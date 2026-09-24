@@ -21,3 +21,7 @@ export * from './trust.ts';
 export * from './mandate.ts';
 export * from './candidate.ts';
 export * from './state.ts';
+export * from './encoding/codec.ts';
+export * from './encoding/digest.ts';
+export { ByteWriter, compareIdentifierBytes } from './encoding/writer.ts';
+export { ByteReader } from './encoding/reader.ts';

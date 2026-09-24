@@ -34,6 +34,7 @@ import {
 import { parseAmount, type Amount } from './units.ts';
 import { parseBigInt, parseDurationSeconds, parseUnixSeconds, type UnixSeconds } from './time.ts';
 import { parseBytes32, type Bytes32 } from './bytes.ts';
+import { compareIdentifierBytes } from './encoding/writer.ts';
 
 export const MANDATE_SCHEMA_VERSION = 1;
 
@@ -133,8 +134,9 @@ function parseIdentifierSet(raw: unknown, code: ReasonCodeName): Result<readonly
   // Duplicates reject rather than collapse: a caller that submitted one did not
   // build the object it believed it built, and silently repairing it hides that.
   if (new Set(out).size !== out.length) return err(code);
-  // Sorted at parse time so the encoding is canonical regardless of authoring order.
-  out.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  // Sorted at parse time, by the same rule the encoder uses, so the encoding is
+  // canonical regardless of authoring order and a round-trip preserves order.
+  out.sort(compareIdentifierBytes);
   return ok(out);
 }
 
