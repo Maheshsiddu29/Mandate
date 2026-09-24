@@ -1,0 +1,13 @@
+# Normalize line endings in the repository.
+* text=auto eol=lf
+
+# Binary assets.
+*.png binary
+*.jpg binary
+*.woff2 binary
+*.pdf binary
+
+# Lockfiles are generated: collapse them in diffs and reviews.
+package-lock.json linguist-generated=true -diff
+pnpm-lock.yaml   linguist-generated=true -diff
+Cargo.lock       linguist-generated=true -diff

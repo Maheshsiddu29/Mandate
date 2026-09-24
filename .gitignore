@@ -1,0 +1,61 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build output
+dist/
+build/
+out/
+target/
+.next/
+*.tsbuildinfo
+
+# Rust / Solidity / Foundry artifacts
+Cargo.lock.orig
+cache/
+artifacts/
+typechain-types/
+broadcast/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+keystore/
+secrets/
+
+# Logs and generated evidence
+*.log
+logs/
+evidence/*.jsonl
+evidence/*.log
+captures/
+
+# Scratch and research junk
+tmp/
+.tmp/
+scratch/
+.scratch/
+*.bak
+*.orig
+*.rej
+
+# Test and coverage output
+coverage/
+.nyc_output/
+.vitest/
+
+# Editor and OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.swo
+
+# Agent working files
+.claude/settings.local.json
