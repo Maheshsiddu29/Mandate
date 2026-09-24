@@ -1532,3 +1532,132 @@ is an explicit simplification, not an oversight. What the MVP must avoid is
 *assuming a single funding asset structurally* — the notional and the funding
 asset are separate concepts in the type design from the beginning, so the
 layer can be added without reworking the mandate.
+
+## 24. StateLatch reuse strategy
+
+> **Status: assessment complete.** The prior repository was located locally and
+> inspected in Phase 0. Full findings are in
+> [statelatch-reuse.md](statelatch-reuse.md); this section is the summary and
+> the policy.
+
+### 24.1 What the prior project was
+
+A Solana system — renamed across its life from StateLatch to EquityGuard to
+StateGuard — solving one problem thoroughly: a tokenized equity's on-chain
+economic state can change between quote and settlement, so move the check to
+execution time and fail atomically if it changed. Roughly 10,600 lines of
+product source against roughly 24,000 lines of tests, plus a Next.js site with
+a complete design-token system.
+
+It is not a foundation Mandate builds on. It is **one component of Mandate's
+execution gate and state model, built well, on a different chain.**
+
+### 24.2 Reuse policy
+
+**SPECIFIED:**
+
+1. **Ideas and methodology reuse freely.** They are chain-independent and they
+   are the expensive part.
+2. **Chain-specific code does not reuse.** Solana's account model, Token-2022
+   extensions, the Instructions sysvar and Jupiter's route grammar have no EVM
+   equivalents worth translating. Re-derive from EVM semantics.
+3. **Web, design and test methodology reuse most.** They are the least
+   chain-specific and the largest volume.
+4. **No prior naming.** StateLatch, EquityGuard, StateGuard, `equity_guard`,
+   `--eg-` prefixes and `EQUITYGUARD_*` identifiers do not enter this
+   repository.
+5. **No imported claims or metrics.** Compute-unit baselines, test-vector
+   counts, deployment addresses and milestone identifiers describe that
+   project, not this one. Importing any would be a false claim.
+6. **No compatibility layers.** Nothing consumes the prior codebase. Reuse
+   means re-deriving a design, not maintaining an interface.
+
+### 24.3 The ideas worth carrying
+
+| Idea | Where it lands in Mandate |
+| --- | --- |
+| Verification happens at execution time, not quote time | [§14.3](#143-the-execution-gate), INV-13 |
+| Economic state includes the clock; stored bytes can be unchanged while meaning changes | [§13.5](#135-scheduled-transitions-and-the-clock), INV-10 |
+| Refusal window around a scheduled transition, with phase as protected state | [§13.4](#134-corporate-action-epoch) |
+| `UNKNOWN` is a value, not an exception | INV-5 |
+| Fail closed on unparseable, unsupported or unmodelled input | INV-5, [§6.4](#64-metadata-sourcing-and-trust) |
+| No floating-point equality in a safety decision | INV-16 |
+| Cross-representation comparison in a common unit, with cost rounded against substitution | [§12.3](#123-ranking), INV-15 |
+| No silent rerouting between issuers | [§12.4](#124-substitution-between-representations), INV-14 |
+| Commitment binding over every security-relevant field of the protected action | [§14.3](#143-the-execution-gate), INV-13 |
+| The gate verifies its own position relative to what it protects | [§14.3](#143-the-execution-gate) |
+| Consent as an opaque, single-use, expiring capability bound to one disclosure | [§7.4](#74-design-rules-for-the-mandate-schema), INV-12 |
+| Provenance required on every observation; conflicts fail closed, never reconciled | INV-17 |
+| Invariants enumerated with enforcement level and evidence | [§16](#16-major-invariants) |
+| Differential corpora, property tests, adversarial stubs, mutation matrices | [§10.5](#105-differential-verification), INV-3 |
+
+### 24.4 The one counter-intuitive finding
+
+The prior project's hardest and most novel engineering — the on-chain guard
+program, with its ~2,800 lines of source and ~6,800 lines of tests — is its
+**least** reusable artifact, because it is Solana-native down to the account
+model. Its ideas transfer completely; its code transfers not at all.
+
+Conversely, the web and design work, which took less engineering judgment,
+transfers almost entirely. Reuse planning should be weighted accordingly, and
+the temptation to "port the program" should be resisted: re-deriving the gate
+for EVM from the documented ideas is cheaper and safer than translating it.
+
+## 25. Phased engineering roadmap
+
+> **Status: SPECIFIED** for phase ordering and exit criteria; **DRAFT** for
+> contents beyond Phase 3. Detail and current state are in
+> [roadmap.md](roadmap.md).
+
+Ordering principle: **build the gate before the thing it gates.** The verifier
+comes first, because everything else is defined by what the verifier requires,
+and because a routing engine built before its constraints exist will encode
+the wrong shape.
+
+| Phase | Deliverable | Exit criterion |
+| --- | --- | --- |
+| **0** | Product thesis, architecture, domain model, engineering rules, roadmap, reuse assessment | This document. No implementation |
+| **1** | Mandate core types and the deterministic verifier | The verifier rejects every enumerated unsafe condition, with a stable reason code and a failure-mode test per code. Pure, total, model-free |
+| **2** | Canonical asset and representation registry | A canonical asset resolves to admissible representations, with per-representation exclusion reasons. Ambiguity and `UNKNOWN` reject |
+| **3** | Robinhood Chain / Arbitrum market-state and chain adapters | Real market, operational and corporate-action state, each observation carrying provenance and an observation time, behind an adapter boundary the verifier does not know about |
+| **4** | Execution-candidate and route engine | Multiple real candidates for one mandate, admissibility-filtered, ranked in a common economic unit |
+| **5** | Jev integration for candidate classification and selection | Jev selects among admissible candidates, and an adversarial-Jev test establishes INV-3 |
+| **6** | On-chain execution gate and settlement integration | Verified execution lands on testnet; a mutated transaction is rejected by the gate; deliberate failure demonstrations pass |
+| **7** | Stablecoin funding and routing adapters | Fiat-denominated intent executes without the mandate naming a funding asset |
+| **8** | Demo product and web experience | Public demonstration showing PASS and, prominently, REJECT with reasons; live and engineered data visibly separated |
+| **9+** | Cross-chain network and broader asset classes | Out of buildathon scope. See [§22](#22-future-architecture) and [§23](#23-expansion-beyond-equities) |
+
+### 25.1 Rules that apply to every phase
+
+**SPECIFIED, and enforced by [AGENTS.md](../AGENTS.md):**
+
+- Every phase lands as **multiple meaningful commits**. Never one giant commit
+  per phase; never fake granularity from meaningless one-line commits.
+- A phase is not complete until its **failure modes are tested**. In this
+  system the rejections are the product, so a check without a test that
+  produces its rejection is not done.
+- Documentation changes in the **same commit** as the code it describes.
+- Each phase ends with a **report and a human approval gate** before the next
+  begins.
+- No phase may weaken an invariant in [§16](#16-major-invariants). If one needs
+  to change, that is a product decision made here first, not an implementation
+  detail discovered later.
+
+### 25.2 What determines the order
+
+- **1 before everything** — the verifier defines the shape of every input, so
+  building it first prevents the rest of the system from encoding the wrong
+  assumptions.
+- **2 before 3** — registry structure determines what adapters must supply.
+- **3 before 4** — candidates cannot be constructed without real state, and
+  candidates built against fake state encode fake assumptions.
+- **4 before 5** — Jev needs a real candidate set to select from. Integrating
+  it earlier would mean building the advisory layer before the thing it
+  advises on.
+- **5 before 6, but not blocking it** — the execution gate must not depend on
+  Jev in any way. If Phase 5 is delayed or abandoned, Phase 6 proceeds
+  unchanged. This is INV-3 expressed as a scheduling property.
+- **6 before 8** — the demo demonstrates real execution and real refusals, not
+  a mock.
+- **7 whenever funding becomes the blocker** — it is a supporting layer and its
+  position is flexible.
