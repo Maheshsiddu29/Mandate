@@ -1,0 +1,17 @@
+{
+  "name": "@mandate/adapter-robinhood",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Strict Robinhood Chain REST and JSON-RPC normalization for Mandate.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "dependencies": {
+    "@mandate/kernel": "0.1.0",
+    "@mandate/registry": "0.1.0"
+  }
+}
