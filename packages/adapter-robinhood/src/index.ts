@@ -5,3 +5,4 @@ export * from './time.ts';
 export * from './asset.ts';
 export * from './identity.ts';
 export * from './representation.ts';
+export * from './price.ts';

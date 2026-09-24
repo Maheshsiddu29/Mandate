@@ -77,7 +77,7 @@ function requiredString(record: Record<string, unknown>, field: string, path: st
   return adapterOk(value);
 }
 
-function parseDeployment(raw: unknown, path: string): AdapterResult<RobinhoodDeployment> {
+export function parseRobinhoodDeployment(raw: unknown, path: string): AdapterResult<RobinhoodDeployment> {
   const object = objectAt(raw, path);
   if (!object.ok) return object;
   const chainId = object.value['chainId'];
@@ -155,7 +155,7 @@ export function parseRobinhoodAsset(raw: unknown, context: AssetParseContext, pa
   const deployments: RobinhoodDeployment[] = [];
   const deploymentKeys = new Set<string>();
   for (let index = 0; index < rawDeployments.length; index += 1) {
-    const parsed = parseDeployment(rawDeployments[index], `${path}.deployments[${index}]`);
+    const parsed = parseRobinhoodDeployment(rawDeployments[index], `${path}.deployments[${index}]`);
     if (!parsed.ok) return parsed;
     const key = `${parsed.value.chainId}:${parsed.value.contractAddress}`;
     if (deploymentKeys.has(key)) return adapterErr(AdapterErrorCode.MALFORMED_RESPONSE, `${path}.deployments`, 'duplicate deployment');
