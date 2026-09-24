@@ -26,3 +26,6 @@ export * from './representation-id.ts';
 export * from './representation.ts';
 export * from './snapshot.ts';
 export * from './registry.ts';
+export * from './requirements.ts';
+export * from './evaluate.ts';
+export * from './bridge.ts';
