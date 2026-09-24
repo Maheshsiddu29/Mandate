@@ -16,6 +16,8 @@
  */
 
 export * from './reason-codes.ts';
+export * from './claims.ts';
+export * from './semantics.ts';
 export * from './asset-id.ts';
 export * from './asset.ts';
 export * from './reference.ts';
