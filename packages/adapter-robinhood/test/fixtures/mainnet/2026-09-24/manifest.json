@@ -1,0 +1,160 @@
+{
+  "version": 1,
+  "captureId": "robinhood-mainnet-2026-09-24T22-36-48Z",
+  "chain": {
+    "name": "Robinhood Chain mainnet",
+    "chainId": 4663,
+    "blockNumber": "0x4468e5a",
+    "blockTimestamp": "2026-09-24T22:36:48Z"
+  },
+  "schemaVersion": "not published",
+  "artifacts": [
+    {
+      "path": "raw/assets.json",
+      "source": "https://api.robinhood.com/stock-tokens/assets",
+      "capturedAt": "2026-09-24T22:36:17Z",
+      "sourceObservedAt": null,
+      "sha256": "96c48d92fd5de31582bcc7bda556b08508e70ed1eac920f875f42e5d8e7523f1"
+    },
+    {
+      "path": "raw/corporate-actions.json",
+      "source": "https://api.robinhood.com/stock-tokens/corporate-actions",
+      "capturedAt": "2026-09-24T22:36:18Z",
+      "sourceObservedAt": null,
+      "sha256": "254fdc578280a64c637725807b9195c19f39c43634d1e4c80f8bdab74b01baf2"
+    },
+    {
+      "path": "raw/price-AAPL.json",
+      "source": "https://api.robinhood.com/stock-tokens/prices/AAPL",
+      "capturedAt": "2026-09-24T22:36:48Z",
+      "sourceObservedAt": "2026-09-24T22:36:43.162193589Z",
+      "sha256": "e4cb35dd90f7f30413cd110d9497dedc127c3dd08727b4cef7f6136ff017b013"
+    },
+    {
+      "path": "raw/price-NVDA.json",
+      "source": "https://api.robinhood.com/stock-tokens/prices/NVDA",
+      "capturedAt": "2026-09-24T22:36:48Z",
+      "sourceObservedAt": "2026-09-24T22:36:35.744265799Z",
+      "sha256": "21d0466048cb300cf410bfb25d37777c302c216fe63baa1c59f097ee47124b62"
+    },
+    {
+      "path": "raw/price-TSLA.json",
+      "source": "https://api.robinhood.com/stock-tokens/prices/TSLA",
+      "capturedAt": "2026-09-24T22:36:48Z",
+      "sourceObservedAt": "2026-09-24T22:36:36.762236563Z",
+      "sha256": "b5165d156cd615091b8ae71f48b1de0a41de927ab5fa63a38f42769ed26f5531"
+    },
+    {
+      "path": "raw/price-QQQ.json",
+      "source": "https://api.robinhood.com/stock-tokens/prices/QQQ",
+      "capturedAt": "2026-09-24T22:36:48Z",
+      "sourceObservedAt": "2026-09-24T22:36:48.609949530Z",
+      "sha256": "6d73cf2ebbd6c596f8778c6abc209d7df4b33a3c8eb86bdf77ddb4a5dc893942"
+    },
+    {
+      "path": "raw/price-CRWD.json",
+      "source": "https://api.robinhood.com/stock-tokens/prices/CRWD",
+      "capturedAt": "2026-09-24T22:36:48Z",
+      "sourceObservedAt": "2026-09-24T22:36:41.206300409Z",
+      "sha256": "ddb9ed94e0946b8d5bd6a00ab2542c3827b70f4b00d63f7c9e09fd82dec7128a"
+    },
+    {
+      "path": "raw/price-MSFT.json",
+      "source": "https://api.robinhood.com/stock-tokens/prices/MSFT",
+      "capturedAt": "2026-09-24T22:36:48Z",
+      "sourceObservedAt": "2026-09-24T22:36:39.163455919Z",
+      "sha256": "4fa2031d48066e9e6be11ee7171e9573d02d41ee6e03d1ffdf21e4d065232133"
+    },
+    {
+      "path": "raw/rpc-chain-id.json",
+      "source": "https://rpc.robinhoodchain.com eth_chainId",
+      "capturedAt": "2026-09-24T22:36:49Z",
+      "sourceObservedAt": null,
+      "sha256": "75ea0f516604d743a7a785da0919b7b26debc20e260ff9d0a045c6cfa40f876f"
+    },
+    {
+      "path": "raw/rpc-latest-block.json",
+      "source": "https://rpc.robinhoodchain.com eth_getBlockByNumber",
+      "capturedAt": "2026-09-24T22:36:49Z",
+      "sourceObservedAt": "2026-09-24T22:36:48Z",
+      "sha256": "0d7a74dd507dcfc543c58f456c65600735cb0113c868d6ade5e8e5d72749259d"
+    },
+    {
+      "path": "raw/rpc-contracts.json",
+      "source": "https://rpc.robinhoodchain.com fixed-block eth_getCode/eth_call batch",
+      "capturedAt": "2026-09-24T22:37:19Z",
+      "sourceObservedAt": "2026-09-24T22:36:48Z",
+      "sha256": "e02f04f1794f9ae4570360a4f81bba8f1b2a4d21d84c6a25d4f1b0646d423951"
+    },
+    {
+      "path": "raw/rpc-state.json",
+      "source": "https://rpc.robinhoodchain.com fixed-block eth_call batch",
+      "capturedAt": "2026-09-24T22:37:52Z",
+      "sourceObservedAt": "2026-09-24T22:36:48Z",
+      "sha256": "a0dd4266136f24ae5d2173a8477308f6cf43c3044c6bc2eb8dbd4025872f1bd0"
+    },
+    {
+      "path": "raw/rpc-multiplier-events.json",
+      "source": "https://rpc.robinhoodchain.com eth_getLogs",
+      "capturedAt": "2026-09-24T22:38:47Z",
+      "sourceObservedAt": "2026-09-24T22:36:48Z",
+      "sha256": "81a5304aa685931a819f7276b42c1565e23d9d53ce29b3e72a28c0c8116c7b7c"
+    },
+    {
+      "path": "raw/chainlink-feeds.json",
+      "source": "https://reference-data-directory.vercel.app/feeds-robinhood-mainnet.json",
+      "capturedAt": "2026-09-24T22:39:54Z",
+      "sourceObservedAt": null,
+      "sha256": "714038abef5e6290ce09d4f02279382ff0dcd36e573b8d745ba38d9d316bf776"
+    },
+    {
+      "path": "raw/rpc-oracles.json",
+      "source": "https://rpc.robinhoodchain.com fixed-block Chainlink proxy batch",
+      "capturedAt": "2026-09-24T22:40:19Z",
+      "sourceObservedAt": "2026-09-24T22:36:48Z",
+      "sha256": "7effe4cb00549ea717d9bc8e0f855e3cd4b853fd9beeed54e1142c960657f34b"
+    },
+    {
+      "path": "raw/rpc-requests.json",
+      "source": "capture request metadata",
+      "capturedAt": "2026-09-24T22:37:19Z",
+      "sourceObservedAt": null,
+      "sha256": "e3b33b44fa369ab587d9e969c06bf85b5915676f4d6b7d74a131ef53974a02b7"
+    },
+    {
+      "path": "raw/rpc-request-map.json",
+      "source": "capture request metadata",
+      "capturedAt": "2026-09-24T22:37:19Z",
+      "sourceObservedAt": null,
+      "sha256": "c3b3f30bdaee2ec7afdf0c7f43345a21fe66191de4086cb564610901ec01599e"
+    },
+    {
+      "path": "raw/rpc-state-requests.json",
+      "source": "capture request metadata",
+      "capturedAt": "2026-09-24T22:37:52Z",
+      "sourceObservedAt": null,
+      "sha256": "425acbc36d2dfea49b5c62e4711797e1c886d177b6c1320c5b0903bf90bd9b09"
+    },
+    {
+      "path": "raw/rpc-logs-request.json",
+      "source": "capture request metadata",
+      "capturedAt": "2026-09-24T22:38:47Z",
+      "sourceObservedAt": null,
+      "sha256": "3ad57780c1274ed19944d1679de8d38ddfd1f959007fcc3072cdfafb8fce842a"
+    },
+    {
+      "path": "raw/rpc-oracle-map.json",
+      "source": "capture request metadata",
+      "capturedAt": "2026-09-24T22:40:19Z",
+      "sourceObservedAt": null,
+      "sha256": "460a73e753909465ca2279a5392c3a5955f16f2d566945b16e058b4581d582ec"
+    },
+    {
+      "path": "raw/rpc-oracle-requests.json",
+      "source": "capture request metadata",
+      "capturedAt": "2026-09-24T22:40:19Z",
+      "sourceObservedAt": null,
+      "sha256": "d0661d8cf2a073fdd0828c8a200b9bb76830815de427aaffcd68fe252ec2a79c"
+    }
+  ]
+}

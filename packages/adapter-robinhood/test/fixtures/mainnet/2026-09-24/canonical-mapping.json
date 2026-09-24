@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "sourceId": "mandate-robinhood-curation-2026-09-24",
+  "curatedAtUnixSeconds": "1790289408",
+  "policy": "UID and issuer-supplied ISIN must both match; ticker is display metadata only",
+  "mappings": [
+    {
+      "robinhoodUid": "0x00000000000000000000000000000000c2425be3658540dd8e2424cbf3c5c649",
+      "isin": "US0378331005",
+      "assetClass": "equity",
+      "primaryName": "Apple Inc.",
+      "displayTicker": "AAPL",
+      "primaryMarketIdentifier": null,
+      "rationale": "large-cap equity; non-unit multiplier"
+    },
+    {
+      "robinhoodUid": "0x00000000000000000000000000000000915f477416294f5099a5e0e09f327ce5",
+      "isin": "US67066G1040",
+      "assetClass": "equity",
+      "primaryName": "NVIDIA Corporation",
+      "displayTicker": "NVDA",
+      "primaryMarketIdentifier": null,
+      "rationale": "large-cap equity; non-unit multiplier"
+    },
+    {
+      "robinhoodUid": "0x00000000000000000000000000000000cfece3244ea34bb29414dd9488b32d9f",
+      "isin": "US88160R1014",
+      "assetClass": "equity",
+      "primaryName": "Tesla, Inc.",
+      "displayTicker": "TSLA",
+      "primaryMarketIdentifier": null,
+      "rationale": "equity with exactly unit multiplier at capture"
+    },
+    {
+      "robinhoodUid": "0x000000000000000000000000000000002470b933c52d47ccad017ed9ee80c9ed",
+      "isin": "US46090E1038",
+      "assetClass": "fund",
+      "primaryName": "Invesco QQQ Trust",
+      "displayTicker": "QQQ",
+      "primaryMarketIdentifier": null,
+      "rationale": "ETF sample proves ISIN does not imply equity asset class"
+    },
+    {
+      "robinhoodUid": "0x000000000000000000000000000000001adecf2c6a3749f9873b8926b5977c0a",
+      "isin": "US22788C1053",
+      "assetClass": "equity",
+      "primaryName": "CrowdStrike Holdings, Inc.",
+      "displayTicker": "CRWD",
+      "primaryMarketIdentifier": null,
+      "rationale": "completed split produced multiplier four"
+    },
+    {
+      "robinhoodUid": "0x00000000000000000000000000000000307bb0113ca54f93adf80f4ff2bf681a",
+      "isin": "US5949181045",
+      "assetClass": "equity",
+      "primaryName": "Microsoft Corporation",
+      "displayTicker": "MSFT",
+      "primaryMarketIdentifier": null,
+      "rationale": "large-cap equity with Chainlink feed"
+    },
+    {
+      "robinhoodUid": "0x0000000000000000000000000000000025191a136aab4e5fa41b67ec3218a093",
+      "isin": "KYG961151035",
+      "assetClass": "equity",
+      "primaryName": "WhiteFiber, Inc.",
+      "displayTicker": "WYFI",
+      "primaryMarketIdentifier": null,
+      "rationale": "fractional trading unavailable and price endpoint returned HTTP 404"
+    }
+  ]
+}

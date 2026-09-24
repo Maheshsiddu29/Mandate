@@ -1,0 +1,19 @@
+{
+  "blockNumber": "0x4468e5a",
+  "symbols": [
+    "AAPL",
+    "NVDA",
+    "TSLA",
+    "QQQ",
+    "CRWD",
+    "MSFT"
+  ],
+  "calls": [
+    "code",
+    "symbol",
+    "name",
+    "decimals",
+    "uiMultiplier",
+    "uid"
+  ]
+}

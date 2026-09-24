@@ -16,7 +16,8 @@
     "corpus:generate": "node packages/kernel/test/support/generate-corpus.ts",
     "check": "npm run typecheck && npm test",
     "docs:generate": "node packages/kernel/test/support/generate-reason-codes-doc.ts && node packages/registry/test/support/generate-reason-codes-doc.ts",
-    "registry-corpus:generate": "node packages/registry/test/support/generate-corpus.ts"
+    "registry-corpus:generate": "node packages/registry/test/support/generate-corpus.ts",
+    "robinhood:fixtures:validate": "node packages/adapter-robinhood/scripts/validate-fixtures.ts"
   },
   "devDependencies": {
     "@types/node": "22.20.2",
