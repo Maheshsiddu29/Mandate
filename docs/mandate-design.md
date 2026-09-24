@@ -1533,6 +1533,237 @@ is an explicit simplification, not an oversight. What the MVP must avoid is
 asset are separate concepts in the type design from the beginning, so the
 layer can be added without reworking the mandate.
 
+## 20. Buildathon MVP scope
+
+> **Status: SPECIFIED.** This is the commitment about what gets built. Anything
+> not listed here is not in the MVP, whatever else this document describes.
+
+### 20.1 Shape of the deliverable
+
+A narrow, production-quality **vertical slice**: the complete path from a
+signed financial mandate to a verified execution, on one asset class, one
+chain environment, a small number of representations, and a small number of
+venues — with every stage real rather than mocked.
+
+Narrow and deep, not broad and shallow. A system that handles one mandate
+correctly end-to-end, and refuses the unsafe variants of it for the right
+reasons, demonstrates the thesis. One that handles many assets shallowly
+demonstrates nothing, because the thesis is about correctness under
+constraint, not coverage.
+
+### 20.2 In scope
+
+| # | Capability | What "done" means |
+| --- | --- | --- |
+| 1 | Machine-readable financial mandate | A signed, versioned, expiring mandate with the MVP field set from [§7.3](#73-mvp-mandate-versus-long-term-mandate) |
+| 2 | Canonical tokenized-equity identity | A canonical asset identifier resolvable from a human reference, with ambiguity rejecting |
+| 3 | Representation metadata | Registry entries with issuer, instrument type, backing model, synthetic flag, rights, operational state and provenance |
+| 4 | Robinhood Chain / Arbitrum market-state integration | Real price, liquidity, operational and — where available — corporate-action state, each with provenance and observation time |
+| 5 | Multiple execution candidates | At least two genuinely different candidates for one mandate, so selection and rejection are meaningful |
+| 6 | Jev-assisted candidate selection | Optional. Selection over a closed admissible set, bounded and abstention-safe |
+| 7 | Deterministic mandate verification | The verifier of [§10](#10-deterministic-verification): pure, total, fail-closed, model-free |
+| 8 | Execution protection | An on-chain gate binding the submitted transaction to the verified one |
+| 9 | Clear PASS / REJECT reason codes | Stable, namespaced, one per distinct cause, with a failure-mode test per code |
+| 10 | Testnet execution | A real signed transaction landing on a testnet, where the environment supports it |
+| 11 | Deliberate failure demonstrations | See [§20.3](#203-the-failure-demonstrations) |
+
+### 20.3 The failure demonstrations
+
+These are the centre of the deliverable, not an appendix. Each is a real
+mandate and a real candidate, refused by the deterministic verifier with a
+named reason code — not a mock, not a screenshot, not a description.
+
+| # | Demonstration | Expected reason family |
+| --- | --- | --- |
+| 1 | Synthetic representation offered against a mandate forbidding synthetic exposure — **at a better price than the compliant candidate** | `MND-REPR-002` |
+| 2 | Representation from an issuer outside the permitted set | `MND-REPR-001` |
+| 3 | Notional exceeding the authorized maximum | `MND-ECON-001` |
+| 4 | Execution deviation beyond the mandate's limit | `MND-ECON-002` |
+| 5 | Stale corporate-action state, or a pending action invalidating the authorization | `MND-STATE-002` / `MND-STATE-003` |
+| 6 | Execution attempted while the underlying is halted | `MND-STATE-004` |
+| 7 | Expired mandate | `MND-AUTH-001` |
+| 8 | Replayed mandate (nonce already consumed) | `MND-AUTH-002` |
+| 9 | Correct ticker, wrong token — a lookalike contract not in the registry | `MND-ASSET-002` |
+| 10 | Transaction mutated after verification, rejected by the on-chain gate | gate rejection |
+| 11 | **Adversarial Jev**: a stub that always returns the most dangerous available answer, with no unsafe execution resulting | establishes INV-3 |
+
+Demonstration 1 is the one that best distinguishes Mandate from a router: a
+price-maximizing router picks the cheaper synthetic. Demonstration 11 is the
+one that best distinguishes it from an agent framework.
+
+### 20.4 Quality bar
+
+"Production-quality vertical slice" means, concretely:
+
+- every reason code has a test that produces it;
+- the verifier has no I/O and no model dependency, checked structurally;
+- no mocked stage in the demonstrated path — real registry, real state, real
+  candidates, real verification, real submission;
+- live data and engineered demo data are visibly separated, with the seam
+  disclosed;
+- what was actually demonstrated is stated precisely, with no overclaiming
+  (see [AGENTS.md §5](../AGENTS.md#5-honesty-requirements)).
+
+### 20.5 Dependencies and risks
+
+| Risk | Impact | Response |
+| --- | --- | --- |
+| Corporate-action state unavailable in the target environment | Weakens capabilities 4 and 5 and demonstration 5 | Phase 3 establishes availability empirically first. If unavailable on-chain, demonstrate with a documented state source and disclose the seam — never present engineered state as live |
+| Too few real representations of one underlying to produce genuinely different candidates | Weakens capability 5 and demonstration 1 | Candidates may differ by venue rather than by issuer; demonstration 1 may need a documented test representation, clearly labelled |
+| Jev's API or latency unsuitable | Removes capability 6 | Capability 6 is explicitly optional. INV-3 guarantees the system is complete without it |
+| Testnet unsuitable for real execution | Weakens capability 10 | Report honestly as blocked. Off-chain verification and the gate's unit-level behaviour are still demonstrable |
+
+## 21. Explicit non-goals for the MVP
+
+Stated as commitments, so that scope creep is visible when it happens.
+
+### 21.1 Not built
+
+| Not built | Why not |
+| --- | --- |
+| Cross-chain routing and bridging | Adds bridge failure modes and settlement complexity orthogonal to the thesis |
+| Many issuers, many chains, many venues | Breadth does not demonstrate correctness under constraint |
+| Portfolio-level mandates | Single-action mandates demonstrate the primitive |
+| Delegated institutional policy and sub-mandates | Requires agent identity infrastructure that does not exist |
+| Agent identity beyond a single keypair | Same |
+| Revocation before expiry | Requires revocation infrastructure; expiry bounds exposure in the MVP |
+| Automated reauthorization workflows | Staleness must be *detected* first; recovering from it automatically is a later, riskier problem |
+| Stablecoin funding abstraction | [§19](#19-stablecoin-funding-as-a-supporting-layer). MVP assumes funded in one configured asset |
+| Deferred, netted or cross-chain settlement | MVP assumes atomic single-chain settlement |
+| Execution attestations | Receipts are designed to be attestable later, but attestation is not built |
+| Asset equivalence and substitution policies | Substitution requires explicit authorization in the MVP; policy-driven substitution is later |
+| Asset classes beyond equities | [§23](#23-expansion-beyond-equities). The abstractions must extend; the MVP does not |
+| SDKs, MCP/tool interfaces, institutional APIs | Premature before the core primitives are stable |
+| A policy engine or compliance adapter framework | The mandate *is* the policy expression in the MVP |
+| Persistence beyond what execution requires | No database until a real persistence requirement appears |
+
+### 21.2 Not claimed
+
+Distinct from "not built", and more important. Even for what is built, the MVP
+does **not** claim:
+
+- that it determines whether an authorization reflects what a human *meant* —
+  it enforces the mandate, not the intention behind it;
+- that a testnet execution against engineered state proves behaviour under a
+  real corporate action;
+- that any two representations of the same underlying are economically or
+  legally equivalent;
+- that the registry's metadata is complete or authoritative for any issuer;
+- that the threat model is closed — [§17](#17-threat-model-overview) lists
+  what remains PARTIAL and OPEN;
+- that on-chain enforcement covers off-chain facts;
+- that Mandate makes a bad instrument good. It refuses one the mandate forbids.
+
+### 21.3 Deliberately deferred decisions
+
+Recorded so they are made on purpose later, not by accident now:
+
+- mandate signature scheme and canonical encoding ([§7.5](#75-open-questions));
+- whether mandates are single-use or reusable envelopes;
+- the authority for incrementing corporate-action epochs
+  ([§13.4](#134-corporate-action-epoch));
+- whether Jev is worth using for metadata classification or only for ranking
+  ([§11.5](#115-open-questions));
+- the final reason-code registry ([§10.3](#103-reason-codes)).
+
+## 22. Future architecture
+
+> **Status: FUTURE.** None of this is built, planned for the buildathon, or
+> claimed. It is recorded for one reason: to constrain today's abstractions so
+> that these become additions rather than rewrites.
+
+### 22.1 Mandate Network
+
+The long-term shape is a network rather than a library: many issuers, many
+chains, many venues, and many agents operating under many principals' policies.
+
+| Area | Capability | Constrains today |
+| --- | --- | --- |
+| Breadth | Many tokenized-asset issuers, chains and execution venues | Adapter boundaries must be real from Phase 3, and the verifier must not know about any chain |
+| Routing | Cross-chain routing; liquidity routing; asset equivalence and substitution policies | Substitution must remain explicitly authorized, never a routing optimization |
+| Funding | Stablecoin funding abstraction | Notional and funding asset are separate concepts from the start ([§19.3](#193-mvp-position)) |
+| Policy | Portfolio-level mandates; delegated institutional policies; programmable compliance adapters; policy engines | Mandate constraints must compose, so the schema must not assume a single flat constraint set |
+| Identity | Agent identity; delegation chains; revocation; key rotation | Nothing outside the verifier's input struct may assume "agent identity == one public key" ([§8.4](#84-agent-identity)) |
+| Corporate actions | Corporate-action synchronization across issuers; automated reauthorization workflows | Epochs must be comparable across issuers, which means the epoch source's authority must be modelled ([§13.4](#134-corporate-action-epoch)) |
+| Settlement | Settlement abstraction; deferred and netted settlement; reconciliation across venues | The MVP's atomic assumption is stated explicitly rather than assumed ([§14.4](#144-settlement-abstraction)) |
+| Provenance | Payment and trade provenance; execution attestations | Receipts use canonical encoding and stable digests so they are attestable later ([§15.4](#154-attestations)) |
+| Interfaces | SDKs, MCP and tool interfaces, institutional APIs | Reason codes are a public interface from Phase 1, so they are designed as one ([§10.3](#103-reason-codes)) |
+
+### 22.2 The one structural commitment
+
+Everything above is optional except this: **the verifier must remain the sole
+authorization authority as the system grows.**
+
+The failure mode for a system like this is that convenience features
+accumulate the ability to permit things — a policy engine with an override, a
+routing optimization that relaxes a bound, a "trusted" integrator path that
+skips a check. Each is individually reasonable and collectively fatal, because
+the property that makes Mandate worth using is that *there is exactly one thing
+that can say yes*.
+
+Any future capability that would let something other than the verifier permit
+an execution is a change to the product, and belongs in this document before it
+belongs in code.
+
+## 23. Expansion beyond equities
+
+> **Status: FUTURE** for implementation; **SPECIFIED** for the design rules
+> that keep it possible.
+
+### 23.1 The design rules
+
+Three rules, applied from Phase 1, keep asset-class expansion an addition
+rather than a rewrite:
+
+1. **Canonical asset identity carries an asset-class segment and an explicit
+   identifier scheme** ([§5.2](#52-canonical-asset-identity)), because
+   different asset classes have different identifier authorities.
+2. **Nothing parses an identifier to infer behaviour.** Behaviour comes from
+   metadata, so a new asset class adds metadata rather than changing parsing
+   logic.
+3. **No verifier check assumes equity semantics.** Checks are over metadata
+   fields and mandate constraints, not over "the ticker" or "the share count".
+
+The test of whether these hold: adding a second asset class must not require
+changing the mandate schema's structure or the verifier's check families — only
+the vocabularies those checks range over.
+
+### 23.2 What each asset class would add
+
+| Asset class | New concepts | Existing concepts that carry over |
+| --- | --- | --- |
+| **Equities** (MVP) | Splits, dividends, mergers, halts, shareholder rights | — |
+| **ETFs and funds** | NAV, creation and redemption mechanics, holdings transparency, tracking error | Issuer, backing, corporate actions, halts |
+| **Bonds** | Coupons, maturity, accrued interest, credit rating, callability, day-count conventions | Issuer, backing, rights, jurisdiction |
+| **U.S. Treasuries** | Auction cycles, yield conventions, settlement conventions | Bond concepts; a strong backing model |
+| **Private credit** | Illiquidity, lockups, drawdown schedules, valuation frequency, transfer restrictions | Transfer restrictions, jurisdiction, redemption model |
+| **Commodities** | Physical delivery, storage and carry, contract expiry and roll, quality grades | Backing model, redemption model |
+| **Tokenized funds** | Subscription and redemption windows, gating, fee structures | Fund concepts, operational state |
+
+### 23.3 Where the model is likely to strain
+
+Honest about the limits of the current abstraction:
+
+- **Corporate-action epochs** ([§13.4](#134-corporate-action-epoch)) are
+  modelled on discrete, dated equity events. A bond's continuous accrual and a
+  fund's periodic NAV are not events in the same sense. The epoch concept
+  probably generalizes to "a marker of material economic-state change", but
+  the per-class definition of *material* is real work.
+- **Execution deviation in basis points** assumes a continuously quoted
+  reference price. Illiquid or periodically valued instruments may have no such
+  reference, so deviation may need a per-class definition.
+- **Atomic settlement** ([§14.2](#142-mvp-settlement-model)) is unrealistic for
+  instruments with subscription windows or scheduled settlement, which is why
+  settlement abstraction ([§14.4](#144-settlement-abstraction)) is the
+  prerequisite for several of these classes.
+- **"Buy $1,000 of exposure"** assumes divisibility and continuous pricing.
+  Minimum denominations and lot sizes break it.
+
+These are recorded now so the MVP's equity-shaped assumptions are visible as
+assumptions. None of them requires solving today; all of them would be
+expensive to discover after three more asset classes had been added on top of
+them.
+
 ## 24. StateLatch reuse strategy
 
 > **Status: assessment complete.** The prior repository was located locally and
