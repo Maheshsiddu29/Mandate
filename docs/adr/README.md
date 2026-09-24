@@ -19,6 +19,7 @@ Status values: `Proposed`, `Accepted`, `Superseded by ADR NNNN`, `Rejected`.
 | [0005](0005-canonical-asset-identity-and-resolution.md) | Canonical asset identifier schemes and deterministic reference resolution | Accepted |
 | [0006](0006-representation-claims-and-conflict-policy.md) | Representation claims, trust floors and conflict policy | Accepted |
 | [0007](0007-registry-snapshot-encoding-and-digest.md) | Registry snapshot encoding, digest and versioning | Accepted |
+| [0008](0008-robinhood-data-source-authority.md) | Robinhood external-data authority and normalization boundary | Accepted |
 
 The canonical product specification remains
 [docs/mandate-design.md](../mandate-design.md). ADRs record *how* a specified
