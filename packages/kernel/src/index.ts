@@ -25,3 +25,5 @@ export * from './encoding/codec.ts';
 export * from './encoding/digest.ts';
 export { ByteWriter, compareIdentifierBytes } from './encoding/writer.ts';
 export { ByteReader } from './encoding/reader.ts';
+export * from './authorization/eip712.ts';
+export * from './authorization/envelope.ts';
