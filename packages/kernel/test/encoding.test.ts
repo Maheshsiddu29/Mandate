@@ -106,6 +106,7 @@ test('every security-relevant field change changes the mandate digest', () => {
     allowedVenues: { allowedVenues: [VENUE, 'venue.beta'] },
     requiredCorporateActionEpoch: { requiredCorporateActionEpoch: 8n },
     maxPriceAgeSeconds: { maxPriceAgeSeconds: 61n },
+    maxCorporateActionAgeSeconds: { maxCorporateActionAgeSeconds: 301n },
     haltPolicy: { haltPolicy: 'ALLOW_WHEN_HALTED' },
     createdAtUnixSeconds: { createdAtUnixSeconds: 1_799_999_000n },
     notBeforeUnixSeconds: { notBeforeUnixSeconds: 1_799_999_001n },

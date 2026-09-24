@@ -139,6 +139,14 @@ const DEFINITIONS = [
     developerMessage: 'The candidate declared notional does not equal quantity multiplied by execution price, rounded either down or up. The declared value is never substituted with the recomputed one.',
     humanMessage: 'The quantity, price and total of this trade did not agree.',
   },
+  {
+    id: 'MND-INPUT-010',
+    name: 'VERIFIER_INTERNAL_ERROR',
+    family: F.INPUT,
+    enforcementPoint: E.A_MANDATE_INTEGRITY,
+    developerMessage: 'A check raised an unexpected error. This is a defect in the verifier, and it fails closed: an internal fault produces a rejection, never a pass.',
+    humanMessage: 'This trade could not be checked and was not executed.',
+  },
 
   // --- AUTH: authorization scope -------------------------------------------
   {
@@ -348,6 +356,22 @@ const DEFINITIONS = [
     enforcementPoint: E.F_MARKET_AND_CORPORATE_ACTION_STATE,
     developerMessage: 'A market state field the verifier requires is UNKNOWN: the halt status or the reference price could not be established.',
     humanMessage: 'Market information for this asset was unavailable.',
+  },
+  {
+    id: 'MND-STATE-007',
+    name: 'CORPORATE_ACTION_STATE_UNKNOWN',
+    family: F.STATE,
+    enforcementPoint: E.F_MARKET_AND_CORPORATE_ACTION_STATE,
+    developerMessage: 'The corporate-action epoch for this asset could not be established. An unknown epoch fails closed; it is never assumed to match the authorization.',
+    humanMessage: 'Corporate action information for this asset was unavailable.',
+  },
+  {
+    id: 'MND-STATE-008',
+    name: 'CORPORATE_ACTION_STATE_STALE',
+    family: F.STATE,
+    enforcementPoint: E.F_MARKET_AND_CORPORATE_ACTION_STATE,
+    developerMessage: 'The corporate-action observation is older than the mandate corporate-action freshness bound at the evaluation time. A fresh epoch feed is itself state that can go stale.',
+    humanMessage: 'Corporate action information for this asset was too old to trade against.',
   },
   {
     id: 'MND-STATE-006',

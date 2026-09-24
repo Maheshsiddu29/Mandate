@@ -113,6 +113,7 @@ export function mandateInput(overrides: Json = {}): Json {
       allowedVenues: [VENUE],
       requiredCorporateActionEpoch: EPOCH,
       maxPriceAgeSeconds: 60n,
+      maxCorporateActionAgeSeconds: 300n,
       haltPolicy: 'FORBID_WHEN_HALTED',
       createdAtUnixSeconds: NOT_BEFORE,
       notBeforeUnixSeconds: NOT_BEFORE,

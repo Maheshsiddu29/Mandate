@@ -122,6 +122,7 @@ export function encodeMandate(m: CanonicalMandate): Uint8Array {
   writeIdentifierSet(w, m.allowedVenues);
   w.u64(m.requiredCorporateActionEpoch);
   w.u32(m.maxPriceAgeSeconds);
+  w.u32(m.maxCorporateActionAgeSeconds);
   w.u8(HALT_POLICY_CODE[m.haltPolicy] as number);
   w.i64(m.createdAtUnixSeconds);
   w.i64(m.notBeforeUnixSeconds);
@@ -177,6 +178,7 @@ export function decodeMandate(bytes: Uint8Array): Result<CanonicalMandate, Reaso
   const allowedVenues = readIdentifierSet(r);
   const epoch = r.u64();
   const maxPriceAge = r.u32();
+  const maxCaAge = r.u32();
   const haltCode = r.u8();
   const createdAt = r.i64();
   const notBefore = r.i64();
@@ -189,7 +191,7 @@ export function decodeMandate(bytes: Uint8Array): Result<CanonicalMandate, Reaso
     notionalUnit === undefined || notionalDecimals === undefined || notionalAtoms === undefined ||
     maxDeviationBps === undefined || syntheticCode === undefined || allowedIssuers === undefined ||
     allowedChains === undefined || allowedVenues === undefined || epoch === undefined ||
-    maxPriceAge === undefined || haltCode === undefined || createdAt === undefined ||
+    maxPriceAge === undefined || maxCaAge === undefined || haltCode === undefined || createdAt === undefined ||
     notBefore === undefined || expiresAt === undefined
   ) {
     return err('MALFORMED_MANDATE');
@@ -220,6 +222,7 @@ export function decodeMandate(bytes: Uint8Array): Result<CanonicalMandate, Reaso
     allowedVenues,
     requiredCorporateActionEpoch: epoch,
     maxPriceAgeSeconds: maxPriceAge,
+    maxCorporateActionAgeSeconds: maxCaAge,
     haltPolicy,
     createdAtUnixSeconds: createdAt,
     notBeforeUnixSeconds: notBefore,

@@ -111,6 +111,7 @@ export interface CanonicalMandate {
 
   readonly requiredCorporateActionEpoch: bigint;
   readonly maxPriceAgeSeconds: bigint;
+  readonly maxCorporateActionAgeSeconds: bigint;
   readonly haltPolicy: HaltPolicy;
 
   readonly createdAtUnixSeconds: UnixSeconds;
@@ -198,6 +199,8 @@ export function parseMandate(raw: unknown): Result<CanonicalMandate, ReasonCodeN
   if (!requiredCorporateActionEpoch.ok) return requiredCorporateActionEpoch;
   const maxPriceAgeSeconds = parseDurationSeconds(r['maxPriceAgeSeconds'], 'MALFORMED_MANDATE');
   if (!maxPriceAgeSeconds.ok) return maxPriceAgeSeconds;
+  const maxCorporateActionAgeSeconds = parseDurationSeconds(r['maxCorporateActionAgeSeconds'], 'MALFORMED_MANDATE');
+  if (!maxCorporateActionAgeSeconds.ok) return maxCorporateActionAgeSeconds;
   const haltPolicy = parseEnum(r['haltPolicy'], HaltPolicy, 'MALFORMED_MANDATE');
   if (!haltPolicy.ok) return haltPolicy;
   const createdAt = parseUnixSeconds(r['createdAtUnixSeconds'], 'MALFORMED_MANDATE');
@@ -228,6 +231,7 @@ export function parseMandate(raw: unknown): Result<CanonicalMandate, ReasonCodeN
     allowedVenues: allowedVenues.value,
     requiredCorporateActionEpoch: requiredCorporateActionEpoch.value,
     maxPriceAgeSeconds: maxPriceAgeSeconds.value,
+    maxCorporateActionAgeSeconds: maxCorporateActionAgeSeconds.value,
     haltPolicy: haltPolicy.value,
     createdAtUnixSeconds: createdAt.value,
     notBeforeUnixSeconds: notBefore.value,
@@ -251,6 +255,7 @@ export const MANDATE_FIELDS = [
   'allowedVenues',
   'requiredCorporateActionEpoch',
   'maxPriceAgeSeconds',
+  'maxCorporateActionAgeSeconds',
   'haltPolicy',
   'createdAtUnixSeconds',
   'notBeforeUnixSeconds',
