@@ -7,3 +7,4 @@ export * from './identity.ts';
 export * from './representation.ts';
 export * from './price.ts';
 export * from './onchain.ts';
+export * from './corporate-action.ts';
