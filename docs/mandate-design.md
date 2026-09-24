@@ -723,3 +723,812 @@ that deterministic code is bad at:
 In every one of those, the model's output is either reviewed by a human before
 becoming authoritative, or constrained afterwards by the verifier. That is the
 whole design: models propose, deterministic code disposes.
+
+## 9. Execution lifecycle
+
+> **Status: SPECIFIED** for the stage boundaries; **DRAFT** for each stage's
+> interface.
+
+### 9.1 Six stages, deliberately separated
+
+Most agent trading stacks collapse these into one step. Mandate separates them
+because each boundary is a place where a different class of attack is caught.
+
+```
+ 1 INTENT          human or institutional financial instruction
+        │          authored into a signed, machine-readable mandate
+        ▼
+ 2 RESOLUTION      canonical asset  ->  candidate representations
+        │          representations filtered by mandate instrument constraints
+        ▼
+ 3 DISCOVERY       admissible representations  ->  execution candidates
+        │          venues, routes, quotes, observed market state
+        ▼
+ 4 SELECTION       candidates ranked; optionally by Jev            [ADVISORY]
+        │          output is an ordering, never an authorization
+        ▼
+ 5 VERIFICATION    deterministic check of the selected candidate   [AUTHORITATIVE]
+        │          PASS with a verdict, or REJECT with reason codes
+        ▼
+ 6 EXECUTION       submit only what was verified; on-chain gate re-asserts
+        │          the binding between verdict and transaction
+        ▼
+ 7 SETTLEMENT      position becomes final
+        │
+        ▼
+ 8 RECONCILIATION  receipt, audit trail, and comparison of intended
+                   versus realized outcome
+```
+
+The numbering above lists eight boxes for seven named lifecycle concerns
+because *selection* and *verification* are drawn separately on purpose: the
+single most important structural property of Mandate is that stage 5 does not
+trust stage 4.
+
+### 9.2 What each stage is responsible for
+
+| Stage | Input | Output | Must not do |
+| --- | --- | --- | --- |
+| Intent | Human instruction | Signed mandate | Interpret prose at execution time |
+| Resolution | Mandate, registry | Admissible representations, or a resolution failure | Guess on ambiguity; accept an address from outside the registry |
+| Discovery | Representations, market state | Execution candidates with quotes and state snapshots | Filter on quality; that is stage 4's job |
+| Selection | Candidates | An ordering, and a chosen candidate | Add a candidate; relax a constraint; be trusted |
+| Verification | Mandate, chosen candidate, state, clock | PASS or REJECT plus reason codes | Perform I/O; call a model; have a "proceed anyway" path |
+| Execution | Verified candidate | Submitted transaction | Execute anything the verifier did not see |
+| Settlement | Submitted transaction | Final position | Be assumed; it is observed |
+| Reconciliation | All of the above | Execution receipt | Hide a discrepancy |
+
+### 9.3 Stage boundaries as security boundaries
+
+| Boundary | Attack it is there to catch |
+| --- | --- |
+| 1 → 2 | A mandate that does not reflect what the human authorized (caught by review, not by code) |
+| 2 → 3 | Hallucinated or injected contract addresses: stage 3 can only see registry-resolved representations |
+| 3 → 4 | A candidate set that already excludes inadmissible representations, so selection cannot pick one |
+| **4 → 5** | **Model compromise, misclassification and prompt injection: whatever stage 4 chose is re-checked from scratch** |
+| 5 → 6 | Substitution between verification and submission: the execution gate re-asserts the binding |
+| 6 → 7 | Assuming submission equals settlement |
+| 7 → 8 | Silent divergence between intended and realized execution |
+
+### 9.4 Resolution failure is a normal outcome
+
+Stage 2 fails closed and loudly:
+
+- the ticker resolves to more than one canonical asset → `AMBIGUOUS`, reject;
+- the canonical asset has no registered representations → reject;
+- all representations are excluded by mandate constraints → reject, and report
+  *which constraint* excluded each one;
+- a representation has `UNKNOWN` in a field the mandate constrains → reject.
+
+The per-representation exclusion reasons are part of the output, not a log
+line. "No route found" is a useless answer; "issuer B excluded: not in
+permitted issuers; issuer C excluded: synthetic, mandate forbids synthetic" is
+an actionable one, and is what the demo shows.
+
+## 10. Deterministic verification
+
+> **Status: SPECIFIED.** This is the component Phase 1 builds and the one with
+> the least room for later change.
+
+### 10.1 The contract
+
+The verifier is a pure function:
+
+```
+verify(mandate, candidate, observed_state, clock) -> Verdict
+```
+
+where `Verdict` is `PASS` or `REJECT`, always accompanied by reason codes, and
+always accompanied by enough information to reproduce the decision.
+
+Properties, all **SPECIFIED** and all testable:
+
+1. **Pure.** No network, no filesystem, no clock reads, no randomness, no
+   environment. Time enters as an explicit parameter. Every input is a value.
+2. **Total.** Every input produces a verdict. It does not throw to signal a
+   financial decision. Malformed input is `REJECT` with a reason code, not an
+   exception that a caller might catch and ignore.
+3. **Deterministic and reproducible.** Same inputs, same verdict, on any
+   machine, at any later date. The audit record captures the inputs, so any
+   past decision can be re-run and checked.
+4. **Fail-closed.** There is no path that permits execution when the verifier
+   could not establish that every constraint holds. `UNKNOWN` is a value that
+   causes rejection, never a value that is skipped.
+5. **Model-free.** No model is called, directly or transitively. This is
+   structural, not a convention: the verifier's dependency graph must not
+   contain an inference client.
+6. **Explaining.** A rejection names every violated constraint, not just the
+   first. A caller fixing one reason should not discover a second on the next
+   attempt.
+7. **Order-independent.** The verdict does not depend on the order checks run
+   in. Checks are evaluated for their union of violations.
+
+### 10.2 Check families
+
+Grouped by what they need. Cheap, dependency-free checks are listed first
+because they can run before any market data is fetched.
+
+**A. Mandate integrity** — needs only the mandate.
+
+- schema version understood;
+- signature valid over the canonical encoding;
+- principal and agent well-formed;
+- required fields present; no unknown fields silently accepted;
+- constraint values in range and carrying units.
+
+**B. Authorization scope** — mandate and clock.
+
+- mandate not expired, and not used before its not-before time;
+- nonce unused (replay protection);
+- the acting agent is the agent named in the mandate;
+- the requested action matches the authorized action.
+
+**C. Asset identity** — mandate, candidate, registry.
+
+- the candidate's representation maps to the mandate's canonical asset;
+- the representation's contract is the registry's contract, byte-for-byte;
+- the chain is a permitted chain, identified by chain ID.
+
+**D. Representation semantics** — candidate metadata and mandate constraints.
+
+- issuer in the permitted set;
+- instrument type permitted;
+- synthetic exposure permitted, if the representation is synthetic;
+- backing requirement satisfied;
+- required rights present;
+- jurisdiction constraints satisfied;
+- no constrained field is `UNKNOWN`.
+
+**E. Economic bounds** — candidate quote and mandate limits.
+
+- notional within maximum notional;
+- execution price within the price limit;
+- expected deviation within the maximum execution deviation;
+- amounts and decimals internally consistent; units explicit.
+
+**F. Market and corporate-action state** — observed state, clock, mandate.
+
+- price observation within the mandate's freshness bound;
+- corporate-action state within the mandate's freshness bound;
+- no pending corporate action invalidating the authorization (§13);
+- underlying not halted, or halted and the mandate's halt policy permits it;
+- representation operational state is active, not paused, not `UNKNOWN`.
+
+**G. Intent fidelity** — the candidate versus the mandate as a whole.
+
+- the candidate does not differ materially from the principal's instruction in
+  any way the individual checks above would not catch;
+- venue permitted;
+- the transaction the execution gate will submit is the one verified (§14.3).
+
+### 10.3 Reason codes
+
+**SPECIFIED as a requirement; DRAFT as a list.** Reason codes are a public
+interface: they appear in receipts, in the demo, in integrator error handling,
+and in audit records. Rules:
+
+- stable and namespaced (`MND-<FAMILY>-<NNN>`);
+- one code per distinct cause, never a generic `INVALID`;
+- a code is never reused for a different meaning; retired codes stay retired;
+- each code carries a human-readable explanation, and the explanation is data,
+  not a string built at the call site.
+
+Illustrative, to fix the shape — not the final registry:
+
+| Code | Family | Meaning |
+| --- | --- | --- |
+| `MND-AUTH-001` | Authorization | Mandate expired |
+| `MND-AUTH-002` | Authorization | Nonce already used (replay) |
+| `MND-AUTH-003` | Authorization | Acting agent is not the mandate's agent |
+| `MND-ASSET-001` | Identity | Representation does not map to the mandate's canonical asset |
+| `MND-ASSET-002` | Identity | Contract address is not the registry's address |
+| `MND-ASSET-003` | Identity | Ticker resolution ambiguous |
+| `MND-REPR-001` | Semantics | Issuer not in permitted issuers |
+| `MND-REPR-002` | Semantics | Synthetic instrument, mandate forbids synthetic exposure |
+| `MND-REPR-003` | Semantics | Required economic right absent |
+| `MND-REPR-004` | Semantics | Constrained metadata field is UNKNOWN |
+| `MND-ECON-001` | Economics | Notional exceeds authorized maximum |
+| `MND-ECON-002` | Economics | Execution deviation exceeds mandate limit |
+| `MND-STATE-001` | State | Price observation older than the mandate's freshness bound |
+| `MND-STATE-002` | State | Corporate-action state stale |
+| `MND-STATE-003` | State | Pending corporate action invalidates this authorization |
+| `MND-STATE-004` | State | Underlying is halted and the mandate forbids halted execution |
+| `MND-STATE-005` | State | Representation is issuer-paused |
+| `MND-NET-001` | Network | Chain not permitted |
+| `MND-NET-002` | Network | Venue not permitted |
+
+### 10.4 Why the verifier does no I/O
+
+Purity is not stylistic. It buys four properties that matter more than
+convenience:
+
+1. **Testability.** Every rejection path can be exercised as a table-driven
+   test with no mocks. The failure modes are where the value is, so they have
+   to be cheap to test exhaustively.
+2. **Auditability.** Because inputs are values, the audit record can contain
+   them, and any decision is re-runnable years later.
+3. **Attack-surface reduction.** A verifier that fetches its own data can be
+   attacked through its data source. A verifier handed explicit values can only
+   be attacked by lying to the caller, which the freshness and provenance
+   checks then examine as data.
+4. **Portability.** The same decision logic can run off-chain, in a service, in
+   a wallet, and — for the subset expressible on-chain — inside the execution
+   gate, without behavioural drift.
+
+### 10.5 Differential verification
+
+**DRAFT, high value.** The same decision existing in more than one place (an
+off-chain verifier and an on-chain gate, or two independent implementations)
+creates the risk of divergence, and divergence in a safety gate is a
+vulnerability.
+
+Planned mitigation, carried over as methodology from prior work (§24): a shared
+corpus of decision vectors — inputs plus expected verdict and reason codes —
+that every implementation is tested against, plus property tests over generated
+inputs asserting that independent implementations agree on every case.
+
+## 11. Jev's role and its limits
+
+> **Status: DRAFT.** The role and the constraints are settled. The integration
+> surface is not, and is deferred to Phase 5.
+
+### 11.1 What Jev may do
+
+Jev may participate in stages where judgment helps and where being wrong is
+recoverable:
+
+- **Candidate classification** — proposing a structured reading of messy
+  representation metadata.
+- **Candidate ranking** — ordering already-admissible candidates.
+- **Candidate selection** — choosing one from the already-admissible set.
+- **Disambiguation support** — proposing canonical asset candidates for an
+  ambiguous human reference, for review.
+- **Explanation** — rendering a deterministic verdict into readable language
+  *after* the verdict exists.
+
+### 11.2 What Jev may never do
+
+**SPECIFIED, and enforced structurally rather than by convention:**
+
+- Jev is never the final authorization authority.
+- Jev may not add a candidate that resolution and admissibility did not
+  produce.
+- Jev may not relax, reinterpret, or override any mandate constraint.
+- Jev may not supply a contract address, a chain ID, an amount, or a
+  constraint value.
+- Jev's output is never an input to the verifier's decision. The verifier
+  receives the *candidate*, not Jev's reasoning about it, and does not know
+  whether Jev was involved.
+- Jev's absence, failure, timeout, or nonsense output must never cause an
+  unsafe execution. It causes a fallback to deterministic ranking, or a
+  refusal — never a relaxation.
+
+### 11.3 The structural property
+
+The set of executions Mandate permits is **identical** whether Jev is present,
+absent, broken, or adversarial.
+
+Jev influences *which* admissible candidate is chosen and *how fast*. It cannot
+influence *whether* a candidate is permitted. A compromised Jev degrades
+execution quality within the mandate's bounds; it does not produce an execution
+outside them.
+
+This is stated as invariant INV-3 in §16 and should be established by test: run
+the pipeline with a deliberately adversarial Jev stub that always returns the
+worst or most dangerous answer, and assert that no execution occurs that the
+deterministic path would not also have permitted.
+
+### 11.4 The integration surface
+
+```
+admissible candidates  ──▶  [ Jev ]  ──▶  selected candidate
+                                              │
+                                              ▼
+                                      [ deterministic verifier ]
+                                              │
+                                    PASS ─────┴───── REJECT
+```
+
+Constraints on the interface (**DRAFT**):
+
+- Jev receives a **closed set** and returns an **index into it**, or an
+  abstention. It does not return a candidate object, because returning an
+  object is an opportunity to return a modified one.
+- Jev's call is bounded by a timeout and a token budget; exceeding either is an
+  abstention, not an error that blocks the pipeline.
+- Jev's input, output, model identity and version are recorded in the audit
+  trail, so a bad selection can be attributed later.
+- Jev never sees the principal's signing material, and nothing it returns is
+  passed to a signer.
+
+### 11.5 Open questions
+
+- Jev's concrete API, latency profile, and cost per call are not yet
+  characterized in this repository. Phase 5 begins with that characterization,
+  not with integration. **Unresolved — do not assume capabilities.**
+- Whether Jev is worth using for classification of representation metadata
+  (a slow, reviewable, high-value task) or only for ranking (a fast, low-value
+  task) should be decided by measurement, not assumption. **Unresolved.**
+
+## 12. Routing architecture
+
+> **Status: DRAFT.** Two-stage structure is settled; the ranking function and
+> the venue adapter interface are not.
+
+### 12.1 Admissibility before quality
+
+```
+canonical asset
+      │
+      ▼
+[ registry ] ──▶ all known representations
+      │
+      ▼
+[ admissibility filter ]          deterministic, fail-closed
+      │                           mandate instrument constraints
+      ▼
+admissible representations
+      │
+      ▼
+[ venue / route discovery ] ──▶ execution candidates, with quotes
+      │                          and observed state snapshots
+      ▼
+[ admissibility filter, again ]   economic and state constraints
+      │                           now that quotes exist
+      ▼
+admissible candidates ───▶ [ ranking ] ───▶ ordered candidates
+                                                  │
+                                                  ▼
+                                         [ Jev, optional ] ──▶ selected
+                                                  │
+                                                  ▼
+                                         [ verifier ] ──▶ PASS / REJECT
+```
+
+Admissibility filtering runs twice because some constraints (issuer, instrument
+type) can be evaluated before quoting and should be, to avoid pointless market
+data calls, while others (notional, deviation, price) need a quote.
+
+Critically, the filter running before ranking does not make the verifier
+redundant. The verifier re-checks everything, because the filter's output
+passes through a ranking stage and an optional model, and the verifier's job is
+to trust neither.
+
+### 12.2 Execution candidates
+
+**DRAFT.** A candidate is a fully specified, self-describing execution
+proposal — everything the verifier needs, with nothing to look up:
+
+| Group | Content |
+| --- | --- |
+| Representation | Which representation, resolved from the registry |
+| Venue and route | Which venue, which path, which contracts |
+| Economics | Input amount, expected output, reference price, expected deviation, fees, all with units and decimals |
+| State snapshot | Observed market state, corporate-action state, operational state — each with source, provenance and observation time |
+| Binding | A commitment to the exact transaction that would be submitted |
+
+The candidate carries its own state snapshot rather than referencing shared
+mutable state, so the verifier's decision is over a fixed, recordable object.
+
+### 12.3 Ranking
+
+**DRAFT.** Among admissible candidates, ranking considers expected execution
+quality, liquidity depth relative to the notional, fees and gas, state
+confidence, and settlement characteristics.
+
+One rule is **SPECIFIED**, because it is the cross-representation version of
+the amount-comparison problem in §4.2:
+
+> Candidates on different representations are never compared by raw token
+> output. Comparison happens in an economically meaningful common unit, with
+> explicit arithmetic, explicit rounding, and a cost that rounds against the
+> substitution rather than in favour of it.
+
+If two candidates cannot be compared in a common unit with a defensible
+computation, they are not comparable and the system does not pretend otherwise.
+
+### 12.4 Substitution between representations
+
+Substituting issuer B's representation for issuer A's is a financial decision,
+not a routing optimization, because the two instruments differ (§5.4).
+
+**SPECIFIED:** substitution requires explicit authorization. Either the mandate
+permits a set of issuers and is indifferent among them — in which case any
+member is not a substitution but an authorized choice — or a change of
+representation outside what the mandate authorized requires new authorization.
+There is no silent reroute, and a better price never implies consent.
+
+### 12.5 Venue adapters
+
+**DRAFT.** Each venue is an adapter behind a common interface: quote, build,
+and report state. Design rules, carried over as lessons from prior work:
+
+- adapters are independent and do not share assumed semantics;
+- an adapter that cannot express a venue's semantics fails closed rather than
+  approximating;
+- an adapter reports what it observed with provenance, and does not normalize
+  away a conflict;
+- adding an adapter must not require changing the verifier.
+
+## 13. Corporate actions
+
+> **Status: SPECIFIED** as an invariant; **DRAFT** as a mechanism.
+
+### 13.1 Why this is a correctness requirement, not a feature
+
+A corporate action changes what one unit of an asset *means*. A 4:1 split makes
+one pre-split share equal four post-split shares. An authorization written
+against pre-split economics, executed against post-split economics, is wrong by
+a factor of four — not by basis points.
+
+This is why corporate-action awareness cannot be a UI nicety or an advisory
+warning. It is a term in the correctness condition of execution.
+
+### 13.2 Events in scope
+
+| Event | Effect on authorization |
+| --- | --- |
+| Dividend | Depends on representation: passed through, or reflected as a price adjustment. Affects reference price and expected economics |
+| Stock split | Changes unit meaning. Material |
+| Reverse split | Changes unit meaning. Material |
+| Merger | May map the canonical asset onto a different one, or onto cash. Material |
+| Spin-off | Creates a new canonical asset and changes the original's economics. Material |
+| Symbol change | Changes the display alias, not the canonical identity — and is exactly why the alias is not the identity |
+| Conversion | Changes the instrument. Material |
+
+### 13.3 The staleness invariant
+
+> A financial authorization created under corporate-action state **S** must not
+> execute under state **S'** when the change from S to S' is material to the
+> authorization.
+
+Consequences:
+
+- a mandate binds to the corporate-action state it was authored under;
+- a material change makes the mandate **stale**, and a stale mandate does not
+  execute;
+- recovery from staleness is **reauthorization**, not an automatic adjustment.
+  Silently rescaling a notional across a split substitutes the system's
+  judgment for the principal's, which is the failure mode Mandate exists to
+  prevent.
+
+### 13.4 Corporate-action epoch
+
+**DRAFT.** Proposed mechanism: every canonical asset carries a monotonically
+increasing **corporate-action epoch**, incremented on any event material to
+execution economics. A mandate records the epoch it was authored under; the
+verifier rejects when the observed epoch differs.
+
+Why an epoch counter rather than comparing event lists:
+
+- it makes the check a cheap integer comparison, suitable for an on-chain gate;
+- it makes staleness explicit and auditable rather than inferred;
+- it is asset-class agnostic, so it extends to bonds, funds and treasuries
+  without redesign.
+
+Open questions, to be resolved before implementation:
+
+- who is authoritative for incrementing the epoch, and how that authority is
+  itself constrained;
+- how epoch data is distributed, and its own freshness bound — an epoch feed is
+  itself state that can be stale;
+- how a scheduled but not yet effective action is represented: an authorization
+  written shortly before a known upcoming split is arguably already unsafe.
+  The prior work's approach — a refusal window around a scheduled activation,
+  with the phase before and after treated as part of the protected state — is
+  the leading candidate. See §24.
+
+### 13.5 Scheduled transitions and the clock
+
+A lesson carried directly from the prior codebase and worth stating plainly:
+
+> Economic state includes the clock. State can change meaning at a scheduled
+> instant without any observable change to stored data.
+
+A system that compares stored bytes and concludes "nothing changed" is wrong
+whenever an adjustment activates on a timestamp. Therefore any Mandate state
+comparison must include *which* of the stored values is effective at the
+evaluation time, and time used for a safety decision must come from the chain's
+clock at execution, not from a wall clock at decision time.
+
+## 14. Settlement
+
+> **Status: DRAFT** for the MVP; **FUTURE** for settlement abstraction.
+
+### 14.1 Submission is not settlement
+
+Three distinct facts, often conflated:
+
+1. a transaction was **submitted**;
+2. a transaction was **included** and did not revert;
+3. the principal's **position** is final.
+
+A Mandate receipt reports what it observed, at whichever of these it reached,
+and never asserts a later stage than it verified.
+
+### 14.2 MVP settlement model
+
+Atomic on-chain settlement on a single chain: the execution succeeds
+completely, or it reverts and nothing settles. Atomicity is what makes the
+execution gate meaningful — a gate that rejects must be able to prevent
+everything else in the transaction from taking effect.
+
+### 14.3 The execution gate
+
+**DRAFT.** Off-chain verification decides; something must then ensure the
+submitted transaction is the verified one. Between a PASS and inclusion there
+is a window in which the transaction can be substituted, reordered, delayed
+into stale state, or partially replaced.
+
+The intended mechanism, carried over conceptually from prior work:
+
+- the verified candidate produces a **commitment** to the exact action —
+  target contract, function, accounts/parameters, amounts, and the economic
+  state asserted;
+- an on-chain gate instruction accompanies the action in the same atomic unit;
+- at execution time the gate re-reads the state it can read on-chain, compares
+  against the commitment, and reverts on any mismatch;
+- the gate verifies *its own position* relative to the action it protects, so
+  ordering is not left to the transaction builder's good behaviour;
+- the gate is read-only and side-effect free: adding it cannot change the
+  outcome of a transaction that would otherwise have succeeded with unchanged
+  state.
+
+What the gate can enforce is bounded by what the chain can observe. It can
+enforce that the action is the committed one and that on-chain economic state
+matches the expectation. It cannot enforce facts that exist only off-chain,
+such as whether the principal genuinely intended the notional. Those remain
+off-chain checks, and the boundary must be stated rather than blurred.
+
+### 14.4 Settlement abstraction
+
+**FUTURE.** Deferred settlement, issuer-confirmed settlement, cross-chain
+settlement, and netting all break the atomicity assumption in §14.2. They
+require a settlement-state machine with pending states, timeouts and failure
+recovery. Recorded here so the MVP's atomic assumption is a stated assumption
+rather than an invisible one.
+
+## 15. Audit and reconciliation
+
+> **Status: DRAFT.**
+
+### 15.1 The execution receipt
+
+Every execution attempt — successful or rejected — produces a structured
+receipt. Rejections produce receipts too; a refusal that leaves no record is
+not auditable.
+
+A receipt contains:
+
+| Section | Content |
+| --- | --- |
+| Authorization | Mandate identifier, digest, principal, agent, expiry, nonce |
+| Intent | Canonical asset, action, limits as authorized |
+| Resolution | Representations considered, and why each was admitted or excluded |
+| Candidates | Candidates discovered, their economics and state snapshots |
+| Advisory | Whether Jev was consulted, what it received, what it returned, model identity and version |
+| Verdict | PASS or REJECT, every reason code, and the inputs the verdict was computed over |
+| Execution | What was submitted, where, and the observed result |
+| Reconciliation | Intended versus realized economics, and any discrepancy |
+
+### 15.2 Explainability requirement
+
+> Every execution and every refusal must be explainable from its receipt alone,
+> without re-running the pipeline and without access to a model.
+
+This is stronger than logging. It means the receipt contains the *inputs* to
+the decision, not only the outputs, so the verifier can be re-run over them and
+must produce the same verdict (§10.1, property 3). A receipt whose verdict is
+not reproducible from its own contents indicates either a non-deterministic
+verifier or an incomplete receipt; both are defects.
+
+### 15.3 Reconciliation
+
+Comparison of intended versus realized: expected against actual execution
+price, expected against actual quantity, assumed against observed state,
+selected against executed venue. A discrepancy is surfaced, never smoothed.
+
+**FUTURE:** portfolio-level reconciliation, cross-venue position aggregation,
+and reporting exports.
+
+### 15.4 Attestations
+
+**FUTURE.** Signed, independently verifiable attestations that a specific
+execution satisfied a specific mandate — useful for institutional reporting and
+for third parties who did not observe the execution. Noted so that receipts are
+designed to be attestable later: stable digests, canonical encoding, no
+dependence on mutable external references.
+
+## 16. Major invariants
+
+These are the properties that define Mandate. A change that breaks one is a
+change to the product, not an implementation detail. Each is stated so it can
+be tested; none is implemented in Phase 0.
+
+| ID | Invariant | Where it will be enforced |
+| --- | --- | --- |
+| **INV-1** | Human intent is authoritative. No component may widen authority beyond the signed mandate. | Verifier |
+| **INV-2** | A valid agent signature alone never authorizes a financial action. Authentication and authorization are separate checks. | Verifier |
+| **INV-3** | The set of permitted executions is identical whether Jev is present, absent, failed or adversarial. | Verifier; pipeline structure; adversarial-stub test |
+| **INV-4** | Model output never supplies an address, an amount, or a constraint value. | Pipeline structure; type boundaries |
+| **INV-5** | Fail closed. `UNKNOWN` state, unparseable data, missing metadata on a constrained field, and unrecognized schema versions all reject. There is no "proceed anyway" path. | Verifier |
+| **INV-6** | Canonical financial identity is distinct from token identity, and equivalence between representations is never inferred from shared underlying. | Registry model; verifier |
+| **INV-7** | Contract addresses used in execution come from the registry, never from a model, a tool response, or free text. | Resolution stage; type boundaries |
+| **INV-8** | Optimization occurs only over candidates that already satisfy every mandate constraint. | Routing structure |
+| **INV-9** | Corporate-action state is part of execution correctness. A materially stale authorization does not execute. | Verifier; epoch check |
+| **INV-10** | Economic state includes the clock. Comparisons account for which stored value is effective at evaluation time, and safety-critical time comes from the chain at execution. | Verifier; execution gate |
+| **INV-11** | Every execution and every refusal is explainable and reproducible from its receipt. | Receipt model; verifier purity |
+| **INV-12** | Replay protection: an authorization is consumed, and a consumed or expired authorization never executes. | Verifier; execution gate |
+| **INV-13** | The transaction submitted is the transaction verified. | Execution gate |
+| **INV-14** | No silent substitution between representations. | Routing; verifier |
+| **INV-15** | Cross-representation comparison is never by raw token amount, and a substitution cost is never understated. | Ranking; explicit arithmetic |
+| **INV-16** | Safety decisions are never made on floating-point equality. Values that gate execution are compared in exact representations. | Verifier |
+| **INV-17** | Every observed state input carries provenance and an observation time, and is subject to an explicit freshness bound. | Candidate model; verifier |
+| **INV-18** | Every quantity carries its unit and its decimals. Unit-less quantities are not representable. | Type design |
+
+INV-16 and INV-18 look like implementation hygiene and are not: both are
+listed as threats in §17, both have produced real financial bugs in production
+systems, and both are cheap to enforce structurally and expensive to retrofit.
+
+## 17. Threat model overview
+
+> **Status: DRAFT.** Phase 0 enumerates and assigns. It solves nothing — no
+> component exists. Each row names the component that must address the risk and
+> the phase that introduces it.
+
+Statuses: **DESIGN** — the design addresses it and the component is planned.
+**PARTIAL** — the design reduces it but cannot close it. **OPEN** — not
+addressed by the current design; recorded deliberately.
+
+### 17.1 Agent and model compromise
+
+| Threat | Addressed by | Phase | Status |
+| --- | --- | --- | --- |
+| Compromised agent acts outside intent | Deterministic verifier; bounded mandate authority (INV-1, INV-2) | 1 | DESIGN |
+| Hallucinated token address | Registry-only address resolution (INV-7); agent never supplies addresses | 2 | DESIGN |
+| Prompt injection steers the agent | Trust levels (§8.3); untrusted input influences nothing; verifier independent of agent reasoning | 1–2 | DESIGN |
+| Malicious tool response | Same as above; tool output is untrusted and cannot supply addresses, amounts or constraints | 1–2 | DESIGN |
+| Jev misclassification or adversarial Jev | INV-3; verifier re-checks; adversarial-stub test | 1, 5 | DESIGN |
+| Agent authored a mandate that does not reflect intent | Human review of the mandate before signing. **Not a code control** | — | PARTIAL |
+
+### 17.2 Identity and representation
+
+| Threat | Addressed by | Phase | Status |
+| --- | --- | --- | --- |
+| Ticker collision | Tickers are aliases, not identity; ambiguous resolution rejects (§5.2) | 2 | DESIGN |
+| Fake or counterfeit token | Registry allowlist; `UNKNOWN` fails closed (INV-5) | 2 | DESIGN |
+| Wrong issuer | Issuer allowlist in mandate; verified against registry metadata | 1–2 | DESIGN |
+| Unsupported representation semantics | Unmodelled semantics reject rather than being approximated (§6.4) | 2 | DESIGN |
+| Registry itself is wrong or compromised | Change control, provenance, on-chain preference for safety-critical fields. Residual risk | 2 | PARTIAL |
+
+### 17.3 State and timing
+
+| Threat | Addressed by | Phase | Status |
+| --- | --- | --- | --- |
+| Stale price | Freshness bounds with provenance (INV-17) | 1, 3 | DESIGN |
+| Stale corporate-action state | Epoch binding; freshness bound (INV-9) | 1, 3 | DESIGN |
+| Scheduled transition crosses during flight | Clock-aware state comparison at execution (INV-10); refusal window | 3, 6 | DESIGN |
+| Market halt | Halt policy in mandate; state check | 1, 3 | DESIGN |
+| Stale mandate (expired) | Expiry check (INV-12) | 1 | DESIGN |
+| Replay of a mandate | Nonce consumption (INV-12) | 1, 6 | DESIGN |
+| Market-data provider lies | Provenance, conflict detection, fail-closed on conflict; on-chain preferred where available | 3 | PARTIAL |
+
+### 17.4 Execution
+
+| Threat | Addressed by | Phase | Status |
+| --- | --- | --- | --- |
+| Amount mutation between decision and submission | Commitment binding; execution gate (INV-13) | 6 | DESIGN |
+| Decimal or unit mistake | Units and decimals mandatory on every quantity (INV-18); exact arithmetic (INV-16) | 1 | DESIGN |
+| Malicious route provider | Routes are candidates, not instructions; verifier re-checks; commitment binding | 4, 6 | DESIGN |
+| Candidate differs materially from intent | Intent-fidelity checks (§10.2 family G) | 1 | DESIGN |
+| Partial execution | Atomic settlement in MVP (§14.2); non-atomic settlement is FUTURE and unaddressed | 6 | PARTIAL |
+| Bridge failure | Out of MVP scope; cross-chain is FUTURE | 9+ | OPEN |
+| MEV, sandwiching, ordering | Deviation bounds limit economic damage; not otherwise addressed | 4, 6 | PARTIAL |
+| Gate program upgraded between verification and execution | Pin deployment identity and re-check before submission; immutable or timelocked deployment needed in production | 6 | PARTIAL |
+
+### 17.5 Surrounding system
+
+| Threat | Addressed by | Phase | Status |
+| --- | --- | --- | --- |
+| Frontend compromise | Mandate signed by the principal; a compromised frontend can request a bad mandate, so the signing surface must display what is being authorized in financial terms | 8 | PARTIAL |
+| Principal's key compromise | Out of scope. Mandate assumes the principal's signing key is sound | — | OPEN |
+| RPC lies about the network | Chain identity from chain ID, checked against the submission target (§5.3) | 3 | DESIGN |
+| Registry supply chain / dependency compromise | Standard supply-chain hygiene: pinned dependencies, lockfiles, audit in CI | 1+ | PARTIAL |
+| Observability data leaking principal information | Receipt design; not yet analysed | 8 | OPEN |
+
+### 17.6 Honest statement of limits
+
+Recorded now so no later document overstates the system:
+
+- Mandate constrains execution to an authorization. It cannot determine whether
+  the authorization reflects what a human *meant*. Mandate protects the
+  mandate, not the intention behind it.
+- Mandate cannot make a bad instrument good. It can refuse one the mandate
+  forbids.
+- On-chain enforcement is bounded by what the chain can observe. Off-chain
+  facts stay off-chain checks.
+- Metadata quality bounds decision quality. A registry that misclassifies a
+  synthetic instrument as backed will pass a mandate that forbids synthetics,
+  and no amount of verification logic fixes that.
+
+## 18. Robinhood Chain and Arbitrum initial integration
+
+> **Status: EXPLORATORY** on specifics; **DRAFT** on structure.
+
+### 18.1 Why this environment first
+
+Tokenized equities on Robinhood Chain / Arbitrum-compatible infrastructure give
+the MVP a real instance of the problem this document describes: real tokenized
+equity representations, an EVM execution environment with mature tooling, and
+Arbitrum-compatible semantics that keep the work portable across the broader
+Arbitrum ecosystem.
+
+### 18.2 What the integration must supply
+
+Structural requirements, independent of the specific endpoints:
+
+| Need | Why |
+| --- | --- |
+| Chain identity by chain ID | INV: never trust an RPC's claim about its network (§5.3) |
+| Representation discovery and metadata | The registry's equity entries (§6) |
+| Market state: price, liquidity, venue quotes | Economic-bound checks (§10.2 family E) |
+| Operational state: pause, transfer restrictions | Representation state checks (§10.2 family F) |
+| Corporate-action state or epoch source | The staleness invariant (§13.3) |
+| Transaction construction and submission | Execution (§9, stage 6) |
+| Testnet environment | Execution proof without financial risk |
+
+### 18.3 What is not yet known
+
+Stated plainly rather than assumed, because assuming here would produce an
+architecture that does not fit reality:
+
+- exact available endpoints, their rate limits, and their freshness guarantees;
+- whether corporate-action state is available on-chain, from an issuer API,
+  only from third-party data, or not at all — this materially affects §13.4;
+- which venues are available and what their quoting interfaces look like;
+- what the testnet environment supports;
+- whether on-chain adjustment mechanisms exist for tokenized equity
+  representations in this environment, and in what form.
+
+**Phase 3 begins with answering these empirically**, and the answers may change
+the corporate-action mechanism in §13.4. This document should be revised when
+they are known rather than being written as if they already are.
+
+### 18.4 Adapter boundary
+
+Everything environment-specific lives behind an adapter (§12.5). The verifier,
+the mandate types, the registry model and the receipt model must contain no
+Arbitrum-specific or Robinhood-Chain-specific assumption. The test of this
+design rule: adding a second chain in a later phase must not require modifying
+the verifier.
+
+## 19. Stablecoin funding as a supporting layer
+
+> **Status: FUTURE.** Not in the MVP.
+
+### 19.1 The problem it solves
+
+A principal expressing "$1,000 of NVDA exposure" is expressing a fiat-
+denominated intent. Execution requires a specific funding asset — some
+stablecoin, on some chain, with some liquidity and some depeg risk. Making the
+principal or the agent reason about *which* stablecoin reintroduces exactly the
+class of blockchain detail Mandate exists to hide.
+
+### 19.2 What a funding layer would need
+
+- a notion of acceptable funding assets, constrained by the mandate the same way
+  instruments are;
+- stablecoin representation semantics — issuer, backing, redemption, depeg
+  history — modelled with the same care as asset representations, because
+  "a dollar" is also a claim with an issuer;
+- funding-route discovery and conversion costs folded into execution economics,
+  so the deviation bound covers the full path;
+- failure handling when funding succeeds and execution does not.
+
+### 19.3 MVP position
+
+The MVP assumes funding is already in place in a single, configured asset. This
+is an explicit simplification, not an oversight. What the MVP must avoid is
+*assuming a single funding asset structurally* — the notional and the funding
+asset are separate concepts in the type design from the beginning, so the
+layer can be added without reworking the mandate.
