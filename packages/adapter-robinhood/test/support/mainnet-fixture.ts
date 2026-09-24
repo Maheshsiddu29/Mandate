@@ -5,15 +5,18 @@ import {
   parseCanonicalIdentityMappingFile,
   parseCorporateActionsResponse,
   parseOnchainTokenObservation,
+  parseOracleObservation,
   parseRobinhoodAssetsResponse,
   parseRobinhoodPriceResponse,
   type AdapterResult,
   type CanonicalIdentityMappingFile,
   type NormalizedCorporateAction,
   type NormalizedOnchainToken,
+  type NormalizedOraclePrice,
   type NormalizedRobinhoodAsset,
   type NormalizedRobinhoodPrice,
   type RawOnchainTokenObservation,
+  type RawOracleObservation,
   type RawMultiplierEventLog,
 } from '../../src/index.ts';
 
@@ -123,4 +126,24 @@ export function loadOnchainToken(symbol: typeof FIXTURE_SYMBOLS[number]): Normal
 export function loadMultiplierEventLogs(): readonly RawMultiplierEventLog[] {
   const response = object(readJson('raw/rpc-multiplier-events.json'), 'multiplier event response');
   return array(response['result'], 'multiplier event result') as readonly RawMultiplierEventLog[];
+}
+
+export function loadOraclePrice(symbol: 'AAPL' | 'NVDA' | 'TSLA' | 'QQQ' | 'MSFT'): NormalizedOraclePrice {
+  const oracleMap = object(readJson('raw/rpc-oracle-map.json'), 'oracle map');
+  const symbols = array(oracleMap['symbols'], 'oracle symbols');
+  const symbolIndex = symbols.indexOf(symbol);
+  if (symbolIndex < 0) throw new Error(`no oracle fixture for ${symbol}`);
+  const requests = array(readJson('raw/rpc-oracle-requests.json'), 'oracle requests');
+  const codeRequest = object(requests[symbolIndex * 3], 'oracle code request');
+  const params = array(codeRequest['params'], 'oracle code request params');
+  const chain = object(readJson('raw/rpc-chain-id.json'), 'chain ID response');
+  const blockResponse = object(readJson('raw/rpc-latest-block.json'), 'block response');
+  const block = object(blockResponse['result'], 'block result');
+  const results = resultById(readJson('raw/rpc-oracles.json'), 'oracle batch');
+  const base = symbolIndex * 3;
+  const observation: RawOracleObservation = {
+    chainId: chain['result'], blockNumber: block['number'], blockTimestamp: block['timestamp'], feedAddress: params[0],
+    code: results.get(base + 1), decimalsResult: results.get(base + 2), latestRoundDataResult: results.get(base + 3),
+  };
+  return expectAdapter(parseOracleObservation(observation), `${symbol} oracle fixture`);
 }

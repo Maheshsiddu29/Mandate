@@ -26,10 +26,10 @@ Direct observations used unauthenticated read-only requests to:
 
 | Surface | Observed endpoint | Documented cache/rate behavior |
 | --- | --- | --- |
-| Asset catalogue | `GET https://api.robinhood.com/rhj/assets` | cached; no numeric window stated on the inspected page; 60 requests/second shared limit |
-| Price | `GET https://api.robinhood.com/rhj/prices/{symbol}` | 15-second cache; 60 requests/second |
-| Corporate actions | `GET https://api.robinhood.com/rhj/corporate-actions` | one-hour cache; 60 requests/second |
-| Mainnet RPC | `https://rpc.mainnet.chain.robinhood.com` | no public rate guarantee relied on |
+| Asset catalogue | `GET https://api.robinhood.com/stock-tokens/assets` | cached; no numeric window stated on the inspected page; 60 requests/second shared limit |
+| Price | `GET https://api.robinhood.com/stock-tokens/prices/{symbol}` | 15-second cache; 60 requests/second |
+| Corporate actions | `GET https://api.robinhood.com/stock-tokens/corporate-actions` | one-hour cache; 60 requests/second |
+| Mainnet RPC | `https://rpc.robinhoodchain.com` | no public rate guarantee relied on |
 
 The API responses returned HTTP 200 through CloudFront. No cache-control or
 freshness header was returned in the captured responses, so Mandate does not
@@ -83,9 +83,10 @@ section. The Phase 3 parser implements the observed nested schema and rejects an
 unknown status. Trading capability is recorded independently of trading halt.
 
 The live `/prices` response also contained `tokenBid` and `tokenAsk`, which were
-not in the schema table. For each sampled quote they exactly matched the
-adapter's deterministic `bid × currentMultiplier` and
-`ask × currentMultiplier` calculation at 18 decimal places.
+not in the schema table. They matched `bid × currentMultiplier` and
+`ask × currentMultiplier` after explicit truncation toward zero to 18 decimal
+places. Several sample products had nonzero sub-atom remainders, so treating
+the calculation as exactly representable would reject valid observed data.
 
 The captured corporate-action response contained 52 rows: cash dividends only,
 with both `IN_PROGRESS` and `COMPLETED` statuses. Other action types are
@@ -130,14 +131,16 @@ Robinhood's REST `bid` and `ask` are raw underlying-share prices. The conversion
 to one raw token's total-return value is:
 
 ```
-tokenEquivalentPrice = underlyingPrice * currentMultiplier / 10^18
+tokenEquivalentPrice = floor(underlyingPriceAtoms * currentMultiplierAtoms / 10^18)
 ```
 
-where the multiplier is an 18-decimal shares-per-token integer. Chainlink's
+where all displayed values use 18 decimal atoms and the floor operation is the
+wire behavior verified against `tokenBid` and `tokenAsk`. The adapter names this
+rounding rule explicitly; it is not generic safety arithmetic. Chainlink's
 feed already publishes this multiplier-adjusted token price with its own
 decimals and `updatedAt`; applying the multiplier again would be wrong.
 
-The capture confirmed the multiplier equation against Robinhood's live
+The capture confirmed the multiplier and truncation equation against Robinhood's live
 `tokenBid`/`tokenAsk`. The sampled Chainlink rounds were older than their paired
 REST quotes, so they are not asserted equal; cross-surface diagnostics label
 them time-incomparable instead of manufacturing a mismatch or ignoring time.
@@ -161,6 +164,8 @@ equities and an ETF, a multiplier of exactly one, dividend-adjusted multipliers,
 CRWD's 4.0 split multiplier, completed and pending cash-dividend rows, and an
 asset whose fractional capability is untradable. The selection records what the
 capture actually exposed; it does not synthesize missing mainnet states.
+WYFI's price endpoint returned HTTP 404 at `2026-09-24T22:57:16Z`; Mandate
+therefore retains its asset and capability state but creates no market state.
 
 ## Limits
 
@@ -174,4 +179,3 @@ capture actually exposed; it does not synthesize missing mainnet states.
   not observed. Offline synthetic tests cover those failure modes.
 - Phase 3 records pending actions and capabilities but does not invent routing
   or long-lived-mandate policy. Those decisions remain later-phase work.
-

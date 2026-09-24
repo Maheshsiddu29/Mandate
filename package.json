@@ -17,7 +17,8 @@
     "check": "npm run typecheck && npm test",
     "docs:generate": "node packages/kernel/test/support/generate-reason-codes-doc.ts && node packages/registry/test/support/generate-reason-codes-doc.ts",
     "registry-corpus:generate": "node packages/registry/test/support/generate-corpus.ts",
-    "robinhood:fixtures:validate": "node packages/adapter-robinhood/scripts/validate-fixtures.ts"
+    "robinhood:fixtures:validate": "node packages/adapter-robinhood/scripts/validate-fixtures.ts",
+    "robinhood:cross-surface": "node packages/adapter-robinhood/scripts/validate-cross-surface.ts"
   },
   "devDependencies": {
     "@types/node": "22.20.2",

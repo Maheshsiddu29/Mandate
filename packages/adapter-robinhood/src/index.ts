@@ -9,3 +9,5 @@ export * from './price.ts';
 export * from './onchain.ts';
 export * from './corporate-action.ts';
 export * from './epoch.ts';
+export * from './oracle.ts';
+export * from './consistency.ts';

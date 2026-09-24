@@ -1,6 +1,6 @@
 import type { Amount, Identifier, Price, UnixSeconds } from '@mandate/kernel';
 import { parsePrice } from '@mandate/kernel';
-import { multiplyFixedExact, parseFixedDecimal, type FixedDecimal } from './decimal.ts';
+import { multiplyFixedFloor, parseFixedDecimal, type FixedDecimal } from './decimal.ts';
 import { authoritativeHttpEvidence, ObservationClock, verifiedDerivation, type Evidence } from './evidence.ts';
 import { parseRobinhoodDeployment, type RobinhoodDeployment } from './asset.ts';
 import { AdapterErrorCode, adapterErr, adapterOk, type AdapterResult } from './result.ts';
@@ -58,7 +58,7 @@ export function tokenEquivalentPrice(
   if (underlying.value.numeratorUnit !== 'USD' || underlying.value.denominatorUnit !== 'SHARE') {
     return adapterErr(AdapterErrorCode.INVALID_DECIMAL, 'price', 'expected USD per SHARE underlying price');
   }
-  const multiplied = multiplyFixedExact(
+  const multiplied = multiplyFixedFloor(
     { atoms: underlying.value.atoms, decimals: underlying.value.decimals },
     currentMultiplier.value,
     PRICE_DECIMALS,

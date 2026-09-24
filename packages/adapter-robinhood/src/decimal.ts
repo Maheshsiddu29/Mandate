@@ -52,3 +52,24 @@ export function multiplyFixedExact(
   if (atoms > UINT256_MAX) return adapterErr(AdapterErrorCode.VALUE_OUT_OF_RANGE, path, 'product exceeds uint256');
   return adapterOk({ atoms, decimals: outputDecimals });
 }
+
+/** Multiply using the truncation toward zero empirically observed in
+ * Robinhood's published tokenBid/tokenAsk fields. The name makes the loss of
+ * sub-atom precision explicit; callers must not mistake this for exact math. */
+export function multiplyFixedFloor(
+  left: FixedDecimal,
+  right: FixedDecimal,
+  outputDecimals: number,
+  path = 'multiplier',
+): AdapterResult<FixedDecimal> {
+  if (outputDecimals < 0 || outputDecimals > 38) {
+    return adapterErr(AdapterErrorCode.VALUE_OUT_OF_RANGE, path, 'unsupported output scale');
+  }
+  const product = left.atoms * right.atoms;
+  const shift = left.decimals + right.decimals - outputDecimals;
+  const atoms = shift >= 0
+    ? product / (10n ** BigInt(shift))
+    : product * (10n ** BigInt(-shift));
+  if (atoms > UINT256_MAX) return adapterErr(AdapterErrorCode.VALUE_OUT_OF_RANGE, path, 'product exceeds uint256');
+  return adapterOk({ atoms, decimals: outputDecimals });
+}
