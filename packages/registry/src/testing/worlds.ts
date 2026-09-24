@@ -66,7 +66,14 @@ export const WorldKind = {
   CORPORATE_ACTION_MISMATCH: 'CORPORATE_ACTION_MISMATCH',
   INJECTED_UNTRUSTED_CLAIM: 'INJECTED_UNTRUSTED_CLAIM',
   MISSING_RIGHTS: 'MISSING_RIGHTS',
+  RIGHTS_WRONG_STATE: 'RIGHTS_WRONG_STATE',
   JURISDICTION_RESTRICTED: 'JURISDICTION_RESTRICTED',
+  PARTIAL_BACKING_REJECTED: 'PARTIAL_BACKING_REJECTED',
+  INSTRUMENT_TYPE_REJECTED: 'INSTRUMENT_TYPE_REJECTED',
+  REDEMPTION_REJECTED: 'REDEMPTION_REJECTED',
+  SETTLEMENT_REJECTED: 'SETTLEMENT_REJECTED',
+  ASSET_NOT_REGISTERED: 'ASSET_NOT_REGISTERED',
+  MULTIPLE_EXCLUSIONS: 'MULTIPLE_EXCLUSIONS',
 } as const;
 export type WorldKind = (typeof WorldKind)[keyof typeof WorldKind];
 
@@ -325,6 +332,85 @@ export function buildWorld(kind: WorldKind): SyntheticWorld {
         description: 'A holder in a jurisdiction the representation prohibits.',
         snapshot: fixtureSnapshot(),
         additionalRequirements: { holderJurisdiction: 'KP' },
+      };
+
+    case WorldKind.RIGHTS_WRONG_STATE:
+      return {
+        ...base,
+        description:
+          'A representation whose dividend is reflected in the price, against a policy requiring a dividend actually paid. The distinction a single boolean loses.',
+        snapshot: fixtureSnapshot({
+          representations: [
+            backedRepresentation({ rights: { DIVIDEND_TREATMENT: fixtureVerified('PRICE_ADJUSTED') } }),
+          ],
+        }),
+        additionalRequirements: {
+          requiredRights: [{ kind: 'DIVIDEND_TREATMENT', acceptable: ['PRESENT'] }],
+        },
+      };
+
+    case WorldKind.PARTIAL_BACKING_REJECTED:
+      return {
+        ...base,
+        description:
+          'A partially-backed representation against a policy requiring full backing. Not synthetic, and still refused — the case a synthetic/backed boolean could not express.',
+        snapshot: fixtureSnapshot({
+          representations: [
+            backedRepresentation({ backing: fixtureVerified('PARTIALLY_BACKED', FIXTURE_SOURCE_CHAIN_READ) }),
+          ],
+        }),
+        additionalRequirements: { allowedBackingModels: ['FULLY_BACKED'] },
+      };
+
+    case WorldKind.INSTRUMENT_TYPE_REJECTED:
+      return {
+        ...base,
+        description: 'A backed note against a policy that accepts only fund shares.',
+        snapshot: fixtureSnapshot(),
+        additionalRequirements: { allowedInstrumentTypes: ['FUND_SHARE'] },
+      };
+
+    case WorldKind.REDEMPTION_REJECTED:
+      return {
+        ...base,
+        description: 'A qualified-holders-only redemption model against a policy requiring open redemption.',
+        snapshot: fixtureSnapshot(),
+        additionalRequirements: { allowedRedemptionModels: ['OPEN_REDEMPTION'] },
+      };
+
+    case WorldKind.SETTLEMENT_REJECTED:
+      return {
+        ...base,
+        description: 'An atomically-settling representation against a policy requiring issuer confirmation.',
+        snapshot: fixtureSnapshot(),
+        additionalRequirements: { allowedSettlementModels: ['ISSUER_CONFIRMED'] },
+      };
+
+    case WorldKind.ASSET_NOT_REGISTERED:
+      return {
+        ...base,
+        description:
+          'A representation whose claimed underlying is the mandate asset, in a snapshot that carries no record for that asset.',
+        snapshot: fixtureSnapshot({ assets: [] }),
+        probeRepresentationIds: [fixtureRepresentationId(FIXTURE_ADDRESS_BACKED)],
+      };
+
+    case WorldKind.MULTIPLE_EXCLUSIONS:
+      return {
+        ...base,
+        description:
+          'Four independent violations at once: wrong issuer, wrong chain, synthetic backing and a paused representation. All must be reported.',
+        snapshot: fixtureSnapshot({
+          representations: [
+            backedRepresentation({
+              representationId: fixtureRepresentationId(FIXTURE_ADDRESS_OTHER_CHAIN, FIXTURE_CHAIN_ETHEREUM),
+              issuer: fixtureVerified(FIXTURE_ISSUER_UNAPPROVED),
+              backing: fixtureVerified('SYNTHETIC', FIXTURE_SOURCE_CHAIN_READ),
+              operationalStatus: fixtureVerified('PAUSED'),
+            }),
+          ],
+        }),
+        probeRepresentationIds: [fixtureRepresentationId(FIXTURE_ADDRESS_OTHER_CHAIN, FIXTURE_CHAIN_ETHEREUM)],
       };
   }
 }
