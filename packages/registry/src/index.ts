@@ -22,3 +22,7 @@ export * from './asset-id.ts';
 export * from './asset.ts';
 export * from './reference.ts';
 export * from './asset-index.ts';
+export * from './representation-id.ts';
+export * from './representation.ts';
+export * from './snapshot.ts';
+export * from './registry.ts';
