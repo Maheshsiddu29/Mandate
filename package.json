@@ -1,0 +1,21 @@
+{
+  "name": "mandate",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "workspaces": [
+    "packages/kernel"
+  ],
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json",
+    "test": "node --test \"packages/**/test/*.test.ts\"",
+    "corpus:generate": "node packages/kernel/test/support/generate-corpus.ts",
+    "check": "npm run typecheck && npm test"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.2",
+    "typescript": "5.9.3"
+  }
+}

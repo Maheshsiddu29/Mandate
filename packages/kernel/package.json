@@ -1,0 +1,17 @@
+{
+  "name": "@mandate/kernel",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Deterministic, model-free mandate verification kernel.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "dependencies": {
+    "@noble/curves": "2.4.0",
+    "@noble/hashes": "2.4.0"
+  }
+}
