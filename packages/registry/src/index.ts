@@ -29,3 +29,4 @@ export * from './registry.ts';
 export * from './requirements.ts';
 export * from './evaluate.ts';
 export * from './bridge.ts';
+export * from './encoding.ts';
