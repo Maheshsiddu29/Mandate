@@ -12,7 +12,8 @@
     "typecheck": "tsc --project tsconfig.json",
     "test": "node --test \"packages/**/test/*.test.ts\"",
     "corpus:generate": "node packages/kernel/test/support/generate-corpus.ts",
-    "check": "npm run typecheck && npm test"
+    "check": "npm run typecheck && npm test",
+    "docs:generate": "node packages/kernel/test/support/generate-reason-codes-doc.ts"
   },
   "devDependencies": {
     "@types/node": "22.20.2",

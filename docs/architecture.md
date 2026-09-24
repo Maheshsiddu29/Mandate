@@ -2,8 +2,9 @@
 
 System structure, component boundaries, and where each concern is enforced.
 
-> **Status: Phase 0.** No component below is implemented. The "Phase" column
-> records when a component is planned to land; see [roadmap.md](roadmap.md).
+> **Status: Phase 1 complete.** The kernel is built; everything else in the
+> component table is still planned. The "Phase" column records when a component
+> lands; see [roadmap.md](roadmap.md).
 > The complete rationale for every decision here is in
 > [mandate-design.md](mandate-design.md) — this document is the structural
 > summary, not the argument.
@@ -63,9 +64,11 @@ trusts none of its callers.
 
 | Component | Responsibility | Phase | Status |
 | --- | --- | --- | --- |
-| Mandate types | The authorization object: schema, canonical encoding, digest, signature | 1 | not implemented |
-| Deterministic verifier | `verify(mandate, candidate, state, clock) -> Verdict`. Pure, total, fail-closed, model-free | 1 | not implemented |
-| Reason-code registry | Stable namespaced codes with data-driven explanations | 1 | not implemented |
+| Mandate types | The authorization object: schema, canonical encoding, digest, signature | 1 | **implemented** — `packages/kernel/src/mandate.ts`, `encoding/`, `authorization/` |
+| Deterministic verifier | `verify(mandate, candidate, state, clock) -> Verdict`. Pure, total, fail-closed, model-free | 1 | **implemented** — `packages/kernel/src/verifier/` |
+| Reason-code registry | Stable namespaced codes with data-driven explanations | 1 | **implemented** — 43 codes; [reason-codes.md](reason-codes.md) |
+| Replay semantics | Pure consumption state machine; the store stays outside the kernel | 1 | **implemented** — [replay-semantics.md](replay-semantics.md) |
+| Decision-vector corpus | Cross-implementation compatibility contract | 1 | **implemented** — `corpus/v1`, 57 vectors |
 | Canonical asset registry | Canonical identities and their external identifier schemes | 2 | not implemented |
 | Representation registry | Tokenized representations, their metadata and provenance | 2 | not implemented |
 | Resolution | Human reference → canonical asset → admissible representations | 2 | not implemented |
@@ -76,10 +79,20 @@ trusts none of its callers.
 | Jev adapter | Advisory selection over a closed candidate set; bounded, abstention-safe | 5 | not implemented |
 | Execution gate | On-chain re-assertion of the commitment, atomic with the action | 6 | not implemented |
 | Funding adapters | Stablecoin funding abstraction | 7 | not implemented |
-| Receipts and audit | Structured receipt for every attempt, including refusals | 1, then 8 | not implemented |
+| Receipts and audit | Structured receipt for every attempt, including refusals | 1, then 8 | **implemented** (kernel receipts); audit surfacing is Phase 8 |
 | Demo and web | Public demonstration, including deliberate failure demonstrations | 8 | not implemented |
 
-Directories are created when they hold real code. Phase 0 adds none.
+Directories are created when they hold real code.
+
+```
+packages/kernel/     the verifier and everything it needs (ADR 0003)
+corpus/v1/           cross-implementation decision vectors
+docs/adr/            architecture decision records
+```
+
+Later phases add adapters, registries and chain clients as packages that depend
+on the kernel — never the reverse. A structural test enforces that the kernel
+imports nothing outside itself and its two allowlisted crypto dependencies.
 
 ## 3. Trust levels
 
@@ -141,6 +154,30 @@ not only of its behaviour.
    until the rejection it produces is covered by a test.
 10. **Architecture docs change in the same commit as the code they describe.**
 
+## 5a. Phase 1: the kernel
+
+What was built, and the decisions that shaped it.
+
+| Area | Decision | Record |
+| --- | --- | --- |
+| Language | TypeScript on Node 22; runtime dependency allowlist of exactly two audited, network-free crypto packages, machine-checked | [ADR 0003](adr/0003-kernel-language-and-dependency-boundary.md) |
+| Authorization | Chain-agnostic mandate digest; EIP-712 domain confined to the authorization envelope; one scheme implemented behind a registry | [ADR 0001](adr/0001-mandate-authorization-architecture.md) |
+| Encoding | MCE v1 — flat, versioned, length-explicit binary, keccak-256, reproducible in Solidity | [ADR 0002](adr/0002-canonical-mandate-encoding.md) |
+| Verification | 17 independent checks, unioned and sorted, so a rejection names every violation and the verdict cannot depend on check order | [verifier-invariants.md](verifier-invariants.md) |
+| Replay | Pure transition rules in the kernel; the store outside it. Reserve before signing, commit on observed settlement, release only on observed failure | [replay-semantics.md](replay-semantics.md) |
+| Compatibility | 57 decision vectors as a contract any future implementation must reproduce | [corpus/v1/README.md](../corpus/v1/README.md) |
+
+The kernel's entry point is one function:
+
+```
+verify({ mandate, authorization, candidate, trustedState, clock, expectedDomain })
+    -> VerificationReceipt { decision, reasonCodes[], violations[], digests, receiptDigest }
+```
+
+It accepts `unknown` for each input and parses at the boundary. That is what
+makes totality real: a caller cannot hand it something unparseable and receive
+a thrown error it might mistake for a transport failure.
+
 ## 6. Key decisions and their rationale
 
 | Decision | Rationale | Detail |
@@ -158,8 +195,11 @@ not only of its behaviour.
 ## 7. Invariants
 
 Eighteen invariants define the system and are listed with their enforcement
-points in [mandate-design.md §16](mandate-design.md#16-major-invariants). The
-four that shape the architecture most:
+points in [mandate-design.md §16](mandate-design.md#16-major-invariants).
+Phase 1's per-property evidence — which are established, which are structural
+only, and which are explicitly deferred — is in
+[verifier-invariants.md](verifier-invariants.md). The four that shape the
+architecture most:
 
 - **INV-3** — the permitted-execution set is identical whether Jev is present,
   absent, failed or adversarial. This is why selection and verification are

@@ -3,7 +3,7 @@
 Phased engineering plan: what each phase delivers, how it is known to be done,
 and what it depends on.
 
-> **Status: Phase 0 complete.** Phases 1 and beyond are planned, not started.
+> **Status: Phase 1 complete.** Phases 2 and beyond are planned, not started.
 > Rationale for the phase ordering is in
 > [mandate-design.md §25](mandate-design.md#25-phased-engineering-roadmap);
 > scope boundaries are in
@@ -45,7 +45,35 @@ phases can be reviewed against. No implementation.
 
 ---
 
-## Phase 1 — Mandate core types and deterministic verifier
+## Phase 1 — Mandate core types and deterministic verifier ✅
+
+**Delivered.** `packages/kernel` and `corpus/v1`. Exit criteria met; evidence
+per property in [verifier-invariants.md](verifier-invariants.md).
+
+| Delivered | Where |
+| --- | --- |
+| Mandate types, MVP field set | `packages/kernel/src/mandate.ts` |
+| Canonical encoding and digests (MCE v1, keccak-256) | `src/encoding/`, [ADR 0002](adr/0002-canonical-mandate-encoding.md) |
+| EIP-712 authorization, one scheme behind a registry | `src/authorization/`, [ADR 0001](adr/0001-mandate-authorization-architecture.md) |
+| Deterministic verifier, 17 independent checks | `src/verifier/` |
+| Reason-code registry, 43 codes | [reason-codes.md](reason-codes.md) |
+| Receipts for PASS and REJECT | `src/receipt.ts` |
+| Human-readable layer, kept separate | `src/explain.ts` |
+| Replay semantics and transition rules | [replay-semantics.md](replay-semantics.md) |
+| Decision-vector corpus, 57 vectors | [corpus/v1](../corpus/v1/README.md) |
+| ADR format adopted | [docs/adr](adr/) |
+
+116 tests pass; typecheck clean. Two decisions Phase 0 flagged as blocking were
+resolved in ADRs before implementation began, and one field the design implied
+but had not named — `maxCorporateActionAgeSeconds` — was added, because an
+epoch feed is itself state that can go stale.
+
+**Not delivered, deliberately:** a second implementation to run the corpus
+against (Phase 6), an adversarial end-to-end test of Jev independence (Phase 5,
+though the structural half is done), and anything about partial fills.
+
+<details>
+<summary>Original Phase 1 plan</summary>
 
 The most important phase. The verifier is the component with the least room for
 later change, because everything else is shaped by it.
@@ -75,9 +103,10 @@ later change, because everything else is shaped by it.
 
 **Depends on:** nothing. **Blocks:** everything.
 
-**Risks:** the signature scheme and canonical encoding are unresolved
-([§7.5](mandate-design.md#75-open-questions)) and must be decided here rather
-than drifted into.
+**Risks:** the signature scheme and canonical encoding are unresolved and must
+be decided here rather than drifted into.
+
+</details>
 
 ---
 
@@ -271,7 +300,7 @@ the design document before it belongs in code.
 | Phase | Deliverable | Depends on | Status |
 | --- | --- | --- | --- |
 | 0 | Foundation: thesis, architecture, rules, scope, reuse assessment | — | ✅ complete |
-| 1 | Mandate types and deterministic verifier | 0 | planned |
+| 1 | Mandate types and deterministic verifier | 0 | ✅ complete |
 | 2 | Canonical asset and representation registry | 1 | planned |
 | 3 | Market-state and chain adapters | 2 | planned |
 | 4 | Execution-candidate and route engine | 3 | planned |

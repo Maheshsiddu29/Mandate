@@ -22,9 +22,10 @@ Read it before proposing architectural changes. If a change contradicts it,
 either the change is wrong or the document needs updating first — resolve which
 before writing code.
 
-The repository is currently in **Phase 0**: specification and engineering rules
-only. No implementation exists. Do not start implementing the trading system
-until a phase that calls for it is explicitly opened.
+The repository is currently at the end of **Phase 1**: the mandate core kernel
+(`packages/kernel`) and the decision-vector corpus (`corpus/v1`) are built.
+Routing, registries, chain adapters, Jev, execution contracts and web work are
+**not** built. Do not start a later phase until it is explicitly opened.
 
 ---
 
@@ -155,6 +156,31 @@ The deterministic verifier and anything it depends on are safety-critical.
 - No secrets, private endpoints or magic constants in source. Configuration via
   environment variables, typed and validated at the boundary.
 - Match the surrounding code's naming, structure and comment density.
+
+### 4.4a Toolchain and validation
+
+TypeScript on Node 22, run directly through Node's type stripping. There is no
+build step; `tsc` runs as a typecheck only.
+
+```bash
+npm run typecheck     # tsc --noEmit, strict
+npm test              # node --test over packages/**/test/*.test.ts
+npm run check         # both
+npm run corpus:generate   # regenerate corpus/v1/vectors.json
+npm run docs:generate     # regenerate docs/reason-codes.md
+```
+
+Both generated artifacts are committed and have tests asserting the committed
+file matches what the generator produces. If one of those tests fails, decide
+whether the behaviour change was intended before regenerating.
+
+The kernel's runtime dependencies are fixed by
+[ADR 0003](docs/adr/0003-kernel-language-and-dependency-boundary.md) to exactly
+`@noble/hashes` and `@noble/curves`. Adding any other runtime dependency to the
+kernel requires a new ADR, and `structure.test.ts` fails without one.
+
+Node's type-stripping loader does not support TypeScript parameter properties,
+enums, namespaces or decorators. Use plain declarations.
 
 ### 4.5 Testing
 

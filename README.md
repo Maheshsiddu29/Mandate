@@ -3,9 +3,12 @@
 **Intent-aware execution infrastructure for AI agents transacting in tokenized
 financial assets.**
 
-> **Status: Phase 0 — foundation.** This repository currently contains
-> specification and engineering rules only. No component described below is
-> implemented. Nothing here should be read as a claim about working software.
+> **Status: Phase 1 complete — the mandate core kernel.** The deterministic
+> verifier, its domain types, canonical encoding, EIP-712 authorization,
+> receipts and replay semantics are built and tested in `packages/kernel`.
+> Routing, registries, chain adapters, Jev, execution contracts and the web
+> experience are **not** built. Nothing below should be read as a claim beyond
+> that boundary.
 
 ---
 
@@ -74,6 +77,31 @@ The constraint set is the product. Optimization happens only over candidates
 that already satisfy it — a candidate that violates a constraint is not a worse
 candidate, it is not a candidate.
 
+## What exists today
+
+```
+verify({ mandate, authorization, candidate, trustedState, clock, expectedDomain })
+    -> { decision: PASS | REJECT, reasonCodes[], violations[], digests, receiptDigest }
+```
+
+One pure function, and everything it needs. It performs no I/O, reads no clock,
+and cannot reach an inference client — all three are enforced by a test that
+reads the sources and the dependency tree, not by convention.
+
+| Piece | What it does |
+| --- | --- |
+| `packages/kernel` | Mandate types, MCE v1 canonical encoding and keccak-256 digests, EIP-712 authorization, the verifier's 17 independent checks, 43 stable reason codes, receipts, and the replay state machine |
+| `corpus/v1` | 57 decision vectors across 24 families — the compatibility contract any future Solidity, Rust or SDK implementation must reproduce |
+
+A rejection names **every** violated constraint, not the first, and the verdict
+never depends on the order checks ran in. Refusals produce receipts just as
+passes do, because refusals are the product.
+
+```bash
+npm install
+npm run check      # typecheck + 116 tests
+```
+
 ## Documentation
 
 | Document | What it covers |
@@ -82,6 +110,11 @@ candidate, it is not a candidate.
 | [docs/architecture.md](docs/architecture.md) | System structure, components and their boundaries, data flow, and where each concern is enforced. |
 | [docs/roadmap.md](docs/roadmap.md) | Phased engineering plan, what each phase delivers, and its exit criteria. |
 | [docs/statelatch-reuse.md](docs/statelatch-reuse.md) | Assessment of the prior StateLatch / EquityGuard codebase: what is reusable, what must be rebuilt, and what must not be carried over. |
+| [docs/verifier-invariants.md](docs/verifier-invariants.md) | What the kernel guarantees today, how each guarantee is established, and what it explicitly does not guarantee. |
+| [docs/reason-codes.md](docs/reason-codes.md) | The 43 stable reason codes. Generated from the registry, so it cannot drift. |
+| [docs/replay-semantics.md](docs/replay-semantics.md) | How a mandate is consumed, and the one obligation the kernel cannot enforce for an integrator. |
+| [docs/adr/](docs/adr/) | Architecture decision records: authorization architecture, canonical encoding, kernel language and dependency boundary. |
+| [corpus/v1/README.md](corpus/v1/README.md) | Decision-vector format, for reimplementers. |
 | [AGENTS.md](AGENTS.md) | Operating rules for coding agents working in this repository. Read before making any change. |
 
 Other documents summarize; `docs/mandate-design.md` is the source of truth and
@@ -110,16 +143,26 @@ See [MVP scope](docs/mandate-design.md#20-buildathon-mvp-scope) and
 
 ```
 .
-├── AGENTS.md      operating rules for coding agents
-├── README.md      this file
+├── AGENTS.md              operating rules for coding agents
+├── README.md              this file
+├── packages/kernel/       the verifier and everything it needs
+│   ├── src/               domain types, encoding, authorization, verifier
+│   └── test/              116 tests: behaviour, boundaries, properties, structure
+├── corpus/v1/             cross-implementation decision vectors
 └── docs/
-    ├── mandate-design.md     canonical specification
-    ├── architecture.md       system structure and component boundaries
-    ├── roadmap.md            phased engineering plan
-    └── statelatch-reuse.md   prior-codebase reuse assessment
+    ├── mandate-design.md       canonical specification
+    ├── architecture.md         system structure and component boundaries
+    ├── roadmap.md              phased engineering plan
+    ├── verifier-invariants.md  what the kernel guarantees, and how
+    ├── reason-codes.md         generated reason-code registry
+    ├── replay-semantics.md     consumption and nonce semantics
+    ├── statelatch-reuse.md     prior-codebase reuse assessment
+    └── adr/                    architecture decision records
 ```
 
-Directories are created when they hold real code. Phase 0 adds none.
+Directories are created when they hold real code. Later phases add adapters,
+registries and chain clients as packages that depend on the kernel — never the
+reverse.
 
 ## Contributing
 

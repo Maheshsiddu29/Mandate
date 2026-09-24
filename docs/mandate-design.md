@@ -4,9 +4,12 @@ Canonical, long-term design document for Mandate. Other documents in this
 repository summarize parts of this one and link back to it; this file is the
 source of truth.
 
-- **Document status:** Phase 0 (foundation). Specification only.
-- **Implementation status:** none. No component described here is built.
-- **Last structural revision:** Phase 0.
+- **Document status:** canonical specification.
+- **Implementation status:** Phase 1 complete — the mandate core kernel
+  (types, canonical encoding, EIP-712 authorization, deterministic verifier,
+  receipts, replay semantics, decision-vector corpus). Everything else in this
+  document remains unbuilt.
+- **Last structural revision:** Phase 1.
 
 ## How to read status labels
 
@@ -16,15 +19,22 @@ labels describe how settled the *design* is, not how much code exists.
 
 | Label | Meaning |
 | --- | --- |
+| **IMPLEMENTED** | Built in this repository and covered by tests. |
 | **SPECIFIED** | Design is settled enough to implement against without another design round. Expected to change only at the margins. |
 | **DRAFT** | Shape is agreed, field-level and interface-level details are still open. Implementing it will force decisions this document does not make. |
 | **EXPLORATORY** | Direction only. Recorded so it is not reinvented, not because it is decided. Likely to change materially. |
 | **FUTURE** | Deliberately out of scope for the buildathon and for the near-term roadmap. Written down to constrain today's abstractions, not to be built soon. |
 
-Nothing in this document is labelled "implemented", because in Phase 0 nothing
-is. Claims about what Mandate *does* should be read as what Mandate is
-*specified to do*. See [Buildathon MVP scope](#20-buildathon-mvp-scope) for
-what is actually being built first.
+A capability labelled **IMPLEMENTED** exists in this repository and is covered
+by tests. Everything else should be read as what Mandate is *specified to do*,
+not what it does. See [Buildathon MVP scope](#20-buildathon-mvp-scope) for what
+is being built first, and [roadmap.md](roadmap.md) for current phase status.
+
+As of Phase 1 the implemented surface is: the mandate type and its canonical
+encoding, the EIP-712 authorization adapter, the deterministic verifier, the
+reason-code registry, verification receipts, and replay semantics — all in
+`packages/kernel`, with a cross-implementation decision-vector corpus in
+`corpus/v1`.
 
 ## Contents
 
@@ -631,20 +641,35 @@ Legend: ✅ in scope, ⬜ not in scope.
    modelled. There is no "until revoked" authorization in the MVP, because
    revocation infrastructure does not exist in the MVP.
 
-### 7.5 Open questions
+### 7.5 Resolved questions
 
-Recorded so that Phase 1 resolves them deliberately, not incidentally:
+Phase 1 settled the three questions this section previously left open. Each has
+an ADR; the reasoning is not repeated here.
 
-- Signature scheme. EIP-712 typed data is the obvious candidate for an
-  EVM-first system, and gives wallet-legible authorization. It also anchors the
-  mandate to one signature ecosystem; a chain-agnostic envelope with
-  per-ecosystem signature adapters is the alternative. **Unresolved.**
-- Whether the canonical mandate encoding is JSON with a canonicalization rule,
-  or a binary encoding. Canonicalization matters because the digest must be
-  stable and collision-resistant. **Unresolved.**
-- Whether a mandate is a single-use authorization or a reusable envelope with
-  per-execution nonces. The MVP assumes single-use with a nonce. **Assumed.**
-- How revocation works before expiry. Not in MVP. **Deferred.**
+- **Signature scheme — RESOLVED.** The canonical mandate stays chain-agnostic;
+  an authorization envelope binds a signer to its digest. One scheme is
+  implemented, `eip712-secp256k1`, behind a scheme registry. EIP-712 domain
+  fields never enter the mandate digest, so `allowedChains` remains the only
+  chain constraint. See
+  [ADR 0001](adr/0001-mandate-authorization-architecture.md).
+- **Canonical encoding — RESOLVED.** MCE v1: a flat, versioned, length-explicit
+  binary encoding digested with keccak-256. JSON canonicalization was rejected
+  because it formats numbers through IEEE-754, cannot reasonably be reproduced
+  in Solidity for the execution gate, and admits byte-distinct equivalent
+  strings. See [ADR 0002](adr/0002-canonical-mandate-encoding.md).
+- **Single-use versus reusable — RESOLVED.** Single-use, keyed on the mandate
+  digest. Reusable envelopes need per-execution accounting and turn a bounded
+  authorization into a standing one. See
+  [replay-semantics.md](replay-semantics.md).
+- **Revocation before expiry — still deferred.** Not in the MVP, because there
+  is no revocation infrastructure to make it safe. Expiry bounds exposure.
+
+Phase 1 also added one field this section did not anticipate:
+`maxCorporateActionAgeSeconds`. A corporate-action epoch feed is itself state
+that can go stale, so a current-looking epoch observed an hour ago does not
+establish the epoch now. §7.3 already listed corporate-action freshness as an
+MVP field; Phase 1 made it a separate bound from market-data freshness because
+the two have genuinely different tolerances.
 
 ## 8. Agent authorization model
 
@@ -812,6 +837,9 @@ an actionable one, and is what the demo shows.
 
 ### 10.1 The contract
 
+**IMPLEMENTED** in `packages/kernel`. Per-property evidence is in
+[verifier-invariants.md](verifier-invariants.md).
+
 The verifier is a pure function:
 
 ```
@@ -913,7 +941,12 @@ and in audit records. Rules:
 - each code carries a human-readable explanation, and the explanation is data,
   not a string built at the call site.
 
-Illustrative, to fix the shape — not the final registry:
+**IMPLEMENTED.** The registry is `packages/kernel/src/reason-codes.ts`, and
+[reason-codes.md](reason-codes.md) is generated from it — 43 codes across eight
+families, each with an enforcement point and a test that produces it. The table
+below is the original illustrative sketch, kept because several ids were
+reassigned during implementation and the difference is worth seeing; the
+generated document is authoritative.
 
 | Code | Family | Meaning |
 | --- | --- | --- |
@@ -966,6 +999,12 @@ Planned mitigation, carried over as methodology from prior work (§24): a shared
 corpus of decision vectors — inputs plus expected verdict and reason codes —
 that every implementation is tested against, plus property tests over generated
 inputs asserting that independent implementations agree on every case.
+
+**Partially implemented.** The corpus exists: `corpus/v1`, 57 vectors across 24
+families, with a format specification and a test asserting the committed file
+matches what the kernel generates. What does not exist yet is a *second*
+implementation to run it against — the mechanism is built, the differential
+comparison begins when the on-chain gate lands in Phase 6.
 
 ## 11. Jev's role and its limits
 
@@ -1194,7 +1233,13 @@ Consequences:
 
 ### 13.4 Corporate-action epoch
 
-**DRAFT.** Proposed mechanism: every canonical asset carries a monotonically
+**IMPLEMENTED for the comparison; the epoch source remains DRAFT.** The verifier
+compares an authorized epoch against an observed one, rejects a mismatch in
+either direction with distinct codes, and enforces a separate freshness bound on
+the observation. Who is authoritative for incrementing the epoch, and how that
+authority is constrained, is still open and belongs to Phase 3.
+
+Mechanism: every canonical asset carries a monotonically
 increasing **corporate-action epoch**, incremented on any event material to
 execution economics. A mandate records the epoch it was authored under; the
 verifier rejects when the observed epoch differs.
@@ -1342,8 +1387,17 @@ dependence on mutable external references.
 ## 16. Major invariants
 
 These are the properties that define Mandate. A change that breaks one is a
-change to the product, not an implementation detail. Each is stated so it can
-be tested; none is implemented in Phase 0.
+change to the product, not an implementation detail.
+
+**Phase 1 status.** INV-1, INV-2, INV-5, INV-9, INV-11, INV-12, INV-16, INV-17
+and INV-18 are established in the kernel today. INV-4 and INV-7 are established
+for the kernel's own boundary — no model or untrusted source can supply a value
+it reads — but the pipeline that would carry such a value does not exist yet.
+INV-3 has its structural half (no inference client is reachable from the
+verifier); the adversarial end-to-end half needs Phase 5. INV-6, INV-8, INV-14
+and INV-15 need the registry and routing of Phases 2 and 4. INV-10 and INV-13
+need the execution gate of Phase 6. Per-property evidence is in
+[verifier-invariants.md](verifier-invariants.md).
 
 | ID | Invariant | Where it will be enforced |
 | --- | --- | --- |
@@ -1658,7 +1712,7 @@ does **not** claim:
 
 Recorded so they are made on purpose later, not by accident now:
 
-- mandate signature scheme and canonical encoding ([§7.5](#75-open-questions));
+- mandate signature scheme and canonical encoding ([§7.5](#75-resolved-questions));
 - whether mandates are single-use or reusable envelopes;
 - the authority for incrementing corporate-action epochs
   ([§13.4](#134-corporate-action-epoch));

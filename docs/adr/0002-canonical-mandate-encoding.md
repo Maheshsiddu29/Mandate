@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-24
-- **Resolves:** [design §7.5](../mandate-design.md#75-open-questions), second open question
+- **Resolves:** [design §7.5](../mandate-design.md#75-resolved-questions), second open question
 
 ## Context
 
