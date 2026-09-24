@@ -179,3 +179,6 @@ therefore retains its asset and capability state but creates no market state.
   not observed. Offline synthetic tests cover those failure modes.
 - Phase 3 records pending actions and capabilities but does not invent routing
   or long-lived-mandate policy. Those decisions remain later-phase work.
+
+The deterministic dataset and its synthetic-state labelling rules are specified
+in [Mainnet replay methodology](mainnet-replay.md).

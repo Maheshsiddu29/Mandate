@@ -18,7 +18,9 @@
     "docs:generate": "node packages/kernel/test/support/generate-reason-codes-doc.ts && node packages/registry/test/support/generate-reason-codes-doc.ts",
     "registry-corpus:generate": "node packages/registry/test/support/generate-corpus.ts",
     "robinhood:fixtures:validate": "node packages/adapter-robinhood/scripts/validate-fixtures.ts",
-    "robinhood:cross-surface": "node packages/adapter-robinhood/scripts/validate-cross-surface.ts"
+    "robinhood:cross-surface": "node packages/adapter-robinhood/scripts/validate-cross-surface.ts",
+    "mainnet-replay:generate": "node packages/adapter-robinhood/scripts/generate-mainnet-replay.ts",
+    "mainnet-replay:validate": "node --test packages/adapter-robinhood/test/mainnet-replay.test.ts"
   },
   "devDependencies": {
     "@types/node": "22.20.2",

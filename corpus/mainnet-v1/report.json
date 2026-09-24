@@ -1,0 +1,33 @@
+{
+  "reportVersion": 1,
+  "captureId": "robinhood-mainnet-2026-09-24T22-36-48Z",
+  "assetsCaptured": 195,
+  "canonicalAssetsMapped": 7,
+  "representationsVerifiedOnchain": 6,
+  "marketSnapshots": 6,
+  "corporateActionsObserved": 52,
+  "corporateActionTypesObserved": [
+    "CASH_DIVIDEND"
+  ],
+  "verificationRuns": 11,
+  "pass": 6,
+  "reject": 5,
+  "rejectByReason": {
+    "PRICE_STATE_STALE": 1,
+    "TRADING_HALTED": 1,
+    "REPRESENTATION_INACTIVE": 1,
+    "CORPORATE_ACTION_STATE_CHANGED": 1,
+    "REPRESENTATION_UNKNOWN": 1
+  },
+  "crossSurface": {
+    "checks": 60,
+    "matches": 54,
+    "mismatches": 0,
+    "timeIncomparable": 5,
+    "unavailable": 1
+  },
+  "unknownMetadata": [
+    "CRWD Chainlink feed unavailable in captured official catalog"
+  ],
+  "syntheticCases": 3
+}
