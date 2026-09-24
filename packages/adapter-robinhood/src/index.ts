@@ -11,3 +11,4 @@ export * from './corporate-action.ts';
 export * from './epoch.ts';
 export * from './oracle.ts';
 export * from './consistency.ts';
+export * from './client.ts';

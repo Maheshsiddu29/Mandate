@@ -182,3 +182,35 @@ therefore retains its asset and capability state but creates no market state.
 
 The deterministic dataset and its synthetic-state labelling rules are specified
 in [Mainnet replay methodology](mainnet-replay.md).
+
+## Developer commands and network isolation
+
+Normal validation is offline:
+
+```bash
+npm test
+npm run robinhood:fixtures:validate
+npm run mainnet-replay:validate
+npm run robinhood:cross-surface
+npm run credentials:scan
+npm run check
+```
+
+Live work is explicit and separate:
+
+```bash
+npm run robinhood:live
+npm run robinhood:capture -- --output /absolute/new/capture-directory
+```
+
+The capture command requires a new output path and refuses to overwrite any
+existing path. It captures exact REST response text, fixed-block contract and
+ERC-8056 reads, multiplier events, the official feed catalog, and fixed-block
+feed reads. Promotion into the committed fixture directory remains a reviewed
+operation; capture never updates it implicitly. `ROBINHOOD_RPC_URL` may override
+the public HTTPS RPC without storing a provider URL or credential.
+
+The network client distinguishes timeouts, HTTP errors, rate limiting, missing
+assets, malformed or partial responses, RPC errors, and chain mismatch. None of
+those failures produces trusted state. Live checks are intentionally absent from
+`npm test` and `npm run check`.
