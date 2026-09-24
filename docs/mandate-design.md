@@ -375,7 +375,7 @@ mandate:asset:<asset-class>:<scheme>:<value>
 
 mandate:asset:equity:figi:BBG000BBJQV0        # NVIDIA Corp common stock
 mandate:asset:equity:isin:US67066G1040
-mandate:asset:treasury:cusip:912797GN2
+mandate:asset:treasury:cusip:912797GN1
 ```
 
 Design rules for the identifier (**SPECIFIED**):
@@ -385,10 +385,14 @@ Design rules for the identifier (**SPECIFIED**):
   because different asset classes have different authorities (FIGI/ISIN for
   equities, CUSIP for many US instruments, LEI for issuers, and others for
   asset classes Mandate has not yet modelled).
-- `MIC:ticker` (e.g. `NASDAQ:NVDA`) is a **display alias and a lookup key**,
+- `MIC:ticker` (e.g. `XNAS:NVDA`) is a **display alias and a lookup key**,
   never the identity. Resolution from a human-supplied ticker to a canonical
   asset is an explicit, auditable step that can fail or return an ambiguity,
   and an ambiguous resolution fails closed rather than picking a favourite.
+  The market identifier is an ISO 10383 **MIC** (`XNAS`), not an exchange name
+  (`NASDAQ`); an exchange-name form resolves only where a curator registered it
+  as an alias
+  ([ADR 0005](adr/0005-canonical-asset-identity-and-resolution.md)).
 - The identifier carries no chain, no contract, and no issuer.
 - A canonical asset is versionless, but its *state* (see §13) is not: symbol
   changes, splits and mergers change the asset's corporate-action epoch, and
