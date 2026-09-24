@@ -1,5 +1,5 @@
-import type { CanonicalAssetId, Identifier, UnixSeconds } from '@mandate/kernel';
-import { validateCanonicalAssetId } from '@mandate/registry';
+import type { Identifier, UnixSeconds } from '@mandate/kernel';
+import { parseRepresentationId } from '@mandate/registry';
 import { parseFixedDecimal, type FixedDecimal } from './decimal.ts';
 import { authoritativeHttpEvidence, ObservationClock, type Evidence } from './evidence.ts';
 import { parseRfc3339Seconds } from './time.ts';
@@ -49,7 +49,9 @@ export interface NormalizedRobinhoodAsset {
   readonly status: Evidence<RobinhoodAssetStatus>;
   readonly tradingCapabilities: Evidence<TradingCapabilities>;
   readonly tokenDecimals: Evidence<number>;
-  readonly canonicalAsset: Evidence<CanonicalAssetId>;
+  /** Direct issuer identity reference. Asset class is established separately by
+   * the audited canonical mapping; an ISIN alone does not say equity vs fund. */
+  readonly isin: Evidence<string>;
 }
 
 export interface AssetParseContext {
@@ -86,7 +88,16 @@ function parseDeployment(raw: unknown, path: string): AdapterResult<RobinhoodDep
   if (typeof address !== 'string' || !ADDRESS.test(address)) {
     return adapterErr(AdapterErrorCode.INVALID_ADDRESS, `${path}.contractAddress`, 'expected a 20-byte EVM address');
   }
-  return adapterOk({ chainId: BigInt(chainId), contractAddress: address.toLowerCase() });
+  const representationId = parseRepresentationId({
+    chainNamespace: 'eip155',
+    chainReference: String(chainId),
+    assetNamespace: 'erc20',
+    contractAddress: address,
+  });
+  if (!representationId.ok) {
+    return adapterErr(AdapterErrorCode.INVALID_ADDRESS, `${path}.contractAddress`, 'address checksum is invalid');
+  }
+  return adapterOk({ chainId: BigInt(chainId), contractAddress: representationId.value.contractAddress });
 }
 
 function parseTradingStatus(raw: unknown, path: string): AdapterResult<TradingStatus> {
@@ -183,8 +194,9 @@ export function parseRobinhoodAsset(raw: unknown, context: AssetParseContext, pa
     return adapterErr(AdapterErrorCode.INVALID_DECIMAL, `${path}.tokenDecimals`, 'invalid token decimals');
   }
   const isin = record['isin'];
-  const identity = validateCanonicalAssetId({ assetClass: 'equity', idScheme: 'isin', value: isin });
-  if (!identity.ok) return adapterErr(AdapterErrorCode.INVALID_IDENTITY, `${path}.isin`, 'missing or invalid authoritative ISIN');
+  if (typeof isin !== 'string' || !/^[A-Z]{2}[0-9A-Z]{9}[0-9]$/.test(isin)) {
+    return adapterErr(AdapterErrorCode.INVALID_IDENTITY, `${path}.isin`, 'missing or malformed authoritative ISIN');
+  }
 
   const observedAt = context.fetchedAtUnixSeconds;
   const ev = <T>(value: T): Evidence<T> => authoritativeHttpEvidence(
@@ -204,7 +216,7 @@ export function parseRobinhoodAsset(raw: unknown, context: AssetParseContext, pa
     status: ev(status.value),
     tradingCapabilities: ev(capabilities.value),
     tokenDecimals: ev(tokenDecimals),
-    canonicalAsset: ev(identity.value),
+    isin: ev(isin),
   });
 }
 

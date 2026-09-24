@@ -3,3 +3,5 @@ export * from './evidence.ts';
 export * from './decimal.ts';
 export * from './time.ts';
 export * from './asset.ts';
+export * from './identity.ts';
+export * from './representation.ts';

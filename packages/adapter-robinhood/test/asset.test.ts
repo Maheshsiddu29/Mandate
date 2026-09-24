@@ -28,7 +28,7 @@ describe('Robinhood asset normalization', () => {
     const result = parseRobinhoodAsset(asset(), { fetchedAtUnixSeconds });
     assert.equal(result.ok, true);
     if (!result.ok) return;
-    assert.deepEqual(result.value.canonicalAsset.value, { assetClass: 'equity', idScheme: 'isin', value: 'US22788C1053' });
+    assert.equal(result.value.isin.value, 'US22788C1053');
     assert.equal(result.value.currentMultiplier.value.atoms, 4_000_000_000_000_000_000n);
     assert.equal(result.value.deployments.value[0]?.contractAddress, '0xea72ecca2d0f6bfa1394dbbcff85b52cd4233931');
     assert.equal(result.value.pendingMultiplier.value, null);
@@ -53,6 +53,15 @@ describe('Robinhood asset normalization', () => {
       mutate(raw);
       assert.equal(parseRobinhoodAsset(raw, { fetchedAtUnixSeconds }).ok, false);
     }
+  });
+
+  test('rejects a malformed mixed-case checksum', () => {
+    const raw = asset();
+    (raw['deployments'] as Record<string, unknown>[])[0]!['contractAddress'] = '0xEa72Ecca2d0f6bFA1394DBBCff85b52CD4233931';
+    const result = parseRobinhoodAsset(raw, { fetchedAtUnixSeconds });
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.equal(result.error.code, 'INVALID_ADDRESS');
   });
 
   test('rejects unknown trading status rather than treating it as tradable', () => {
