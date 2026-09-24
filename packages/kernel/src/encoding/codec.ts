@@ -69,8 +69,8 @@ const OPERATIONAL_BY_CODE: Record<number, string> = { 1: 'ACTIVE', 2: 'PAUSED', 
 const HALT_STATUS_CODE: Record<string, number> = { TRADING: 1, HALTED: 2, UNKNOWN: 3 };
 const HALT_STATUS_BY_CODE: Record<number, string> = { 1: 'TRADING', 2: 'HALTED', 3: 'UNKNOWN' };
 
-const REPLAY_STATUS_CODE: Record<string, number> = { UNUSED: 1, CONSUMED: 2, UNKNOWN: 3 };
-const REPLAY_STATUS_BY_CODE: Record<number, string> = { 1: 'UNUSED', 2: 'CONSUMED', 3: 'UNKNOWN' };
+const REPLAY_STATUS_CODE: Record<string, number> = { UNUSED: 1, CONSUMED: 2, UNKNOWN: 3, RESERVED: 4 };
+const REPLAY_STATUS_BY_CODE: Record<number, string> = { 1: 'UNUSED', 2: 'CONSUMED', 3: 'UNKNOWN', 4: 'RESERVED' };
 
 const TRUST_CLASS_CODE: Record<string, number> = { AUTHORITATIVE: 1, VERIFIED: 2, ADVISORY: 3, UNTRUSTED: 4 };
 const TRUST_CLASS_BY_CODE: Record<number, string> = { 1: 'AUTHORITATIVE', 2: 'VERIFIED', 3: 'ADVISORY', 4: 'UNTRUSTED' };

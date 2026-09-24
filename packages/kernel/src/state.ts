@@ -46,7 +46,13 @@ export type OperationalState = (typeof OperationalState)[keyof typeof Operationa
 export const HaltStatus = { TRADING: 'TRADING', HALTED: 'HALTED', UNKNOWN: 'UNKNOWN' } as const;
 export type HaltStatus = (typeof HaltStatus)[keyof typeof HaltStatus];
 
-export const ReplayStatus = { UNUSED: 'UNUSED', CONSUMED: 'CONSUMED', UNKNOWN: 'UNKNOWN' } as const;
+export const ReplayStatus = {
+  UNUSED: 'UNUSED',
+  /** Reserved by an in-flight execution attempt. Not yet consumed, and not available. */
+  RESERVED: 'RESERVED',
+  CONSUMED: 'CONSUMED',
+  UNKNOWN: 'UNKNOWN',
+} as const;
 export type ReplayStatus = (typeof ReplayStatus)[keyof typeof ReplayStatus];
 
 /**

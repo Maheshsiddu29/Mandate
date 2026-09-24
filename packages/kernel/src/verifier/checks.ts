@@ -107,6 +107,10 @@ const checkReplay: Check = {
     switch (replay.value.status) {
       case ReplayStatus.CONSUMED:
         return [violation('MANDATE_ALREADY_CONSUMED', { mandateDigest: ctx.mandateDigest })];
+      case ReplayStatus.RESERVED:
+        // A concurrent attempt holds this authorization. Letting a second
+        // attempt through would be the double-spend the reservation prevents.
+        return [violation('MANDATE_RESERVED', { mandateDigest: ctx.mandateDigest })];
       case ReplayStatus.UNKNOWN:
         return [violation('REPLAY_STATE_UNKNOWN', { reason: 'source-reported-unknown' })];
       case ReplayStatus.UNUSED:

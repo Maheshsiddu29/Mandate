@@ -198,6 +198,14 @@ const DEFINITIONS = [
     humanMessage: 'This authorization has already been used.',
   },
   {
+    id: 'MND-AUTH-010',
+    name: 'MANDATE_RESERVED',
+    family: F.AUTH,
+    enforcementPoint: E.B_AUTHORIZATION_SCOPE,
+    developerMessage: 'Replay state reports this mandate digest as reserved by an in-flight execution attempt. A reserved mandate is not available to a second attempt.',
+    humanMessage: 'This authorization is already being used by another trade in progress.',
+  },
+  {
     id: 'MND-AUTH-007',
     name: 'REPLAY_STATE_UNKNOWN',
     family: F.AUTH,

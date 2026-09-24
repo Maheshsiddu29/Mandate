@@ -28,6 +28,7 @@ export { ByteReader } from './encoding/reader.ts';
 export * from './authorization/eip712.ts';
 export * from './authorization/envelope.ts';
 export * from './receipt.ts';
+export * from './replay.ts';
 export * from './explain.ts';
 export * from './verifier/checks.ts';
 export * from './verifier/verify.ts';

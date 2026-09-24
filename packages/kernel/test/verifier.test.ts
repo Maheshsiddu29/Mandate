@@ -590,6 +590,7 @@ test('every reason code the verifier can emit is reachable by a test in this sui
     { signWith: TEST_PRIVATE_KEY_2, forgeSigner: true },
     { candidate: { agent: { ...OTHER_AGENT } } },
     { state: { replay: { value: { status: 'CONSUMED' } } } },
+    { state: { replay: { value: { status: 'RESERVED' } } } },
     { state: { replay: { value: { status: 'UNKNOWN' } } } },
     { state: { corporateAction: { value: { epoch: EPOCH + 1n } }, }, candidate: { corporateActionEpoch: EPOCH + 1n } },
     { state: { corporateAction: { value: { epoch: EPOCH - 1n } } }, candidate: { corporateActionEpoch: EPOCH - 1n } },
