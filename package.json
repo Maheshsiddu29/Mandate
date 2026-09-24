@@ -6,7 +6,8 @@
     "node": ">=22.18.0"
   },
   "workspaces": [
-    "packages/kernel"
+    "packages/kernel",
+    "packages/registry"
   ],
   "scripts": {
     "typecheck": "tsc --project tsconfig.json",

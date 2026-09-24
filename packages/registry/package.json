@@ -1,0 +1,17 @@
+{
+  "name": "@mandate/registry",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Canonical asset and representation registry: resolution and mandate-constrained admissibility.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing/index.ts"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "dependencies": {
+    "@mandate/kernel": "0.1.0"
+  }
+}

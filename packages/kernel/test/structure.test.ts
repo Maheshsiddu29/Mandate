@@ -185,6 +185,24 @@ test('no kernel source imports from outside the kernel', () => {
   }
 });
 
+test('the kernel never imports the registry, by name', () => {
+  // The generic rule above already fails a registry import, because every
+  // non-relative specifier must start with `@noble/`. This states the Phase 2
+  // boundary explicitly so a violation says what it violated (ADR 0004), rather
+  // than leaving the reader to infer it from an allowlist.
+  const importRe = /\bfrom\s*['"]([^'"]+)['"]|\bimport\s*\(\s*['"]([^'"]+)['"]/g;
+  for (const { path, text } of SOURCES) {
+    for (const match of code(text).matchAll(importRe)) {
+      const specifier = match[1] ?? match[2] ?? '';
+      assert.equal(
+        specifier.includes('@mandate/registry') || specifier.includes('/registry/'),
+        false,
+        `${path} imports ${specifier}: the dependency direction is registry -> kernel, never the reverse`,
+      );
+    }
+  }
+});
+
 test('the verifier module graph never reaches the test tree', () => {
   const importRe = /\bfrom\s*['"](\.[^'"]+)['"]/g;
   for (const { path, text } of SOURCES) {
