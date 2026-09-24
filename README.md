@@ -3,12 +3,15 @@
 **Intent-aware execution infrastructure for AI agents transacting in tokenized
 financial assets.**
 
-> **Status: Phase 1 complete — the mandate core kernel.** The deterministic
-> verifier, its domain types, canonical encoding, EIP-712 authorization,
-> receipts and replay semantics are built and tested in `packages/kernel`.
-> Routing, registries, chain adapters, Jev, execution contracts and the web
-> experience are **not** built. Nothing below should be read as a claim beyond
-> that boundary.
+> **Status: Phase 2 complete — the kernel and the registry.** The deterministic
+> verifier, its domain types, canonical encoding, EIP-712 authorization, receipts
+> and replay semantics are built and tested in `packages/kernel`. The canonical
+> asset and representation registry — identifier schemes, reference resolution,
+> provenance-carrying representation metadata, mandate-constrained admissibility
+> and reproducible snapshots — is built and tested in `packages/registry`.
+> Routing, chain adapters, live market data, Jev, execution contracts and the web
+> experience are **not** built, and the registry makes no network call of any kind.
+> Nothing below should be read as a claim beyond that boundary.
 
 ---
 
@@ -79,27 +82,47 @@ candidate, it is not a candidate.
 
 ## What exists today
 
+Two pure packages. Neither performs I/O, reads a clock, or can reach an inference
+client — all three are enforced by tests that read the sources and the dependency
+tree, not by convention.
+
+**The verifier** decides whether one proposed execution is inside one signed
+authorization:
+
 ```
 verify({ mandate, authorization, candidate, trustedState, clock, expectedDomain })
     -> { decision: PASS | REJECT, reasonCodes[], violations[], digests, receiptDigest }
 ```
 
-One pure function, and everything it needs. It performs no I/O, reads no clock,
-and cannot reach an inference client — all three are enforced by a test that
-reads the sources and the dependency tree, not by convention.
+**The registry** decides what financial asset a human meant, and which tokenized
+representations may legitimately be considered for it:
+
+```
+resolve(registry, "NVDA")                 -> RESOLVED | AMBIGUOUS | UNKNOWN | INVALID
+listRepresentations(registry, assetId)     -> representations issued against it
+evaluateRepresentation(registry, req, id)  -> ADMISSIBLE | EXCLUDED + reasonCodes[]
+```
 
 | Piece | What it does |
 | --- | --- |
 | `packages/kernel` | Mandate types, MCE v1 canonical encoding and keccak-256 digests, EIP-712 authorization, the verifier's 17 independent checks, 43 stable reason codes, receipts, and the replay state machine |
-| `corpus/v1` | 57 decision vectors across 24 families — the compatibility contract any future Solidity, Rust or SDK implementation must reproduce |
+| `packages/registry` | Canonical asset identity with check-digit-validated identifier schemes, deterministic reference resolution, provenance-carrying representation metadata with trust floors and fail-closed conflict handling, mandate-constrained admissibility with 20 registry reason codes, reproducible snapshots and digests, and synthetic world builders |
+| `corpus/v1` | 57 verifier decision vectors across 24 families |
+| `corpus/registry-v1` | 27 registry decision vectors covering resolution and admissibility |
 
-A rejection names **every** violated constraint, not the first, and the verdict
-never depends on the order checks ran in. Refusals produce receipts just as
-passes do, because refusals are the product.
+Three properties hold across both. A refusal names **every** violated constraint,
+not the first. No verdict depends on the order checks ran in. And `UNKNOWN` is a
+value that rejects — unknown metadata, a conflict between data sources, an
+unregistered contract and an ambiguous ticker are all refusals, not defaults.
+
+The registry asserts the weakest useful claim: *this token is issued against that
+underlying*. It never asserts that two representations of one underlying are
+equivalent, interchangeable or equally safe. Whether one may satisfy a given
+mandate is computed against that mandate and is not stored anywhere.
 
 ```bash
 npm install
-npm run check      # typecheck + 116 tests
+npm run check      # typecheck + 298 tests
 ```
 
 ## Documentation
@@ -111,10 +134,13 @@ npm run check      # typecheck + 116 tests
 | [docs/roadmap.md](docs/roadmap.md) | Phased engineering plan, what each phase delivers, and its exit criteria. |
 | [docs/statelatch-reuse.md](docs/statelatch-reuse.md) | Assessment of the prior StateLatch / EquityGuard codebase: what is reusable, what must be rebuilt, and what must not be carried over. |
 | [docs/verifier-invariants.md](docs/verifier-invariants.md) | What the kernel guarantees today, how each guarantee is established, and what it explicitly does not guarantee. |
-| [docs/reason-codes.md](docs/reason-codes.md) | The 43 stable reason codes. Generated from the registry, so it cannot drift. |
+| [docs/registry-semantics.md](docs/registry-semantics.md) | Canonical asset identity, the representation model, registry trust and provenance, resolution and ambiguity, admissibility, snapshots — and what the registry explicitly does not guarantee. |
+| [docs/reason-codes.md](docs/reason-codes.md) | The 43 stable verifier reason codes. Generated from the registry, so it cannot drift. |
+| [docs/registry-reason-codes.md](docs/registry-reason-codes.md) | The 20 registry reason codes, and the kernel codes registry decisions reuse. Generated. |
 | [docs/replay-semantics.md](docs/replay-semantics.md) | How a mandate is consumed, and the one obligation the kernel cannot enforce for an integrator. |
 | [docs/adr/](docs/adr/) | Architecture decision records: authorization architecture, canonical encoding, kernel language and dependency boundary. |
-| [corpus/v1/README.md](corpus/v1/README.md) | Decision-vector format, for reimplementers. |
+| [corpus/v1/README.md](corpus/v1/README.md) | Verifier decision-vector format, for reimplementers. |
+| [corpus/registry-v1/README.md](corpus/registry-v1/README.md) | Registry decision-vector format, and exactly which fixture data is real and which is synthetic. |
 | [AGENTS.md](AGENTS.md) | Operating rules for coding agents working in this repository. Read before making any change. |
 
 Other documents summarize; `docs/mandate-design.md` is the source of truth and
@@ -124,7 +150,7 @@ is where a disagreement gets resolved.
 
 **Buildathon MVP** — a narrow, production-quality vertical slice on tokenized
 equities over Robinhood Chain / Arbitrum-compatible infrastructure: a
-machine-readable mandate, canonical asset and representation registry,
+machine-readable mandate, a canonical asset and representation registry,
 representation metadata, market-state integration, multiple execution
 candidates, optional Jev-assisted selection, deterministic verification with
 stable PASS/REJECT reason codes, an execution gate, and deliberate failure
@@ -147,22 +173,29 @@ See [MVP scope](docs/mandate-design.md#20-buildathon-mvp-scope) and
 ├── README.md              this file
 ├── packages/kernel/       the verifier and everything it needs
 │   ├── src/               domain types, encoding, authorization, verifier
-│   └── test/              116 tests: behaviour, boundaries, properties, structure
-├── corpus/v1/             cross-implementation decision vectors
+│   └── test/              118 tests: behaviour, boundaries, properties, structure
+├── packages/registry/     canonical assets, representations, resolution
+│   ├── src/               identity, claims, semantics, admissibility, snapshots
+│   │   └── testing/       synthetic world builders and labelled dev fixtures
+│   └── test/              180 tests: behaviour, adversarial properties, structure
+├── corpus/v1/             cross-implementation verifier decision vectors
+├── corpus/registry-v1/    cross-implementation registry decision vectors
 └── docs/
-    ├── mandate-design.md       canonical specification
-    ├── architecture.md         system structure and component boundaries
-    ├── roadmap.md              phased engineering plan
-    ├── verifier-invariants.md  what the kernel guarantees, and how
-    ├── reason-codes.md         generated reason-code registry
-    ├── replay-semantics.md     consumption and nonce semantics
-    ├── statelatch-reuse.md     prior-codebase reuse assessment
-    └── adr/                    architecture decision records
+    ├── mandate-design.md         canonical specification
+    ├── architecture.md           system structure and component boundaries
+    ├── roadmap.md                phased engineering plan
+    ├── verifier-invariants.md    what the kernel guarantees, and how
+    ├── registry-semantics.md     what the registry means, and what it refuses to mean
+    ├── reason-codes.md           generated verifier reason-code registry
+    ├── registry-reason-codes.md  generated registry reason-code registry
+    ├── replay-semantics.md       consumption and nonce semantics
+    ├── statelatch-reuse.md       prior-codebase reuse assessment
+    └── adr/                      architecture decision records
 ```
 
-Directories are created when they hold real code. Later phases add adapters,
-registries and chain clients as packages that depend on the kernel — never the
-reverse.
+Directories are created when they hold real code. The dependency direction is
+`registry → kernel`, never the reverse, and structural tests enforce it from both
+sides. Later phases add adapters and chain clients the same way.
 
 ## Contributing
 

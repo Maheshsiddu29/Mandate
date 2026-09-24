@@ -5,11 +5,14 @@ repository summarize parts of this one and link back to it; this file is the
 source of truth.
 
 - **Document status:** canonical specification.
-- **Implementation status:** Phase 1 complete — the mandate core kernel
+- **Implementation status:** Phase 2 complete — the mandate core kernel
   (types, canonical encoding, EIP-712 authorization, deterministic verifier,
-  receipts, replay semantics, decision-vector corpus). Everything else in this
+  receipts, replay semantics, decision-vector corpus) and the canonical asset and
+  representation registry (identifier schemes, reference resolution,
+  provenance-carrying representation metadata, mandate-constrained admissibility,
+  deterministic snapshots, registry decision vectors). Everything else in this
   document remains unbuilt.
-- **Last structural revision:** Phase 1.
+- **Last structural revision:** Phase 2.
 
 ## How to read status labels
 
@@ -30,7 +33,8 @@ by tests. Everything else should be read as what Mandate is *specified to do*,
 not what it does. See [Buildathon MVP scope](#20-buildathon-mvp-scope) for what
 is being built first, and [roadmap.md](roadmap.md) for current phase status.
 
-As of Phase 1 the implemented surface is: the mandate type and its canonical
+As of Phase 2 the implemented surface adds the canonical asset and representation
+registry (§5, §6) on top of Phase 1's kernel: the mandate type and its canonical
 encoding, the EIP-712 authorization adapter, the deterministic verifier, the
 reason-code registry, verification receipts, and replay semantics — all in
 `packages/kernel`, with a cross-implementation decision-vector corpus in
@@ -326,8 +330,10 @@ component.
 
 ## 5. Canonical assets and token representations
 
-> **Status: SPECIFIED** for the identity model; **DRAFT** for the identifier
-> encoding and registry format.
+> **Status: IMPLEMENTED.** The identity model, the identifier scheme vocabulary
+> and the registry format are built in `packages/registry`
+> ([registry-semantics.md](registry-semantics.md),
+> [ADR 0005](adr/0005-canonical-asset-identity-and-resolution.md)).
 
 ### 5.1 The separation
 
@@ -368,7 +374,7 @@ Identity must be stable, collision-resistant, and not derived from a display
 string. A ticker is a label, not an identifier: tickers are reused across
 venues, reassigned after delistings, and changed by corporate action.
 
-Proposed identifier shape (**DRAFT**):
+Identifier shape (**IMPLEMENTED**):
 
 ```
 mandate:asset:<asset-class>:<scheme>:<value>
@@ -378,9 +384,14 @@ mandate:asset:equity:isin:US67066G1040
 mandate:asset:treasury:cusip:912797GN1
 ```
 
-Design rules for the identifier (**SPECIFIED**):
+Design rules for the identifier (**IMPLEMENTED**):
 
 - The identifier is opaque to consumers. Nothing parses it to infer behaviour.
+- `<scheme>` is a **closed vocabulary** — `figi`, `isin`, `cusip` — and a scheme
+  value is **check-digit validated** rather than stored as supplied, so a
+  single-character typo cannot become a different canonical asset. `<asset-class>`
+  is closed for the same reason: it is part of identity, and a free-form identity
+  field is how a phantom asset gets created.
 - `<scheme>` records *which external identifier system* establishes identity,
   because different asset classes have different authorities (FIGI/ISIN for
   equities, CUSIP for many US instruments, LEI for issuers, and others for
@@ -404,20 +415,23 @@ without a redesign; see §23.
 ### 5.3 Representation identity
 
 A representation is identified by chain plus contract, using a CAIP-19-style
-encoding (**DRAFT**):
+encoding (**IMPLEMENTED**):
 
 ```
 eip155:42161/erc20:0x<address>
 ```
 
-Rules (**SPECIFIED**):
+Rules (**IMPLEMENTED**):
 
 - Chain identity comes from a chain ID, not from an RPC URL, a hostname, or a
   human-readable network name. An RPC endpoint is a data source and can lie
   about which network it serves; the chain ID is checked against the network
   the transaction is actually submitted to.
 - Contract address is the only address that matters, and it comes from the
-  registry, never from a model, a tool response, or user free text.
+  registry, never from a model, a tool response, or user free text. It is
+  validated and canonicalized: a mixed-case address is accepted only if its
+  EIP-55 checksum verifies, and a broken checksum is a rejection rather than a
+  repair.
 - A representation belongs to exactly one canonical asset. A token claiming to
   represent two underlyings at once is not modelled and is rejected.
 - Representations are registry entries, not discoveries. An unknown contract
@@ -437,8 +451,13 @@ where it can be checked, explained, and refused.
 
 ## 6. Representation semantics
 
-> **Status: DRAFT.** The metadata dimensions are settled; the value
-> vocabularies and their sourcing are not.
+> **Status: IMPLEMENTED.** The metadata dimensions, the value vocabularies and
+> the trust and conflict rules for sourcing them are built in
+> `packages/registry` ([registry-semantics.md](registry-semantics.md) §6,
+> [ADR 0006](adr/0006-representation-claims-and-conflict-policy.md)). The
+> vocabularies are expected to grow as Phase 3 learns what real issuers publish;
+> growing one is a registry schema-version change and cannot affect a mandate
+> digest.
 
 ### 6.1 Why metadata is the core registry asset
 
@@ -482,8 +501,13 @@ first-class treatment:
 
 ### 6.4 Metadata sourcing and trust
 
-**Status: DRAFT.** Metadata will be wrong sometimes; the design must survive
-that.
+**Status: IMPLEMENTED.** Metadata will be wrong sometimes; the design must
+survive that. Each dimension is a *set of claims*, each carrying provenance and an
+observation time, resolved against a `VERIFIED` trust floor. The rule that took
+the most care: a claim **below** the floor can neither establish a value **nor
+create a conflict** — otherwise anyone able to inject an advisory claim could make
+any representation inadmissible
+([ADR 0006](adr/0006-representation-claims-and-conflict-policy.md)).
 
 - Every metadata field carries **provenance** (issuer documentation, on-chain
   read, third-party data, manual curation) and an **as-of** timestamp.
@@ -1393,15 +1417,20 @@ dependence on mutable external references.
 These are the properties that define Mandate. A change that breaks one is a
 change to the product, not an implementation detail.
 
-**Phase 1 status.** INV-1, INV-2, INV-5, INV-9, INV-11, INV-12, INV-16, INV-17
-and INV-18 are established in the kernel today. INV-4 and INV-7 are established
-for the kernel's own boundary — no model or untrusted source can supply a value
-it reads — but the pipeline that would carry such a value does not exist yet.
-INV-3 has its structural half (no inference client is reachable from the
-verifier); the adversarial end-to-end half needs Phase 5. INV-6, INV-8, INV-14
-and INV-15 need the registry and routing of Phases 2 and 4. INV-10 and INV-13
-need the execution gate of Phase 6. Per-property evidence is in
-[verifier-invariants.md](verifier-invariants.md).
+**Phase 2 status.** INV-1, INV-2, INV-5, INV-9, INV-11, INV-12, INV-16, INV-17
+and INV-18 are established in the kernel. **INV-6 is now established**: canonical
+identity and token identity are distinct types, and equivalence is a function of
+the current mandate rather than a stored field — enforced structurally, not by
+comment. **INV-7 is established through the registry**: an execution address
+originates only from a registry entry, and an unregistered contract is never
+admissible. INV-4 holds for both packages' own boundaries — no model or untrusted
+source can supply a value either reads — but the pipeline that would carry such a
+value does not exist yet. INV-3 has its structural half (no inference client is
+reachable from the verifier or the registry); the adversarial end-to-end half
+needs Phase 5. INV-8, INV-14 and INV-15 need the routing of Phase 4. INV-10 and
+INV-13 need the execution gate of Phase 6. Per-property evidence is in
+[verifier-invariants.md](verifier-invariants.md) and
+[registry-semantics.md §12](registry-semantics.md#12-registry-invariants-and-their-evidence).
 
 | ID | Invariant | Where it will be enforced |
 | --- | --- | --- |
@@ -1410,8 +1439,8 @@ need the execution gate of Phase 6. Per-property evidence is in
 | **INV-3** | The set of permitted executions is identical whether Jev is present, absent, failed or adversarial. | Verifier; pipeline structure; adversarial-stub test |
 | **INV-4** | Model output never supplies an address, an amount, or a constraint value. | Pipeline structure; type boundaries |
 | **INV-5** | Fail closed. `UNKNOWN` state, unparseable data, missing metadata on a constrained field, and unrecognized schema versions all reject. There is no "proceed anyway" path. | Verifier |
-| **INV-6** | Canonical financial identity is distinct from token identity, and equivalence between representations is never inferred from shared underlying. | Registry model; verifier |
-| **INV-7** | Contract addresses used in execution come from the registry, never from a model, a tool response, or free text. | Resolution stage; type boundaries |
+| **INV-6** | Canonical financial identity is distinct from token identity, and equivalence between representations is never inferred from shared underlying. | Registry model; verifier — **established Phase 2** |
+| **INV-7** | Contract addresses used in execution come from the registry, never from a model, a tool response, or free text. | Resolution stage; type boundaries — **established Phase 2** |
 | **INV-8** | Optimization occurs only over candidates that already satisfy every mandate constraint. | Routing structure |
 | **INV-9** | Corporate-action state is part of execution correctness. A materially stale authorization does not execute. | Verifier; epoch check |
 | **INV-10** | Economic state includes the clock. Comparisons account for which stored value is effective at evaluation time, and safety-critical time comes from the chain at execution. | Verifier; execution gate |

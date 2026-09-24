@@ -22,10 +22,17 @@ Read it before proposing architectural changes. If a change contradicts it,
 either the change is wrong or the document needs updating first — resolve which
 before writing code.
 
-The repository is currently at the end of **Phase 1**: the mandate core kernel
-(`packages/kernel`) and the decision-vector corpus (`corpus/v1`) are built.
-Routing, registries, chain adapters, Jev, execution contracts and web work are
-**not** built. Do not start a later phase until it is explicitly opened.
+The repository is currently at the end of **Phase 2**: the mandate core kernel
+(`packages/kernel`), the canonical asset and representation registry
+(`packages/registry`), and both decision-vector corpora (`corpus/v1`,
+`corpus/registry-v1`) are built. Routing, chain adapters, live market data, Jev,
+execution contracts and web work are **not** built. Do not start a later phase
+until it is explicitly opened.
+
+The dependency direction is `registry → kernel`, never the reverse, and it is
+enforced by structural tests in both packages
+([ADR 0004](docs/adr/0004-registry-package-boundary.md)). Neither package
+performs I/O.
 
 ---
 
@@ -176,8 +183,15 @@ whether the behaviour change was intended before regenerating.
 
 The kernel's runtime dependencies are fixed by
 [ADR 0003](docs/adr/0003-kernel-language-and-dependency-boundary.md) to exactly
-`@noble/hashes` and `@noble/curves`. Adding any other runtime dependency to the
-kernel requires a new ADR, and `structure.test.ts` fails without one.
+`@noble/hashes` and `@noble/curves`. The registry's are fixed by
+[ADR 0004](docs/adr/0004-registry-package-boundary.md) to exactly
+`@mandate/kernel`. Adding any other runtime dependency to either requires a new
+ADR, and each package's `structure.test.ts` fails without one.
+
+`npm run corpus:generate` regenerates the verifier corpus and
+`npm run registry-corpus:generate` the registry corpus; `npm run docs:generate`
+regenerates both reason-code documents. All four artifacts are committed with
+tests asserting the committed files match what the generators produce.
 
 Node's type-stripping loader does not support TypeScript parameter properties,
 enums, namespaces or decorators. Use plain declarations.

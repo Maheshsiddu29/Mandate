@@ -2,8 +2,8 @@
 
 System structure, component boundaries, and where each concern is enforced.
 
-> **Status: Phase 1 complete.** The kernel is built; everything else in the
-> component table is still planned. The "Phase" column records when a component
+> **Status: Phase 2 complete.** The kernel and the registry are built;
+> everything else in the component table is still planned. The "Phase" column records when a component
 > lands; see [roadmap.md](roadmap.md).
 > The complete rationale for every decision here is in
 > [mandate-design.md](mandate-design.md) — this document is the structural
@@ -69,9 +69,11 @@ trusts none of its callers.
 | Reason-code registry | Stable namespaced codes with data-driven explanations | 1 | **implemented** — 43 codes; [reason-codes.md](reason-codes.md) |
 | Replay semantics | Pure consumption state machine; the store stays outside the kernel | 1 | **implemented** — [replay-semantics.md](replay-semantics.md) |
 | Decision-vector corpus | Cross-implementation compatibility contract | 1 | **implemented** — `corpus/v1`, 57 vectors |
-| Canonical asset registry | Canonical identities and their external identifier schemes | 2 | not implemented |
-| Representation registry | Tokenized representations, their metadata and provenance | 2 | not implemented |
-| Resolution | Human reference → canonical asset → admissible representations | 2 | not implemented |
+| Canonical asset registry | Canonical identities and their external identifier schemes | 2 | **implemented** — `packages/registry/src/asset-id.ts`, `asset.ts` |
+| Representation registry | Tokenized representations, their metadata and provenance | 2 | **implemented** — `packages/registry/src/representation.ts`, `claims.ts`, `semantics.ts` |
+| Resolution | Human reference → canonical asset → admissible representations | 2 | **implemented** — `packages/registry/src/reference.ts`, `asset-index.ts`, `evaluate.ts` |
+| Registry snapshots and digests | Reproducible registry state a decision can be replayed against | 2 | **implemented** — `packages/registry/src/snapshot.ts`, `encoding.ts` |
+| Registry decision vectors | Cross-implementation contract for resolution and admissibility | 2 | **implemented** — `corpus/registry-v1`, 27 vectors |
 | Market-state adapters | Price, liquidity, quotes, operational and corporate-action state, with provenance | 3 | not implemented |
 | Chain adapters | Chain identity, reads, transaction construction and submission | 3 | not implemented |
 | Candidate engine | Venue and route discovery; candidate construction with state snapshots | 4 | not implemented |
@@ -86,13 +88,22 @@ Directories are created when they hold real code.
 
 ```
 packages/kernel/     the verifier and everything it needs (ADR 0003)
-corpus/v1/           cross-implementation decision vectors
+packages/registry/   canonical assets, representations, resolution (ADR 0004)
+corpus/v1/           cross-implementation verifier decision vectors
+corpus/registry-v1/  cross-implementation registry decision vectors
 docs/adr/            architecture decision records
 ```
 
-Later phases add adapters, registries and chain clients as packages that depend
-on the kernel — never the reverse. A structural test enforces that the kernel
-imports nothing outside itself and its two allowlisted crypto dependencies.
+Later phases add adapters and chain clients as packages that depend on the kernel
+— never the reverse. Structural tests enforce the direction from both sides: the
+kernel imports nothing outside itself and its two allowlisted crypto
+dependencies, and the registry imports nothing outside itself and the kernel
+([ADR 0004](adr/0004-registry-package-boundary.md)).
+
+```
+registry  ──▶  kernel        permitted, and the only permitted direction
+kernel    ──▶  registry      forbidden, structurally
+```
 
 ## 3. Trust levels
 
@@ -115,7 +126,9 @@ constraints come from the signed mandate.
 | Concern | Enforced in | Not enforced in |
 | --- | --- | --- |
 | Is the asset the right financial asset? | Resolution + verifier (identity checks) | Ranking, Jev |
-| Is this representation acceptable? | Verifier (semantics checks) against registry metadata | Discovery, ranking |
+| What financial asset did a human mean? | Registry resolution — ambiguity rejects | The verifier, which is handed an identity, not a reference |
+| Is this representation acceptable? | Registry admissibility, then re-checked by the verifier (semantics checks) against registry metadata | Discovery, ranking |
+| Do the data sources about a representation agree? | Registry claim resolution — conflict fails closed | The verifier, which reads one resolved value |
 | Is the amount within authority? | Verifier (economic checks) | Candidate engine |
 | Is the state fresh enough? | Verifier (state checks) against observation times | Adapters |
 | Is the corporate-action state current? | Verifier (epoch check) | Adapters |
@@ -178,12 +191,41 @@ It accepts `unknown` for each input and parses at the boundary. That is what
 makes totality real: a caller cannot hand it something unparseable and receive
 a thrown error it might mistake for a transport failure.
 
+## 5b. Phase 2: the registry
+
+What was built, and the decisions that shaped it.
+
+| Area | Decision | Record |
+| --- | --- | --- |
+| Package boundary | A separate package depending on the kernel, performing no I/O, so a decision is replayable and there is one decision engine rather than a real and a simulated one | [ADR 0004](adr/0004-registry-package-boundary.md) |
+| Asset identity | Closed scheme vocabulary (`figi`, `isin`, `cusip`) with check-digit validation; resolution total over `RESOLVED` / `AMBIGUOUS` / `UNKNOWN` / `INVALID`, never a tie-break | [ADR 0005](adr/0005-canonical-asset-identity-and-resolution.md) |
+| Provenance | Every security-relevant property is a claim set resolved against a `VERIFIED` trust floor; sub-floor claims neither establish nor conflict; conflicts fail closed unconditionally | [ADR 0006](adr/0006-representation-claims-and-conflict-policy.md) |
+| Snapshots | MCE primitives with the registry's own tags and its own schema version, so registry evolution cannot change a mandate digest | [ADR 0007](adr/0007-registry-snapshot-encoding-and-digest.md) |
+| Admissibility | A function of mandate, semantics and trusted state — never stored. Additional requirements can only narrow | [registry-semantics.md](registry-semantics.md) |
+| Compatibility | 27 registry decision vectors | [corpus/registry-v1](../corpus/registry-v1/README.md) |
+
+The registry's surface is resolution and filtering, not authorization:
+
+```
+resolve(registry, "NVDA")                    -> RESOLVED | AMBIGUOUS | UNKNOWN | INVALID
+listRepresentations(registry, assetId)        -> representations issued against it
+evaluateRepresentation(registry, req, id)     -> ADMISSIBLE | EXCLUDED + reasonCodes[]
+toRepresentationState(record, req)            -> kernel trusted state, or an error
+```
+
+The last one is the seam. The registry's output is an *input* to the verifier,
+re-checked from scratch, and it refuses to emit anything it could not establish
+rather than substituting a permissive default.
+
 ## 6. Key decisions and their rationale
 
 | Decision | Rationale | Detail |
 | --- | --- | --- |
 | Canonical asset identity separate from token identity | Representations of one underlying are not equivalent instruments | [§5](mandate-design.md#5-canonical-assets-and-token-representations) |
 | Registry asserts only "issued against the same underlying" | Any stronger claim would be false and the system would be built on it | [§5.4](mandate-design.md#54-why-same-underlying-is-deliberately-weak) |
+| Ambiguous resolution refuses rather than choosing | A tie-break is a guess about financial identity, and a guess that is right most of the time buys the wrong security the rest | [ADR 0005](adr/0005-canonical-asset-identity-and-resolution.md) |
+| A sub-floor claim can neither establish a value nor create a conflict | Otherwise injecting an advisory claim denies service to every honest representation it touches | [ADR 0006](adr/0006-representation-claims-and-conflict-policy.md) |
+| Registry admissibility is evaluated by identifier, never by caller-supplied record | Makes "an unregistered contract is never admissible" structural rather than a check that could be forgotten | [registry-semantics.md](registry-semantics.md) |
 | Verifier is pure and total | Testability, auditability, reduced attack surface, portability | [§10.4](mandate-design.md#104-why-the-verifier-does-no-io) |
 | Jev returns an index into a closed set | Returning an object is an opportunity to return a modified one | [§11.4](mandate-design.md#114-the-integration-surface) |
 | Admissibility filtered before ranking, then re-verified after | Ranking and model selection sit between the filter and execution | [§12.1](mandate-design.md#121-admissibility-before-quality) |
@@ -196,9 +238,10 @@ a thrown error it might mistake for a transport failure.
 
 Eighteen invariants define the system and are listed with their enforcement
 points in [mandate-design.md §16](mandate-design.md#16-major-invariants).
-Phase 1's per-property evidence — which are established, which are structural
-only, and which are explicitly deferred — is in
-[verifier-invariants.md](verifier-invariants.md). The four that shape the
+Per-property evidence is in [verifier-invariants.md](verifier-invariants.md) for
+the kernel and
+[registry-semantics.md §12](registry-semantics.md#12-registry-invariants-and-their-evidence)
+for the registry. Phase 2 established INV-6 and INV-7. The four that shape the
 architecture most:
 
 - **INV-3** — the permitted-execution set is identical whether Jev is present,
@@ -206,7 +249,9 @@ architecture most:
   separate components rather than separate functions.
 - **INV-5** — fail closed. This is why `UNKNOWN` is a value in the type system.
 - **INV-7** — execution addresses come only from the registry. This is why
-  resolution is a distinct stage that the agent cannot bypass.
+  resolution is a distinct stage that the agent cannot bypass, and why
+  admissibility is evaluated by identifier rather than by a record a caller
+  supplies.
 - **INV-13** — the transaction submitted is the transaction verified. This is
   why an on-chain gate exists at all.
 

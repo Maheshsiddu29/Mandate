@@ -3,7 +3,9 @@
 Canonical asset identity, representation metadata, trust, resolution and
 admissibility — what the Phase 2 registry means and what it refuses to mean.
 
-> **Status: Phase 2, specified.** The canonical product specification remains
+> **Status: Phase 2, implemented.** Everything below is built in
+> `packages/registry` and covered by its test suite. The canonical product
+> specification remains
 > [mandate-design.md](mandate-design.md) §5 and §6; this document is the
 > implementation-level semantics for `packages/registry`, in the same
 > relationship to the design document as
@@ -334,3 +336,79 @@ Named so nothing downstream assumes it.
 | Execution, bridging, stablecoin funding | Phases 6–7 |
 | Deciding whether registry metadata is *true* | Curation and adapters; the registry checks provenance, trust, agreement and freshness, not accuracy ([design §17.6](mandate-design.md#176-honest-statement-of-limits)) |
 | Real market data | Phase 3. Every Phase 2 fixture is `SYNTHETIC_FIXTURE` |
+
+## 12. Registry invariants and their evidence
+
+How each guarantee is established, in the same form as
+[verifier-invariants.md](verifier-invariants.md). **CODE** — a structural property
+of the package, checked by a test that reads the sources or the dependency tree.
+**TEST** — established by behavioural tests. **PROPERTY** — established over
+generated registries.
+
+### Identity
+
+| # | Property | How | Status |
+| --- | --- | --- | --- |
+| R-1 | Canonical financial identity exists independently of token identity. | `CanonicalAssetRecord` carries no chain, contract or issuer; `RepresentationRecord` carries its underlying only as a provenance-bearing claim | CODE |
+| R-2 | A scheme value that does not verify cannot be registered. | FIGI, ISIN and CUSIP check digits verified; every single-digit mutation of each fixture identifier is rejected | TEST |
+| R-3 | Changing display metadata cannot change canonical identity. | Identity and display are separate groups with separate digests; display mutated across names, tickers, MICs, listings and aliases over generated cases | CODE, PROPERTY |
+| R-4 | Changing a contract address changes representation identity. | Injectivity established exhaustively over all 256 single-byte address fills, plus one address on two chains | TEST |
+| R-5 | `ticker + chain` is never accepted as representation identity. | The only constructor is `parseRepresentationId`, which requires a namespace-qualified chain and a validated contract | CODE |
+| R-6 | A contract address with a broken EIP-55 checksum rejects rather than being repaired. | Verified against a known-good checksummed address and a single-case-flip mutation of it | TEST |
+
+### Resolution
+
+| # | Property | How | Status |
+| --- | --- | --- | --- |
+| R-10 | Resolution is deterministic and model-free. | No inference client is reachable; matching is exact over a normalized key; identical snapshot and reference give an identical outcome | CODE, TEST |
+| R-11 | An ambiguous reference rejects rather than choosing. | Ticker collision, duplicate names and a two-target alias each resolve `AMBIGUOUS` with every candidate reported | TEST |
+| R-12 | An unknown reference rejects rather than matching something similar. | Near-miss names and symbols resolve `UNKNOWN`; there is no edit-distance path | TEST |
+| R-13 | Symbol equality cannot satisfy canonical asset equality. | Two assets sharing a ticker have different identities and resolve ambiguous; a token's symbol is display metadata the resolver never reads | CODE, TEST |
+| R-14 | Resolution never returns an asset absent from the snapshot. | Property over generated registries | PROPERTY |
+| R-15 | Resolution order-independence. | Shuffled asset order yields an identical outcome | PROPERTY |
+
+### Trust and provenance
+
+| # | Property | How | Status |
+| --- | --- | --- | --- |
+| R-20 | A property that gates execution cannot be established from advisory or untrusted data. | `resolveClaimSet` applies a `VERIFIED` floor; downgrading provenance never improves admissibility, over generated registries | TEST, PROPERTY |
+| R-21 | A sub-floor claim cannot create a conflict. | Injecting an advisory or untrusted claim changes no decision, over generated registries. The security half of the rule | TEST, PROPERTY |
+| R-22 | Source conflict fails closed unconditionally. | A test per rejected tie-break: recency, trust precedence, majority | TEST |
+| R-23 | Adding an untrusted representation cannot change another representation's semantics. | Property over generated registries | PROPERTY |
+| R-24 | A stale claim can neither establish nor conflict, and an observation from the future fails closed. | Boundary tests at the freshness edge and one second past it | TEST |
+| R-25 | Missing, sub-floor, stale and conflicting metadata are four distinct reported causes. | Four reason codes, each produced by a corpus vector | TEST |
+
+### Admissibility
+
+| # | Property | How | Status |
+| --- | --- | --- | --- |
+| R-30 | An unregistered contract is never admissible. | `evaluateRepresentation` takes an identifier and resolves it through the snapshot; no function accepts a caller-supplied record. Holds over generated registries | CODE, PROPERTY |
+| R-31 | Membership is not admissibility. | One registry, two representations, two mandates, two different answers | TEST |
+| R-32 | Equivalence is never stored. | No record type has an equivalence, substitutability or admissibility field, enforced by a source scan; no function has the shape `(record) -> Admissibility` | CODE |
+| R-33 | Every exclusion explains itself, and all independent reasons are collected. | A four-violation case asserts all four; exclusions are canonicalized by reason-code id | TEST |
+| R-34 | Adding a constraint never creates an admissible representation. | Fourteen constraint additions over generated registries | PROPERTY |
+| R-35 | An additional requirement cannot widen mandate authority. | Allowlists intersect, the synthetic policy is one-way, and a widening attempt is an error rather than being ignored | TEST |
+| R-36 | Ordering cannot affect admissibility. | Shuffled representation and asset order over generated registries | PROPERTY |
+| R-37 | Registry exclusion and verifier rejection agree. | Per constraint both layers know about, a registry exclusion is also a kernel rejection, and an admissible representation produces no representation-level rejection | TEST |
+| R-38 | The bridge never emits a permissive default. | Unknown, conflicted, advisory-only and stale metadata all emit nothing; emitted provenance is the weakest of the properties the state rests on | TEST, PROPERTY |
+
+### Snapshots
+
+| # | Property | How | Status |
+| --- | --- | --- | --- |
+| R-40 | A registry decision depends on no mutable global state. | The registry performs no I/O, reads no clock and holds no cache; `openRegistry` takes a snapshot value | CODE |
+| R-41 | Snapshot digests are deterministic and order-independent. | Ordering proven not to reach a digest across assets, representations, claims, listings, aliases, jurisdictions and rights | TEST, PROPERTY |
+| R-42 | Every security-relevant change moves the snapshot digest. | Sixteen mutations, each asserted to change the digest and not to collide with another | TEST |
+| R-43 | Registry schema evolution cannot change a mandate digest. | Separate schema versions and separate, mutually non-prefixing domain tags | CODE |
+| R-44 | Simulated data cannot be presented as observed. | Every snapshot declares `dataClass`; no decision path reads it | CODE, TEST |
+
+### Explicitly not guaranteed by Phase 2
+
+| # | Not guaranteed | Whose job |
+| --- | --- | --- |
+| R-50 | That registry metadata is **true**. The registry checks provenance, trust, agreement and freshness — not accuracy. | Curation, and Phase 3 adapters ([design §17.6](mandate-design.md#176-honest-statement-of-limits)) |
+| R-51 | That a snapshot reflects the chain now. A snapshot is state as observed, and staleness is the caller's bound. | Phase 3 |
+| R-52 | Any live data access. Phase 2 ships no adapter and makes no network call. | Phase 3 |
+| R-53 | Routing, ranking or candidate construction. | Phase 4 |
+| R-54 | That two independent registry implementations agree. The corpus is the *mechanism*; only one implementation exists today. | Whenever a second is written |
+| R-55 | Resolution of a conflict. Phase 2 reports conflicts and refuses; it does not adjudicate them. | A human curator |

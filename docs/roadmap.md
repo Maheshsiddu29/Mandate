@@ -3,7 +3,7 @@
 Phased engineering plan: what each phase delivers, how it is known to be done,
 and what it depends on.
 
-> **Status: Phase 1 complete.** Phases 2 and beyond are planned, not started.
+> **Status: Phase 2 complete.** Phases 3 and beyond are planned, not started.
 > Rationale for the phase ordering is in
 > [mandate-design.md §25](mandate-design.md#25-phased-engineering-roadmap);
 > scope boundaries are in
@@ -110,29 +110,55 @@ be decided here rather than drifted into.
 
 ---
 
-## Phase 2 — Canonical asset and representation registry
+## Phase 2 — Canonical asset and representation registry ✅
 
-**Delivers**
+**Delivered.** `packages/registry` and `corpus/registry-v1`. Exit criteria met;
+evidence per property in
+[registry-semantics.md §12](registry-semantics.md#12-registry-invariants-and-their-evidence).
 
-- canonical asset identity and its identifier scheme
-  ([§5.2](mandate-design.md#52-canonical-asset-identity));
-- the representation registry with metadata, provenance and as-of times
-  ([§6.2](mandate-design.md#62-metadata-dimensions));
-- resolution: human reference → canonical asset → admissible representations;
-- per-representation exclusion reasons.
+| Delivered | Where |
+| --- | --- |
+| Canonical asset identity, closed scheme vocabulary, check-digit validation | `packages/registry/src/asset-id.ts`, [ADR 0005](adr/0005-canonical-asset-identity-and-resolution.md) |
+| Canonical asset records, identity separated from display | `src/asset.ts` |
+| Deterministic reference resolution, four named outcomes | `src/reference.ts`, `src/asset-index.ts` |
+| Representation identity, EIP-55 validated and canonicalized | `src/representation-id.ts` |
+| Provenance-carrying claim sets, trust floors, conflict policy | `src/claims.ts`, [ADR 0006](adr/0006-representation-claims-and-conflict-policy.md) |
+| Representation semantics vocabularies | `src/semantics.ts`, `src/representation.ts` |
+| Mandate-constrained admissibility, all exclusions collected | `src/requirements.ts`, `src/evaluate.ts` |
+| Deterministic snapshots and digests | `src/snapshot.ts`, `src/encoding.ts`, [ADR 0007](adr/0007-registry-snapshot-encoding-and-digest.md) |
+| Kernel bridge, refusing to emit unestablished state | `src/bridge.ts` |
+| Synthetic world builders and labelled dev fixtures | `src/testing/` |
+| Registry reason codes, 20 codes | [registry-reason-codes.md](registry-reason-codes.md) |
+| Registry decision vectors, 27 vectors | [corpus/registry-v1](../corpus/registry-v1/README.md) |
+| Package boundary and purity, enforced structurally | [ADR 0004](adr/0004-registry-package-boundary.md) |
 
-**Exit criteria**
+298 tests pass (118 kernel, 180 registry); typecheck clean.
 
-- a canonical asset resolves to its admissible representations, and each
-  exclusion reports *which constraint* excluded it;
-- ambiguous resolution rejects rather than choosing
-  ([§9.4](mandate-design.md#94-resolution-failure-is-a-normal-outcome));
-- an unregistered contract is `UNKNOWN` and never admissible;
-- the membership-is-not-equivalence rule is expressed in the type system, not
-  only in a comment.
+Exit criteria, each met: a canonical asset resolves to its admissible
+representations and every exclusion reports which constraint excluded it;
+ambiguous resolution rejects rather than choosing; an unregistered contract is
+never admissible, enforced structurally by evaluating identifiers rather than
+caller-supplied records; and membership-is-not-equivalence is expressed in the
+type system — no record type carries an equivalence or admissibility field, and a
+source scan fails if one is added.
 
-**Depends on:** Phase 1. **Reuse:** re-derive from the prior `registry.ts`
-model ([statelatch-reuse.md §6](statelatch-reuse.md#6-actions-for-later-phases)).
+**Two things Phase 2 added that the original plan did not name.** Source conflict
+policy needed its own ADR, because the obvious-looking tie-breaks are each a way
+for one bad source to override curation, and because the rule that a *sub-floor*
+claim must not be able to create a conflict is a security property rather than a
+modelling preference. And requirements had to be split into mandate-derived and
+narrowing-only halves, because the Phase 1 mandate schema is frozen and does not
+carry backing, rights or jurisdiction constraints — layering those as
+institutional policy that can only tighten was the only way to support them
+without changing signed digests.
+
+**Not delivered, deliberately:** any live data access, any adapter, any database,
+and any routing. A second registry implementation to run the corpus against does
+not exist yet either; the corpus is the mechanism, not the proof.
+
+**Depends on:** Phase 1. **Reuse:** re-derived from the prior `registry.ts`
+model, with the membership-is-not-equivalence rule preserved in the type system
+([statelatch-reuse.md §6](statelatch-reuse.md#6-actions-for-later-phases)).
 
 ---
 
@@ -301,7 +327,7 @@ the design document before it belongs in code.
 | --- | --- | --- | --- |
 | 0 | Foundation: thesis, architecture, rules, scope, reuse assessment | — | ✅ complete |
 | 1 | Mandate types and deterministic verifier | 0 | ✅ complete |
-| 2 | Canonical asset and representation registry | 1 | planned |
+| 2 | Canonical asset and representation registry | 1 | ✅ complete |
 | 3 | Market-state and chain adapters | 2 | planned |
 | 4 | Execution-candidate and route engine | 3 | planned |
 | 5 | Jev integration | 4 | planned, non-blocking |
