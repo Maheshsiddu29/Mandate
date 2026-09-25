@@ -125,6 +125,7 @@ export type RoutingReasonCode =
   | 'COST_STATE_STALE'
   | 'COST_STATE_FUTURE'
   | 'SELL_FEES_EXCEED_PROCEEDS'
+  | 'TOTAL_COST_EXCEEDS_MANDATE'
   | 'QUOTE_STALE'
   | 'QUOTE_FROM_FUTURE'
   | 'FINAL_REVERIFICATION_FAILED'
@@ -157,6 +158,7 @@ export interface RoutingReceipt {
   readonly mandateDigest: Bytes32;
   readonly registrySnapshotDigest: Bytes32;
   readonly marketStateDigest: Bytes32;
+  readonly requestedQuantity: Amount;
   readonly outcomes: readonly RouteOutcome[];
   readonly rankedCandidateDigests: readonly Bytes32[];
   readonly selectedCandidateDigest: Bytes32 | null;

@@ -130,4 +130,16 @@ describe('adversarial route providers', () => {
     const later = route({ ...input, clock: { nowUnixSeconds: ROUTER_CLOCK + 1n } });
     if (first.status === 'SELECTED' && later.status === 'SELECTED') assert.notEqual(first.receipt.receiptDigest, later.receipt.receiptDigest);
   });
+
+  it('binds requested quantity even when no route is valid', () => {
+    const attacker = parseIdentifier('issuer.attacker');
+    if (!attacker.ok) throw new Error('invalid attacker issuer');
+    const quote = routeQuote({ issuer: attacker.value });
+    const input = signedRequest(quote);
+    const first = route(input);
+    const second = route({ ...input, requestedQuantity: { ...ROUTER_REQUESTED_QUANTITY, atoms: ROUTER_REQUESTED_QUANTITY.atoms - 1n } });
+    assert.equal(first.status, 'NO_VALID_ROUTE');
+    assert.equal(second.status, 'NO_VALID_ROUTE');
+    if (first.status === 'NO_VALID_ROUTE' && second.status === 'NO_VALID_ROUTE') assert.notEqual(first.receipt.receiptDigest, second.receipt.receiptDigest);
+  });
 });

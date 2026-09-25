@@ -42,6 +42,8 @@ For `BUY`, total economic cost is quoted notional plus known fees. For `SELL`,
 net proceeds are quoted notional minus known fees; fees at or above proceeds
 exclude the route. All arithmetic is integer fixed-point arithmetic in the
 notional unit and scale, and overflow or unit mismatch excludes the route.
+The BUY all-in total, not only its base notional, must remain within the
+mandate's maximum-notional authorization.
 
 ## Consequences
 

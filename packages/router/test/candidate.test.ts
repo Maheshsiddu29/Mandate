@@ -87,6 +87,16 @@ describe('execution candidate construction', () => {
     assert.equal(result.ok, false);
     if (!result.ok) assert.ok(result.exclusions.some((item) => item.code === 'SELL_FEES_EXCEED_PROCEEDS'));
   });
+
+  it('applies the mandate maximum to all-in BUY cost', () => {
+    const quote = routeQuote();
+    const remaining = ROUTER_MANDATE.maxNotional.atoms - quote.notional.atoms;
+    const fee = { ...zeroFee(), atoms: remaining + 1n };
+    const over = { ...quote, costs: { venueFee: fee, executionFee: zeroFee(), settlementFee: zeroFee(), routeFee: zeroFee() } };
+    const result = build(ROUTER_MANDATE, over, trustedCost(over));
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.ok(result.exclusions.some((item) => item.code === 'TOTAL_COST_EXCEEDS_MANDATE'));
+  });
 });
 
 function build(mandate: typeof ROUTER_MANDATE, quote: ReturnType<typeof routeQuote>, cost: ReturnType<typeof trustedCost>) {

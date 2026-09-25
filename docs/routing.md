@@ -57,7 +57,8 @@ Unknown fees and partial fills follow the fail-closed policy in
 Every routing result is `SELECTED`, `NO_VALID_ROUTE`, or `INVALID_INPUT` and
 has a deterministic receipt. The receipt commits to the router version,
 mandate, registry snapshot, trusted state, every route outcome, ranking inputs,
-selected candidate, final verifier receipt and explicit evaluation time.
+requested quantity, selected candidate, final verifier receipt and explicit
+evaluation time. The quantity is committed even when no candidate is built.
 
 `SELECTED` means the preferred candidate passed a second kernel verification.
 It is not an executed trade and not a transaction authorization beyond the

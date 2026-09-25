@@ -2,6 +2,7 @@ import {
   UINT256_MAX,
   candidateDigest as digestKernelCandidate,
   canonicalAssetIdEquals,
+  compareAmounts,
   deviationBps,
   findRepresentation,
   parseCandidate,
@@ -131,6 +132,10 @@ export function buildRoutingCandidate(input: {
   if (mandate.side === 'BUY') {
     economicAtoms = quote.notional.atoms + feeAtoms;
     if (economicAtoms > UINT256_MAX) return { ok: false, exclusions: [exclusion('COST_OVERFLOW')] };
+    const total = { unit: quote.notional.unit, decimals: quote.notional.decimals, atoms: economicAtoms };
+    const bounded = compareAmounts(total, mandate.maxNotional);
+    if (!bounded.ok) return { ok: false, exclusions: [exclusion(bounded.error)] };
+    if (bounded.value > 0) return { ok: false, exclusions: [exclusion('TOTAL_COST_EXCEEDS_MANDATE', { total: String(economicAtoms), maximum: String(mandate.maxNotional.atoms) })] };
   } else {
     if (feeAtoms >= quote.notional.atoms) return { ok: false, exclusions: [exclusion('SELL_FEES_EXCEED_PROCEEDS')] };
     economicAtoms = quote.notional.atoms - feeAtoms;

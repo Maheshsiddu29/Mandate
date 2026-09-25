@@ -249,7 +249,7 @@
             "status": "ADMISSIBLE"
           }
         ],
-        "routingReceiptDigest": "0xf8dbcee9c4874438120ccecbc0c194555a70ba90b6e4af54e60d9c021e2b02b0",
+        "routingReceiptDigest": "0xf652d70ff882be2c71dfbde8043a2434e322a8fe8b8641d13a368734c2738089",
         "selectedCandidateDigest": "0x45613ec7a202ee9b14dd6340accfd858a6538f65f716d523c82dcdea54c7c9b0",
         "selectedRouteId": "route.aapl.valid-cheap",
         "status": "SELECTED"
@@ -499,7 +499,7 @@
             "status": "ADMISSIBLE"
           }
         ],
-        "routingReceiptDigest": "0x7b0bde46c5ab8e15ead55b2c180562300c25b9c71aa6d947266f7d8e247336cf",
+        "routingReceiptDigest": "0x70195df7e34b401b009b8dce429a893de5502132a6e06633f4cd12239c2c9372",
         "selectedCandidateDigest": "0xdc0c15403a888d76d6770277b4e50ffd6cd19c106102e86bf7251cdd50fd2461",
         "selectedRouteId": "route.nvda.valid-cheap",
         "status": "SELECTED"
@@ -749,7 +749,7 @@
             "status": "ADMISSIBLE"
           }
         ],
-        "routingReceiptDigest": "0x90e4fcb6b38bf7e808667c6d6079bfdefbce4f52e1b4cb53d3fc248298498aef",
+        "routingReceiptDigest": "0x079fa03b0dbf4b14f0f70a2310e26fc891738209bacf05d2748d4edfbd677bd1",
         "selectedCandidateDigest": "0x46c914a59a411bc89bed20d86c79ef99744bf7f53113c6048cb7786129e746f3",
         "selectedRouteId": "route.tsla.valid-cheap",
         "status": "SELECTED"
@@ -999,7 +999,7 @@
             "status": "ADMISSIBLE"
           }
         ],
-        "routingReceiptDigest": "0xbadb5ecc6a46891755c4e54dfe1b3a180826a2bcda6735a4c3c25100a17302b2",
+        "routingReceiptDigest": "0xe60f09aef5ddc3c3ef6d3cab1c118feed2d73dbc72c2db1918d7f4bf9599be93",
         "selectedCandidateDigest": "0x0f7f3ec55ba22f0d0016e3966c5abeda876f50ab4196a349211a519024c7364d",
         "selectedRouteId": "route.qqq.valid-cheap",
         "status": "SELECTED"
@@ -1249,7 +1249,7 @@
             "status": "ADMISSIBLE"
           }
         ],
-        "routingReceiptDigest": "0xf277527c4c9b545b9252f3114002b140646956661f523995b554cbbb261cc4fd",
+        "routingReceiptDigest": "0x5fd38d55ec503950cc530a66938f38d8e766227055905a67e444ab538005c558",
         "selectedCandidateDigest": "0x7a1d268d8e56fb080630e59d5f8e18748052f6bffc6e7609d08e29b5494901c4",
         "selectedRouteId": "route.crwd.valid-cheap",
         "status": "SELECTED"
@@ -1499,7 +1499,7 @@
             "status": "ADMISSIBLE"
           }
         ],
-        "routingReceiptDigest": "0xb07bed33763258216c9b257af0d18f8a699ef52a61614b5df6c1c7af3943f9a5",
+        "routingReceiptDigest": "0x2a0bbd6710d764e70cb03d3ce4223b0ad17ddf236662d6428e2a55b392221b0e",
         "selectedCandidateDigest": "0xd59989557dcb20b17e991755df74804436d49ba82e24396dc191771c61d00627",
         "selectedRouteId": "route.msft.valid-cheap",
         "status": "SELECTED"

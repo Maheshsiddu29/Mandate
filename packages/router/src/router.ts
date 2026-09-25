@@ -10,6 +10,7 @@ import {
   parseTrustedState,
   trustedStateDigest,
   verify,
+  type Amount,
   type CanonicalMandate,
   type TrustedState,
   type UnixSeconds,
@@ -144,7 +145,7 @@ export function route(request: RouteRequest, verifier: Verifier = verify): Routi
   ranked.sort((left, right) => compareRanked(left, right, mandate.value.side));
   const sortedOutcomes = [...outcomes].sort((left, right) => left.routeId < right.routeId ? -1 : left.routeId > right.routeId ? 1 : 0);
   if (ranked.length === 0) {
-    return { status: 'NO_VALID_ROUTE', receipt: finishReceipt(request.registry, mandate.value, trustedState.value, clock.value.nowUnixSeconds, sortedOutcomes, [], null, null) };
+    return { status: 'NO_VALID_ROUTE', receipt: finishReceipt(request.registry, mandate.value, trustedState.value, requestedQuantity.value, clock.value.nowUnixSeconds, sortedOutcomes, [], null, null) };
   }
 
   const selected = ranked[0] as Ranked;
@@ -161,13 +162,13 @@ export function route(request: RouteRequest, verifier: Verifier = verify): Routi
     const revised = sortedOutcomes.map((outcome) => outcome.candidateDigest === selected.candidate.candidateDigest
       ? excluded(outcome.routeId, [{ code: 'FINAL_REVERIFICATION_FAILED', detail: { receiptDigest: finalVerification.receiptDigest } }], outcome.candidateDigest, finalVerification)
       : outcome);
-    return { status: 'NO_VALID_ROUTE', receipt: finishReceipt(request.registry, mandate.value, trustedState.value, clock.value.nowUnixSeconds, revised, rankedDigests, null, finalVerification.receiptDigest) };
+    return { status: 'NO_VALID_ROUTE', receipt: finishReceipt(request.registry, mandate.value, trustedState.value, requestedQuantity.value, clock.value.nowUnixSeconds, revised, rankedDigests, null, finalVerification.receiptDigest) };
   }
   return {
     status: 'SELECTED',
     selected: selected.candidate,
     finalVerificationReceipt: finalVerification,
-    receipt: finishReceipt(request.registry, mandate.value, trustedState.value, clock.value.nowUnixSeconds, sortedOutcomes, rankedDigests, selected.candidate.candidateDigest, finalVerification.receiptDigest),
+    receipt: finishReceipt(request.registry, mandate.value, trustedState.value, requestedQuantity.value, clock.value.nowUnixSeconds, sortedOutcomes, rankedDigests, selected.candidate.candidateDigest, finalVerification.receiptDigest),
   };
 }
 
@@ -201,6 +202,7 @@ function finishReceipt(
   registry: Registry,
   mandate: CanonicalMandate,
   state: TrustedState,
+  requestedQuantity: Amount,
   evaluatedAtUnixSeconds: UnixSeconds,
   outcomes: readonly RouteOutcome[],
   rankedCandidateDigests: RoutingReceipt['rankedCandidateDigests'],
@@ -213,6 +215,7 @@ function finishReceipt(
     mandateDigest: mandateDigest(mandate),
     registrySnapshotDigest: registrySnapshotDigest(registry.snapshot),
     marketStateDigest: trustedStateDigest(state),
+    requestedQuantity,
     outcomes,
     rankedCandidateDigests,
     selectedCandidateDigest,

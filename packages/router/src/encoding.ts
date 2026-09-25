@@ -59,6 +59,7 @@ export function encodeRoutingReceipt(receipt: Omit<RoutingReceipt, 'receiptDiges
   const writer = new ByteWriter().tag(RECEIPT_DOMAIN).u16(receipt.version).str(receipt.routerVersion);
   writer.bytes32(bytes32ToBytes(receipt.mandateDigest)).bytes32(bytes32ToBytes(receipt.registrySnapshotDigest));
   writer.bytes32(bytes32ToBytes(receipt.marketStateDigest)).i64(receipt.evaluatedAtUnixSeconds);
+  amount(writer, receipt.requestedQuantity);
   writer.u16(receipt.outcomes.length);
   for (const item of receipt.outcomes) outcome(writer, item);
   writer.u16(receipt.rankedCandidateDigests.length);
