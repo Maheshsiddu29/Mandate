@@ -2,9 +2,10 @@
 
 System structure, component boundaries, and where each concern is enforced.
 
-> **Status: Phase 3 complete.** The kernel, registry, and read-only Robinhood
-> external-data adapter are built. Routing, transaction construction and
-> submission, Jev, execution contracts, funding and web work remain planned.
+> **Status: Phase 4 complete.** The kernel, registry, read-only Robinhood
+> external-data adapter and deterministic router are built. Transaction
+> construction and submission, Jev, execution contracts, funding and web work
+> remain planned.
 > The "Phase" column records when a component lands; see [roadmap.md](roadmap.md).
 > The complete rationale for every decision here is in
 > [mandate-design.md](mandate-design.md) — this document is the structural
@@ -37,8 +38,13 @@ System structure, component boundaries, and where each concern is enforced.
   └────────────────────────────────┬────────────────────────────────────────┘
                                    │  candidates + state snapshots
   ┌────────────────────────────────▼────────────────────────────────────────┐
-  │ SELECTION           ranking, then optionally Jev             ADVISORY   │
-  │ returns an index into a closed candidate set, or abstains               │
+  │ ADMISSIBILITY       registry + kernel verification          AUTHORITATIVE│
+  │ only PASS candidates continue; every exclusion is retained              │
+  └────────────────────────────────┬────────────────────────────────────────┘
+                                   │  closed admissible candidate set
+  ┌────────────────────────────────▼────────────────────────────────────────┐
+  │ SELECTION           deterministic ranking; Jev is not present           │
+  │ exact cost, deviation, freshness, complexity, stable digest tie-break   │
   └────────────────────────────────┬────────────────────────────────────────┘
                                    │  one selected candidate
   ╔════════════════════════════════▼════════════════════════════════════════╗
@@ -78,9 +84,10 @@ trusts none of its callers.
 | Robinhood market-state adapter | Strict asset, price, halt, capability and corporate-action normalization with provenance | 3 | **implemented** — `packages/adapter-robinhood` |
 | Robinhood mainnet read adapter | Chain identity, fixed-block code/metadata/multiplier/event/oracle reads | 3 | **implemented read-only** — no transaction construction or submission |
 | Mainnet replay corpus | Recorded REST/RPC state through registry and kernel, with stable digests and metrics | 3 | **implemented** — `corpus/mainnet-v1`, 11 vectors |
-| Transaction construction and submission | Build and submit a transaction bound to a verified candidate | 4, 6 | not implemented |
-| Candidate engine | Venue and route discovery; candidate construction with state snapshots | 4 | not implemented |
-| Ranking | Ordering of admissible candidates in a common economic unit | 4 | not implemented |
+| Transaction construction and submission | Build and submit a transaction bound to a verified candidate | 6 | not implemented |
+| Candidate engine | Strict provider parsing and candidate construction over trusted normalized state | 4 | **implemented** — `packages/router` |
+| Ranking | Lexicographic exact-cost ordering of kernel-PASS candidates | 4 | **implemented** — ADR 0010 |
+| Routing receipts and simulation | Deterministic selection audit, mainnet candidate replay and seeded adversarial worlds | 4 | **implemented** |
 | Jev adapter | Advisory selection over a closed candidate set; bounded, abstention-safe | 5 | not implemented |
 | Execution gate | On-chain re-assertion of the commitment, atomic with the action | 6 | not implemented |
 | Funding adapters | Stablecoin funding abstraction | 7 | not implemented |
@@ -93,22 +100,29 @@ Directories are created when they hold real code.
 packages/kernel/     the verifier and everything it needs (ADR 0003)
 packages/registry/   canonical assets, representations, resolution (ADR 0004)
 packages/adapter-robinhood/ strict external I/O and normalization (ADR 0008)
+packages/router/     pure candidate construction, filtering and ranking
 corpus/v1/           cross-implementation verifier decision vectors
 corpus/registry-v1/  cross-implementation registry decision vectors
 corpus/mainnet-v1/   recorded mainnet registry-plus-kernel replay vectors
+corpus/mainnet-routing-v1/ recorded state plus synthetic route economics
+corpus/routing-simulation-v1/ seeded execution-world validation metrics
 docs/adr/            architecture decision records
 ```
 
-The external adapter depends on the registry and kernel — never the reverse.
-Structural tests enforce all three boundaries: the kernel imports nothing
+The external adapter and router depend inward — never the reverse. The router
+consumes adapter-normalized values but does not import an issuer adapter.
+Structural tests enforce all four boundaries: the kernel imports nothing
 outside itself and its two allowlisted crypto dependencies, the registry imports
 nothing outside itself and the kernel, and neither imports the adapter
 ([ADR 0004](adr/0004-registry-package-boundary.md),
-[ADR 0008](adr/0008-robinhood-data-source-authority.md)).
+[ADR 0008](adr/0008-robinhood-data-source-authority.md)). The router imports
+only the registry and kernel and cannot reach I/O, environment, randomness,
+implicit clocks, Jev or another model client.
 
 ```
-adapter   ──▶  registry  ──▶  kernel        permitted
-kernel/registry  ──▶  adapter               forbidden, structurally
+adapter  ──▶ registry ──▶ kernel             permitted
+router   ──▶ registry ──▶ kernel             permitted
+kernel/registry ──▶ adapter/router           forbidden, structurally
 ```
 
 ## 3. Trust levels

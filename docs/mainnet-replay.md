@@ -55,6 +55,15 @@ corporate-action rows, and 11 verification runs. The expected outcome is six
 passes and five rejections, one each for stale price, trading halt, inactive
 representation, changed corporate-action state, and unknown representation.
 
+## Phase 4 candidate-set extension
+
+`corpus/mainnet-routing-v1` extends the six passing recorded snapshots into
+candidate-set worlds. Each preserves the real representation, price,
+multiplier, contract and corporate-action epoch while clearly labelling route
+fees and alternate venue choices as synthetic. The ordinary router excludes a
+cheaper issuer-substitution proposal, ranks two valid routes and invokes the
+unchanged kernel again before producing its receipt.
+
 ## Limits
 
 The capture is a point-in-time observation, not continuing proof of issuer or

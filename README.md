@@ -3,7 +3,7 @@
 **Intent-aware execution infrastructure for AI agents transacting in tokenized
 financial assets.**
 
-> **Status: Phase 3 complete — kernel, registry, and read-only Robinhood adapter.** The deterministic
+> **Status: Phase 4 complete — deterministic routing over trusted state.** The deterministic
 > verifier, its domain types, canonical encoding, EIP-712 authorization, receipts
 > and replay semantics are built and tested in `packages/kernel`. The canonical
 > asset and representation registry — identifier schemes, reference resolution,
@@ -11,8 +11,10 @@ financial assets.**
 > and reproducible snapshots — is built and tested in `packages/registry`. A
 > strict adapter in `packages/adapter-robinhood` normalizes recorded and live
 > Robinhood Stock Token REST/RPC state into those unchanged decision engines.
-> Routing, transaction construction/submission, Jev, execution contracts,
-> funding and the web experience are **not** built. The kernel and registry
+> `packages/router` constructs bounded candidates, separates admissibility from
+> quality, ranks exact costs, reverifies the winner and emits deterministic
+> receipts. Transaction construction/submission, Jev, execution contracts,
+> funding and the web experience are **not** built. The kernel, registry and router
 > still make no network call of any kind.
 > Nothing below should be read as a claim beyond that boundary.
 
@@ -85,10 +87,9 @@ candidate, it is not a candidate.
 
 ## What exists today
 
-Two pure decision packages and one external adapter. The kernel and registry
-perform no I/O, read no clock, and can reach no inference client — all three are
-enforced structurally. The adapter owns external I/O and depends inward on both;
-neither decision package can import it.
+Three pure decision packages and one external adapter. The kernel, registry and
+router perform no I/O, read no clock, and can reach no inference client. The
+adapter owns external I/O; the router consumes already-normalized trusted state.
 
 **The verifier** decides whether one proposed execution is inside one signed
 authorization:
@@ -112,14 +113,22 @@ mainnet contract/oracle observations. Ticker never establishes identity; the
 audited edge is issuer UID + validated ISIN + authoritative deployment + matching
 onchain code and metadata.
 
+**The router** limits discovery to registry representations, treats every
+provider quote as untrusted, requires exact full-fill quantity and independently
+established costs, verifies before ranking, and verifies the selected route a
+second time before returning a handoff candidate.
+
 | Piece | What it does |
 | --- | --- |
 | `packages/kernel` | Mandate types, MCE v1 canonical encoding and keccak-256 digests, EIP-712 authorization, the verifier's 17 independent checks, 43 stable reason codes, receipts, and the replay state machine |
 | `packages/registry` | Canonical asset identity with check-digit-validated identifier schemes, deterministic reference resolution, provenance-carrying representation metadata with trust floors and fail-closed conflict handling, mandate-constrained admissibility with 20 registry reason codes, reproducible snapshots and digests, and synthetic world builders |
 | `packages/adapter-robinhood` | Strict Robinhood assets, price, capability, corporate-action, ERC-20/ERC-8056 and Chainlink normalization; explicit live failure handling and capture tooling |
+| `packages/router` | Strict provider boundary, committed routing candidates, fail-closed cost model, lexicographic BUY/SELL ranking, re-verification, selection receipts and seeded simulation |
 | `corpus/v1` | 57 verifier decision vectors across 24 families |
 | `corpus/registry-v1` | 27 registry decision vectors covering resolution and admissibility |
 | `corpus/mainnet-v1` | 11 recorded-mainnet registry-plus-kernel replay vectors and a machine-readable report |
+| `corpus/mainnet-routing-v1` | Six hybrid recorded-mainnet candidate-set routing worlds with deterministic receipts |
+| `corpus/routing-simulation-v1` | Committed 200-world safety and determinism metrics |
 
 Three properties hold across both. A refusal names **every** violated constraint,
 not the first. No verdict depends on the order checks ran in. And `UNKNOWN` is a
@@ -133,7 +142,7 @@ mandate is computed against that mandate and is not stored anywhere.
 
 ```bash
 npm install
-npm run check      # typecheck, 353 offline tests, fixture/replay drift, consistency and credential checks
+npm run check      # 389 offline tests plus fixtures, replays, boundaries and repository safety gates
 ```
 
 ## Documentation
@@ -151,6 +160,10 @@ npm run check      # typecheck, 353 offline tests, fixture/replay drift, consist
 | [docs/replay-semantics.md](docs/replay-semantics.md) | How a mandate is consumed, and the one obligation the kernel cannot enforce for an integrator. |
 | [docs/robinhood-integration.md](docs/robinhood-integration.md) | Verified endpoints, schemas, issuer semantics, price/multiplier rules, timestamps and real-data limitations. |
 | [docs/mainnet-replay.md](docs/mainnet-replay.md) | Recorded-mainnet replay methodology, synthetic labelling and validation report. |
+| [docs/routing.md](docs/routing.md) | Candidate model, provider boundary, ranking, costs, limits and selection receipts. |
+| [docs/security-review.md](docs/security-review.md) | Living internal threat/control review and dependency-audit status. |
+| [docs/ci.md](docs/ci.md) | Offline continuous-integration and drift gates. |
+| [docs/simulation.md](docs/simulation.md) | Seeded hybrid-world generation, metrics and replay methodology. |
 | [docs/adr/](docs/adr/) | Architecture decision records: authorization architecture, canonical encoding, kernel language and dependency boundary. |
 | [corpus/v1/README.md](corpus/v1/README.md) | Verifier decision-vector format, for reimplementers. |
 | [corpus/registry-v1/README.md](corpus/registry-v1/README.md) | Registry decision-vector format, and exactly which fixture data is real and which is synthetic. |

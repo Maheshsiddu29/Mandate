@@ -5,16 +5,18 @@ repository summarize parts of this one and link back to it; this file is the
 source of truth.
 
 - **Document status:** canonical specification.
-- **Implementation status:** Phase 3 complete — the mandate core kernel
+- **Implementation status:** Phase 4 complete — the mandate core kernel
   (types, canonical encoding, EIP-712 authorization, deterministic verifier,
   receipts, replay semantics, decision-vector corpus) and the canonical asset and
   representation registry (identifier schemes, reference resolution,
   provenance-carrying representation metadata, mandate-constrained admissibility,
   deterministic snapshots, registry decision vectors), plus the read-only
-  Robinhood REST/RPC adapter, recorded mainnet fixtures and replay corpus.
-  Routing, transaction submission, Jev, execution contracts, funding and web
-  work remain unbuilt.
-- **Last structural revision:** Phase 3.
+  Robinhood REST/RPC adapter, recorded mainnet fixtures and replay corpus, plus
+  deterministic candidate construction, admissibility, exact-cost ranking,
+  selection receipts, mainnet routing replay and seeded simulation. Transaction
+  construction/submission, Jev, execution contracts, funding and web work remain
+  unbuilt.
+- **Last structural revision:** Phase 4.
 
 ## How to read status labels
 
@@ -1121,8 +1123,8 @@ Constraints on the interface (**DRAFT**):
 
 ## 12. Routing architecture
 
-> **Status: DRAFT.** Two-stage structure is settled; the ranking function and
-> the venue adapter interface are not.
+> **Status: IMPLEMENTED for Phase 4.** The router is deterministic, offline and
+> model-free. Jev and executable transaction construction remain later phases.
 
 ### 12.1 Admissibility before quality
 
@@ -1145,13 +1147,10 @@ admissible representations
 [ admissibility filter, again ]   economic and state constraints
       │                           now that quotes exist
       ▼
-admissible candidates ───▶ [ ranking ] ───▶ ordered candidates
+kernel-PASS candidates ──▶ [ ranking ] ──▶ preferred candidate
                                                   │
                                                   ▼
-                                         [ Jev, optional ] ──▶ selected
-                                                  │
-                                                  ▼
-                                         [ verifier ] ──▶ PASS / REJECT
+                                  [ verifier, again ] ──▶ PASS / REJECT
 ```
 
 Admissibility filtering runs twice because some constraints (issuer, instrument
@@ -1159,14 +1158,16 @@ type) can be evaluated before quoting and should be, to avoid pointless market
 data calls, while others (notional, deviation, price) need a quote.
 
 Critically, the filter running before ranking does not make the verifier
-redundant. The verifier re-checks everything, because the filter's output
-passes through a ranking stage and an optional model, and the verifier's job is
-to trust neither.
+redundant. The kernel supplies the quote-level admissibility decision before
+ranking and re-checks the preferred candidate afterward. Phase 5 may insert an
+optional model into selection, but Phase 4 contains no such dependency.
 
 ### 12.2 Execution candidates
 
-**DRAFT.** A candidate is a fully specified, self-describing execution
-proposal — everything the verifier needs, with nothing to look up:
+**IMPLEMENTED.** A routing candidate binds the kernel execution candidate to
+route identity, full-fill policy, quote and reference observation times, exact
+known costs, trusted-cost provenance and ordered route steps. The caller also
+supplies one exact requested quantity; every comparable route must fill it.
 
 | Group | Content |
 | --- | --- |
@@ -1174,16 +1175,21 @@ proposal — everything the verifier needs, with nothing to look up:
 | Venue and route | Which venue, which path, which contracts |
 | Economics | Input amount, expected output, reference price, expected deviation, fees, all with units and decimals |
 | State snapshot | Observed market state, corporate-action state, operational state — each with source, provenance and observation time |
-| Binding | A commitment to the exact transaction that would be submitted |
+| Binding | Domain-separated candidate digest; transaction binding remains Phase 6 |
 
-The candidate carries its own state snapshot rather than referencing shared
-mutable state, so the verifier's decision is over a fixed, recordable object.
+The candidate references one explicit trusted-state identifier, and the routing
+receipt commits to the full trusted-state digest. No mutable or implicit state
+is read during the decision.
 
 ### 12.3 Ranking
 
-**DRAFT.** Among admissible candidates, ranking considers expected execution
-quality, liquidity depth relative to the notional, fees and gas, state
-confidence, and settlement characteristics.
+**IMPLEMENTED.** Only kernel-PASS candidates are ranked. The ordering is lower
+all-in BUY cost or higher SELL net proceeds, then lower deviation, fresher
+quote, fewer route steps and routing-candidate digest as a stable tie-break
+([ADR 0010](adr/0010-deterministic-route-ranking.md)). Unknown supported costs
+exclude a route rather than becoming zero
+([ADR 0011](adr/0011-route-cost-and-fill-policy.md)). Liquidity and execution
+certainty are not scored because Phase 4 has no authoritative depth data.
 
 One rule is **SPECIFIED**, because it is the cross-representation version of
 the amount-comparison problem in §4.2:
@@ -1209,8 +1215,14 @@ There is no silent reroute, and a better price never implies consent.
 
 ### 12.5 Venue adapters
 
-**DRAFT.** Each venue is an adapter behind a common interface: quote, build,
-and report state. Design rules, carried over as lessons from prior work:
+**IMPLEMENTED at the provider boundary; live venues remain future work.** A
+provider returns untrusted quote proposals behind a common interface. Strict
+parsing, resource limits and independent registry, state, cost and kernel checks
+stand between provider output and candidate construction. Phase 4 uses recorded
+Robinhood state and clearly labelled synthetic venue economics; it does not
+claim a live trading-venue integration.
+
+Design rules:
 
 - adapters are independent and do not share assumed semantics;
 - an adapter that cannot express a venue's semantics fails closed rather than
@@ -1419,7 +1431,7 @@ dependence on mutable external references.
 These are the properties that define Mandate. A change that breaks one is a
 change to the product, not an implementation detail.
 
-**Phase 2 status.** INV-1, INV-2, INV-5, INV-9, INV-11, INV-12, INV-16, INV-17
+**Phase 4 status.** INV-1, INV-2, INV-5, INV-9, INV-11, INV-12, INV-16, INV-17
 and INV-18 are established in the kernel. **INV-6 is now established**: canonical
 identity and token identity are distinct types, and equivalence is a function of
 the current mandate rather than a stored field — enforced structurally, not by
@@ -1427,9 +1439,10 @@ comment. **INV-7 is established through the registry**: an execution address
 originates only from a registry entry, and an unregistered contract is never
 admissible. INV-4 holds for both packages' own boundaries — no model or untrusted
 source can supply a value either reads — but the pipeline that would carry such a
-value does not exist yet. INV-3 has its structural half (no inference client is
-reachable from the verifier or the registry); the adversarial end-to-end half
-needs Phase 5. INV-8, INV-14 and INV-15 need the routing of Phase 4. INV-10 and
+value flows through the Phase 4 provider boundary and is rechecked. INV-3 has
+its structural half (no inference client is reachable from the verifier,
+registry or router); the adversarial model half needs Phase 5. **INV-8, INV-14
+and INV-15 are established by the router.** INV-10 and
 INV-13 need the execution gate of Phase 6. Per-property evidence is in
 [verifier-invariants.md](verifier-invariants.md) and
 [registry-semantics.md §12](registry-semantics.md#12-registry-invariants-and-their-evidence).
@@ -1508,7 +1521,7 @@ addressed by the current design; recorded deliberately.
 | --- | --- | --- | --- |
 | Amount mutation between decision and submission | Commitment binding; execution gate (INV-13) | 6 | DESIGN |
 | Decimal or unit mistake | Units and decimals mandatory on every quantity (INV-18); exact arithmetic (INV-16) | 1 | DESIGN |
-| Malicious route provider | Routes are candidates, not instructions; verifier re-checks; commitment binding | 4, 6 | DESIGN |
+| Malicious route provider | Routes are candidates, not instructions; verifier re-checks; commitment binding | 4, 6 | PHASE 4 CONTROLLED; transaction binding remains Phase 6 |
 | Candidate differs materially from intent | Intent-fidelity checks (§10.2 family G) | 1 | DESIGN |
 | Partial execution | Atomic settlement in MVP (§14.2); non-atomic settlement is FUTURE and unaddressed | 6 | PARTIAL |
 | Bridge failure | Out of MVP scope; cross-chain is FUTURE | 9+ | OPEN |
@@ -1958,7 +1971,7 @@ the wrong shape.
 | **8** | Demo product and web experience | Public demonstration showing PASS and, prominently, REJECT with reasons; live and engineered data visibly separated |
 | **9+** | Cross-chain network and broader asset classes | Out of buildathon scope. See [§22](#22-future-architecture) and [§23](#23-expansion-beyond-equities) |
 
-Phases 0–3 are complete. Phase 4 has not started.
+Phases 0–4 are complete. Phase 5 has not started.
 
 ### 25.1 Rules that apply to every phase
 

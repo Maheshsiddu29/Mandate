@@ -3,7 +3,7 @@
 Phased engineering plan: what each phase delivers, how it is known to be done,
 and what it depends on.
 
-> **Status: Phase 3 complete.** Phase 4 and beyond are planned, not started.
+> **Status: Phase 4 complete.** Phase 5 and beyond are planned, not started.
 > Rationale for the phase ordering is in
 > [mandate-design.md §25](mandate-design.md#25-phased-engineering-roadmap);
 > scope boundaries are in
@@ -206,15 +206,21 @@ remain unsupported rather than being forced into an epoch.
 
 ## Phase 4 — Execution-candidate and route engine
 
-**Delivers**
+**Complete.** The implementation is in `packages/router`; semantics and limits
+are documented in [routing.md](routing.md).
 
-- venue adapters behind a common interface;
-- candidate construction with self-contained state snapshots
+**Delivered**
+
+- an untrusted route-provider interface and strict bounded parser;
+- candidate construction committed to an explicit trusted-state snapshot
   ([§12.2](mandate-design.md#122-execution-candidates));
 - the two-stage admissibility filter;
 - ranking in a common economic unit
   ([§12.3](mandate-design.md#123-ranking));
-- commitment construction binding a candidate to a transaction.
+- domain-separated candidate and selection-receipt commitments;
+- post-ranking kernel re-verification;
+- seeded simulations and six-asset mainnet candidate-set replay;
+- offline CI, dependency review, credential and repository-junk gates.
 
 **Exit criteria**
 
@@ -224,6 +230,11 @@ remain unsupported rather than being forced into an epoch.
 - substitution cost rounds against the substitution, never in favour of it;
 - adding a venue adapter requires no verifier change — the test of the
   abstraction.
+
+All exit criteria are met. The committed 200-world run produced zero malicious
+selections, zero unsafe handoffs and zero determinism or receipt-reproduction
+failures. Transaction construction was not started; candidate identity will be
+bound to transactions by the Phase 6 execution gate.
 
 **Depends on:** Phase 3.
 
@@ -340,7 +351,7 @@ the design document before it belongs in code.
 | 1 | Mandate types and deterministic verifier | 0 | ✅ complete |
 | 2 | Canonical asset and representation registry | 1 | ✅ complete |
 | 3 | Read-only Robinhood market-state and chain adapters | 2 | ✅ complete |
-| 4 | Execution-candidate and route engine | 3 | planned |
+| 4 | Execution-candidate and route engine | 3 | ✅ complete |
 | 5 | Jev integration | 4 | planned, non-blocking |
 | 6 | On-chain execution gate and settlement | 4 | planned |
 | 7 | Stablecoin funding adapters | 6 | planned, flexible |
