@@ -124,7 +124,15 @@ export interface ExecutionCandidate {
   readonly corporateActionEpoch: bigint;
 }
 
-const CANDIDATE_FIELDS = [
+/**
+ * Every field a candidate carries, and therefore every field its digest commits
+ * to: the encoder writes all of them and the parser refuses any other key.
+ *
+ * Exported so `commitment.test.ts` can drive the "no security-relevant execution
+ * field escapes commitment" property off this list rather than a copy of it — a
+ * field added here without a mutation case fails that test.
+ */
+export const CANDIDATE_FIELDS = [
   'version',
   'representationId',
   'canonicalAsset',

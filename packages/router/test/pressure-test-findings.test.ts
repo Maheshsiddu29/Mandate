@@ -132,22 +132,40 @@ test('F-5 REGRESSION: the handoff re-verification reads the handoff state, not t
   assert.notEqual(last, seen[0], 'the final call must not see the evaluation state object');
 });
 
-test('F-5 REGRESSION: each kind of state change between evaluation and handoff rejects', () => {
-  const cases: readonly { readonly label: string; readonly handoff: ReturnType<typeof routerHandoff> }[] = [
-    { label: 'trading halted', handoff: routerHandoff({ trustedMarketState: haltedRouterState() }) },
-    { label: 'representation paused', handoff: routerHandoff({ trustedMarketState: pausedRepresentationState() }) },
+/**
+ * Each kind of state change refuses **for its own reason**.
+ *
+ * This assertion used to be `status === 'NO_VALID_ROUTE'` and nothing more, which
+ * the post-remediation audit rejected as evidence (finding N-2): candidate schema
+ * v2's whole-state digest equality made *every* fresh handoff fail, so the
+ * assertion held for a reason that had nothing to do with halts or expiry. The
+ * discriminating suite is `handoff.test.ts`; this keeps the F-5 pinning alongside
+ * it, now naming each predicate.
+ */
+test('F-5 REGRESSION: each kind of state change between evaluation and handoff rejects for its own reason', () => {
+  const cases: readonly { readonly label: string; readonly handoff: ReturnType<typeof routerHandoff>; readonly code: string }[] = [
+    { label: 'trading halted', handoff: routerHandoff({ trustedMarketState: haltedRouterState() }), code: 'TRADING_HALTED' },
+    { label: 'representation paused', handoff: routerHandoff({ trustedMarketState: pausedRepresentationState() }), code: 'REPRESENTATION_INACTIVE' },
     {
       label: 'mandate expired',
       handoff: routerHandoff({ clock: { nowUnixSeconds: ROUTER_MANDATE.expiresAtUnixSeconds } }),
+      code: 'MANDATE_EXPIRED',
     },
     {
       label: 'price observation now stale',
       handoff: routerHandoff({ clock: { nowUnixSeconds: ROUTER_CLOCK + ROUTER_MANDATE.maxPriceAgeSeconds + 1n } }),
+      code: 'PRICE_STATE_STALE',
     },
   ];
   for (const item of cases) {
     const result = route(request([routeQuote({ routeId: 'route.one' })]), item.handoff);
     assert.equal(result.status, 'NO_VALID_ROUTE', item.label);
+    if (result.status !== 'NO_VALID_ROUTE') continue;
+    const receipt = result.finalVerificationReceipt;
+    assert.ok(receipt !== null, `${item.label}: the re-verification receipt must be carried`);
+    assert.ok(receipt.reasonCodes.includes(item.code as never), `${item.label} -> ${receipt.reasonCodes.join(', ')}`);
+    // And not for the digest mismatch that used to mask all of these.
+    assert.ok(!receipt.reasonCodes.includes('CANDIDATE_STATE_MISMATCH' as never), item.label);
   }
 });
 
@@ -190,6 +208,17 @@ test('F-7 REGRESSION: a trusted state declaring another registry snapshot is ref
   const bound = { ...ROUTER_STATE, registrySnapshotDigest: registrySnapshotDigest(REGISTRY.snapshot) };
   const matched = route(request([routeQuote()], { trustedMarketState: bound }), routerHandoff({ trustedMarketState: bound }));
   assert.equal(matched.status, 'SELECTED');
+
+  // And the binding is no longer opt-in (finding N-8). It used to accept a state
+  // declaring no snapshot, on the grounds that the candidate's whole-state digest
+  // covered the declaration incidentally; removing that digest (ADR 0017) removed
+  // the cover, so an undeclared snapshot is an unestablished binding.
+  const undeclared = { ...ROUTER_STATE, registrySnapshotDigest: null };
+  const unbound = route(request([routeQuote()], { trustedMarketState: undeclared }), routerHandoff({ trustedMarketState: undeclared }));
+  assert.equal(unbound.status, 'INVALID_INPUT');
+  if (unbound.status === 'INVALID_INPUT') {
+    assert.ok(unbound.errors.some((item) => item.code === 'REGISTRY_SNAPSHOT_UNKNOWN'), JSON.stringify(unbound.errors));
+  }
 });
 
 // --- F-3: route() returns a verdict rather than throwing --------------------
@@ -207,7 +236,7 @@ test('F-3 REGRESSION: an oversized trusted state is INVALID_INPUT, not a throw',
   const inflated = {
     version: 2,
     stateId: ROUTER_STATE.stateId,
-    registrySnapshotDigest: null,
+    registrySnapshotDigest: registrySnapshotDigest(REGISTRY.snapshot),
     representations,
     market: ROUTER_STATE.market,
     corporateAction: ROUTER_STATE.corporateAction,

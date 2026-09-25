@@ -21,6 +21,7 @@ import {
   parseMandate,
   verify,
   type VerificationReceipt,
+  type VerifyRequest,
 } from '../src/index.ts';
 import {
   AMD,
@@ -318,6 +319,78 @@ test('arbitrary structured junk never produces a pass and never throws', () => {
     assert.equal(receipt.decision, Decision.REJECT, `iteration ${i} produced a PASS`);
     assert.ok(receipt.reasonCodes.length > 0);
     assert.match(receipt.receiptDigest, /^0x[0-9a-f]{64}$/);
+  }
+});
+
+/**
+ * The totality claim, accurately scoped (finding N-6).
+ *
+ * `verify` is total over **parsed, plain values**: anything `JSON.parse` can
+ * produce, plus the kernel's own value types. That is the scope that matters,
+ * because it is the scope of every external input in the system — a network
+ * response, a file, a provider quote, an adapter's translation — and it is
+ * exactly where a thrown error would be indistinguishable from a transport
+ * failure and could be caught and ignored.
+ *
+ * It is deliberately *not* a claim about a hostile host object: a `Proxy` whose
+ * traps throw, or a property getter with a side effect, can make any JavaScript
+ * function fail, and defending against that would mean copying every input
+ * through a serializer before parsing it — cost paid on every call to close a
+ * hole that requires the caller to already be running arbitrary code in the
+ * verifier's own process.
+ *
+ * What is still guaranteed in that unscoped case is the direction of failure: a
+ * hostile object may make `verify` throw, and it must never make it return PASS.
+ * A thrown error is a refusal a caller cannot mistake for an authorization; a
+ * wrong PASS is the only outcome that actually matters.
+ */
+test('totality holds for every value JSON can produce, and a hostile object never passes', () => {
+  const next = rng(0x7075);
+  const jsonAtoms: unknown[] = [null, 0, 1, -1, 1.5, '', '0x', 'BUY', 'UNUSED', true, false];
+  const growJson = (depth: number): unknown => {
+    if (depth <= 0) return jsonAtoms[Math.floor(next() * jsonAtoms.length)];
+    const r = next();
+    if (r < 0.4) return Array.from({ length: Math.floor(next() * 3) }, () => growJson(depth - 1));
+    if (r < 0.85) {
+      const keys = ['version', 'unit', 'atoms', 'decimals', 'stateId', 'status', 'provenance', 'side', 'registrySnapshotDigest'];
+      const out: Record<string, unknown> = {};
+      for (let i = 0; i < 1 + Math.floor(next() * 4); i += 1) {
+        out[keys[Math.floor(next() * keys.length)] as string] = growJson(depth - 1);
+      }
+      return out;
+    }
+    return jsonAtoms[Math.floor(next() * jsonAtoms.length)];
+  };
+
+  // Round-tripped through JSON, so these are exactly the values a network or file
+  // boundary can hand the kernel — nothing exotic that only a test could build.
+  for (let i = 0; i < 200; i += 1) {
+    const payload = JSON.parse(JSON.stringify({
+      mandate: growJson(3),
+      authorization: growJson(3),
+      candidate: growJson(3),
+      trustedState: growJson(3),
+      clock: growJson(2),
+      expectedDomain: growJson(2),
+    })) as VerifyRequest;
+    const receipt = verify(payload);
+    assert.equal(receipt.decision, Decision.REJECT, `iteration ${i} produced a PASS`);
+    assert.match(receipt.receiptDigest, /^0x[0-9a-f]{64}$/, `iteration ${i} produced no receipt`);
+  }
+
+  // Outside the scope: a getter that throws. The guarantee is one-directional —
+  // it may throw, it must not pass.
+  const hostile = {
+    get version(): never { throw new Error('hostile getter'); },
+  };
+  for (const slot of ['mandate', 'candidate', 'trustedState'] as const) {
+    let decision: string | undefined;
+    try {
+      decision = verify({ ...buildWorld(), [slot]: hostile }).decision;
+    } catch {
+      decision = undefined;
+    }
+    assert.notEqual(decision, Decision.PASS, `${slot}: a hostile object must never authorize`);
   }
 });
 

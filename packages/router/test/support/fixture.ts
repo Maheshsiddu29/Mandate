@@ -1,4 +1,4 @@
-import { parseBytes32, parseClock, parseEip712Domain, parseMandate, parseTrustedState, type Amount, type CanonicalMandate, type ExecutionCandidate, type TrustedState, type UnixSeconds } from '@mandate/kernel';
+import { parseBytes32, parseClock, parseEip712Domain, parseIdentifier, parseMandate, parseTrustedState, type Amount, type CanonicalMandate, type ExecutionCandidate, type TrustedState, type UnixSeconds } from '@mandate/kernel';
 import { buildReplayWorld } from '../../../adapter-robinhood/test/support/mainnet-replay.ts';
 import type { ProviderRouteQuote, TrustedRouteCost } from '../../src/index.ts';
 
@@ -133,6 +133,56 @@ export const ROUTER_REGISTRY_SNAPSHOT_DIGEST = (() => {
   if (!parsed.ok) throw new Error('router fixture has no registry snapshot digest');
   return parsed.value;
 })();
+
+/**
+ * The recorded state, re-observed `seconds` later with nothing else changed.
+ *
+ * A new snapshot label and newer provenance on every observed input, with every
+ * *value* identical. Paired with a handoff clock advanced by the same amount it
+ * is a world whose age bounds are exactly as satisfied as the evaluation world's
+ * — and whose trusted-state digest is completely different, which is what
+ * schema v2's whole-state binding could not tolerate (ADR 0017).
+ */
+export function refreshedRouterState(seconds: bigint, stateId = 'router.fixture.refreshed'): TrustedState {
+  const bump = <T extends { readonly provenance: { readonly observedAtUnixSeconds: UnixSeconds } }>(observed: T): T => ({
+    ...observed,
+    provenance: {
+      ...observed.provenance,
+      observedAtUnixSeconds: (observed.provenance.observedAtUnixSeconds + seconds) as UnixSeconds,
+    },
+  });
+  const identifier = parseIdentifier(stateId);
+  if (!identifier.ok) throw new Error('invalid refreshed state id');
+  return {
+    ...ROUTER_STATE,
+    stateId: identifier.value,
+    representations: ROUTER_STATE.representations.map(bump),
+    market: ROUTER_STATE.market === null ? null : bump(ROUTER_STATE.market),
+    corporateAction: ROUTER_STATE.corporateAction === null ? null : bump(ROUTER_STATE.corporateAction),
+    replay: ROUTER_STATE.replay === null ? null : bump(ROUTER_STATE.replay),
+  };
+}
+
+/** The recorded state with a different corporate-action epoch. */
+export function stateWithEpoch(epoch: bigint): TrustedState {
+  if (ROUTER_STATE.corporateAction === null) throw new Error('fixture has no corporate-action state');
+  return {
+    ...ROUTER_STATE,
+    corporateAction: { ...ROUTER_STATE.corporateAction, value: { ...ROUTER_STATE.corporateAction.value, epoch } },
+  };
+}
+
+/** The recorded state, declaring a registry snapshot that is not the one evaluated. */
+export function stateWithForeignRegistrySnapshot(): TrustedState {
+  const foreign = parseBytes32(`0x${'ab'.repeat(32)}`, 'MALFORMED_TRUSTED_STATE');
+  if (!foreign.ok) throw new Error('invalid foreign snapshot digest');
+  return { ...ROUTER_STATE, registrySnapshotDigest: foreign.value };
+}
+
+/** The recorded state, declaring no registry snapshot at all. */
+export function stateWithoutRegistrySnapshot(): TrustedState {
+  return { ...ROUTER_STATE, registrySnapshotDigest: null };
+}
 
 /** The recorded state with trading halted, for handoff-freshness tests. */
 export function haltedRouterState(): TrustedState {
