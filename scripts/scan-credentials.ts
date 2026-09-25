@@ -8,6 +8,12 @@ const patterns: readonly [string, RegExp][] = [
   ['GitHub token', /gh[pousr]_[A-Za-z0-9]{36,}/],
   ['OpenAI API key', /sk-[A-Za-z0-9_-]{32,}/],
   ['assigned credential', /(?:api[_-]?key|access[_-]?token|client[_-]?secret)\s*[:=]\s*["'][^"'\s]{16,}["']/i],
+  // TypeSafe/Jev (Phase 5). The vendor does not publish a key format, so this
+  // covers the two shapes a leak actually takes: a named assignment with a
+  // literal, and a bearer token pasted into a tracked file.
+  ['TypeSafe key assignment', /TYPESAFE_API_KEY\s*[:=]\s*["'`][^"'`\s]{8,}["'`]/],
+  ['TypeSafe-shaped token', /\bts[kp]?[_-][A-Za-z0-9]{24,}\b/],
+  ['literal bearer token', /\bBearer\s+[A-Za-z0-9._~+/-]{20,}={0,2}(?![>\w])/],
 ];
 const findings: string[] = [];
 for (const file of files) {
