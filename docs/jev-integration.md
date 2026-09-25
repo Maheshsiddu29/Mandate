@@ -386,6 +386,12 @@ models those as the closed `venueReliability` and `quoteFirmness` vocabularies
 so the integration has a real signal to carry, and measures whether the model
 uses them.
 
-Where the data is purely deterministic, the integration's value is that it
-demonstrates *how* a model can be attached safely — not that it improved a
-decision. The measured outcome is reported with the evaluation corpus.
+The measured outcome is in [jev-evaluation.md §5](jev-evaluation.md#5-results),
+and it is honest: over the evaluation corpus a signal-following model abstains
+on 9 of 11 eligible decisions, because Phase 4's route data is almost entirely
+exact integers and a model has nothing to add to a comparison of integers.
+
+What Phase 5 demonstrates is not that Jev improves routing. It is that a model
+can be attached to this pipeline in a way that cannot compromise it, so that
+when richer signals arrive the integration is already safe. The value today is
+the boundary, not the advice.

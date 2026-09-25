@@ -72,6 +72,44 @@ export function worstChoiceTransport(confidence = 0.95, options: StubOptions = {
   };
 }
 
+/**
+ * A stand-in for a model that actually uses the soft signals.
+ *
+ * It prefers ESTABLISHED over PROVISIONAL over DEGRADED, then FIRM over
+ * INDICATIVE, then falls back to the deterministic order, and abstains when
+ * every option carries the same signals.
+ *
+ * This is a *simulation of model behaviour*, not a model and not a prediction
+ * of what Jev would answer. It exists so the evaluation corpus can exercise
+ * the advisory dimensions end to end without thousands of paid requests.
+ */
+export function signalFollowingTransport(options: StubOptions = {}): JevTransport {
+  const model = options.model ?? 'jev-1.13.0';
+  const reliabilityRank: Record<string, number> = { ESTABLISHED: 0, PROVISIONAL: 1, UNKNOWN: 2, DEGRADED: 3 };
+  const firmnessRank: Record<string, number> = { FIRM: 0, UNKNOWN: 1, INDICATIVE: 2 };
+  return {
+    send: async (payload) => {
+      const views = payload.state.candidates;
+      const distinct = new Set(views.map((view) => `${view.venueReliability}/${view.quoteFirmness}`));
+      if (views.length === 0 || distinct.size <= 1) {
+        const probabilities = evenDistribution(payload, ABSTAIN_CHOICE_ID);
+        return { ok: true, body: answerBody(ABSTAIN_CHOICE_ID, 0.2, probabilities, model), latencyMs: options.latencyMs ?? 1 };
+      }
+      const ranked = [...views].sort((left, right) => {
+        const reliability = (reliabilityRank[left.venueReliability] ?? 2) - (reliabilityRank[right.venueReliability] ?? 2);
+        if (reliability !== 0) return reliability;
+        const firmness = (firmnessRank[left.quoteFirmness] ?? 1) - (firmnessRank[right.quoteFirmness] ?? 1);
+        if (firmness !== 0) return firmness;
+        return left.choiceId < right.choiceId ? -1 : left.choiceId > right.choiceId ? 1 : 0;
+      });
+      const choice = ranked[0]?.choiceId ?? ABSTAIN_CHOICE_ID;
+      const probabilities = evenDistribution(payload, choice);
+      probabilities[choice] = 0.82;
+      return { ok: true, body: answerBody(choice, 0.82, probabilities, model), latencyMs: options.latencyMs ?? 1 };
+    },
+  };
+}
+
 export function abstainingTransport(options: StubOptions = {}): JevTransport {
   return choosingTransport(ABSTAIN_CHOICE_ID, 0.3, options);
 }

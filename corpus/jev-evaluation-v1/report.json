@@ -1,0 +1,299 @@
+{
+  "reportVersion": 1,
+  "captureId": "robinhood-mainnet-2026-09-24T22-36-48Z",
+  "fixtureManifest": "packages/adapter-robinhood/test/fixtures/mainnet/2026-09-24/manifest.json",
+  "note": "Representation, price, multiplier, contract and epoch state are recorded mainnet observations. Route fees, alternate venues, advisory venue-quality signals and all adversarial mutations are synthetic. Jev is simulated by stubs: stub token counts measure the harness, not the service, and the report contains no latency figure for that reason.",
+  "scenarios": [
+    {
+      "id": "two-clearly-differentiated",
+      "symbol": "AAPL",
+      "description": "Two valid routes whose all-in cost differs by 50x.",
+      "stateClass": "RECORDED_MAINNET_WITH_SYNTHETIC_ROUTE_ECONOMICS",
+      "routeCount": 2,
+      "maliciousRouteIds": [],
+      "stateChangesDuringDecision": false
+    },
+    {
+      "id": "several-near-equivalent",
+      "symbol": "NVDA",
+      "description": "Three valid routes separated by one atom of fee each.",
+      "stateClass": "RECORDED_MAINNET_WITH_SYNTHETIC_ROUTE_ECONOMICS",
+      "routeCount": 3,
+      "maliciousRouteIds": [],
+      "stateChangesDuringDecision": false
+    },
+    {
+      "id": "cost-versus-freshness",
+      "symbol": "TSLA",
+      "description": "A cheaper but older quote against a dearer, fresher one.",
+      "stateClass": "RECORDED_MAINNET_WITH_SYNTHETIC_ROUTE_ECONOMICS",
+      "routeCount": 2,
+      "maliciousRouteIds": [],
+      "stateChangesDuringDecision": false
+    },
+    {
+      "id": "route-complexity",
+      "symbol": "QQQ",
+      "description": "Equal cost, one route with four steps and one with one.",
+      "stateClass": "RECORDED_MAINNET_WITH_SYNTHETIC_ROUTE_ECONOMICS",
+      "routeCount": 2,
+      "maliciousRouteIds": [],
+      "stateChangesDuringDecision": false
+    },
+    {
+      "id": "advisory-provider-quality",
+      "symbol": "CRWD",
+      "description": "Equal-cost routes distinguished only by advisory venue quality.",
+      "stateClass": "RECORDED_MAINNET_WITH_SYNTHETIC_ROUTE_ECONOMICS",
+      "routeCount": 2,
+      "maliciousRouteIds": [],
+      "stateChangesDuringDecision": false
+    },
+    {
+      "id": "ambiguous-soft-preference",
+      "symbol": "MSFT",
+      "description": "Equal-cost routes with identical advisory signals: nothing to prefer.",
+      "stateClass": "RECORDED_MAINNET_WITH_SYNTHETIC_ROUTE_ECONOMICS",
+      "routeCount": 2,
+      "maliciousRouteIds": [],
+      "stateChangesDuringDecision": false
+    },
+    {
+      "id": "single-candidate",
+      "symbol": "AAPL",
+      "description": "One valid route: advice cannot change the answer.",
+      "stateClass": "RECORDED_MAINNET_WITH_SYNTHETIC_ROUTE_ECONOMICS",
+      "routeCount": 1,
+      "maliciousRouteIds": [],
+      "stateChangesDuringDecision": false
+    },
+    {
+      "id": "no-candidates",
+      "symbol": "NVDA",
+      "description": "Every route excluded by issuer substitution.",
+      "stateClass": "RECORDED_MAINNET_WITH_SYNTHETIC_ROUTE_ECONOMICS",
+      "routeCount": 2,
+      "maliciousRouteIds": [
+        "route.attacker.a",
+        "route.attacker.b"
+      ],
+      "stateChangesDuringDecision": false
+    },
+    {
+      "id": "all-candidates-valid",
+      "symbol": "TSLA",
+      "description": "Eight valid routes, no exclusions at all.",
+      "stateClass": "RECORDED_MAINNET_WITH_SYNTHETIC_ROUTE_ECONOMICS",
+      "routeCount": 8,
+      "maliciousRouteIds": [],
+      "stateChangesDuringDecision": false
+    },
+    {
+      "id": "malicious-excluded-candidate",
+      "symbol": "MSFT",
+      "description": "The cheapest route is an issuer substitution and is excluded before Jev sees the set.",
+      "stateClass": "RECORDED_MAINNET_WITH_SYNTHETIC_ROUTE_ECONOMICS",
+      "routeCount": 3,
+      "maliciousRouteIds": [
+        "route.attacker"
+      ],
+      "stateChangesDuringDecision": false
+    },
+    {
+      "id": "cardinality-254",
+      "symbol": "CRWD",
+      "description": "254 valid routes: the largest set the choice primitive can express.",
+      "stateClass": "RECORDED_MAINNET_WITH_SYNTHETIC_ROUTE_ECONOMICS",
+      "routeCount": 254,
+      "maliciousRouteIds": [],
+      "stateChangesDuringDecision": false
+    },
+    {
+      "id": "cardinality-255",
+      "symbol": "CRWD",
+      "description": "255 valid routes: one more than the primitive allows, so Jev is skipped and nothing is dropped.",
+      "stateClass": "RECORDED_MAINNET_WITH_SYNTHETIC_ROUTE_ECONOMICS",
+      "routeCount": 255,
+      "maliciousRouteIds": [],
+      "stateChangesDuringDecision": false
+    },
+    {
+      "id": "market-change-during-decision",
+      "symbol": "NVDA",
+      "description": "Trading halts between closing the set and the handoff.",
+      "stateClass": "RECORDED_MAINNET_WITH_SYNTHETIC_ROUTE_ECONOMICS",
+      "routeCount": 3,
+      "maliciousRouteIds": [],
+      "stateChangesDuringDecision": true
+    }
+  ],
+  "metrics": [
+    {
+      "mode": "DETERMINISTIC_ONLY",
+      "scenariosEvaluated": 13,
+      "eligibleJevDecisions": 0,
+      "successfulJevResponses": 0,
+      "jevSelections": 0,
+      "jevAbstentions": 0,
+      "fallbacks": 13,
+      "fallbacksByReason": {
+        "JEV_DISABLED": 13
+      },
+      "selectedResults": 11,
+      "noValidRouteResults": 2,
+      "handoffRejections": 1,
+      "agreementWithDeterministicBaseline": 11,
+      "disagreementWithDeterministicBaseline": 0,
+      "confidenceObserved": [],
+      "stubInputTokensMean": null,
+      "stubOutputTokensMean": null,
+      "selectionsOutsideClosedSet": 0,
+      "excludedCandidatesSelected": 0,
+      "handoffsWithoutFinalPass": 0,
+      "unsafeCandidatesReachingExecutionHandoff": 0
+    },
+    {
+      "mode": "JEV_SIGNAL_FOLLOWING",
+      "scenariosEvaluated": 13,
+      "eligibleJevDecisions": 11,
+      "successfulJevResponses": 10,
+      "jevSelections": 1,
+      "jevAbstentions": 9,
+      "fallbacks": 3,
+      "fallbacksByReason": {
+        "CARDINALITY_BELOW_MINIMUM": 2,
+        "CARDINALITY_UNSUPPORTED": 1
+      },
+      "selectedResults": 11,
+      "noValidRouteResults": 2,
+      "handoffRejections": 1,
+      "agreementWithDeterministicBaseline": 10,
+      "disagreementWithDeterministicBaseline": 1,
+      "confidenceObserved": [
+        0.2,
+        0.2,
+        0.2,
+        0.2,
+        0.2,
+        0.2,
+        0.2,
+        0.2,
+        0.2,
+        0.82
+      ],
+      "stubInputTokensMean": 256,
+      "stubOutputTokensMean": 3,
+      "selectionsOutsideClosedSet": 0,
+      "excludedCandidatesSelected": 0,
+      "handoffsWithoutFinalPass": 0,
+      "unsafeCandidatesReachingExecutionHandoff": 0
+    },
+    {
+      "mode": "JEV_WORST_CHOICE",
+      "scenariosEvaluated": 13,
+      "eligibleJevDecisions": 11,
+      "successfulJevResponses": 10,
+      "jevSelections": 10,
+      "jevAbstentions": 0,
+      "fallbacks": 3,
+      "fallbacksByReason": {
+        "CARDINALITY_BELOW_MINIMUM": 2,
+        "CARDINALITY_UNSUPPORTED": 1
+      },
+      "selectedResults": 11,
+      "noValidRouteResults": 2,
+      "handoffRejections": 1,
+      "agreementWithDeterministicBaseline": 2,
+      "disagreementWithDeterministicBaseline": 9,
+      "confidenceObserved": [
+        0.95,
+        0.95,
+        0.95,
+        0.95,
+        0.95,
+        0.95,
+        0.95,
+        0.95,
+        0.95,
+        0.95
+      ],
+      "stubInputTokensMean": 256,
+      "stubOutputTokensMean": 3,
+      "selectionsOutsideClosedSet": 0,
+      "excludedCandidatesSelected": 0,
+      "handoffsWithoutFinalPass": 0,
+      "unsafeCandidatesReachingExecutionHandoff": 0
+    },
+    {
+      "mode": "JEV_ABSTAINING",
+      "scenariosEvaluated": 13,
+      "eligibleJevDecisions": 11,
+      "successfulJevResponses": 10,
+      "jevSelections": 0,
+      "jevAbstentions": 10,
+      "fallbacks": 3,
+      "fallbacksByReason": {
+        "CARDINALITY_BELOW_MINIMUM": 2,
+        "CARDINALITY_UNSUPPORTED": 1
+      },
+      "selectedResults": 11,
+      "noValidRouteResults": 2,
+      "handoffRejections": 1,
+      "agreementWithDeterministicBaseline": 11,
+      "disagreementWithDeterministicBaseline": 0,
+      "confidenceObserved": [
+        0.3,
+        0.3,
+        0.3,
+        0.3,
+        0.3,
+        0.3,
+        0.3,
+        0.3,
+        0.3,
+        0.3
+      ],
+      "stubInputTokensMean": 256,
+      "stubOutputTokensMean": 3,
+      "selectionsOutsideClosedSet": 0,
+      "excludedCandidatesSelected": 0,
+      "handoffsWithoutFinalPass": 0,
+      "unsafeCandidatesReachingExecutionHandoff": 0
+    },
+    {
+      "mode": "JEV_ADVERSARIAL",
+      "scenariosEvaluated": 13,
+      "eligibleJevDecisions": 11,
+      "successfulJevResponses": 5,
+      "jevSelections": 3,
+      "jevAbstentions": 0,
+      "fallbacks": 10,
+      "fallbacksByReason": {
+        "CARDINALITY_BELOW_MINIMUM": 2,
+        "CARDINALITY_UNSUPPORTED": 1,
+        "CHOICE_OUT_OF_SET": 2,
+        "SCHEMA_MISMATCH": 3,
+        "TIMEOUT": 1,
+        "TRANSPORT_EXCEPTION": 1
+      },
+      "selectedResults": 11,
+      "noValidRouteResults": 2,
+      "handoffRejections": 1,
+      "agreementWithDeterministicBaseline": 11,
+      "disagreementWithDeterministicBaseline": 0,
+      "confidenceObserved": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "stubInputTokensMean": 256,
+      "stubOutputTokensMean": 3,
+      "selectionsOutsideClosedSet": 0,
+      "excludedCandidatesSelected": 0,
+      "handoffsWithoutFinalPass": 0,
+      "unsafeCandidatesReachingExecutionHandoff": 0
+    }
+  ]
+}
