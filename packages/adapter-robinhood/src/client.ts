@@ -4,8 +4,8 @@ import { parseCorporateActionsResponse, type NormalizedCorporateAction } from '.
 import { parseRobinhoodPriceResponse, type NormalizedRobinhoodPrice } from './price.ts';
 import { AdapterErrorCode, adapterErr, adapterOk, type AdapterResult } from './result.ts';
 
-export const ROBINHOOD_API_BASE_URL = 'https://api.robinhood.com/stock-tokens';
-export const ROBINHOOD_MAINNET_RPC_URL = 'https://rpc.robinhoodchain.com';
+export const ROBINHOOD_API_BASE_URL = 'https://api.robinhood.com/rhj';
+export const ROBINHOOD_MAINNET_RPC_URL = 'https://rpc.mainnet.chain.robinhood.com';
 
 export type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 

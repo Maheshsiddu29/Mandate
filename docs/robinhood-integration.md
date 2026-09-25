@@ -7,7 +7,7 @@ documentation.
 - **Investigation date:** 2026-09-24 (America/Los_Angeles)
 - **Mainnet observation block:** `0x4468e5a` (71,732,826)
 - **Mainnet block timestamp:** `2026-09-24T22:36:48Z`
-- **Implementation status:** investigation complete; Phase 3 adapter work in progress
+- **Implementation status:** Phase 3 complete; read-only adapter and replay validation implemented
 
 ## Sources and observed interfaces
 
@@ -26,10 +26,10 @@ Direct observations used unauthenticated read-only requests to:
 
 | Surface | Observed endpoint | Documented cache/rate behavior |
 | --- | --- | --- |
-| Asset catalogue | `GET https://api.robinhood.com/stock-tokens/assets` | cached; no numeric window stated on the inspected page; 60 requests/second shared limit |
-| Price | `GET https://api.robinhood.com/stock-tokens/prices/{symbol}` | 15-second cache; 60 requests/second |
-| Corporate actions | `GET https://api.robinhood.com/stock-tokens/corporate-actions` | one-hour cache; 60 requests/second |
-| Mainnet RPC | `https://rpc.robinhoodchain.com` | no public rate guarantee relied on |
+| Asset catalogue | `GET https://api.robinhood.com/rhj/assets` | cached; no numeric window stated on the inspected page; 60 requests/second shared limit |
+| Price | `GET https://api.robinhood.com/rhj/prices/{symbol}` | 15-second cache; 60 requests/second |
+| Corporate actions | `GET https://api.robinhood.com/rhj/corporate-actions` | one-hour cache; 60 requests/second |
+| Mainnet RPC | Capture: `https://rpc.robinhoodchain.com`; tooling default: `https://rpc.mainnet.chain.robinhood.com` | both returned chain ID 4663; no public rate guarantee relied on |
 
 The API responses returned HTTP 200 through CloudFront. No cache-control or
 freshness header was returned in the captured responses, so Mandate does not

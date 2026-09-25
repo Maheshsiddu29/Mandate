@@ -11,56 +11,56 @@
   "artifacts": [
     {
       "path": "raw/assets.json",
-      "source": "https://api.robinhood.com/stock-tokens/assets",
+      "source": "https://api.robinhood.com/rhj/assets",
       "capturedAt": "2026-09-24T22:36:17Z",
       "sourceObservedAt": null,
       "sha256": "96c48d92fd5de31582bcc7bda556b08508e70ed1eac920f875f42e5d8e7523f1"
     },
     {
       "path": "raw/corporate-actions.json",
-      "source": "https://api.robinhood.com/stock-tokens/corporate-actions",
+      "source": "https://api.robinhood.com/rhj/corporate-actions",
       "capturedAt": "2026-09-24T22:36:18Z",
       "sourceObservedAt": null,
       "sha256": "254fdc578280a64c637725807b9195c19f39c43634d1e4c80f8bdab74b01baf2"
     },
     {
       "path": "raw/price-AAPL.json",
-      "source": "https://api.robinhood.com/stock-tokens/prices/AAPL",
+      "source": "https://api.robinhood.com/rhj/prices/AAPL",
       "capturedAt": "2026-09-24T22:36:48Z",
       "sourceObservedAt": "2026-09-24T22:36:43.162193589Z",
       "sha256": "e4cb35dd90f7f30413cd110d9497dedc127c3dd08727b4cef7f6136ff017b013"
     },
     {
       "path": "raw/price-NVDA.json",
-      "source": "https://api.robinhood.com/stock-tokens/prices/NVDA",
+      "source": "https://api.robinhood.com/rhj/prices/NVDA",
       "capturedAt": "2026-09-24T22:36:48Z",
       "sourceObservedAt": "2026-09-24T22:36:35.744265799Z",
       "sha256": "21d0466048cb300cf410bfb25d37777c302c216fe63baa1c59f097ee47124b62"
     },
     {
       "path": "raw/price-TSLA.json",
-      "source": "https://api.robinhood.com/stock-tokens/prices/TSLA",
+      "source": "https://api.robinhood.com/rhj/prices/TSLA",
       "capturedAt": "2026-09-24T22:36:48Z",
       "sourceObservedAt": "2026-09-24T22:36:36.762236563Z",
       "sha256": "b5165d156cd615091b8ae71f48b1de0a41de927ab5fa63a38f42769ed26f5531"
     },
     {
       "path": "raw/price-QQQ.json",
-      "source": "https://api.robinhood.com/stock-tokens/prices/QQQ",
+      "source": "https://api.robinhood.com/rhj/prices/QQQ",
       "capturedAt": "2026-09-24T22:36:48Z",
       "sourceObservedAt": "2026-09-24T22:36:48.609949530Z",
       "sha256": "6d73cf2ebbd6c596f8778c6abc209d7df4b33a3c8eb86bdf77ddb4a5dc893942"
     },
     {
       "path": "raw/price-CRWD.json",
-      "source": "https://api.robinhood.com/stock-tokens/prices/CRWD",
+      "source": "https://api.robinhood.com/rhj/prices/CRWD",
       "capturedAt": "2026-09-24T22:36:48Z",
       "sourceObservedAt": "2026-09-24T22:36:41.206300409Z",
       "sha256": "ddb9ed94e0946b8d5bd6a00ab2542c3827b70f4b00d63f7c9e09fd82dec7128a"
     },
     {
       "path": "raw/price-MSFT.json",
-      "source": "https://api.robinhood.com/stock-tokens/prices/MSFT",
+      "source": "https://api.robinhood.com/rhj/prices/MSFT",
       "capturedAt": "2026-09-24T22:36:48Z",
       "sourceObservedAt": "2026-09-24T22:36:39.163455919Z",
       "sha256": "4fa2031d48066e9e6be11ee7171e9573d02d41ee6e03d1ffdf21e4d065232133"

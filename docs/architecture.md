@@ -2,9 +2,10 @@
 
 System structure, component boundaries, and where each concern is enforced.
 
-> **Status: Phase 2 complete.** The kernel and the registry are built;
-> everything else in the component table is still planned. The "Phase" column records when a component
-> lands; see [roadmap.md](roadmap.md).
+> **Status: Phase 3 complete.** The kernel, registry, and read-only Robinhood
+> external-data adapter are built. Routing, transaction construction and
+> submission, Jev, execution contracts, funding and web work remain planned.
+> The "Phase" column records when a component lands; see [roadmap.md](roadmap.md).
 > The complete rationale for every decision here is in
 > [mandate-design.md](mandate-design.md) — this document is the structural
 > summary, not the argument.
@@ -74,8 +75,10 @@ trusts none of its callers.
 | Resolution | Human reference → canonical asset → admissible representations | 2 | **implemented** — `packages/registry/src/reference.ts`, `asset-index.ts`, `evaluate.ts` |
 | Registry snapshots and digests | Reproducible registry state a decision can be replayed against | 2 | **implemented** — `packages/registry/src/snapshot.ts`, `encoding.ts` |
 | Registry decision vectors | Cross-implementation contract for resolution and admissibility | 2 | **implemented** — `corpus/registry-v1`, 27 vectors |
-| Market-state adapters | Price, liquidity, quotes, operational and corporate-action state, with provenance | 3 | not implemented |
-| Chain adapters | Chain identity, reads, transaction construction and submission | 3 | not implemented |
+| Robinhood market-state adapter | Strict asset, price, halt, capability and corporate-action normalization with provenance | 3 | **implemented** — `packages/adapter-robinhood` |
+| Robinhood mainnet read adapter | Chain identity, fixed-block code/metadata/multiplier/event/oracle reads | 3 | **implemented read-only** — no transaction construction or submission |
+| Mainnet replay corpus | Recorded REST/RPC state through registry and kernel, with stable digests and metrics | 3 | **implemented** — `corpus/mainnet-v1`, 11 vectors |
+| Transaction construction and submission | Build and submit a transaction bound to a verified candidate | 4, 6 | not implemented |
 | Candidate engine | Venue and route discovery; candidate construction with state snapshots | 4 | not implemented |
 | Ranking | Ordering of admissible candidates in a common economic unit | 4 | not implemented |
 | Jev adapter | Advisory selection over a closed candidate set; bounded, abstention-safe | 5 | not implemented |
@@ -89,20 +92,23 @@ Directories are created when they hold real code.
 ```
 packages/kernel/     the verifier and everything it needs (ADR 0003)
 packages/registry/   canonical assets, representations, resolution (ADR 0004)
+packages/adapter-robinhood/ strict external I/O and normalization (ADR 0008)
 corpus/v1/           cross-implementation verifier decision vectors
 corpus/registry-v1/  cross-implementation registry decision vectors
+corpus/mainnet-v1/   recorded mainnet registry-plus-kernel replay vectors
 docs/adr/            architecture decision records
 ```
 
-Later phases add adapters and chain clients as packages that depend on the kernel
-— never the reverse. Structural tests enforce the direction from both sides: the
-kernel imports nothing outside itself and its two allowlisted crypto
-dependencies, and the registry imports nothing outside itself and the kernel
-([ADR 0004](adr/0004-registry-package-boundary.md)).
+The external adapter depends on the registry and kernel — never the reverse.
+Structural tests enforce all three boundaries: the kernel imports nothing
+outside itself and its two allowlisted crypto dependencies, the registry imports
+nothing outside itself and the kernel, and neither imports the adapter
+([ADR 0004](adr/0004-registry-package-boundary.md),
+[ADR 0008](adr/0008-robinhood-data-source-authority.md)).
 
 ```
-registry  ──▶  kernel        permitted, and the only permitted direction
-kernel    ──▶  registry      forbidden, structurally
+adapter   ──▶  registry  ──▶  kernel        permitted
+kernel/registry  ──▶  adapter               forbidden, structurally
 ```
 
 ## 3. Trust levels
@@ -216,6 +222,21 @@ toRepresentationState(record, req)            -> kernel trusted state, or an err
 The last one is the seam. The registry's output is an *input* to the verifier,
 re-checked from scratch, and it refuses to emit anything it could not establish
 rather than substituting a permissive default.
+
+## 5c. Phase 3: Robinhood external state
+
+The adapter is the only network-aware package. It strictly parses issuer REST
+responses and fixed-block JSON-RPC observations into provenance-labelled values,
+then builds the same registry records and kernel state used by synthetic worlds.
+
+| Area | Decision | Record |
+| --- | --- | --- |
+| Authority boundary | Field-specific REST, issuer disclosure, onchain and curated-mapping authority; ticker never establishes identity | [ADR 0008](adr/0008-robinhood-data-source-authority.md) |
+| Identity | Issuer UID and check-digit-valid ISIN must match an audited asset-class mapping; deployment identity also requires chain, address, code and metadata | [Robinhood integration](robinhood-integration.md) |
+| Price | REST is underlying USD/share; token price applies `uiMultiplier` with observed 18-decimal truncation; Chainlink is already token-adjusted | [Robinhood integration](robinhood-integration.md#price-and-time-semantics) |
+| Corporate actions | Latest effective multiplier event reconciled with fixed-block `uiMultiplier()` is the epoch; pending state remains distinct | [ADR 0009](adr/0009-corporate-action-epoch-authority.md) |
+| Replay | Six unmodified real snapshots and five failure cases use registry plus unchanged kernel | [Mainnet replay](mainnet-replay.md) |
+| Network isolation | Recorded fixtures are default; live capture/checks are explicit; normal CI remains offline | [Robinhood integration](robinhood-integration.md#developer-commands-and-network-isolation) |
 
 ## 6. Key decisions and their rationale
 

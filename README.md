@@ -3,14 +3,17 @@
 **Intent-aware execution infrastructure for AI agents transacting in tokenized
 financial assets.**
 
-> **Status: Phase 2 complete — the kernel and the registry.** The deterministic
+> **Status: Phase 3 complete — kernel, registry, and read-only Robinhood adapter.** The deterministic
 > verifier, its domain types, canonical encoding, EIP-712 authorization, receipts
 > and replay semantics are built and tested in `packages/kernel`. The canonical
 > asset and representation registry — identifier schemes, reference resolution,
 > provenance-carrying representation metadata, mandate-constrained admissibility
-> and reproducible snapshots — is built and tested in `packages/registry`.
-> Routing, chain adapters, live market data, Jev, execution contracts and the web
-> experience are **not** built, and the registry makes no network call of any kind.
+> and reproducible snapshots — is built and tested in `packages/registry`. A
+> strict adapter in `packages/adapter-robinhood` normalizes recorded and live
+> Robinhood Stock Token REST/RPC state into those unchanged decision engines.
+> Routing, transaction construction/submission, Jev, execution contracts,
+> funding and the web experience are **not** built. The kernel and registry
+> still make no network call of any kind.
 > Nothing below should be read as a claim beyond that boundary.
 
 ---
@@ -82,9 +85,10 @@ candidate, it is not a candidate.
 
 ## What exists today
 
-Two pure packages. Neither performs I/O, reads a clock, or can reach an inference
-client — all three are enforced by tests that read the sources and the dependency
-tree, not by convention.
+Two pure decision packages and one external adapter. The kernel and registry
+perform no I/O, read no clock, and can reach no inference client — all three are
+enforced structurally. The adapter owns external I/O and depends inward on both;
+neither decision package can import it.
 
 **The verifier** decides whether one proposed execution is inside one signed
 authorization:
@@ -103,12 +107,19 @@ listRepresentations(registry, assetId)     -> representations issued against it
 evaluateRepresentation(registry, req, id)  -> ADMISSIBLE | EXCLUDED + reasonCodes[]
 ```
 
+**The Robinhood adapter** strictly normalizes issuer REST state and fixed-block
+mainnet contract/oracle observations. Ticker never establishes identity; the
+audited edge is issuer UID + validated ISIN + authoritative deployment + matching
+onchain code and metadata.
+
 | Piece | What it does |
 | --- | --- |
 | `packages/kernel` | Mandate types, MCE v1 canonical encoding and keccak-256 digests, EIP-712 authorization, the verifier's 17 independent checks, 43 stable reason codes, receipts, and the replay state machine |
 | `packages/registry` | Canonical asset identity with check-digit-validated identifier schemes, deterministic reference resolution, provenance-carrying representation metadata with trust floors and fail-closed conflict handling, mandate-constrained admissibility with 20 registry reason codes, reproducible snapshots and digests, and synthetic world builders |
+| `packages/adapter-robinhood` | Strict Robinhood assets, price, capability, corporate-action, ERC-20/ERC-8056 and Chainlink normalization; explicit live failure handling and capture tooling |
 | `corpus/v1` | 57 verifier decision vectors across 24 families |
 | `corpus/registry-v1` | 27 registry decision vectors covering resolution and admissibility |
+| `corpus/mainnet-v1` | 11 recorded-mainnet registry-plus-kernel replay vectors and a machine-readable report |
 
 Three properties hold across both. A refusal names **every** violated constraint,
 not the first. No verdict depends on the order checks ran in. And `UNKNOWN` is a
@@ -122,7 +133,7 @@ mandate is computed against that mandate and is not stored anywhere.
 
 ```bash
 npm install
-npm run check      # typecheck + 298 tests
+npm run check      # typecheck, 353 offline tests, fixture/replay drift, consistency and credential checks
 ```
 
 ## Documentation
@@ -138,6 +149,8 @@ npm run check      # typecheck + 298 tests
 | [docs/reason-codes.md](docs/reason-codes.md) | The 43 stable verifier reason codes. Generated from the registry, so it cannot drift. |
 | [docs/registry-reason-codes.md](docs/registry-reason-codes.md) | The 20 registry reason codes, and the kernel codes registry decisions reuse. Generated. |
 | [docs/replay-semantics.md](docs/replay-semantics.md) | How a mandate is consumed, and the one obligation the kernel cannot enforce for an integrator. |
+| [docs/robinhood-integration.md](docs/robinhood-integration.md) | Verified endpoints, schemas, issuer semantics, price/multiplier rules, timestamps and real-data limitations. |
+| [docs/mainnet-replay.md](docs/mainnet-replay.md) | Recorded-mainnet replay methodology, synthetic labelling and validation report. |
 | [docs/adr/](docs/adr/) | Architecture decision records: authorization architecture, canonical encoding, kernel language and dependency boundary. |
 | [corpus/v1/README.md](corpus/v1/README.md) | Verifier decision-vector format, for reimplementers. |
 | [corpus/registry-v1/README.md](corpus/registry-v1/README.md) | Registry decision-vector format, and exactly which fixture data is real and which is synthetic. |
@@ -178,8 +191,12 @@ See [MVP scope](docs/mandate-design.md#20-buildathon-mvp-scope) and
 │   ├── src/               identity, claims, semantics, admissibility, snapshots
 │   │   └── testing/       synthetic world builders and labelled dev fixtures
 │   └── test/              180 tests: behaviour, adversarial properties, structure
+├── packages/adapter-robinhood/ strict Robinhood REST/RPC normalization
+│   ├── src/               adapters, provenance, exact price and epoch semantics
+│   └── test/              recorded fixtures, offline replay and failure tests
 ├── corpus/v1/             cross-implementation verifier decision vectors
 ├── corpus/registry-v1/    cross-implementation registry decision vectors
+├── corpus/mainnet-v1/     recorded mainnet replay vectors and metrics
 └── docs/
     ├── mandate-design.md         canonical specification
     ├── architecture.md           system structure and component boundaries
@@ -189,13 +206,15 @@ See [MVP scope](docs/mandate-design.md#20-buildathon-mvp-scope) and
     ├── reason-codes.md           generated verifier reason-code registry
     ├── registry-reason-codes.md  generated registry reason-code registry
     ├── replay-semantics.md       consumption and nonce semantics
+    ├── robinhood-integration.md  verified Phase 3 external-data findings
+    ├── mainnet-replay.md         real replay methodology and limits
     ├── statelatch-reuse.md       prior-codebase reuse assessment
     └── adr/                      architecture decision records
 ```
 
 Directories are created when they hold real code. The dependency direction is
-`registry → kernel`, never the reverse, and structural tests enforce it from both
-sides. Later phases add adapters and chain clients the same way.
+`adapter → registry → kernel`, never the reverse, and structural tests enforce
+it from all three packages.
 
 ## Contributing
 

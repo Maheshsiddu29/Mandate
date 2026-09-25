@@ -5,14 +5,16 @@ repository summarize parts of this one and link back to it; this file is the
 source of truth.
 
 - **Document status:** canonical specification.
-- **Implementation status:** Phase 2 complete — the mandate core kernel
+- **Implementation status:** Phase 3 complete — the mandate core kernel
   (types, canonical encoding, EIP-712 authorization, deterministic verifier,
   receipts, replay semantics, decision-vector corpus) and the canonical asset and
   representation registry (identifier schemes, reference resolution,
   provenance-carrying representation metadata, mandate-constrained admissibility,
-  deterministic snapshots, registry decision vectors). Everything else in this
-  document remains unbuilt.
-- **Last structural revision:** Phase 2.
+  deterministic snapshots, registry decision vectors), plus the read-only
+  Robinhood REST/RPC adapter, recorded mainnet fixtures and replay corpus.
+  Routing, transaction submission, Jev, execution contracts, funding and web
+  work remain unbuilt.
+- **Last structural revision:** Phase 3.
 
 ## How to read status labels
 
@@ -33,12 +35,10 @@ by tests. Everything else should be read as what Mandate is *specified to do*,
 not what it does. See [Buildathon MVP scope](#20-buildathon-mvp-scope) for what
 is being built first, and [roadmap.md](roadmap.md) for current phase status.
 
-As of Phase 2 the implemented surface adds the canonical asset and representation
-registry (§5, §6) on top of Phase 1's kernel: the mandate type and its canonical
-encoding, the EIP-712 authorization adapter, the deterministic verifier, the
-reason-code registry, verification receipts, and replay semantics — all in
-`packages/kernel`, with a cross-implementation decision-vector corpus in
-`corpus/v1`.
+As of Phase 3 the implemented surface is the Phase 1 kernel, the Phase 2
+canonical asset and representation registry (§5, §6), and the external
+Robinhood adapter (§18). Recorded REST/RPC state flows through the same registry
+and verifier as synthetic worlds; neither decision engine imports the adapter.
 
 ## Contents
 
@@ -455,9 +455,11 @@ where it can be checked, explained, and refused.
 > the trust and conflict rules for sourcing them are built in
 > `packages/registry` ([registry-semantics.md](registry-semantics.md) §6,
 > [ADR 0006](adr/0006-representation-claims-and-conflict-policy.md)). The
-> vocabularies are expected to grow as Phase 3 learns what real issuers publish;
-> growing one is a registry schema-version change and cannot affect a mandate
-> digest.
+> Phase 3 reviewed these vocabularies against Robinhood's issuer disclosures and
+> found that the existing debt-instrument, backing, rights, redemption,
+> settlement and multiplier concepts express the observed semantics without a
+> schema change. Any future growth remains a registry schema-version change and
+> cannot affect a mandate digest.
 
 ### 6.1 Why metadata is the core registry asset
 
@@ -1261,31 +1263,31 @@ Consequences:
 
 ### 13.4 Corporate-action epoch
 
-**IMPLEMENTED for the comparison; the epoch source remains DRAFT.** The verifier
+**IMPLEMENTED for the comparison and the Robinhood Phase 3 source.** The verifier
 compares an authorized epoch against an observed one, rejects a mismatch in
 either direction with distinct codes, and enforces a separate freshness bound on
-the observation. Who is authoritative for incrementing the epoch, and how that
-authority is constrained, is still open and belongs to Phase 3.
+the observation. For Robinhood Stock Tokens the adapter derives the epoch from
+fixed-block ERC-8056 `UIMultiplierUpdated` history reconciled against the current
+`uiMultiplier()` ([ADR 0009](adr/0009-corporate-action-epoch-authority.md)).
 
-Mechanism: every canonical asset carries a monotonically
-increasing **corporate-action epoch**, incremented on any event material to
-execution economics. A mandate records the epoch it was authored under; the
-verifier rejects when the observed epoch differs.
+Mechanism: every canonical asset carries a monotonically increasing
+**corporate-action epoch**. A mandate records the epoch it was authored under;
+the verifier rejects when the observed epoch differs. Robinhood uses the latest
+effective multiplier-event timestamp as that value, not a manually incremented
+counter. An initial 1.0 multiplier with no event has epoch zero. Pending events
+remain separate state and do not advance it.
 
-Why an epoch counter rather than comparing event lists:
+Why an epoch value rather than comparing event lists:
 
 - it makes the check a cheap integer comparison, suitable for an on-chain gate;
 - it makes staleness explicit and auditable rather than inferred;
 - it is asset-class agnostic, so it extends to bonds, funds and treasuries
   without redesign.
 
-Open questions, to be resolved before implementation:
+Remaining policy question for a later phase:
 
-- who is authoritative for incrementing the epoch, and how that authority is
-  itself constrained;
-- how epoch data is distributed, and its own freshness bound — an epoch feed is
-  itself state that can be stale;
-- how a scheduled but not yet effective action is represented: an authorization
+- how a scheduled but not yet effective action restricts authoring or routing:
+  the adapter records the pending multiplier and effective time, but an authorization
   written shortly before a known upcoming split is arguably already unsafe.
   The prior work's approach — a refusal window around a scheduled activation,
   with the phase before and after treated as part of the protected state — is
@@ -1540,7 +1542,9 @@ Recorded now so no later document overstates the system:
 
 ## 18. Robinhood Chain and Arbitrum initial integration
 
-> **Status: EXPLORATORY** on specifics; **DRAFT** on structure.
+> **Status: PHASE 3 IMPLEMENTED** for read-only Robinhood market, representation,
+> oracle and corporate-action state. Routing, transaction construction,
+> submission and testnet execution remain later-phase work.
 
 ### 18.1 Why this environment first
 
@@ -1554,32 +1558,41 @@ Arbitrum ecosystem.
 
 Structural requirements, independent of the specific endpoints:
 
-| Need | Why |
-| --- | --- |
-| Chain identity by chain ID | INV: never trust an RPC's claim about its network (§5.3) |
-| Representation discovery and metadata | The registry's equity entries (§6) |
-| Market state: price, liquidity, venue quotes | Economic-bound checks (§10.2 family E) |
-| Operational state: pause, transfer restrictions | Representation state checks (§10.2 family F) |
-| Corporate-action state or epoch source | The staleness invariant (§13.3) |
-| Transaction construction and submission | Execution (§9, stage 6) |
-| Testnet environment | Execution proof without financial risk |
+| Need | Phase 3 result | Why |
+| --- | --- | --- |
+| Chain identity by chain ID | Mainnet 4663 documented and observed by RPC; testnet 46630 documented | Never trust an RPC's network implicitly (§5.3) |
+| Representation discovery and metadata | `/rhj/assets`, issuer disclosures and fixed-block token views | The registry's representation entries (§6) |
+| Market state | Raw underlying bid/ask, volume and halt state from `/prices/{symbol}` | Economic-bound checks (§10.2 family E) |
+| Operational state | API status, per-session capabilities, code and token metadata; `oraclePaused()` observed | Representation state checks (§10.2 family F) |
+| Corporate-action state or epoch source | API action records plus deterministic ERC-8056 event-derived epoch | The staleness invariant (§13.3) |
+| Transaction construction and submission | Not implemented; out of Phase 3 | Execution (§9, stage 6) |
+| Testnet execution | Not implemented; out of Phase 3 | Execution proof without financial risk |
 
-### 18.3 What is not yet known
+### 18.3 Empirical findings and remaining limits
 
-Stated plainly rather than assumed, because assuming here would produce an
-architecture that does not fit reality:
+Observed on 2026-09-24: the public API serves `/rhj/assets`,
+`/rhj/prices/{symbol}` and `/rhj/corporate-actions` at a shared
+documented 60-request/second limit. Prices have a documented 15-second cache and
+actions a one-hour cache; the inspected asset page stated caching without a
+numeric window. `generatedAt`, not retrieval time, governs price freshness.
 
-- exact available endpoints, their rate limits, and their freshness guarantees;
-- whether corporate-action state is available on-chain, from an issuer API,
-  only from third-party data, or not at all — this materially affects §13.4;
-- which venues are available and what their quoting interfaces look like;
-- what the testnet environment supports;
-- whether on-chain adjustment mechanisms exist for tokenized equity
-  representations in this environment, and in what form.
+REST bid/ask values are underlying-share prices. Token-equivalent values use the
+18-decimal `currentMultiplier` with the observed floor-to-18-decimals rule.
+Chainlink tokenized-equity feeds already include that multiplier and carry their
+own `updatedAt`; they are compared only when source times are compatible.
 
-**Phase 3 begins with answering these empirically**, and the answers may change
-the corporate-action mechanism in §13.4. This document should be revised when
-they are known rather than being written as if they already are.
+Robinhood's API supplied UID, deployment, ISIN, token decimals, status,
+capabilities and current/pending multiplier state. Contracts supplied code,
+ERC-20 metadata, UID and ERC-8056 multiplier views. The issuer describes the
+tokens as fully backed tokenized debt securities giving economic exposure, not
+legal or beneficial ownership of the underlying security.
+
+Still unknown or intentionally deferred: venue quote and route interfaces,
+liquidity usable for execution, testnet transaction behavior, transfer
+restriction enforcement beyond the observed public views, and policy for
+mandates crossing a pending action's effective time. See
+[Robinhood integration findings](robinhood-integration.md) for exact sources and
+the recorded limitations.
 
 ### 18.4 Adapter boundary
 
@@ -1944,6 +1957,8 @@ the wrong shape.
 | **7** | Stablecoin funding and routing adapters | Fiat-denominated intent executes without the mandate naming a funding asset |
 | **8** | Demo product and web experience | Public demonstration showing PASS and, prominently, REJECT with reasons; live and engineered data visibly separated |
 | **9+** | Cross-chain network and broader asset classes | Out of buildathon scope. See [§22](#22-future-architecture) and [§23](#23-expansion-beyond-equities) |
+
+Phases 0–3 are complete. Phase 4 has not started.
 
 ### 25.1 Rules that apply to every phase
 

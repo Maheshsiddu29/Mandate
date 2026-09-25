@@ -37,11 +37,11 @@ The following sources may establish the named facts:
 
 | Fact | Establishing source |
 | --- | --- |
-| Stock Token UID, deployment, status, multiplier, token decimals, ISIN | Robinhood `/stock-tokens/assets`, cross-checked onchain where a corresponding view exists |
+| Stock Token UID, deployment, status, multiplier, token decimals, ISIN | Robinhood `/rhj/assets`, cross-checked onchain where a corresponding view exists |
 | Contract code, ERC-20 metadata, UID, multiplier and oracle-pause state | Robinhood Chain mainnet at a named block |
 | Canonical Stock Token contract identity | Robinhood deployment address plus matching chain ID, code, UID and metadata; symbol alone never establishes it |
-| Underlying bid/ask and trading halt | Robinhood `/stock-tokens/prices/{symbol}`, observed at `generatedAt` |
-| Corporate-action records | Robinhood `/stock-tokens/corporate-actions` |
+| Underlying bid/ask and trading halt | Robinhood `/rhj/prices/{symbol}`, observed at `generatedAt` |
+| Corporate-action records | Robinhood `/rhj/corporate-actions` |
 | Feed proxy address and heartbeat | Chainlink's Robinhood feed catalog |
 | Token-equivalent onchain price and its observation time | Chainlink feed proxy `latestRoundData()` |
 | Legal and economic semantics | RHJ issuer disclosures and official Robinhood Stock Token documentation |

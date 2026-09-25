@@ -22,17 +22,19 @@ Read it before proposing architectural changes. If a change contradicts it,
 either the change is wrong or the document needs updating first — resolve which
 before writing code.
 
-The repository is currently at the end of **Phase 2**: the mandate core kernel
+The repository is currently at the end of **Phase 3**: the mandate core kernel
 (`packages/kernel`), the canonical asset and representation registry
-(`packages/registry`), and both decision-vector corpora (`corpus/v1`,
-`corpus/registry-v1`) are built. Routing, chain adapters, live market data, Jev,
-execution contracts and web work are **not** built. Do not start a later phase
-until it is explicitly opened.
+(`packages/registry`), the read-only Robinhood external adapter
+(`packages/adapter-robinhood`), and verifier, registry and recorded-mainnet
+corpora (`corpus/v1`, `corpus/registry-v1`, `corpus/mainnet-v1`) are built.
+Routing, transaction construction or submission, Jev, execution contracts,
+funding and web work are **not** built. Do not start a later phase until it is
+explicitly opened.
 
-The dependency direction is `registry → kernel`, never the reverse, and it is
-enforced by structural tests in both packages
-([ADR 0004](docs/adr/0004-registry-package-boundary.md)). Neither package
-performs I/O.
+The dependency direction is `adapter → registry → kernel`, never the reverse,
+and it is enforced by structural tests
+([ADR 0004](docs/adr/0004-registry-package-boundary.md)). The kernel and
+registry perform no I/O; the external adapter owns network access.
 
 ---
 
@@ -175,6 +177,9 @@ npm test              # node --test over packages/**/test/*.test.ts
 npm run check         # both
 npm run corpus:generate   # regenerate corpus/v1/vectors.json
 npm run docs:generate     # regenerate docs/reason-codes.md
+npm run robinhood:fixtures:validate  # verify pinned real-data digests
+npm run mainnet-replay:validate      # replay registry + kernel corpus
+npm run robinhood:cross-surface      # validate compatible REST/onchain facts
 ```
 
 Both generated artifacts are committed and have tests asserting the committed
@@ -187,6 +192,10 @@ The kernel's runtime dependencies are fixed by
 [ADR 0004](docs/adr/0004-registry-package-boundary.md) to exactly
 `@mandate/kernel`. Adding any other runtime dependency to either requires a new
 ADR, and each package's `structure.test.ts` fails without one.
+
+The Robinhood adapter's runtime dependencies are fixed to `@mandate/registry`
+and `@mandate/kernel`. Live capture and checks are explicit commands; normal
+tests and `npm run check` remain offline.
 
 `npm run corpus:generate` regenerates the verifier corpus and
 `npm run registry-corpus:generate` the registry corpus; `npm run docs:generate`

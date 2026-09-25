@@ -3,7 +3,7 @@
 Phased engineering plan: what each phase delivers, how it is known to be done,
 and what it depends on.
 
-> **Status: Phase 2 complete.** Phases 3 and beyond are planned, not started.
+> **Status: Phase 3 complete.** Phase 4 and beyond are planned, not started.
 > Rationale for the phase ordering is in
 > [mandate-design.md §25](mandate-design.md#25-phased-engineering-roadmap);
 > scope boundaries are in
@@ -164,32 +164,43 @@ model, with the membership-is-not-equivalence rule preserved in the type system
 
 ## Phase 3 — Robinhood Chain / Arbitrum market-state adapters
 
-**Begins with empirical investigation, not code.** What is actually available
-in this environment is not yet known
-([§18.3](mandate-design.md#183-what-is-not-yet-known)), and the answers may
-change the corporate-action mechanism.
+**Complete.** Empirical findings, exact sources and limitations are recorded in
+[Robinhood integration findings](robinhood-integration.md). The implementation
+is read-only and did not begin routing or execution work.
 
 **Delivers**
 
-- chain adapter: chain identity by chain ID, reads, transaction construction;
-- market-state adapter: price, liquidity, venue quotes;
-- operational-state adapter: pause and transfer restrictions;
-- corporate-action state source, in whatever form proves available;
-- state normalization with `UNKNOWN` as a value and conflicts failing closed.
+- strict external adapter package with dependency direction
+  `adapter → registry → kernel`;
+- chain identity plus fixed-block contract, metadata, multiplier, event and
+  Chainlink reads;
+- raw underlying price, trading halt, volume and per-session trading
+  capabilities;
+- explicit Stock Token debt/exposure/rights/backing/redemption/settlement claims;
+- deterministic multiplier-event corporate-action epoch authority;
+- SHA-256-pinned real REST/RPC fixtures and an 11-vector registry-plus-kernel
+  replay corpus;
+- opt-in live capture and validation, with normal CI entirely offline.
 
 **Exit criteria**
 
-- real state flows into candidate construction;
+- real state flows through registry admissibility and kernel candidate
+  verification;
 - every observation carries provenance and an observation time;
 - a source conflict is recorded as a conflict and fails closed, never
   reconciled;
 - the verifier contains no Arbitrum-specific or Robinhood-Chain-specific
   assumption;
 - findings from the investigation are documented, and
-  [§18.3](mandate-design.md#183-what-is-not-yet-known) is revised.
+  [§18.3](mandate-design.md#183-empirical-findings-and-remaining-limits) is revised.
 
-**Depends on:** Phase 2. **Risk:** corporate-action state may not be available
-on-chain, which affects MVP capability 4 and failure demonstration 5.
+**Not delivered, deliberately:** route discovery, liquidity-based candidate
+construction, transaction construction, any chain write, testnet execution,
+stablecoin funding, Jev and web UX.
+
+**Depends on:** Phase 2. **Resolved risk:** Robinhood exposes API action records
+and ERC-8056 multiplier events/state; actions not reflected in that authority
+remain unsupported rather than being forced into an epoch.
 
 ---
 
@@ -328,7 +339,7 @@ the design document before it belongs in code.
 | 0 | Foundation: thesis, architecture, rules, scope, reuse assessment | — | ✅ complete |
 | 1 | Mandate types and deterministic verifier | 0 | ✅ complete |
 | 2 | Canonical asset and representation registry | 1 | ✅ complete |
-| 3 | Market-state and chain adapters | 2 | planned |
+| 3 | Read-only Robinhood market-state and chain adapters | 2 | ✅ complete |
 | 4 | Execution-candidate and route engine | 3 | planned |
 | 5 | Jev integration | 4 | planned, non-blocking |
 | 6 | On-chain execution gate and settlement | 4 | planned |
