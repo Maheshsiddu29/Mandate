@@ -127,3 +127,22 @@ export interface RouteProvider {
   discover(): unknown;
 }
 
+/** Invoke one provider and ensure it cannot mislabel another provider's output. */
+export function collectProviderRoutes(provider: RouteProvider): ParseResult<readonly ProviderRouteQuote[]> {
+  const providerId = parseIdentifier(provider.providerId);
+  if (!providerId.ok || !Object.values(ProviderClass).includes(provider.providerClass)) return failure({ path: 'provider' });
+  let raw: unknown;
+  try {
+    raw = provider.discover();
+  } catch {
+    return failure({ path: 'provider.discover' });
+  }
+  const parsed = parseProviderRouteSet(raw);
+  if (!parsed.ok) return parsed;
+  for (const quote of parsed.value) {
+    if (quote.providerId !== providerId.value || quote.providerClass !== provider.providerClass) {
+      return { ok: false, error: { code: 'PROVIDER_IDENTITY_MISMATCH', detail: { routeId: quote.routeId, field: 'provider' } } };
+    }
+  }
+  return parsed;
+}

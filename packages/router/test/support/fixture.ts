@@ -1,4 +1,4 @@
-import { parseClock, parseMandate, parseTrustedState, type Amount, type CanonicalMandate, type ExecutionCandidate, type TrustedState, type UnixSeconds } from '@mandate/kernel';
+import { parseClock, parseEip712Domain, parseMandate, parseTrustedState, type Amount, type CanonicalMandate, type ExecutionCandidate, type TrustedState, type UnixSeconds } from '@mandate/kernel';
 import { buildReplayWorld } from '../../../adapter-robinhood/test/support/mainnet-replay.ts';
 import type { ProviderRouteQuote, TrustedRouteCost } from '../../src/index.ts';
 
@@ -9,13 +9,14 @@ const replay = buildReplayWorld({
 const mandateResult = parseMandate(replay.request.mandate);
 const stateResult = parseTrustedState(replay.request.trustedState);
 const clockResult = parseClock(replay.request.clock);
-if (!mandateResult.ok || !stateResult.ok || !clockResult.ok) throw new Error('invalid router fixture');
+const domainResult = parseEip712Domain(replay.request.expectedDomain);
+if (!mandateResult.ok || !stateResult.ok || !clockResult.ok || !domainResult.ok) throw new Error('invalid router fixture');
 
 export const ROUTER_MANDATE = mandateResult.value;
 export const ROUTER_STATE = stateResult.value;
 export const ROUTER_CLOCK = clockResult.value.nowUnixSeconds;
 export const ROUTER_AUTHORIZATION = replay.request.authorization;
-export const ROUTER_DOMAIN = replay.request.expectedDomain;
+export const ROUTER_DOMAIN = domainResult.value;
 export const ROUTER_REGISTRY_INPUT = replay.registryInput;
 
 const sourceCandidate = replay.request.candidate as Record<string, unknown>;

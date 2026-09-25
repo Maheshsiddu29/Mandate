@@ -8,7 +8,6 @@
     "./testing": "./src/testing/index.ts"
   },
   "dependencies": {
-    "@mandate/adapter-robinhood": "0.1.0",
     "@mandate/kernel": "0.1.0",
     "@mandate/registry": "0.1.0"
   }
