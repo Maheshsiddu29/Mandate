@@ -12,11 +12,12 @@
 
 import { ByteWriter, bytes32ToBytes, keccak256, type Bytes32 } from '@mandate/kernel';
 import type { ClosedChoiceSet } from './choices.ts';
-import type { JevCandidateView, JevDecisionReceipt, JevState } from './types.ts';
+import type { JevAssistedSelectionReceipt, JevCandidateView, JevDecisionReceipt, JevState } from './types.ts';
 
 const CHOICE_SET_DOMAIN = 'MANDATE.JEV.CHOICESET.V1';
 const STATE_DOMAIN = 'MANDATE.JEV.STATE.V1';
 const RECEIPT_DOMAIN = 'MANDATE.JEV.RECEIPT.V1';
+const SELECTION_DOMAIN = 'MANDATE.JEV.SELECTION.V1';
 
 /**
  * Probabilities are floats from an external service and must not reach a digest
@@ -83,6 +84,27 @@ export function encodeJevDecisionReceipt(receipt: Omit<JevDecisionReceipt, 'rece
 
 export function jevDecisionReceiptDigest(receipt: Omit<JevDecisionReceipt, 'receiptDigest'>): Bytes32 {
   return keccak256(encodeJevDecisionReceipt(receipt));
+}
+
+export function encodeJevSelectionReceipt(receipt: Omit<JevAssistedSelectionReceipt, 'receiptDigest'>): Uint8Array {
+  const writer = new ByteWriter().tag(SELECTION_DOMAIN).u16(receipt.version);
+  writer.str(receipt.integrationVersion).str(receipt.selectionMode);
+  writer.bytes32(bytes32ToBytes(receipt.routingReceiptDigest));
+  optionalDigest(writer, receipt.jevReceiptDigest);
+  optionalDigest(writer, receipt.deterministicCandidateDigest);
+  optionalDigest(writer, receipt.selectedCandidateDigest);
+  optionalDigest(writer, receipt.handoffVerificationReceiptDigest);
+  writer.str(receipt.handoffDecision).i64(receipt.evaluatedAtUnixSeconds);
+  return writer.finish();
+}
+
+export function jevSelectionReceiptDigest(receipt: Omit<JevAssistedSelectionReceipt, 'receiptDigest'>): Bytes32 {
+  return keccak256(encodeJevSelectionReceipt(receipt));
+}
+
+function optionalDigest(writer: ByteWriter, value: Bytes32 | null): void {
+  if (value === null) writer.u8(0);
+  else writer.u8(1).bytes32(bytes32ToBytes(value));
 }
 
 function optionalString(writer: ByteWriter, value: string | null): void {

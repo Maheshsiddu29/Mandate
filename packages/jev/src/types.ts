@@ -11,6 +11,7 @@ import type { Bytes32 } from '@mandate/kernel';
 export const JEV_INTEGRATION_VERSION = 'mandate-jev/1';
 export const JEV_QUESTION_SCHEMA_VERSION = 1;
 export const JEV_RECEIPT_SCHEMA_VERSION = 1;
+export const JEV_SELECTION_RECEIPT_SCHEMA_VERSION = 1;
 
 /** The question key used in every request. Local, never read from a response. */
 export const JEV_QUESTION_NAME = 'route_selection';
@@ -238,6 +239,34 @@ export interface JevDecisionReceipt {
   readonly outcome: JevOutcome;
   readonly fallbackReason: JevFallbackReason | null;
   readonly selectionMode: SelectionMode;
+
+  readonly evaluatedAtUnixSeconds: bigint;
+  readonly receiptDigest: Bytes32;
+}
+
+/**
+ * The Phase 5 selection receipt: the one record that binds the deterministic
+ * routing receipt, the advisory decision receipt and the handoff verification
+ * together.
+ *
+ * It exists because the Phase 4 routing receipt must not change — its encoding
+ * is a committed compatibility surface — and because a reviewer needs to see,
+ * in one place, what the deterministic path would have chosen and what was
+ * actually selected. When those digests differ, a model changed the answer.
+ */
+export interface JevAssistedSelectionReceipt {
+  readonly version: number;
+  readonly integrationVersion: string;
+  readonly selectionMode: SelectionMode;
+
+  readonly routingReceiptDigest: Bytes32;
+  readonly jevReceiptDigest: Bytes32 | null;
+
+  readonly deterministicCandidateDigest: Bytes32 | null;
+  readonly selectedCandidateDigest: Bytes32 | null;
+
+  readonly handoffVerificationReceiptDigest: Bytes32 | null;
+  readonly handoffDecision: 'PASS' | 'REJECT' | 'NONE';
 
   readonly evaluatedAtUnixSeconds: bigint;
   readonly receiptDigest: Bytes32;
