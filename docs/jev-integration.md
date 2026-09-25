@@ -192,8 +192,11 @@ This is a *defence in depth* measure, not the safety property. Even a model
 fully steered into choosing the worst available option can only choose
 something the kernel already passed, and that choice is re-verified afterwards.
 Both halves are asserted by
-test: that the outbound payload does not contain the hostile string, and that a
-model which obeys it still cannot produce an unsafe handoff.
+[`injection.test.ts`](../packages/jev/test/injection.test.ts): that the
+outbound payload does not contain the hostile string, and that a model which
+obeys it completely — modelled as one that picks the deterministically worst
+option every time — still cannot produce an unsafe handoff. The cost of a
+fully steered model is bounded by the mandate, not by the ranking.
 
 ## 6. Selection modes, fallback and confidence
 
@@ -273,7 +276,7 @@ whether the deterministic answer is safe, and the deterministic answer is what
 the system falls back to.
 
 The boundary is inclusive — `confidence >= minimumConfidence` is accepted — and
-both sides of it are pinned by test.
+both sides of it are pinned by `selection.test.ts`.
 
 ## 7. Live characterization
 

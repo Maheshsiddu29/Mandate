@@ -166,7 +166,10 @@ export function adversarialTransport(behaviour: AdversarialBehaviour, excludedCh
     case AdversarialBehaviour.MALFORMED_IDENTIFIER:
       return bodyTransport(answerBody('route_\u0000\u0001', 1, { route_000: 1 }, model));
     case AdversarialBehaviour.PROTOTYPE_KEY:
-      return bodyTransport(answerBody('__proto__', 1, { __proto__: 1 }, model));
+      // `Object.fromEntries` creates a real own property named `__proto__`,
+      // which an object literal would not: the point is to reach the lookup
+      // with that name, not to be refused earlier for being empty.
+      return bodyTransport(answerBody('__proto__', 1, Object.fromEntries([['__proto__', 1]]) as Record<string, number>, model));
     case AdversarialBehaviour.ALTERED_CANDIDATE:
       return {
         send: async (payload) => ({
