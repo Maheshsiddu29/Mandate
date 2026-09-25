@@ -33,9 +33,9 @@ export type RouteStepKind = (typeof RouteStepKind)[keyof typeof RouteStepKind];
 
 export interface RouteStep {
   readonly kind: RouteStepKind;
-  readonly venue: string;
-  readonly chain: string;
-  readonly representationId: string;
+  readonly venue: ExecutionCandidate['venue'];
+  readonly chain: ExecutionCandidate['chain'];
+  readonly representationId: ExecutionCandidate['representationId'];
 }
 
 export interface RouteCosts {
@@ -52,10 +52,10 @@ export interface ProviderRouteQuote {
   readonly providerId: string;
   readonly providerClass: ProviderClass;
   readonly canonicalAsset: CanonicalAssetId;
-  readonly representationId: string;
-  readonly issuer: string;
-  readonly chain: string;
-  readonly venue: string;
+  readonly representationId: ExecutionCandidate['representationId'];
+  readonly issuer: ExecutionCandidate['issuer'];
+  readonly chain: ExecutionCandidate['chain'];
+  readonly venue: ExecutionCandidate['venue'];
   readonly side: 'BUY' | 'SELL';
   readonly agent: ExecutionCandidate['agent'];
   readonly quantity: Amount;
@@ -164,4 +164,3 @@ export type RoutingResult =
   | { readonly status: 'SELECTED'; readonly selected: RoutingCandidate; readonly finalVerificationReceipt: VerificationReceipt; readonly receipt: RoutingReceipt }
   | { readonly status: 'NO_VALID_ROUTE'; readonly receipt: RoutingReceipt }
   | { readonly status: 'INVALID_INPUT'; readonly errors: readonly RouteExclusion[] };
-
