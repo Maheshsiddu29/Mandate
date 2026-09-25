@@ -63,3 +63,7 @@ existing mandate-verifier decision.
 
 These limits are checked before expensive registry and verifier work.
 
+The seeded simulation methodology and committed metrics are in
+`corpus/routing-simulation-v1`. Performance methodology is documented in
+[router-performance.md](router-performance.md), and current controls and
+residual risks are maintained in [security-review.md](security-review.md).

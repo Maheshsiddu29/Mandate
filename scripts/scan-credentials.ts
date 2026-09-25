@@ -11,6 +11,10 @@ const patterns: readonly [string, RegExp][] = [
 ];
 const findings: string[] = [];
 for (const file of files) {
+  if (/(^|\/)\.env(?:\.|$)/.test(file) || /\.(?:pem|key)$/.test(file) || /(^|\/)(?:keystore|secrets)\//.test(file)) {
+    findings.push(`${file}: forbidden credential-bearing path`);
+    continue;
+  }
   let text: string;
   try { text = readFileSync(file, 'utf8'); } catch { continue; }
   for (const [label, pattern] of patterns) if (pattern.test(text)) findings.push(`${file}: ${label}`);

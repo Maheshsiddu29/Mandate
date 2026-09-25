@@ -15,7 +15,7 @@
     "typecheck": "tsc --project tsconfig.json",
     "test": "node --test \"packages/**/test/*.test.ts\"",
     "corpus:generate": "node packages/kernel/test/support/generate-corpus.ts",
-    "check": "npm run typecheck && npm test && npm run robinhood:fixtures:validate && npm run mainnet-replay:validate && npm run robinhood:cross-surface && npm run credentials:scan",
+    "check": "npm run typecheck && npm test && npm run robinhood:fixtures:validate && npm run mainnet-replay:validate && npm run mainnet-routing:validate && npm run robinhood:cross-surface && npm run credentials:scan && npm run repository:junk",
     "docs:generate": "node packages/kernel/test/support/generate-reason-codes-doc.ts && node packages/registry/test/support/generate-reason-codes-doc.ts",
     "registry-corpus:generate": "node packages/registry/test/support/generate-corpus.ts",
     "robinhood:fixtures:validate": "node packages/adapter-robinhood/scripts/validate-fixtures.ts",
@@ -27,7 +27,11 @@
     "credentials:scan": "node scripts/scan-credentials.ts",
     "routing-simulation:generate": "node packages/router/scripts/generate-simulation-report.ts",
     "mainnet-routing:generate": "node packages/router/scripts/generate-mainnet-routing.ts",
-    "mainnet-routing:validate": "node --test packages/router/test/mainnet-routing.test.ts"
+    "mainnet-routing:validate": "node --test packages/router/test/mainnet-routing.test.ts",
+    "generated:check": "npm run corpus:generate && npm run registry-corpus:generate && npm run docs:generate && npm run mainnet-replay:generate && npm run mainnet-routing:generate && npm run routing-simulation:generate && git diff --exit-code -- corpus docs/reason-codes.md docs/registry-reason-codes.md",
+    "repository:junk": "node scripts/check-repository-junk.ts",
+    "audit:security": "npm audit --audit-level=high",
+    "router:benchmark": "node packages/router/scripts/benchmark.ts"
   },
   "devDependencies": {
     "@types/node": "22.20.2",
