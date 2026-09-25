@@ -9,7 +9,7 @@ import type {
 } from '@mandate/kernel';
 import type { RegistryReasonCode } from '@mandate/registry';
 
-export const ROUTER_VERSION = 'mandate-router/1';
+export const ROUTER_VERSION = 'mandate-router/2';
 export const ROUTE_QUOTE_SCHEMA_VERSION = 1;
 export const ROUTING_RECEIPT_SCHEMA_VERSION = 1;
 
@@ -95,6 +95,14 @@ export interface RoutingCandidate {
     readonly routeFee: Amount;
   };
   readonly steps: readonly RouteStep[];
+  /**
+   * The sum of `costs`, in the notional's unit.
+   *
+   * Carried on the execution candidate as well, where the kernel reads it. The
+   * router establishes it; the router no longer decides whether it is within
+   * authority (ADR 0014).
+   */
+  readonly feeTotal: Amount;
   readonly executionCandidate: ExecutionCandidate;
   readonly kernelCandidateDigest: Bytes32;
   readonly candidateDigest: Bytes32;
@@ -124,8 +132,9 @@ export type RoutingReasonCode =
   | 'COST_OVERFLOW'
   | 'COST_STATE_STALE'
   | 'COST_STATE_FUTURE'
-  | 'SELL_FEES_EXCEED_PROCEEDS'
-  | 'TOTAL_COST_EXCEEDS_MANDATE'
+  | 'REGISTRY_SNAPSHOT_MISMATCH'
+  | 'HANDOFF_TIME_REGRESSED'
+  | 'HANDOFF_STATE_MISSING'
   | 'QUOTE_STALE'
   | 'QUOTE_FROM_FUTURE'
   | 'FINAL_REVERIFICATION_FAILED'
@@ -164,10 +173,25 @@ export interface RoutingReceipt {
   readonly selectedCandidateDigest: Bytes32 | null;
   readonly finalVerificationReceiptDigest: Bytes32 | null;
   readonly evaluatedAtUnixSeconds: UnixSeconds;
+  /** Digest of the state the handoff re-verification actually read. */
+  readonly handoffStateDigest: Bytes32 | null;
+  /** The instant the handoff re-verification was performed at. */
+  readonly handoffAtUnixSeconds: UnixSeconds | null;
   readonly receiptDigest: Bytes32;
 }
 
 export type RoutingResult =
   | { readonly status: 'SELECTED'; readonly selected: RoutingCandidate; readonly finalVerificationReceipt: VerificationReceipt; readonly receipt: RoutingReceipt }
-  | { readonly status: 'NO_VALID_ROUTE'; readonly receipt: RoutingReceipt }
+  | {
+      readonly status: 'NO_VALID_ROUTE';
+      readonly receipt: RoutingReceipt;
+      /**
+       * The handoff re-verification, when one ran and refused.
+       *
+       * Null when there was nothing to re-verify. Carried so a caller can tell
+       * "nothing was admissible" from "the winner stopped being admissible
+       * between evaluation and handoff" without re-deriving it.
+       */
+      readonly finalVerificationReceipt: VerificationReceipt | null;
+    }
   | { readonly status: 'INVALID_INPUT'; readonly errors: readonly RouteExclusion[] };

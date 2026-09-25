@@ -19,6 +19,7 @@ export function encodeRoutingCandidate(candidate: Omit<RoutingCandidate, 'candid
   writer.str(candidate.trustedCostSourceId).i64(candidate.trustedCostObservedAtUnixSeconds);
   amount(writer, candidate.costs.venueFee); amount(writer, candidate.costs.executionFee);
   amount(writer, candidate.costs.settlementFee); amount(writer, candidate.costs.routeFee);
+  amount(writer, candidate.feeTotal);
   writer.u8(candidate.steps.length);
   for (const step of candidate.steps) writer.str(step.kind).str(step.venue).str(step.chain).str(step.representationId);
   return writer.finish();
@@ -59,6 +60,10 @@ export function encodeRoutingReceipt(receipt: Omit<RoutingReceipt, 'receiptDiges
   const writer = new ByteWriter().tag(RECEIPT_DOMAIN).u16(receipt.version).str(receipt.routerVersion);
   writer.bytes32(bytes32ToBytes(receipt.mandateDigest)).bytes32(bytes32ToBytes(receipt.registrySnapshotDigest));
   writer.bytes32(bytes32ToBytes(receipt.marketStateDigest)).i64(receipt.evaluatedAtUnixSeconds);
+  if (receipt.handoffStateDigest === null) writer.u8(0);
+  else writer.u8(1).bytes32(bytes32ToBytes(receipt.handoffStateDigest));
+  if (receipt.handoffAtUnixSeconds === null) writer.u8(0);
+  else writer.u8(1).i64(receipt.handoffAtUnixSeconds);
   amount(writer, receipt.requestedQuantity);
   writer.u16(receipt.outcomes.length);
   for (const item of receipt.outcomes) outcome(writer, item);

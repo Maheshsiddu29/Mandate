@@ -40,8 +40,12 @@ export function runSimulation(
     const seed = config.seed + index;
     const asset = config.assetSet[index % config.assetSet.length] as string;
     const world = buildExecutionWorld(seed, config, templateFor(seed, asset));
-    const first = route(world.request);
-    const second = route({ ...world.request, routes: [...(world.request.routes as readonly unknown[])].reverse() });
+    // The simulation hands off against the same world it evaluated: these are
+    // seeded determinism and safety worlds, not TOCTOU worlds. Passing it
+    // explicitly is the point of ADR 0016 — reuse is now a visible decision.
+    const handoff = { trustedMarketState: world.request.trustedMarketState, clock: world.request.clock };
+    const first = route(world.request, handoff);
+    const second = route({ ...world.request, routes: [...(world.request.routes as readonly unknown[])].reverse() }, handoff);
     candidatesGenerated += (world.request.routes as readonly unknown[]).length;
     maliciousCandidatesGenerated += world.maliciousRouteIds.length;
     if (first.status === 'INVALID_INPUT' || second.status === 'INVALID_INPUT') {

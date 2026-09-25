@@ -2,11 +2,11 @@ import {
   UINT256_MAX,
   candidateDigest as digestKernelCandidate,
   canonicalAssetIdEquals,
-  compareAmounts,
   deviationBps,
   findRepresentation,
   parseCandidate,
   partyIdEquals,
+  trustedStateDigest,
   type Amount,
   type CanonicalMandate,
   type TrustedState,
@@ -109,7 +109,7 @@ export function buildRoutingCandidate(input: {
   }
 
   const parsed = parseCandidate({
-    version: 1,
+    version: 2,
     representationId: quote.representationId,
     canonicalAsset: quote.canonicalAsset,
     issuer: quote.issuer,
@@ -120,25 +120,34 @@ export function buildRoutingCandidate(input: {
     quantity: quote.quantity,
     executionPrice: quote.executionPrice,
     notional: quote.notional,
+    feeTotal: costs.total,
     referenceStateId: quote.referenceStateId,
+    // Bound to the content of the state this candidate was built against, not
+    // to its label. The router computes it from the state it actually used, so
+    // a provider cannot influence it.
+    referenceStateDigest: trustedStateDigest(trustedState),
     corporateActionEpoch: quote.corporateActionEpoch,
   });
   if (!parsed.ok) return { ok: false, exclusions: [exclusion(parsed.error)] };
   const deviation = deviationBps(parsed.value.executionPrice, market.value.referencePrice);
   if (!deviation.ok) return { ok: false, exclusions: [exclusion(deviation.error)] };
 
+  // Economic *quality*, for ranking only. Whether this candidate is within the
+  // principal's authority is the kernel's decision and nothing here duplicates
+  // it: TOTAL_COST_EXCEEDS_MANDATE and SELL_FEES_EXCEED_PROCEEDS used to live
+  // here and are now TOTAL_DEBIT_EXCEEDED, TOTAL_CREDIT_BELOW_MINIMUM and
+  // FEES_EXCEED_NOTIONAL in `checkEconomicLimit` (ADR 0014). A second economic
+  // gate in a component that does not authorize is exactly the differential
+  // -consistency risk the pressure test flagged.
   const feeAtoms = costs.total.atoms;
   let economicAtoms: bigint;
   if (mandate.side === 'BUY') {
     economicAtoms = quote.notional.atoms + feeAtoms;
     if (economicAtoms > UINT256_MAX) return { ok: false, exclusions: [exclusion('COST_OVERFLOW')] };
-    const total = { unit: quote.notional.unit, decimals: quote.notional.decimals, atoms: economicAtoms };
-    const bounded = compareAmounts(total, mandate.maxNotional);
-    if (!bounded.ok) return { ok: false, exclusions: [exclusion(bounded.error)] };
-    if (bounded.value > 0) return { ok: false, exclusions: [exclusion('TOTAL_COST_EXCEEDS_MANDATE', { total: String(economicAtoms), maximum: String(mandate.maxNotional.atoms) })] };
   } else {
-    if (feeAtoms >= quote.notional.atoms) return { ok: false, exclusions: [exclusion('SELL_FEES_EXCEED_PROCEEDS')] };
-    economicAtoms = quote.notional.atoms - feeAtoms;
+    // A ranking value, not a permission: a net debit sorts last rather than
+    // being refused here, and the kernel refuses it.
+    economicAtoms = feeAtoms >= quote.notional.atoms ? 0n : quote.notional.atoms - feeAtoms;
   }
 
   const unsigned = {
@@ -154,6 +163,7 @@ export function buildRoutingCandidate(input: {
     trustedCostObservedAtUnixSeconds: trustedCost.observedAtUnixSeconds,
     costs: costs.costs,
     steps: quote.steps,
+    feeTotal: costs.total,
     executionCandidate: parsed.value,
   };
   const candidate: RoutingCandidate = {
