@@ -97,3 +97,8 @@ The seeded simulation methodology and committed metrics are in
 `corpus/routing-simulation-v1`. Performance methodology is documented in
 [router-performance.md](router-performance.md), and current controls and
 residual risks are maintained in [security-review.md](security-review.md).
+
+The optional advisory layer built on top of this router is documented in
+[jev-integration.md](jev-integration.md). It changes nothing here: the router
+does not know it exists, and the deterministic ranking is both the baseline and
+the fallback.

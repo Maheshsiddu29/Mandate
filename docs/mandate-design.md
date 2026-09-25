@@ -1040,8 +1040,12 @@ comparison begins when the on-chain gate lands in Phase 6.
 
 ## 11. Jev's role and its limits
 
-> **Status: DRAFT.** The role and the constraints are settled. The integration
-> surface is not, and is deferred to Phase 5.
+> **Status: IMPLEMENTED in Phase 5.** The role, the constraints and the
+> integration surface are settled and built (`packages/jev`,
+> [ADR 0012](adr/0012-jev-closed-set-authority-boundary.md),
+> [jev-integration.md](jev-integration.md)). Live characterization against a
+> real account remains outstanding and is labelled as such in
+> [jev-characterization.md](jev-characterization.md).
 
 ### 11.1 What Jev may do
 
@@ -1100,26 +1104,40 @@ admissible candidates  ──▶  [ Jev ]  ──▶  selected candidate
                                     PASS ─────┴───── REJECT
 ```
 
-Constraints on the interface (**DRAFT**):
+Constraints on the interface (**IMPLEMENTED**):
 
 - Jev receives a **closed set** and returns an **index into it**, or an
   abstention. It does not return a candidate object, because returning an
-  object is an opportunity to return a modified one.
-- Jev's call is bounded by a timeout and a token budget; exceeding either is an
-  abstention, not an error that blocks the pipeline.
+  object is an opportunity to return a modified one. *As built:* the API's
+  primitive returns a named option rather than an integer, so the names are
+  generated locally from array positions and resolved by exact array lookup.
+- Jev's call is bounded by a timeout; exceeding it is an abstention in effect,
+  not an error that blocks the pipeline. *As built:* TypeSafe accepts no
+  request-time token budget, so usage is an observed quantity recorded in the
+  receipt, and the deadline is the bound that protects the trading path.
 - Jev's input, output, model identity and version are recorded in the audit
-  trail, so a bad selection can be attributed later.
+  trail, so a bad selection can be attributed later. *As built:* the requested
+  alias and the returned versioned identifier are recorded separately, because
+  an alias moves.
 - Jev never sees the principal's signing material, and nothing it returns is
-  passed to a signer.
+  passed to a signer. *As built:* the outbound projection is a twelve-field
+  allowlist enforced by a test over every key in the payload.
 
 ### 11.5 Open questions
 
-- Jev's concrete API, latency profile, and cost per call are not yet
-  characterized in this repository. Phase 5 begins with that characterization,
-  not with integration. **Unresolved — do not assume capabilities.**
-- Whether Jev is worth using for classification of representation metadata
-  (a slow, reviewable, high-value task) or only for ranking (a fast, low-value
-  task) should be decided by measurement, not assumption. **Unresolved.**
+- Jev's concrete API surface is now characterized from published documentation
+  and the integration is built against it. **Its latency profile and cost per
+  call remain unmeasured**, because no account credential was available:
+  `npm run jev:characterize` exists and has not been run.
+  **Partially resolved — no latency or cost figure may be quoted.**
+- Whether Jev is worth using was to be decided by measurement. Phase 5's
+  measurement says: **not yet, on this data.** Route selection in Phase 4 is a
+  comparison of exact integers with a total order, and a signal-following model
+  abstains on 9 of 11 eligible decisions over the evaluation corpus. The
+  integration's present value is the safety boundary, not the advice.
+  Classification of representation metadata — the slow, reviewable, high-value
+  task — was not attempted in Phase 5 and remains the more promising use.
+  **Resolved for ranking; open for classification.**
 
 ## 12. Routing architecture
 
@@ -1431,6 +1449,18 @@ dependence on mutable external references.
 These are the properties that define Mandate. A change that breaks one is a
 change to the product, not an implementation detail.
 
+**Phase 5 status.** **INV-3 is now established.** Its structural half was
+already in place (no inference client is reachable from the verifier, registry
+or router); Phase 5 adds the adversarial half. An adversarial stub set covering
+seventeen hostile behaviours, together with every one of the integration's
+eighteen failure reasons, produces an unchanged closed-set digest, a handoff
+that is always a member of the deterministic admissible set, and a kernel
+`PASS` on every handoff — measured across a 13-scenario corpus in five modes
+with zero unsafe handoffs. **INV-4 is now established end to end**: the
+pipeline that could carry a model-supplied value exists, and no field of a
+model response is read as an address, amount, quantity, side, representation,
+chain, issuer, price, cost or constraint.
+
 **Phase 4 status.** INV-1, INV-2, INV-5, INV-9, INV-11, INV-12, INV-16, INV-17
 and INV-18 are established in the kernel. **INV-6 is now established**: canonical
 identity and token identity are distinct types, and equivalence is a function of
@@ -1451,8 +1481,8 @@ INV-13 need the execution gate of Phase 6. Per-property evidence is in
 | --- | --- | --- |
 | **INV-1** | Human intent is authoritative. No component may widen authority beyond the signed mandate. | Verifier |
 | **INV-2** | A valid agent signature alone never authorizes a financial action. Authentication and authorization are separate checks. | Verifier |
-| **INV-3** | The set of permitted executions is identical whether Jev is present, absent, failed or adversarial. | Verifier; pipeline structure; adversarial-stub test |
-| **INV-4** | Model output never supplies an address, an amount, or a constraint value. | Pipeline structure; type boundaries |
+| **INV-3** | The set of permitted executions is identical whether Jev is present, absent, failed or adversarial. | Verifier; pipeline structure; adversarial-stub test — **established Phase 5** |
+| **INV-4** | Model output never supplies an address, an amount, or a constraint value. | Pipeline structure; type boundaries — **established Phase 5** |
 | **INV-5** | Fail closed. `UNKNOWN` state, unparseable data, missing metadata on a constrained field, and unrecognized schema versions all reject. There is no "proceed anyway" path. | Verifier |
 | **INV-6** | Canonical financial identity is distinct from token identity, and equivalence between representations is never inferred from shared underlying. | Registry model; verifier — **established Phase 2** |
 | **INV-7** | Contract addresses used in execution come from the registry, never from a model, a tool response, or free text. | Resolution stage; type boundaries — **established Phase 2** |
@@ -1490,7 +1520,7 @@ addressed by the current design; recorded deliberately.
 | Hallucinated token address | Registry-only address resolution (INV-7); agent never supplies addresses | 2 | DESIGN |
 | Prompt injection steers the agent | Trust levels (§8.3); untrusted input influences nothing; verifier independent of agent reasoning | 1–2 | DESIGN |
 | Malicious tool response | Same as above; tool output is untrusted and cannot supply addresses, amounts or constraints | 1–2 | DESIGN |
-| Jev misclassification or adversarial Jev | INV-3; verifier re-checks; adversarial-stub test | 1, 5 | DESIGN |
+| Jev misclassification or adversarial Jev | INV-3; verifier re-checks; adversarial-stub test | 1, 5 | **BUILT** |
 | Agent authored a mandate that does not reflect intent | Human review of the mandate before signing. **Not a code control** | — | PARTIAL |
 
 ### 17.2 Identity and representation
@@ -1698,7 +1728,7 @@ named reason code — not a mock, not a screenshot, not a description.
 | 8 | Replayed mandate (nonce already consumed) | `MND-AUTH-002` |
 | 9 | Correct ticker, wrong token — a lookalike contract not in the registry | `MND-ASSET-002` |
 | 10 | Transaction mutated after verification, rejected by the on-chain gate | gate rejection |
-| 11 | **Adversarial Jev**: a stub that always returns the most dangerous available answer, with no unsafe execution resulting | establishes INV-3 |
+| 11 | **Adversarial Jev**: a stub set that returns the most dangerous available answers, with no unsafe execution resulting | establishes INV-3 — **done Phase 5**, zero unsafe handoffs measured |
 
 Demonstration 1 is the one that best distinguishes Mandate from a router: a
 price-maximizing router picks the cheaper synthetic. Demonstration 11 is the
@@ -1723,7 +1753,7 @@ one that best distinguishes it from an agent framework.
 | --- | --- | --- |
 | Corporate-action state unavailable in the target environment | Weakens capabilities 4 and 5 and demonstration 5 | Phase 3 establishes availability empirically first. If unavailable on-chain, demonstrate with a documented state source and disclose the seam — never present engineered state as live |
 | Too few real representations of one underlying to produce genuinely different candidates | Weakens capability 5 and demonstration 1 | Candidates may differ by venue rather than by issuer; demonstration 1 may need a documented test representation, clearly labelled |
-| Jev's API or latency unsuitable | Removes capability 6 | Capability 6 is explicitly optional. INV-3 guarantees the system is complete without it |
+| Jev's API or latency unsuitable | Removes capability 6 | Capability 6 is explicitly optional. INV-3 guarantees the system is complete without it — established by test in Phase 5 |
 | Testnet unsuitable for real execution | Weakens capability 10 | Report honestly as blocked. Off-chain verification and the gate's unit-level behaviour are still demonstrable |
 
 ## 21. Explicit non-goals for the MVP
@@ -1965,7 +1995,7 @@ the wrong shape.
 | **2** | Canonical asset and representation registry | A canonical asset resolves to admissible representations, with per-representation exclusion reasons. Ambiguity and `UNKNOWN` reject |
 | **3** | Robinhood Chain / Arbitrum market-state and chain adapters | Real market, operational and corporate-action state, each observation carrying provenance and an observation time, behind an adapter boundary the verifier does not know about |
 | **4** | Execution-candidate and route engine | Multiple real candidates for one mandate, admissibility-filtered, ranked in a common economic unit |
-| **5** | Jev integration for candidate classification and selection | Jev selects among admissible candidates, and an adversarial-Jev test establishes INV-3 |
+| **5** | Jev-assisted decision layer | Jev selects among admissible candidates; an adversarial-Jev harness establishes INV-3 with zero unsafe handoffs measured |
 | **6** | On-chain execution gate and settlement integration | Verified execution lands on testnet; a mutated transaction is rejected by the gate; deliberate failure demonstrations pass |
 | **7** | Stablecoin funding and routing adapters | Fiat-denominated intent executes without the mandate naming a funding asset |
 | **8** | Demo product and web experience | Public demonstration showing PASS and, prominently, REJECT with reasons; live and engineered data visibly separated |

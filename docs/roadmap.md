@@ -3,7 +3,7 @@
 Phased engineering plan: what each phase delivers, how it is known to be done,
 and what it depends on.
 
-> **Status: Phase 4 complete.** Phase 5 and beyond are planned, not started.
+> **Status: Phase 5 complete.** Phase 6 and beyond are planned, not started.
 > Rationale for the phase ordering is in
 > [mandate-design.md §25](mandate-design.md#25-phased-engineering-roadmap);
 > scope boundaries are in
@@ -240,28 +240,58 @@ bound to transactions by the Phase 6 execution gate.
 
 ---
 
-## Phase 5 — Jev integration for candidate classification
+## Phase 5 — Jev integration for candidate selection
 
-**Begins with characterization, not integration.** Jev's API, latency profile
-and cost are not yet established
-([§11.5](mandate-design.md#115-open-questions)).
+**Complete, with one item outstanding and labelled.** The implementation is in
+`packages/jev`; semantics are in [jev-integration.md](jev-integration.md),
+methodology in [jev-evaluation.md](jev-evaluation.md).
 
-**Delivers**
+**Delivered**
 
-- Jev adapter: closed candidate set in, index or abstention out;
-- timeout and budget bounds, with exceeding either treated as abstention;
-- deterministic ranking fallback;
-- Jev inputs, outputs, model identity and version in the receipt.
+- the documented TypeSafe surface recorded, and three assumptions the design
+  held corrected ([jev-characterization.md](jev-characterization.md));
+- a Jev client and strict response parser, with the credential confined to one
+  environment variable in one module;
+- closed-set projection: a twelve-field view, positional local identifiers, and
+  recovery by array index only ([ADR 0012](adr/0012-jev-closed-set-authority-boundary.md));
+- explicit `ABSTAIN`, four selection modes and eighteen fallback reasons, all
+  resolving to the single Phase 4 deterministic baseline
+  ([ADR 0013](adr/0013-jev-fallback-and-confidence-policy.md));
+- cardinality handling that never truncates an admissible set;
+- `JevDecisionReceipt` and a selection record binding it to the routing receipt
+  and the handoff verification;
+- mandatory kernel re-verification against state current at handoff;
+- an adversarial stub set and a 13-scenario evaluation corpus over six recorded
+  mainnet symbols, run in five modes;
+- offline CI, an extended credential scanner and a documented trust boundary.
 
 **Exit criteria**
 
 - an adversarial Jev stub that always returns the most dangerous available
   answer produces no execution the deterministic path would not also have
-  permitted — this establishes
-  [INV-3](mandate-design.md#16-major-invariants);
-- Jev's absence or failure degrades execution quality and never safety.
+  permitted — **met, and measured**: `corpus/jev-evaluation-v1` reports zero
+  unsafe handoffs in all five modes, and `equivalence.test.ts` asserts the
+  property across every hostile behaviour and every failure reason. This
+  establishes [INV-3](mandate-design.md#16-major-invariants);
+- Jev's absence or failure degrades execution quality and never safety —
+  **met**: every failure path selects the deterministic candidate, and a test
+  asserts a single identical selection across all of them.
 
-**Depends on:** Phase 4. **Does not block Phase 6** — that independence is
+**Outstanding, and reported as blocked rather than done:** no live
+characterization run has been performed, because no account credential was
+available. The harness exists and is wired to CI as a manual job; the
+repository holds four schema-derived fixtures and zero live ones, states so in
+its own validator output, and publishes no latency, availability or usage
+figure for the service.
+
+**The honest finding on value.** Phase 4's route data is almost entirely exact
+integers with a total order, and a model has nothing to add to a comparison of
+integers. Over the evaluation corpus a signal-following model abstains on 9 of
+11 eligible decisions. What Phase 5 demonstrates is that a model can be
+attached to this pipeline in a way that cannot compromise it — the boundary,
+not the advice.
+
+**Depends on:** Phase 4. **Did not block Phase 6** — that independence is
 INV-3 expressed as a scheduling property.
 
 ---
@@ -352,7 +382,7 @@ the design document before it belongs in code.
 | 2 | Canonical asset and representation registry | 1 | ✅ complete |
 | 3 | Read-only Robinhood market-state and chain adapters | 2 | ✅ complete |
 | 4 | Execution-candidate and route engine | 3 | ✅ complete |
-| 5 | Jev integration | 4 | planned, non-blocking |
+| 5 | Jev-assisted decision layer | 4 | ✅ complete (live characterization blocked on credentials) |
 | 6 | On-chain execution gate and settlement | 4 | planned |
 | 7 | Stablecoin funding adapters | 6 | planned, flexible |
 | 8 | Demo product and web experience | 6 | planned |

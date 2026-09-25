@@ -2,10 +2,12 @@
 
 System structure, component boundaries, and where each concern is enforced.
 
-> **Status: Phase 4 complete.** The kernel, registry, read-only Robinhood
-> external-data adapter and deterministic router are built. Transaction
-> construction and submission, Jev, execution contracts, funding and web work
-> remain planned.
+> **Status: Phase 5 complete.** The kernel, registry, read-only Robinhood
+> external-data adapter, deterministic router and the optional Jev advisory
+> layer are built. Transaction construction and submission, execution
+> contracts, funding and web work remain planned. Jev has not been
+> characterized against a live account
+> ([jev-characterization.md](jev-characterization.md)).
 > The "Phase" column records when a component lands; see [roadmap.md](roadmap.md).
 > The complete rationale for every decision here is in
 > [mandate-design.md](mandate-design.md) — this document is the structural
@@ -43,8 +45,9 @@ System structure, component boundaries, and where each concern is enforced.
   └────────────────────────────────┬────────────────────────────────────────┘
                                    │  closed admissible candidate set
   ┌────────────────────────────────▼────────────────────────────────────────┐
-  │ SELECTION           deterministic ranking; Jev is not present           │
+  │ SELECTION           deterministic ranking; Jev may advise, never permit │
   │ exact cost, deviation, freshness, complexity, stable digest tie-break   │
+  │ an advisory choice is an index into this closed set, and nothing else   │
   └────────────────────────────────┬────────────────────────────────────────┘
                                    │  one selected candidate
   ╔════════════════════════════════▼════════════════════════════════════════╗
@@ -88,7 +91,9 @@ trusts none of its callers.
 | Candidate engine | Strict provider parsing and candidate construction over trusted normalized state | 4 | **implemented** — `packages/router` |
 | Ranking | Lexicographic exact-cost ordering of kernel-PASS candidates | 4 | **implemented** — ADR 0010 |
 | Routing receipts and simulation | Deterministic selection audit, mainnet candidate replay and seeded adversarial worlds | 4 | **implemented** |
-| Jev adapter | Advisory selection over a closed candidate set; bounded, abstention-safe | 5 | not implemented |
+| Jev adapter | Advisory selection over a closed candidate set; bounded, abstention-safe | 5 | **implemented** — `packages/jev`; live characterization outstanding |
+| Advisory receipts | `JevDecisionReceipt` and the selection record binding it to the routing receipt and handoff verification | 5 | **implemented** — no verifier reads either |
+| Jev evaluation corpus | 13 advisory scenarios over six recorded symbols in five modes, with measured safety counters | 5 | **implemented** — `corpus/jev-evaluation-v1` |
 | Execution gate | On-chain re-assertion of the commitment, atomic with the action | 6 | not implemented |
 | Funding adapters | Stablecoin funding abstraction | 7 | not implemented |
 | Receipts and audit | Structured receipt for every attempt, including refusals | 1, then 8 | **implemented** (kernel receipts); audit surfacing is Phase 8 |
@@ -101,11 +106,13 @@ packages/kernel/     the verifier and everything it needs (ADR 0003)
 packages/registry/   canonical assets, representations, resolution (ADR 0004)
 packages/adapter-robinhood/ strict external I/O and normalization (ADR 0008)
 packages/router/     pure candidate construction, filtering and ranking
+packages/jev/        optional advisory selection over a closed set (ADR 0012)
 corpus/v1/           cross-implementation verifier decision vectors
 corpus/registry-v1/  cross-implementation registry decision vectors
 corpus/mainnet-v1/   recorded mainnet registry-plus-kernel replay vectors
 corpus/mainnet-routing-v1/ recorded state plus synthetic route economics
 corpus/routing-simulation-v1/ seeded execution-world validation metrics
+corpus/jev-evaluation-v1/ advisory-layer safety and selection metrics
 docs/adr/            architecture decision records
 ```
 
@@ -122,8 +129,16 @@ implicit clocks, Jev or another model client.
 ```
 adapter  ──▶ registry ──▶ kernel             permitted
 router   ──▶ registry ──▶ kernel             permitted
+jev      ──▶ router ──▶ registry ──▶ kernel  permitted
+kernel/registry/router ──▶ jev               forbidden, structurally
 kernel/registry ──▶ adapter/router           forbidden, structurally
 ```
+
+The last direction is the one that matters for INV-3. The router cannot import
+the advisory layer, cannot detect its presence, and behaves identically whether
+or not it exists. A structural test in `packages/jev` asserts that the kernel,
+registry and router neither declare nor import `@mandate/jev`, and the router's
+own structural test fails if a model client appears in its source.
 
 ## 3. Trust levels
 
@@ -133,7 +148,7 @@ Every input carries a trust level, and its level bounds what it may influence.
 | --- | --- | --- |
 | **Authoritative** | Signed mandate; on-chain state read at execution | Anything, including admissibility |
 | **Verified** | Registry entries under change control; market state from configured providers, with provenance and freshness | Admissibility, subject to freshness checks |
-| **Advisory** | Jev output; heuristic rankings | Ordering within the already-admissible set only |
+| **Advisory** | Jev output; heuristic rankings | Ordering within the already-admissible set only — expressed as an index into a closed array, never as a value |
 | **Untrusted** | Model-authored text, tool responses, external content, free text | Nothing. Quotable in audit records; never a source of an address, amount or constraint |
 
 The rule that does the work: **an address, an amount, or a constraint value
@@ -237,6 +252,23 @@ The last one is the seam. The registry's output is an *input* to the verifier,
 re-checked from scratch, and it refuses to emit anything it could not establish
 rather than substituting a permissive default.
 
+## 5c-bis. Phase 5: the advisory layer
+
+| Area | Decision | Record |
+| --- | --- | --- |
+| Authority | Jev is called only after the set is closed, returns a name used solely as a local array key, and supplies no value | [ADR 0012](adr/0012-jev-closed-set-authority-boundary.md) |
+| Fallback | Every failure maps to one stable reason code and selects index 0; no retry inside a decision | [ADR 0013](adr/0013-jev-fallback-and-confidence-policy.md) |
+| Abstention | `ABSTAIN` is a first-class outcome meaning "use the deterministic result", distinct from failure and from `NO_VALID_ROUTE` | [jev-integration.md](jev-integration.md) |
+| Confidence | No threshold ships: the distribution it would be derived from has not been observed | [ADR 0013](adr/0013-jev-fallback-and-confidence-policy.md) |
+| Cardinality | The API's 255-option limit never truncates an admissible set; above 254 the layer is skipped | [jev-integration.md](jev-integration.md) |
+| Data minimization | Twelve declared view fields, built individually, enforced by an allowlist test over every payload key | [security-review.md](security-review.md) |
+| Handoff | The selected candidate is re-verified against state current at handoff, not at set construction | [jev-integration.md](jev-integration.md) |
+
+The router was split into `evaluateRoutes` and `selectEvaluated` so the
+advisory layer addresses the same ranked array the deterministic path selects
+from. There is one ranking implementation, and `route()` is defined as
+evaluate-then-select-index-0 with byte-identical Phase 4 receipts.
+
 ## 5c. Phase 3: Robinhood external state
 
 The adapter is the only network-aware package. It strictly parses issuer REST
@@ -281,7 +313,11 @@ architecture most:
 
 - **INV-3** — the permitted-execution set is identical whether Jev is present,
   absent, failed or adversarial. This is why selection and verification are
-  separate components rather than separate functions.
+  separate components rather than separate functions. **Established in Phase
+  5** by an adversarial harness rather than by argument: across every hostile
+  behaviour and every failure reason, the closed-set digest is unchanged, every
+  handoff is a member of the deterministic admissible set, and every handoff
+  carries a kernel `PASS`.
 - **INV-5** — fail closed. This is why `UNKNOWN` is a value in the type system.
 - **INV-7** — execution addresses come only from the registry. This is why
   resolution is a distinct stage that the agent cannot bypass, and why

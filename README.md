@@ -3,7 +3,7 @@
 **Intent-aware execution infrastructure for AI agents transacting in tokenized
 financial assets.**
 
-> **Status: Phase 4 complete — deterministic routing over trusted state.** The deterministic
+> **Status: Phase 5 complete — an advisory model layer that cannot authorize.** The deterministic
 > verifier, its domain types, canonical encoding, EIP-712 authorization, receipts
 > and replay semantics are built and tested in `packages/kernel`. The canonical
 > asset and representation registry — identifier schemes, reference resolution,
@@ -13,9 +13,15 @@ financial assets.**
 > Robinhood Stock Token REST/RPC state into those unchanged decision engines.
 > `packages/router` constructs bounded candidates, separates admissibility from
 > quality, ranks exact costs, reverifies the winner and emits deterministic
-> receipts. Transaction construction/submission, Jev, execution contracts,
-> funding and the web experience are **not** built. The kernel, registry and router
-> still make no network call of any kind.
+> receipts. `packages/jev` attaches TypeSafe's Jev as an **optional advisory
+> selector over an already-closed admissible set**: it may choose, abstain,
+> fail, be wrong or be malicious, and it can never authorize. Transaction
+> construction/submission, execution contracts, funding and the web experience
+> are **not** built. The kernel, registry and router still make no network call
+> of any kind. **Jev has not been characterized against a live account** — see
+> [docs/jev-characterization.md](docs/jev-characterization.md); every Phase 5
+> result comes from recorded fixtures, deterministic stubs and adversarial
+> stubs.
 > Nothing below should be read as a claim beyond that boundary.
 
 ---
@@ -67,10 +73,15 @@ deviation, required corporate-action freshness, expiry. The agent operates
 inside it. A valid agent signature proves who asked; it does not prove the
 action was permitted.
 
-**Model output is advisory; deterministic code decides.** Jev may classify,
-rank or select among candidates. Whatever it returns is then re-checked from
-scratch by a deterministic verifier with final authority. A model cannot relax
-a constraint, add a candidate, or authorize an execution.
+**Model output is advisory; deterministic code decides.** Jev selects among
+candidates the pipeline has already admitted. It receives a projection rather
+than a candidate, returns a name that is only meaningful as a key into a local
+array, and whatever it names is re-verified from scratch against current state
+before handoff. A model cannot relax a constraint, add a candidate, or
+authorize an execution — and this is measured, not asserted: seventeen
+adversarial behaviours and every failure reason produce zero unsafe handoffs
+across the evaluation corpus. See
+[docs/jev-integration.md](docs/jev-integration.md).
 
 ## What Mandate optimizes
 
@@ -124,11 +135,13 @@ second time before returning a handoff candidate.
 | `packages/registry` | Canonical asset identity with check-digit-validated identifier schemes, deterministic reference resolution, provenance-carrying representation metadata with trust floors and fail-closed conflict handling, mandate-constrained admissibility with 20 registry reason codes, reproducible snapshots and digests, and synthetic world builders |
 | `packages/adapter-robinhood` | Strict Robinhood assets, price, capability, corporate-action, ERC-20/ERC-8056 and Chainlink normalization; explicit live failure handling and capture tooling |
 | `packages/router` | Strict provider boundary, committed routing candidates, fail-closed cost model, lexicographic BUY/SELL ranking, re-verification, selection receipts and seeded simulation |
+| `packages/jev` | TypeSafe client and strict response parser, closed-set choice projection, explicit abstention, deterministic fallback across eighteen failure reasons, advisory receipts, handoff re-verification, adversarial stubs and the trader-facing summary |
 | `corpus/v1` | 57 verifier decision vectors across 24 families |
 | `corpus/registry-v1` | 27 registry decision vectors covering resolution and admissibility |
 | `corpus/mainnet-v1` | 11 recorded-mainnet registry-plus-kernel replay vectors and a machine-readable report |
 | `corpus/mainnet-routing-v1` | Six hybrid recorded-mainnet candidate-set routing worlds with deterministic receipts |
 | `corpus/routing-simulation-v1` | Committed 200-world safety and determinism metrics |
+| `corpus/jev-evaluation-v1` | 13 advisory scenarios over six recorded symbols, run in five modes including a fully adversarial one |
 
 Three properties hold across both. A refusal names **every** violated constraint,
 not the first. No verdict depends on the order checks ran in. And `UNKNOWN` is a
@@ -142,7 +155,7 @@ mandate is computed against that mandate and is not stored anywhere.
 
 ```bash
 npm install
-npm run check      # 389 offline tests plus fixtures, replays, boundaries and repository safety gates
+npm run check      # 567 offline tests plus fixtures, replays, boundaries and repository safety gates
 ```
 
 ## Documentation
@@ -161,6 +174,11 @@ npm run check      # 389 offline tests plus fixtures, replays, boundaries and re
 | [docs/robinhood-integration.md](docs/robinhood-integration.md) | Verified endpoints, schemas, issuer semantics, price/multiplier rules, timestamps and real-data limitations. |
 | [docs/mainnet-replay.md](docs/mainnet-replay.md) | Recorded-mainnet replay methodology, synthetic labelling and validation report. |
 | [docs/routing.md](docs/routing.md) | Candidate model, provider boundary, ranking, costs, limits and selection receipts. |
+| [docs/jev-integration.md](docs/jev-integration.md) | The advisory decision layer: authority boundary, closed-set projection, abstention, fallback, confidence policy, receipts and trader-facing output. |
+| [docs/jev-characterization.md](docs/jev-characterization.md) | The documented TypeSafe API surface, the characterization method, and an explicit record that no live run has been performed. |
+| [docs/jev-evaluation.md](docs/jev-evaluation.md) | Advisory evaluation methodology, the safety/quality distinction, results, and the honest finding about decision quality. |
+| [docs/jev-performance.md](docs/jev-performance.md) | Local latency cost of the advisory layer, and what is deliberately not measured. |
+| [docs/router-performance.md](docs/router-performance.md) | Deterministic router latency baseline and methodology. |
 | [docs/security-review.md](docs/security-review.md) | Living internal threat/control review and dependency-audit status. |
 | [docs/ci.md](docs/ci.md) | Offline continuous-integration and drift gates. |
 | [docs/simulation.md](docs/simulation.md) | Seeded hybrid-world generation, metrics and replay methodology. |

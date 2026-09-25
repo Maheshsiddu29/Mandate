@@ -22,20 +22,24 @@ Read it before proposing architectural changes. If a change contradicts it,
 either the change is wrong or the document needs updating first — resolve which
 before writing code.
 
-The repository is currently at the end of **Phase 4**: the mandate core kernel
+The repository is currently at the end of **Phase 5**: the mandate core kernel
 (`packages/kernel`), the canonical asset and representation registry
 (`packages/registry`), the read-only Robinhood external adapter
 (`packages/adapter-robinhood`), the deterministic candidate/router package
-(`packages/router`), and verifier, registry, recorded-mainnet, mainnet-routing
-and simulation corpora are built. Transaction construction or submission, Jev,
+(`packages/router`), the optional Jev advisory layer (`packages/jev`), and
+verifier, registry, recorded-mainnet, mainnet-routing, simulation and
+Jev-evaluation corpora are built. Transaction construction or submission,
 execution contracts, funding and web work are **not** built. Do not start a
 later phase until it is explicitly opened.
 
-The dependency directions are `adapter → registry → kernel` and
-`router → registry → kernel`, never the reverse,
-and it is enforced by structural tests
-([ADR 0004](docs/adr/0004-registry-package-boundary.md)). The kernel, registry
-and router perform no I/O; the external adapter owns network access.
+The dependency directions are `adapter → registry → kernel`,
+`router → registry → kernel` and `jev → router → registry → kernel`, never the
+reverse, and it is enforced by structural tests
+([ADR 0004](docs/adr/0004-registry-package-boundary.md),
+[ADR 0012](docs/adr/0012-jev-closed-set-authority-boundary.md)). The kernel,
+registry and router perform no I/O; the Robinhood adapter and the Jev client
+own network access, each confined to a single module and each reachable only
+through an explicit command.
 
 ---
 
@@ -157,6 +161,14 @@ The deterministic verifier and anything it depends on are safety-critical.
   present, absent, failed or adversarial. Where this can be tested, test it
   with a deliberately adversarial stub.
 
+**As built (Phase 5).** A model is consulted only after the admissible set is
+closed. It receives a projection, never a candidate. It returns a name that is
+resolved by exact lookup into a local array, and the result is re-verified by
+the kernel against current state before handoff. Extending this is governed by
+[ADR 0012](docs/adr/0012-jev-closed-set-authority-boundary.md): any change that
+would let model output become a value rather than an index is a product
+decision, not an implementation detail.
+
 ### 4.4 Code quality
 
 - Small modules, explicit errors, clear boundaries.
@@ -183,7 +195,15 @@ npm run mainnet-replay:validate      # replay registry + kernel corpus
 npm run robinhood:cross-surface      # validate compatible REST/onchain facts
 npm run mainnet-routing:validate     # candidate-set routing replay
 npm run routing-simulation:generate  # seeded router safety metrics
+npm run jev:fixtures:validate        # offline Jev fixture integrity
+npm run jev:evaluate                 # regenerate the advisory evaluation report
+npm run jev:benchmark                # local advisory latency cost
+npm run jev:characterize             # LIVE: requires TYPESAFE_API_KEY, never in CI
 ```
+
+`jev:characterize` is the only command that contacts TypeSafe. It refuses to
+run without a credential and exits with code 2, so a blocked run is never
+mistaken for a passing one. Never commit the key.
 
 Both generated artifacts are committed and have tests asserting the committed
 file matches what the generator produces. If one of those tests fails, decide
@@ -202,6 +222,14 @@ tests and `npm run check` remain offline.
 
 The router's runtime dependencies are fixed to `@mandate/registry` and
 `@mandate/kernel`. It performs no I/O and contains no inference dependency.
+
+The Jev package's runtime dependencies are fixed to `@mandate/kernel`,
+`@mandate/registry` and `@mandate/router`, with no third-party package. Network
+access is confined to `src/client.ts`, the credential is read from
+`TYPESAFE_API_KEY` in that same module and nowhere else, and library code
+writes nothing to stdout or stderr. `structure.test.ts` enforces all four, and
+additionally asserts the kernel, registry and router neither declare nor import
+`@mandate/jev`.
 
 `npm run corpus:generate` regenerates the verifier corpus and
 `npm run registry-corpus:generate` the registry corpus; `npm run docs:generate`
