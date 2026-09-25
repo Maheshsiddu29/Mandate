@@ -220,3 +220,63 @@ test('no registry type stores equivalence, substitutability or admissibility', (
     }
   }
 });
+
+// --- Resource bounds (Phase 5R) ---------------------------------------------
+
+/**
+ * Every collection the registry encoder counts as a `u16` must be bounded by its
+ * parser. The architecture pressure test found three that were not, and
+ * `registrySnapshotDigest` threw on them instead of the parser rejecting.
+ *
+ * These assert the boundary immediately below, at and above each limit.
+ */
+test('every counted registry collection is bounded at its encoder width', async () => {
+  const { MAX_CLAIMS_PER_PROPERTY, MAX_SNAPSHOT_ENTRIES, parseRegistrySnapshot, registrySnapshotDigest } =
+    await import('../src/index.ts');
+
+  const provenance = (i: number) => ({
+    trustClass: 'VERIFIED',
+    sourceId: `source.${i}`,
+    observedAtUnixSeconds: 1_800_000_000n,
+  });
+  const claims = (n: number) =>
+    Array.from({ length: n }, (_unused, i) => ({ value: 'issuer.alpha', provenance: provenance(i) }));
+
+  const record = (issuerClaims: unknown) => ({
+    representationId: 'eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    display: { tokenSymbol: null, tokenName: null },
+    underlying: [{ value: { assetClass: 'equity', idScheme: 'figi', value: 'BBG000BBJQV0' }, provenance: provenance(0) }],
+    issuer: issuerClaims,
+    instrumentType: [], backing: [], redemption: [], rights: {},
+    corporateActionHandling: [], settlement: [], operationalStatus: [], eligibility: [],
+  });
+
+  const snapshot = (representations: unknown[], sourceVersions: unknown[] = []) => ({
+    registrySchemaVersion: 1,
+    snapshotId: 'snapshot.bounds',
+    createdAtUnixSeconds: 1_800_000_000n,
+    dataClass: 'SYNTHETIC_FIXTURE',
+    sourceVersions,
+    assets: [],
+    representations,
+  });
+
+  // Claims per property: at the bound it parses and digests; one past it is a
+  // typed rejection rather than a throw from the encoder.
+  for (const n of [MAX_CLAIMS_PER_PROPERTY - 1, MAX_CLAIMS_PER_PROPERTY]) {
+    const parsed = parseRegistrySnapshot(snapshot([record(claims(n))]));
+    assert.equal(parsed.ok, true, `${n} claims must parse`);
+    if (parsed.ok) assert.match(registrySnapshotDigest(parsed.value), /^0x[0-9a-f]{64}$/);
+  }
+  const overClaims = parseRegistrySnapshot(snapshot([record(claims(MAX_CLAIMS_PER_PROPERTY + 1))]));
+  assert.equal(overClaims.ok, false);
+  assert.equal(overClaims.ok ? '' : overClaims.error, 'SNAPSHOT_RESOURCE_LIMIT_EXCEEDED');
+
+  // Source versions: the same rule.
+  const versions = (n: number) =>
+    Array.from({ length: n }, (_unused, i) => ({ sourceId: `source.${i}`, version: 'v1' }));
+  assert.equal(parseRegistrySnapshot(snapshot([], versions(8))).ok, true);
+  const overVersions = parseRegistrySnapshot(snapshot([], versions(MAX_SNAPSHOT_ENTRIES + 1)));
+  assert.equal(overVersions.ok, false);
+  assert.equal(overVersions.ok ? '' : overVersions.error, 'SNAPSHOT_RESOURCE_LIMIT_EXCEEDED');
+});

@@ -19,6 +19,8 @@ import {
   TrustClass,
   verify,
   type CanonicalMandate,
+  parseTrustedState,
+  trustedStateDigest,
 } from '@mandate/kernel';
 import {
   deriveRequirements,
@@ -162,6 +164,32 @@ test('the weakest evidence sets the provenance the kernel checks', () => {
 function kernelReasonCodes(registry: Registry, m: CanonicalMandate, address: string, chain: string): readonly string[] {
   const state = toRepresentationState(recordOf(registry, address, chain), requirements(m));
   const representations = state.ok ? [state.value] : [];
+  const trustedState = {
+    version: 2,
+    stateId: 'fixture.snapshot.0001',
+    registrySnapshotDigest: null,
+    representations,
+    market: {
+      provenance: { trustClass: 'VERIFIED', sourceId: 'fixture.source.a', observedAtUnixSeconds: String(NOW) },
+      value: {
+        canonicalAsset: { assetClass: 'equity', idScheme: 'figi', value: 'BBG000BBJQV0' },
+        referencePrice: { numeratorUnit: 'USD', denominatorUnit: 'SHARE', decimals: 2, atoms: '10000' },
+        haltStatus: 'TRADING',
+      },
+    },
+    corporateAction: {
+      provenance: { trustClass: 'VERIFIED', sourceId: 'fixture.source.a', observedAtUnixSeconds: String(NOW) },
+      value: { canonicalAsset: { assetClass: 'equity', idScheme: 'figi', value: 'BBG000BBJQV0' }, epoch: '7' },
+    },
+    replay: {
+      provenance: { trustClass: 'VERIFIED', sourceId: 'fixture.source.a', observedAtUnixSeconds: String(NOW) },
+      value: { mandateDigest: '0x' + '00'.repeat(32), status: 'UNUSED' },
+    },
+  };
+  // Schema v2 binds a candidate to the digest of the state it was built
+  // against, so this harness computes it rather than naming a snapshot.
+  const parsedState = parseTrustedState(trustedState);
+  const stateDigest = parsedState.ok ? trustedStateDigest(parsedState.value) : ('0x' + '00'.repeat(32));
   const receipt = verify({
     mandate: mandateInput(),
     authorization: {
@@ -171,7 +199,7 @@ function kernelReasonCodes(registry: Registry, m: CanonicalMandate, address: str
       domain: { name: 'Mandate', version: '1', chainId: '42161', verifyingContract: '0x' + '00'.repeat(19) + '01' },
     },
     candidate: {
-      version: 1,
+      version: 2,
       representationId: repId(address, chain),
       canonicalAsset: { assetClass: 'equity', idScheme: 'figi', value: 'BBG000BBJQV0' },
       issuer: state.ok ? state.value.value.issuer : ISSUER_ALPHA,
@@ -182,30 +210,12 @@ function kernelReasonCodes(registry: Registry, m: CanonicalMandate, address: str
       quantity: { unit: 'SHARE', decimals: 2, atoms: '1000' },
       executionPrice: { numeratorUnit: 'USD', denominatorUnit: 'SHARE', decimals: 2, atoms: '10000' },
       notional: { unit: 'USD', decimals: 2, atoms: '100000' },
+      feeTotal: { unit: 'USD', decimals: 2, atoms: '250' },
       referenceStateId: 'fixture.snapshot.0001',
+      referenceStateDigest: stateDigest,
       corporateActionEpoch: '7',
     },
-    trustedState: {
-      version: 1,
-      stateId: 'fixture.snapshot.0001',
-      representations,
-      market: {
-        provenance: { trustClass: 'VERIFIED', sourceId: 'fixture.source.a', observedAtUnixSeconds: String(NOW) },
-        value: {
-          canonicalAsset: { assetClass: 'equity', idScheme: 'figi', value: 'BBG000BBJQV0' },
-          referencePrice: { numeratorUnit: 'USD', denominatorUnit: 'SHARE', decimals: 2, atoms: '10000' },
-          haltStatus: 'TRADING',
-        },
-      },
-      corporateAction: {
-        provenance: { trustClass: 'VERIFIED', sourceId: 'fixture.source.a', observedAtUnixSeconds: String(NOW) },
-        value: { canonicalAsset: { assetClass: 'equity', idScheme: 'figi', value: 'BBG000BBJQV0' }, epoch: '7' },
-      },
-      replay: {
-        provenance: { trustClass: 'VERIFIED', sourceId: 'fixture.source.a', observedAtUnixSeconds: String(NOW) },
-        value: { mandateDigest: '0x' + '00'.repeat(32), status: 'UNUSED' },
-      },
-    },
+    trustedState,
     clock: { nowUnixSeconds: String(NOW) },
     expectedDomain: { name: 'Mandate', version: '1', chainId: '42161', verifyingContract: '0x' + '00'.repeat(19) + '01' },
   });

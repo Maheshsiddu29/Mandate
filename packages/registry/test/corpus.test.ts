@@ -81,10 +81,10 @@ test('every registry exclusion reason code is exercised by a vector or is resolu
       for (const code of decision.reasonCodes) produced.add(code);
     }
   }
-  // SNAPSHOT_MALFORMED is a construction-time refusal: a malformed snapshot never
-  // becomes a vector, because a vector's input must open. It is covered by unit
-  // tests instead, and is the one code deliberately absent here.
-  const constructionOnly = new Set(['SNAPSHOT_MALFORMED']);
+  // Both of these are construction-time refusals: a snapshot that does not parse
+  // never becomes a vector, because a vector's input must open. They are covered
+  // by unit tests instead, and are the codes deliberately absent here.
+  const constructionOnly = new Set(['SNAPSHOT_MALFORMED', 'SNAPSHOT_RESOURCE_LIMIT_EXCEEDED']);
   const missing = ALL_REGISTRY_REASON_CODE_NAMES.filter(
     (name) => !produced.has(name) && !constructionOnly.has(name),
   );

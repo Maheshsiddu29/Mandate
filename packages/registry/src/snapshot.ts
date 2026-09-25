@@ -15,6 +15,7 @@
 
 import { err, ok, parseIdentifier, type Identifier, type Result, type UnixSeconds } from '@mandate/kernel';
 import type { RegistryReasonCodeName } from './reason-codes.ts';
+import { MAX_SNAPSHOT_ENTRIES } from './limits.ts';
 import { parseCanonicalAssetRecord, type CanonicalAssetRecord } from './asset.ts';
 import { parseRepresentationRecord, type RepresentationRecord } from './representation.ts';
 
@@ -68,7 +69,7 @@ const SNAPSHOT_FIELDS = [
   'representations',
 ] as const;
 
-export const MAX_SNAPSHOT_ENTRIES = 65_535;
+export { MAX_SNAPSHOT_ENTRIES };
 
 function parseUnix(raw: unknown): Result<UnixSeconds, RegistryReasonCodeName> {
   if (typeof raw === 'bigint') return ok(raw);
@@ -80,6 +81,7 @@ function parseUnix(raw: unknown): Result<UnixSeconds, RegistryReasonCodeName> {
 
 function parseSourceVersions(raw: unknown): Result<readonly SourceVersion[], RegistryReasonCodeName> {
   if (!Array.isArray(raw)) return err('SNAPSHOT_MALFORMED');
+  if (raw.length > MAX_SNAPSHOT_ENTRIES) return err('SNAPSHOT_RESOURCE_LIMIT_EXCEEDED');
   const out: SourceVersion[] = [];
   const seen = new Set<string>();
   for (const entry of raw) {
@@ -131,7 +133,8 @@ export function parseRegistrySnapshot(raw: unknown): Result<RegistrySnapshot, Re
   if (!sourceVersions.ok) return sourceVersions;
 
   const rawAssets = r['assets'];
-  if (!Array.isArray(rawAssets) || rawAssets.length > MAX_SNAPSHOT_ENTRIES) return err('SNAPSHOT_MALFORMED');
+  if (!Array.isArray(rawAssets)) return err('SNAPSHOT_MALFORMED');
+  if (rawAssets.length > MAX_SNAPSHOT_ENTRIES) return err('SNAPSHOT_RESOURCE_LIMIT_EXCEEDED');
   const assets: CanonicalAssetRecord[] = [];
   for (const entry of rawAssets) {
     const parsed = parseCanonicalAssetRecord(entry);
@@ -140,7 +143,8 @@ export function parseRegistrySnapshot(raw: unknown): Result<RegistrySnapshot, Re
   }
 
   const rawReps = r['representations'];
-  if (!Array.isArray(rawReps) || rawReps.length > MAX_SNAPSHOT_ENTRIES) return err('SNAPSHOT_MALFORMED');
+  if (!Array.isArray(rawReps)) return err('SNAPSHOT_MALFORMED');
+  if (rawReps.length > MAX_SNAPSHOT_ENTRIES) return err('SNAPSHOT_RESOURCE_LIMIT_EXCEEDED');
   const representations: RepresentationRecord[] = [];
   for (const entry of rawReps) {
     const parsed = parseRepresentationRecord(entry);

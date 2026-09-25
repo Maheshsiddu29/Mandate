@@ -117,6 +117,14 @@ const DEFINITIONS = [
     humanMessage: 'The asset registry could not be read, so nothing was traded.',
   },
   {
+    id: 'MND-REG-015',
+    name: 'SNAPSHOT_RESOURCE_LIMIT_EXCEEDED',
+    family: F.REG,
+    enforcementPoint: E.S_REGISTRY_STATE,
+    developerMessage: 'A counted collection in the snapshot exceeds its declared bound. Every collection the registry encoder writes as a u16 count has a matching parse-time limit, so an oversized snapshot is a typed rejection rather than an encoder assertion during digest computation.',
+    humanMessage: 'This registry snapshot was larger than the system accepts and was not used.',
+  },
+  {
     id: 'MND-REG-002',
     name: 'REPRESENTATION_ID_MALFORMED',
     family: F.REG,

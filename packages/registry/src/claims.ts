@@ -27,6 +27,7 @@
 
 import { err, ok, parseProvenance, TrustClass, type Provenance, type Result, type UnixSeconds } from '@mandate/kernel';
 import type { RegistryReasonCodeName } from './reason-codes.ts';
+import { MAX_CLAIMS_PER_PROPERTY } from './limits.ts';
 
 /** One assertion about one property, by one source, at one time. */
 export interface Claim<T> {
@@ -92,6 +93,7 @@ export function meetsTrustFloor(actual: TrustClass, floor: TrustClass): boolean 
  * the registry is willing to establish is one the kernel is willing to read.
  */
 export const EXECUTION_TRUST_FLOOR: TrustClass = TrustClass.VERIFIED;
+
 
 export interface ClaimPolicy {
   readonly minimumTrust: TrustClass;
@@ -190,6 +192,9 @@ export function parseClaimSet<T>(
   keyOf: (value: T) => string,
 ): Result<ClaimSet<T>, RegistryReasonCodeName> {
   if (!Array.isArray(raw)) return err('SNAPSHOT_MALFORMED');
+  // The encoder counts claims as a u16, so a set past that bound is refused
+  // here rather than discovered when a digest is computed over it.
+  if (raw.length > MAX_CLAIMS_PER_PROPERTY) return err('SNAPSHOT_RESOURCE_LIMIT_EXCEEDED');
   const out: Claim<T>[] = [];
   const seen = new Set<string>();
   for (const entry of raw) {

@@ -28,7 +28,7 @@ show an end user.
 this table doubles as a coverage map. The stages are the registry's own; the
 kernel's A–G families describe verification, not resolution.
 
-**20 registry codes across 2 families**, plus the reused kernel codes below.
+**21 registry codes across 2 families**, plus the reused kernel codes below.
 
 ## REF — human reference to canonical financial identity
 
@@ -59,6 +59,7 @@ kernel's A–G families describe verification, not resolution.
 | `MND-REG-012` | `SETTLEMENT_MODEL_NOT_ALLOWED` | T_REPRESENTATION_ADMISSIBILITY | The representation settlement model is not in the set the requirements permit. |
 | `MND-REG-013` | `CORPORATE_ACTION_MODEL_NOT_ALLOWED` | T_REPRESENTATION_ADMISSIBILITY | The way this representation applies corporate actions is not in the set the requirements permit. This describes the representation semantics and is a different check from the verifier corporate-action epoch, which is the execution-time safety mechanism. |
 | `MND-REG-014` | `JURISDICTION_NOT_ELIGIBLE` | T_REPRESENTATION_ADMISSIBILITY | The holder jurisdiction supplied with the requirements is prohibited for this representation, or is not among the jurisdictions the representation declares permitted. An undeclared jurisdiction is not permitted. |
+| `MND-REG-015` | `SNAPSHOT_RESOURCE_LIMIT_EXCEEDED` | S_REGISTRY_STATE | A counted collection in the snapshot exceeds its declared bound. Every collection the registry encoder writes as a u16 count has a matching parse-time limit, so an oversized snapshot is a typed rejection rather than an encoder assertion during digest computation. |
 
 ## Reused kernel codes
 
@@ -101,4 +102,5 @@ and machine-readable detail, never a rendered string.
 | `RIGHTS_REQUIREMENT_NOT_MET` | This token does not carry a holder right your authorization requires. |
 | `SETTLEMENT_MODEL_NOT_ALLOWED` | This token settles in a way your authorization does not permit. |
 | `SNAPSHOT_MALFORMED` | The asset registry could not be read, so nothing was traded. |
+| `SNAPSHOT_RESOURCE_LIMIT_EXCEEDED` | This registry snapshot was larger than the system accepts and was not used. |
 | `TRUST_REQUIREMENT_NOT_MET` | Information about this token did not come from a source trusted for it. |

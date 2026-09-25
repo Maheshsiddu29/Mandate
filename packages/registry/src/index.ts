@@ -24,6 +24,7 @@ export * from './reference.ts';
 export * from './asset-index.ts';
 export * from './representation-id.ts';
 export * from './representation.ts';
+export * from './limits.ts';
 export * from './snapshot.ts';
 export * from './registry.ts';
 export * from './requirements.ts';

@@ -16,6 +16,7 @@
 
 import { err, ok, type Result } from '@mandate/kernel';
 import type { RegistryReasonCodeName } from './reason-codes.ts';
+import { MAX_SNAPSHOT_ENTRIES } from './limits.ts';
 import { validateCanonicalAssetId, type ValidatedCanonicalAssetId } from './asset-id.ts';
 
 /**
@@ -156,6 +157,7 @@ function parseEnumValue<T extends string>(
 
 function parseListings(raw: unknown): Result<readonly MarketListing[], RegistryReasonCodeName> {
   if (!Array.isArray(raw)) return err('SNAPSHOT_MALFORMED');
+  if (raw.length > MAX_SNAPSHOT_ENTRIES) return err('SNAPSHOT_RESOURCE_LIMIT_EXCEEDED');
   const out: MarketListing[] = [];
   const seen = new Set<string>();
   for (const entry of raw) {
@@ -178,6 +180,7 @@ function parseListings(raw: unknown): Result<readonly MarketListing[], RegistryR
 
 function parseAliases(raw: unknown): Result<readonly AssetAlias[], RegistryReasonCodeName> {
   if (!Array.isArray(raw)) return err('SNAPSHOT_MALFORMED');
+  if (raw.length > MAX_SNAPSHOT_ENTRIES) return err('SNAPSHOT_RESOURCE_LIMIT_EXCEEDED');
   const out: AssetAlias[] = [];
   const seen = new Set<string>();
   for (const entry of raw) {

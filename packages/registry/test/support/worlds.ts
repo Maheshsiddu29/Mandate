@@ -186,7 +186,7 @@ export function snapshotInput(overrides: Json = {}): Json {
 export function mandateInput(overrides: Json = {}): Json {
   return deepMerge(
     {
-      version: 1,
+      version: 2,
       mandateId: '0x' + '11'.repeat(32),
       nonce: '1',
       principal: { kind: 'eip155-address', value: '0x1111111111111111111111111111111111111111' },
@@ -194,6 +194,7 @@ export function mandateInput(overrides: Json = {}): Json {
       canonicalAsset: { ...NVDA },
       side: 'BUY',
       maxNotional: { unit: 'USD', decimals: 2, atoms: '100000' },
+      economicLimit: { unit: 'USD', decimals: 2, atoms: '100650' },
       maxDeviationBps: '40',
       syntheticPolicy: 'FORBIDDEN',
       allowedIssuers: [ISSUER_ALPHA],
