@@ -34,6 +34,9 @@ Probes, one request each unless stated:
 | `unknown-model` | response to a model name the account cannot use |
 | `timeout` | client behaviour when the deadline is shorter than the response |
 
+Add `-- --write-fixtures` to record the first successful exchange as a `LIVE`
+fixture.
+
 Latency is wall-clock around the HTTP call only, measured with
 `performance.now()`, and reported as p50, p95 and maximum over the successful
 `choice` probes. The sample is small by design. **A handful of requests from
@@ -115,3 +118,13 @@ that an external service never improves.
 Fixtures whose `captureClass` is `SCHEMA_DERIVED` were constructed from the
 published schema and are **not** recordings of a real response. They exercise
 the parser and nothing more, and they are labelled as such in the file itself.
+
+`npm run jev:fixtures:validate` enforces the distinction rather than trusting
+it: a `SCHEMA_DERIVED` fixture may not carry an observed latency and must say
+in its own note that it is not a recording, and a `LIVE` fixture must record
+both an observed latency and the returned model. Every fixture is digest-pinned
+and scanned for credential-shaped content.
+
+**At the time of writing this repository holds 4 `SCHEMA_DERIVED` fixtures and
+0 `LIVE` fixtures**, because no account access was available. The validator
+prints that fact on every run rather than letting it pass unnoticed.

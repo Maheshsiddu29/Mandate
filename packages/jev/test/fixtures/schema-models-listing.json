@@ -1,0 +1,32 @@
+{
+  "fixtureVersion": 1,
+  "id": "schema-models-listing",
+  "captureClass": "SCHEMA_DERIVED",
+  "capturedAt": "2026-09-25",
+  "note": "Constructed from the published GET /v1/models schema. Not a recording; the names below are the documented aliases, not a statement about any account.",
+  "endpoint": "GET /v1/models",
+  "modelRequested": "n/a",
+  "modelReturned": null,
+  "request": null,
+  "response": {
+    "models": [
+      {
+        "name": "jev-latest",
+        "description": "The most recent stable, official release",
+        "release_date": "2026-09-18"
+      },
+      {
+        "name": "jev-preview",
+        "description": "The most recent release",
+        "release_date": "2026-09-18"
+      },
+      {
+        "name": "jev-1.13.0",
+        "description": "Pinned production version",
+        "release_date": "2026-09-18"
+      }
+    ]
+  },
+  "observedLatencyMs": null,
+  "digest": "57f37e1060a68dfd47f98179c3e3834b3aa519a6f8259866eb7b3e4376c66898"
+}

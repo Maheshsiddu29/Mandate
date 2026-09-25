@@ -1,0 +1,98 @@
+{
+  "fixtureVersion": 1,
+  "id": "schema-choice-pinned-model",
+  "captureClass": "SCHEMA_DERIVED",
+  "capturedAt": "2026-09-25",
+  "note": "Constructed from the published TypeSafe schema to pin alias resolution: jev-latest was requested and a versioned identifier answered. Not a recording.",
+  "endpoint": "POST /v1/systemone",
+  "modelRequested": "jev-latest",
+  "modelReturned": "jev-1.13.0",
+  "request": {
+    "state": {
+      "schema": "mandate.jev.routing/1",
+      "side": "BUY",
+      "costUnit": "USD",
+      "costDecimals": 18,
+      "candidateCount": 3,
+      "candidates": [
+        {
+          "choiceId": "route_000",
+          "allInCostAtoms": "224153620149693960768",
+          "costUnit": "USD",
+          "costDecimals": 18,
+          "explicitFeeTotalAtoms": "100",
+          "executionDeviationBps": "0",
+          "quoteAgeSeconds": "0",
+          "routeStepCount": 1,
+          "providerClass": "SYNTHETIC_TEST",
+          "venueReliability": "ESTABLISHED",
+          "quoteFirmness": "FIRM",
+          "fillPolicy": "FILL_OR_KILL"
+        },
+        {
+          "choiceId": "route_001",
+          "allInCostAtoms": "224153620149693960900",
+          "costUnit": "USD",
+          "costDecimals": 18,
+          "explicitFeeTotalAtoms": "232",
+          "executionDeviationBps": "0",
+          "quoteAgeSeconds": "4",
+          "routeStepCount": 2,
+          "providerClass": "SYNTHETIC_TEST",
+          "venueReliability": "PROVISIONAL",
+          "quoteFirmness": "INDICATIVE",
+          "fillPolicy": "FILL_OR_KILL"
+        },
+        {
+          "choiceId": "route_002",
+          "allInCostAtoms": "224153620149693961100",
+          "costUnit": "USD",
+          "costDecimals": 18,
+          "explicitFeeTotalAtoms": "432",
+          "executionDeviationBps": "1",
+          "quoteAgeSeconds": "9",
+          "routeStepCount": 1,
+          "providerClass": "SYNTHETIC_TEST",
+          "venueReliability": "DEGRADED",
+          "quoteFirmness": "INDICATIVE",
+          "fillPolicy": "FILL_OR_KILL"
+        }
+      ]
+    },
+    "model": "jev-latest",
+    "questions": {
+      "route_selection": {
+        "type": "choice",
+        "instructions": "Every option below is an execution route that has already passed every safety and authorization check. They are all permitted. Choose the one you judge to be the best execution, weighing all-in cost first and treating venue reliability, quote firmness, quote age and route complexity as secondary judgement. Choose ABSTAIN if you have no basis to prefer one over another; abstaining is a normal answer and has no penalty.",
+        "criteria": {
+          "route_000": "All-in cost 224153620149693960768 (unit USD, 18 decimals). Explicit fees 100. Execution deviation 0 bps from the reference price. Quote age 0s. 1 route step(s), fill policy FILL_OR_KILL. Venue reliability ESTABLISHED, quote firmness FIRM. Route data class SYNTHETIC_TEST.",
+          "route_001": "All-in cost 224153620149693960900 (unit USD, 18 decimals). Explicit fees 232. Execution deviation 0 bps from the reference price. Quote age 4s. 2 route step(s), fill policy FILL_OR_KILL. Venue reliability PROVISIONAL, quote firmness INDICATIVE. Route data class SYNTHETIC_TEST.",
+          "route_002": "All-in cost 224153620149693961100 (unit USD, 18 decimals). Explicit fees 432. Execution deviation 1 bps from the reference price. Quote age 9s. 1 route step(s), fill policy FILL_OR_KILL. Venue reliability DEGRADED, quote firmness INDICATIVE. Route data class SYNTHETIC_TEST.",
+          "ABSTAIN": "Decline to advise. The deterministic selection is used instead. Choose this whenever the options are equivalent on the information given."
+        }
+      }
+    }
+  },
+  "response": {
+    "model": "jev-1.13.0",
+    "answers": {
+      "route_selection": {
+        "type": "choice",
+        "choice": "route_002",
+        "probabilities": {
+          "route_000": 0.11,
+          "route_001": 0.2,
+          "route_002": 0.63,
+          "ABSTAIN": 0.06
+        },
+        "confidence": 0.51
+      }
+    },
+    "usage": {
+      "input_tokens": 612,
+      "output_tokens": 4
+    }
+  },
+  "observedLatencyMs": null,
+  "digest": "2ae1e2336134fca1259a3d779435b2799593912cb19ad7d5c222999c35bd2b35"
+}
