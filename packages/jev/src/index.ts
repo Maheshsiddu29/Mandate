@@ -20,3 +20,4 @@ export * from './encoding.ts';
 export * from './parse.ts';
 export * from './client.ts';
 export * from './decide.ts';
+export * from './explain.ts';

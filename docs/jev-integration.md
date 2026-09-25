@@ -395,3 +395,37 @@ What Phase 5 demonstrates is not that Jev improves routing. It is that a model
 can be attached to this pipeline in a way that cannot compromise it, so that
 when richer signals arrive the integration is already safe. The value today is
 the boundary, not the advice.
+
+## 10. Trader-facing output
+
+There is still no frontend. `summarizeSelection` renders a decision into the
+shape a trading surface would use, and is kept strictly separate from the
+decision — exactly as the kernel keeps `explain` separate from `verify`.
+
+The default view is two or three lines:
+
+```text
+Best valid execution found
+Decision mode: Jev-assisted
+Confidence: 94%
+```
+
+Behind an advanced affordance:
+
+```text
+3 valid routes
+Jev selected Route B
+Final Mandate verification: PASS
+```
+
+Confidence appears only when Jev actually decided — an abstention or a
+fallback shows the mode and no percentage, because a confidence figure next to
+a decision the model did not make would be misleading.
+
+A probability distribution is **not** shown by default and requires
+`includeProbabilities`. A probability matrix is not something an ordinary user
+should be asked to read before a trade.
+
+An unavailable advisory layer does not change the headline. "Best valid
+execution found" is true whether or not Jev answered, and surfacing an external
+service's outage as a trading problem would misrepresent what happened.
