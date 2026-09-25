@@ -24,7 +24,8 @@
     "mainnet-replay:validate": "node --test packages/adapter-robinhood/test/mainnet-replay.test.ts",
     "robinhood:capture": "node packages/adapter-robinhood/scripts/capture-mainnet.ts",
     "robinhood:live": "node packages/adapter-robinhood/scripts/live-check.ts",
-    "credentials:scan": "node scripts/scan-credentials.ts"
+    "credentials:scan": "node scripts/scan-credentials.ts",
+    "routing-simulation:generate": "node packages/router/scripts/generate-simulation-report.ts"
   },
   "devDependencies": {
     "@types/node": "22.20.2",

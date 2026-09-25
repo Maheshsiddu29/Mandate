@@ -1,0 +1,44 @@
+{
+  "reportVersion": 1,
+  "config": {
+    "seed": 4200,
+    "worlds": 200,
+    "assetSet": [
+      "NVDA"
+    ],
+    "marketRegimes": [
+      "NORMAL",
+      "HALTED",
+      "FAST"
+    ],
+    "agentMutationRateBps": 300,
+    "routeProviderFaultRateBps": 500,
+    "staleStateRateBps": 300,
+    "corporateActionRateBps": 200
+  },
+  "metrics": {
+    "seed": 4200,
+    "worldsEvaluated": 200,
+    "candidatesGenerated": 313,
+    "candidatesExcluded": 166,
+    "validCandidates": 147,
+    "noRouteOutcomes": 105,
+    "selectedRoutes": 95,
+    "rejectionsByReason": {
+      "CANDIDATE_STATE_MISMATCH": 11,
+      "NOTIONAL_INCONSISTENT": 9,
+      "PRICE_DEVIATION_EXCEEDED": 9,
+      "PROVIDER_IDENTITY_MISMATCH": 98,
+      "QUOTE_STALE": 21,
+      "REPRESENTATION_NOT_DISCOVERABLE": 10,
+      "TRADING_HALTED": 10,
+      "UNKNOWN_COST": 9,
+      "UNTRUSTED_COST_MISMATCH": 10
+    },
+    "maliciousCandidatesGenerated": 166,
+    "maliciousCandidatesSelected": 0,
+    "unsafeCandidatesReachingExecutionHandoff": 0,
+    "determinismFailures": 0,
+    "receiptReproductionFailures": 0
+  }
+}
