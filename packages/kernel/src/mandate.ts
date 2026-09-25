@@ -14,6 +14,10 @@
  *   mandate signed before the field existed.
  * - **Bounded validity is mandatory.** There is no "until revoked" mandate,
  *   because there is no revocation infrastructure to make one safe.
+ * - **Economic authority is symmetric and signed.** A mandate bounds the cash
+ *   flow it authorizes on whichever side it names, and the bound is inside the
+ *   digest. `maxNotional` bounds gross exposure; `economicLimit` bounds what the
+ *   principal actually pays or receives, fees included (schema v2).
  *
  * The field set is the Phase 1 / MVP set from design section 7.3. Fields marked
  * long-term there are deliberately absent: every field below has a verifier
@@ -36,10 +40,31 @@ import { parseBigInt, parseDurationSeconds, parseUnixSeconds, type UnixSeconds }
 import { parseBytes32, type Bytes32 } from './bytes.ts';
 import { compareIdentifierBytes } from './encoding/writer.ts';
 
-export const MANDATE_SCHEMA_VERSION = 1;
+export const MANDATE_SCHEMA_VERSION = 2;
 
 export const Side = { BUY: 'BUY', SELL: 'SELL' } as const;
 export type Side = (typeof Side)[keyof typeof Side];
+
+/**
+ * What `CanonicalMandate.economicLimit` means, derived from `side` and never
+ * carried separately.
+ *
+ * One field with a side-determined reading rather than two nullable fields: two
+ * fields would admit a mandate that sets the wrong one, or both, and the verifier
+ * would then have to decide which to honour. Deriving the reading from a field
+ * that is already signed removes the ambiguity instead of resolving it.
+ */
+export const EconomicLimitKind = {
+  /** BUY: notional + fees must not exceed the limit. */
+  MAX_TOTAL_DEBIT: 'MAX_TOTAL_DEBIT',
+  /** SELL: notional - fees must be at least the limit. */
+  MIN_TOTAL_CREDIT: 'MIN_TOTAL_CREDIT',
+} as const;
+export type EconomicLimitKind = (typeof EconomicLimitKind)[keyof typeof EconomicLimitKind];
+
+export function economicLimitKind(side: Side): EconomicLimitKind {
+  return side === Side.BUY ? EconomicLimitKind.MAX_TOTAL_DEBIT : EconomicLimitKind.MIN_TOTAL_CREDIT;
+}
 
 export const SyntheticPolicy = {
   /** Synthetic exposure is refused. The headline MVP constraint. */
@@ -101,7 +126,20 @@ export interface CanonicalMandate {
   readonly canonicalAsset: CanonicalAssetId;
   readonly side: Side;
 
+  /** Gross exposure bound: quantity x price, before fees. */
   readonly maxNotional: Amount;
+  /**
+   * Cash-flow bound, read according to `side` (see `EconomicLimitKind`).
+   *
+   * BUY: the most the principal may be debited in total, fees included.
+   * SELL: the least the principal must be credited in total, after fees.
+   *
+   * This is the field the pressure test's F-2 and F-4 findings required. Without
+   * it the verifier bounded the notional and nothing bounded the fees, so the
+   * only component that authorizes could not see the number the principal
+   * actually cared about.
+   */
+  readonly economicLimit: Amount;
   readonly maxDeviationBps: bigint;
 
   readonly syntheticPolicy: SyntheticPolicy;
@@ -185,6 +223,8 @@ export function parseMandate(raw: unknown): Result<CanonicalMandate, ReasonCodeN
   if (!side.ok) return side;
   const maxNotional = parseAmount(r['maxNotional']);
   if (!maxNotional.ok) return maxNotional;
+  const economicLimit = parseAmount(r['economicLimit']);
+  if (!economicLimit.ok) return economicLimit;
   const maxDeviationBps = parseBoundedUint(r['maxDeviationBps'], UINT16_MAX, 'MALFORMED_MANDATE');
   if (!maxDeviationBps.ok) return maxDeviationBps;
   const syntheticPolicy = parseEnum(r['syntheticPolicy'], SyntheticPolicy, 'MALFORMED_MANDATE');
@@ -215,6 +255,11 @@ export function parseMandate(raw: unknown): Result<CanonicalMandate, ReasonCodeN
   // than reporting MANDATE_EXPIRED at every evaluation time.
   if (notBefore.value >= expiresAt.value) return err('MALFORMED_MANDATE');
 
+  // Both economic bounds must name one currency. A mandate whose gross bound is
+  // in USD and whose cash-flow bound is in EUR does not express a single
+  // authorization, and picking one to honour would be inventing intent.
+  if (maxNotional.value.unit !== economicLimit.value.unit) return err('UNIT_MISMATCH');
+
   return ok({
     version,
     mandateId: mandateId.value,
@@ -224,6 +269,7 @@ export function parseMandate(raw: unknown): Result<CanonicalMandate, ReasonCodeN
     canonicalAsset: canonicalAsset.value,
     side: side.value,
     maxNotional: maxNotional.value,
+    economicLimit: economicLimit.value,
     maxDeviationBps: maxDeviationBps.value,
     syntheticPolicy: syntheticPolicy.value,
     allowedIssuers: allowedIssuers.value,
@@ -248,6 +294,7 @@ export const MANDATE_FIELDS = [
   'canonicalAsset',
   'side',
   'maxNotional',
+  'economicLimit',
   'maxDeviationBps',
   'syntheticPolicy',
   'allowedIssuers',

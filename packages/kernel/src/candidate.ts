@@ -11,6 +11,16 @@
  * A candidate *claims* things — an issuer, a chain, a canonical asset. It does
  * not get to establish them. Every claim is cross-checked against trusted state
  * and a disagreement rejects.
+ *
+ * Schema v2 adds the two fields the architecture pressure test found missing:
+ *
+ * - `feeTotal`, so the verifier can bound what the principal actually pays or
+ *   receives rather than only the gross notional, and so the candidate digest
+ *   commits to it. Fees enforced outside the commitment are fees a future
+ *   on-chain gate cannot re-assert.
+ * - `referenceStateDigest`, so the binding to the state a candidate was built
+ *   against is a commitment to that state's *content*. `referenceStateId` is
+ *   retained beside it as a correlation label, and is no longer the binding.
  */
 
 import { type Result, ok, err } from './result.ts';
@@ -26,9 +36,10 @@ import {
 } from './identifiers.ts';
 import { parseAmount, parsePrice, type Amount, type Price } from './units.ts';
 import { parseBigInt } from './time.ts';
+import { parseBytes32, type Bytes32 } from './bytes.ts';
 import { parsePartyId, Side, UINT64_MAX, type PartyId } from './mandate.ts';
 
-export const CANDIDATE_SCHEMA_VERSION = 1;
+export const CANDIDATE_SCHEMA_VERSION = 2;
 
 export interface ExecutionCandidate {
   readonly version: number;
@@ -48,9 +59,25 @@ export interface ExecutionCandidate {
   readonly quantity: Amount;
   readonly executionPrice: Price;
   readonly notional: Amount;
+  /**
+   * Every explicit cost of this route, summed, in the notional's unit.
+   *
+   * Established outside the route provider and cross-checked against it before
+   * a candidate is built; the candidate carries the total so the verifier — not
+   * the router — decides whether it is within authority.
+   */
+  readonly feeTotal: Amount;
 
-  /** Which trusted-state snapshot this candidate was constructed against. */
+  /**
+   * Which trusted-state snapshot this candidate was constructed against.
+   *
+   * A correlation label only. The security binding is `referenceStateDigest`:
+   * two different states can share one `stateId`, so matching the name
+   * establishes nothing.
+   */
   readonly referenceStateId: string;
+  /** Digest of the trusted state this candidate was constructed against. */
+  readonly referenceStateDigest: Bytes32;
   /** The corporate-action epoch the candidate was built under. */
   readonly corporateActionEpoch: bigint;
 }
@@ -67,7 +94,9 @@ const CANDIDATE_FIELDS = [
   'quantity',
   'executionPrice',
   'notional',
+  'feeTotal',
   'referenceStateId',
+  'referenceStateDigest',
   'corporateActionEpoch',
 ] as const;
 
@@ -101,8 +130,12 @@ export function parseCandidate(raw: unknown): Result<ExecutionCandidate, ReasonC
   if (!executionPrice.ok) return executionPrice;
   const notional = parseAmount(r['notional']);
   if (!notional.ok) return notional;
+  const feeTotal = parseAmount(r['feeTotal']);
+  if (!feeTotal.ok) return feeTotal;
   const referenceStateId = parseIdentifier(r['referenceStateId']);
   if (!referenceStateId.ok) return referenceStateId;
+  const referenceStateDigest = parseBytes32(r['referenceStateDigest'], 'MALFORMED_CANDIDATE');
+  if (!referenceStateDigest.ok) return referenceStateDigest;
   const epoch = parseBigInt(r['corporateActionEpoch']);
   if (epoch === undefined) return err('MALFORMED_CANDIDATE');
   if (epoch < 0n || epoch > UINT64_MAX) return err('VALUE_OUT_OF_RANGE');
@@ -119,7 +152,9 @@ export function parseCandidate(raw: unknown): Result<ExecutionCandidate, ReasonC
     quantity: quantity.value,
     executionPrice: executionPrice.value,
     notional: notional.value,
+    feeTotal: feeTotal.value,
     referenceStateId: referenceStateId.value,
+    referenceStateDigest: referenceStateDigest.value,
     corporateActionEpoch: epoch,
   });
 }

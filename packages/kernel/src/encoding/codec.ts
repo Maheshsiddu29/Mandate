@@ -42,9 +42,9 @@ import {
 import { TrustClass, type Observed, type Provenance } from '../trust.ts';
 
 export const DomainTag = {
-  MANDATE: 'MANDATE.MANDATE.V1',
-  CANDIDATE: 'MANDATE.CANDIDATE.V1',
-  STATE: 'MANDATE.STATE.V1',
+  MANDATE: 'MANDATE.MANDATE.V2',
+  CANDIDATE: 'MANDATE.CANDIDATE.V2',
+  STATE: 'MANDATE.STATE.V2',
   AUTHZ: 'MANDATE.AUTHZ.V1',
   RECEIPT: 'MANDATE.RECEIPT.V1',
 } as const;
@@ -69,8 +69,8 @@ const OPERATIONAL_BY_CODE: Record<number, string> = { 1: 'ACTIVE', 2: 'PAUSED', 
 const HALT_STATUS_CODE: Record<string, number> = { TRADING: 1, HALTED: 2, UNKNOWN: 3 };
 const HALT_STATUS_BY_CODE: Record<number, string> = { 1: 'TRADING', 2: 'HALTED', 3: 'UNKNOWN' };
 
-const REPLAY_STATUS_CODE: Record<string, number> = { UNUSED: 1, CONSUMED: 2, UNKNOWN: 3, RESERVED: 4 };
-const REPLAY_STATUS_BY_CODE: Record<number, string> = { 1: 'UNUSED', 2: 'CONSUMED', 3: 'UNKNOWN', 4: 'RESERVED' };
+const REPLAY_STATUS_CODE: Record<string, number> = { UNUSED: 1, CONSUMED: 2, UNKNOWN: 3, RESERVED: 4, QUARANTINED: 5 };
+const REPLAY_STATUS_BY_CODE: Record<number, string> = { 1: 'UNUSED', 2: 'CONSUMED', 3: 'UNKNOWN', 4: 'RESERVED', 5: 'QUARANTINED' };
 
 const TRUST_CLASS_CODE: Record<string, number> = { AUTHORITATIVE: 1, VERIFIED: 2, ADVISORY: 3, UNTRUSTED: 4 };
 const TRUST_CLASS_BY_CODE: Record<number, string> = { 1: 'AUTHORITATIVE', 2: 'VERIFIED', 3: 'ADVISORY', 4: 'UNTRUSTED' };
@@ -115,6 +115,7 @@ export function encodeMandate(m: CanonicalMandate): Uint8Array {
   writeAsset(w, m.canonicalAsset);
   w.u8(SIDE_CODE[m.side] as number);
   writeAmount(w, m.maxNotional);
+  writeAmount(w, m.economicLimit);
   w.u16(m.maxDeviationBps);
   w.u8(SYNTHETIC_POLICY_CODE[m.syntheticPolicy] as number);
   writeIdentifierSet(w, m.allowedIssuers);
@@ -171,6 +172,9 @@ export function decodeMandate(bytes: Uint8Array): Result<CanonicalMandate, Reaso
   const notionalUnit = r.str();
   const notionalDecimals = r.u8();
   const notionalAtoms = r.u256();
+  const limitUnit = r.str();
+  const limitDecimals = r.u8();
+  const limitAtoms = r.u256();
   const maxDeviationBps = r.u16();
   const syntheticCode = r.u8();
   const allowedIssuers = readIdentifierSet(r);
@@ -189,6 +193,7 @@ export function decodeMandate(bytes: Uint8Array): Result<CanonicalMandate, Reaso
     agentKind === undefined || agentValue === undefined || assetClass === undefined ||
     idScheme === undefined || assetValue === undefined || sideCode === undefined ||
     notionalUnit === undefined || notionalDecimals === undefined || notionalAtoms === undefined ||
+    limitUnit === undefined || limitDecimals === undefined || limitAtoms === undefined ||
     maxDeviationBps === undefined || syntheticCode === undefined || allowedIssuers === undefined ||
     allowedChains === undefined || allowedVenues === undefined || epoch === undefined ||
     maxPriceAge === undefined || maxCaAge === undefined || haltCode === undefined || createdAt === undefined ||
@@ -215,6 +220,7 @@ export function decodeMandate(bytes: Uint8Array): Result<CanonicalMandate, Reaso
     canonicalAsset: { assetClass, idScheme, value: assetValue },
     side,
     maxNotional: { unit: notionalUnit, decimals: Number(notionalDecimals), atoms: notionalAtoms },
+    economicLimit: { unit: limitUnit, decimals: Number(limitDecimals), atoms: limitAtoms },
     maxDeviationBps,
     syntheticPolicy,
     allowedIssuers,
@@ -243,7 +249,9 @@ export function encodeCandidate(c: ExecutionCandidate): Uint8Array {
   writeAmount(w, c.quantity);
   writePrice(w, c.executionPrice);
   writeAmount(w, c.notional);
+  writeAmount(w, c.feeTotal);
   w.str(c.referenceStateId);
+  w.bytes32(bytes32ToBytes(c.referenceStateDigest));
   w.u64(c.corporateActionEpoch);
   return w.finish();
 }
@@ -274,7 +282,11 @@ export function decodeCandidate(bytes: Uint8Array): Result<ExecutionCandidate, R
   const notionalUnit = r.str();
   const notionalDecimals = r.u8();
   const notionalAtoms = r.u256();
+  const feeUnit = r.str();
+  const feeDecimals = r.u8();
+  const feeAtoms = r.u256();
   const referenceStateId = r.str();
+  const referenceStateDigest = r.bytes32();
   const epoch = r.u64();
 
   if (
@@ -284,7 +296,9 @@ export function decodeCandidate(bytes: Uint8Array): Result<ExecutionCandidate, R
     qtyUnit === undefined || qtyDecimals === undefined || qtyAtoms === undefined ||
     priceNum === undefined || priceDen === undefined || priceDecimals === undefined ||
     priceAtoms === undefined || notionalUnit === undefined || notionalDecimals === undefined ||
-    notionalAtoms === undefined || referenceStateId === undefined || epoch === undefined
+    notionalAtoms === undefined || feeUnit === undefined || feeDecimals === undefined ||
+    feeAtoms === undefined || referenceStateId === undefined ||
+    referenceStateDigest === undefined || epoch === undefined
   ) {
     return err('MALFORMED_CANDIDATE');
   }
@@ -310,7 +324,9 @@ export function decodeCandidate(bytes: Uint8Array): Result<ExecutionCandidate, R
       atoms: priceAtoms,
     },
     notional: { unit: notionalUnit, decimals: Number(notionalDecimals), atoms: notionalAtoms },
+    feeTotal: { unit: feeUnit, decimals: Number(feeDecimals), atoms: feeAtoms },
     referenceStateId,
+    referenceStateDigest: bytesToHex(referenceStateDigest),
     corporateActionEpoch: epoch,
   });
 }
@@ -325,6 +341,8 @@ export function encodeTrustedState(s: TrustedState): Uint8Array {
   const w = new ByteWriter();
   w.tag(DomainTag.STATE).u16(s.version);
   w.str(s.stateId);
+  if (s.registrySnapshotDigest === null) w.u8(ABSENT);
+  else w.u8(PRESENT).bytes32(bytes32ToBytes(s.registrySnapshotDigest));
 
   // Representations are sorted by id so the digest does not depend on the order
   // an adapter happened to emit them in.
@@ -413,6 +431,14 @@ export function decodeTrustedState(bytes: Uint8Array): Result<TrustedState, Reas
   if (version === undefined || Number(version) !== STATE_SCHEMA_VERSION) return err('MALFORMED_TRUSTED_STATE');
   const stateId = r.str();
   if (stateId === undefined) return err('MALFORMED_TRUSTED_STATE');
+  const hasRegistryDigest = readFlag(r);
+  if (hasRegistryDigest === undefined) return err('MALFORMED_TRUSTED_STATE');
+  let registrySnapshotDigest: string | null = null;
+  if (hasRegistryDigest) {
+    const digest = r.bytes32();
+    if (digest === undefined) return err('MALFORMED_TRUSTED_STATE');
+    registrySnapshotDigest = bytesToHex(digest);
+  }
 
   const repCount = r.u16();
   if (repCount === undefined) return err('MALFORMED_TRUSTED_STATE');
@@ -525,6 +551,7 @@ export function decodeTrustedState(bytes: Uint8Array): Result<TrustedState, Reas
   return parseTrustedState({
     version: Number(version),
     stateId,
+    registrySnapshotDigest,
     representations,
     market,
     corporateAction,

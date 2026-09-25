@@ -22,7 +22,7 @@ import { bytes32ToBytes, type Bytes32 } from './bytes.ts';
 import type { ReasonCodeName } from './reason-codes.ts';
 import type { Violation } from './verifier/checks.ts';
 
-export const VERIFIER_VERSION = 'mandate-kernel/1';
+export const VERIFIER_VERSION = 'mandate-kernel/2';
 
 export const Decision = { PASS: 'PASS', REJECT: 'REJECT' } as const;
 export type Decision = (typeof Decision)[keyof typeof Decision];

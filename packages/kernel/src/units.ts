@@ -164,6 +164,43 @@ export function notionalBounds(
   return ok({ floorAtoms, ceilAtoms });
 }
 
+/**
+ * `a + b`, exactly, at the finer of the two scales.
+ *
+ * Same unit required: adding dollars to euros is meaningless and returns
+ * `UNIT_MISMATCH` rather than a number. Differing scales are handled by lifting
+ * the coarser value to the finer scale, which is exact because the lift is a
+ * multiplication by a power of ten — no rounding decision is taken, and there is
+ * therefore no rounding direction to argue about.
+ *
+ * A sum past `uint256` is `VALUE_OUT_OF_RANGE`. It is checked rather than
+ * wrapped, because a wrapped total would be a small number and would pass a
+ * maximum-spend bound it should fail.
+ */
+export function addAmounts(a: Amount, b: Amount): Result<Amount, ReasonCodeName> {
+  if (a.unit !== b.unit) return err('UNIT_MISMATCH');
+  const decimals = a.decimals > b.decimals ? a.decimals : b.decimals;
+  const atoms = a.atoms * pow10(decimals - a.decimals) + b.atoms * pow10(decimals - b.decimals);
+  if (atoms > UINT256_MAX) return err('VALUE_OUT_OF_RANGE');
+  return ok({ unit: a.unit, decimals, atoms });
+}
+
+/**
+ * `a - b`, exactly, at the finer of the two scales.
+ *
+ * Refuses a negative result with `VALUE_OUT_OF_RANGE`: `Amount` is unsigned, and
+ * representing "less than nothing" as a small positive number is the class of
+ * error the unit types exist to prevent. A caller that needs to know whether
+ * `b` exceeded `a` compares first.
+ */
+export function subtractAmounts(a: Amount, b: Amount): Result<Amount, ReasonCodeName> {
+  if (a.unit !== b.unit) return err('UNIT_MISMATCH');
+  const decimals = a.decimals > b.decimals ? a.decimals : b.decimals;
+  const atoms = a.atoms * pow10(decimals - a.decimals) - b.atoms * pow10(decimals - b.decimals);
+  if (atoms < 0n) return err('VALUE_OUT_OF_RANGE');
+  return ok({ unit: a.unit, decimals, atoms });
+}
+
 export const BPS_SCALE = 10_000n;
 
 /**

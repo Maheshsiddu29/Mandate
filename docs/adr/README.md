@@ -25,6 +25,9 @@ Status values: `Proposed`, `Accepted`, `Superseded by ADR NNNN`, `Rejected`.
 | [0011](0011-route-cost-and-fill-policy.md) | Route cost and fill policy | Accepted |
 | [0012](0012-jev-closed-set-authority-boundary.md) | Jev closed-set authority boundary | Accepted |
 | [0013](0013-jev-fallback-and-confidence-policy.md) | Jev fallback and confidence policy | Accepted |
+| [0014](0014-symmetric-signed-economic-authorization.md) | Symmetric signed economic authorization | Accepted |
+| [0015](0015-replay-quarantine-and-reconciliation.md) | Replay quarantine and reconciliation | Accepted |
+| [0016](0016-pipeline-time-and-handoff-freshness.md) | Pipeline time authority and handoff freshness | Accepted |
 
 The canonical product specification remains
 [docs/mandate-design.md](../mandate-design.md). ADRs record *how* a specified
