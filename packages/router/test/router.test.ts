@@ -6,6 +6,7 @@ import { route, type ProviderRouteQuote, type TrustedRouteCost } from '../src/in
 import {
   ROUTER_AUTHORIZATION, ROUTER_CLOCK, ROUTER_DOMAIN, ROUTER_MANDATE, ROUTER_REGISTRY_INPUT, ROUTER_REQUESTED_QUANTITY,
   ROUTER_STATE, routeQuote, trustedCost, zeroFee,
+  routerHandoff,
 } from './support/fixture.ts';
 
 const opened = openRegistry(ROUTER_REGISTRY_INPUT);
@@ -35,7 +36,7 @@ describe('deterministic router', () => {
   it('ranks only kernel-PASS candidates and selects lower BUY cost', () => {
     const expensive = withFee('route.expensive', 500n);
     const cheap = withFee('route.cheap', 100n);
-    const result = route(request([expensive, cheap]));
+    const result = route(request([expensive, cheap]), routerHandoff());
     assert.equal(result.status, 'SELECTED');
     if (result.status !== 'SELECTED') return;
     assert.equal(result.selected.routeId, 'route.cheap');
@@ -49,7 +50,7 @@ describe('deterministic router', () => {
     const wrongIssuer = parseIdentifier('issuer.attacker');
     assert.equal(wrongIssuer.ok, true);
     if (!wrongIssuer.ok) return;
-    const result = route(request([{ ...attacker, issuer: wrongIssuer.value }, valid]));
+    const result = route(request([{ ...attacker, issuer: wrongIssuer.value }, valid]), routerHandoff());
     assert.equal(result.status, 'SELECTED');
     if (result.status !== 'SELECTED') return;
     assert.equal(result.selected.routeId, 'route.valid');
@@ -63,7 +64,7 @@ describe('deterministic router', () => {
     assert.equal(fake.ok, true);
     if (!fake.ok) return;
     const quote = routeQuote({ routeId: 'route.fake', representationId: fake.value });
-    const result = route(request([quote]));
+    const result = route(request([quote]), routerHandoff());
     assert.equal(result.status, 'NO_VALID_ROUTE');
     if (result.status !== 'NO_VALID_ROUTE') return;
     const outcome = result.receipt.outcomes[0];
@@ -74,8 +75,8 @@ describe('deterministic router', () => {
   it('is invariant to provider input order and uses a stable digest tie-break', () => {
     const a = withFee('route.a', 100n);
     const b = withFee('route.b', 100n);
-    const first = route(request([a, b]));
-    const second = route(request([b, a]));
+    const first = route(request([a, b]), routerHandoff());
+    const second = route(request([b, a]), routerHandoff());
     assert.equal(first.status, 'SELECTED');
     assert.equal(second.status, 'SELECTED');
     if (first.status !== 'SELECTED' || second.status !== 'SELECTED') return;
@@ -85,7 +86,7 @@ describe('deterministic router', () => {
 
   it('re-verifies the ranked winner before handoff', () => {
     let calls = 0;
-    const result = route(request([routeQuote()]), (input) => {
+    const result = route(request([routeQuote()]), routerHandoff(), (input) => {
       calls += 1;
       return verify(input);
     });
@@ -95,7 +96,7 @@ describe('deterministic router', () => {
 
   it('returns no handoff if final re-verification fails', () => {
     let calls = 0;
-    const result = route(request([routeQuote()]), (input) => {
+    const result = route(request([routeQuote()]), routerHandoff(), (input) => {
       calls += 1;
       const actual = verify(input);
       if (calls === 1) return actual;
@@ -107,7 +108,7 @@ describe('deterministic router', () => {
   });
 
   it('returns INVALID_INPUT for duplicate routes and oversized provider input', () => {
-    const duplicate = route(request([routeQuote(), routeQuote()]));
+    const duplicate = route(request([routeQuote(), routeQuote()]), routerHandoff());
     assert.equal(duplicate.status, 'INVALID_INPUT');
     if (duplicate.status === 'INVALID_INPUT') assert.equal(duplicate.errors[0]?.code, 'DUPLICATE_ROUTE_ID');
   });

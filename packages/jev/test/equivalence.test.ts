@@ -40,7 +40,7 @@ import {
   throwingTransport,
   worstChoiceTransport,
 } from '../src/testing/index.ts';
-import { maliciousQuote, quoteWithFee, routeRequest, validRoutes, haltedState, ROUTER_CLOCK } from './support/world.ts';
+import { maliciousQuote, quoteWithFee, routeRequest, validRoutes, haltedState, ROUTER_CLOCK, jevHandoff, } from './support/world.ts';
 
 /** Every Jev behaviour the system can encounter, hostile ones included. */
 function allBehaviours(): readonly (readonly [string, JevTransport | null])[] {
@@ -79,7 +79,7 @@ describe('permitted-execution set equivalence', () => {
     const baselineDigest = closedChoiceSetDigest(buildClosedChoiceSet(evaluated.evaluation.admissible));
 
     for (const [name, transport] of allBehaviours()) {
-      const result = await selectWithJev({ route: routeRequest(routes), transport, policy: { timeoutMs: 60 } });
+      const result = await selectWithJev({ route: routeRequest(routes), transport, policy: { timeoutMs: 60 }, handoffState: jevHandoff() });
       const receipt = result.jevReceipt;
       assert.notEqual(receipt, null, name);
       if (receipt === null) continue;
@@ -96,7 +96,7 @@ describe('permitted-execution set equivalence', () => {
 
     const reached = new Set<string>();
     for (const [name, transport] of allBehaviours()) {
-      const result = await selectWithJev({ route: routeRequest(routes), transport, policy: { timeoutMs: 60 } });
+      const result = await selectWithJev({ route: routeRequest(routes), transport, policy: { timeoutMs: 60 }, handoffState: jevHandoff() });
       if (result.status !== 'SELECTED') continue;
       assert.ok(admissible.has(result.selected.candidateDigest), `${name} handed off a candidate outside the admissible set`);
       assert.equal(result.handoffVerification.decision, Decision.PASS, `${name} handed off without a final PASS`);
@@ -111,12 +111,12 @@ describe('permitted-execution set equivalence', () => {
 
   it('refuses identically for every Jev behaviour when nothing is admissible', async () => {
     const impossible = [maliciousQuote('route.attacker.a'), maliciousQuote('route.attacker.b')];
-    const deterministicBaseline = route(routeRequest(impossible));
+    const deterministicBaseline = route(routeRequest(impossible), jevHandoff());
     assert.equal(deterministicBaseline.status, 'NO_VALID_ROUTE');
     if (deterministicBaseline.status !== 'NO_VALID_ROUTE') return;
 
     for (const [name, transport] of allBehaviours()) {
-      const result = await selectWithJev({ route: routeRequest(impossible), transport, policy: { timeoutMs: 60 } });
+      const result = await selectWithJev({ route: routeRequest(impossible), transport, policy: { timeoutMs: 60 }, handoffState: jevHandoff() });
       assert.equal(result.status, 'NO_VALID_ROUTE', name);
       assert.equal(
         result.routing.status === 'NO_VALID_ROUTE' ? result.routing.receipt.receiptDigest : null,
@@ -137,12 +137,12 @@ describe('permitted-execution set equivalence', () => {
   });
 
   it('produces the byte-identical Phase 4 result whenever the deterministic candidate is chosen', async () => {
-    const baseline = route(routeRequest(routes));
+    const baseline = route(routeRequest(routes), jevHandoff());
     assert.equal(baseline.status, 'SELECTED');
     if (baseline.status !== 'SELECTED') return;
 
     for (const [name, transport] of [...allBehaviours()].filter(([label]) => label !== 'disagreeing' && label !== 'worst-choice' && label !== 'signal-following')) {
-      const result = await selectWithJev({ route: routeRequest(routes), transport, policy: { timeoutMs: 60 } });
+      const result = await selectWithJev({ route: routeRequest(routes), transport, policy: { timeoutMs: 60 }, handoffState: jevHandoff() });
       if (result.status !== 'SELECTED') continue;
       if (result.selected.candidateDigest !== baseline.selected.candidateDigest) continue;
       assert.equal(
@@ -156,8 +156,8 @@ describe('permitted-execution set equivalence', () => {
   it('keeps the invariant at the cardinality boundary, where Jev is skipped', async () => {
     for (const count of [254, 255]) {
       const bulk = validRoutes(count);
-      const baseline = route(routeRequest(bulk));
-      const result = await selectWithJev({ route: routeRequest(bulk), transport: worstChoiceTransport(), policy: { timeoutMs: 500 } });
+      const baseline = route(routeRequest(bulk), jevHandoff());
+      const result = await selectWithJev({ route: routeRequest(bulk), transport: worstChoiceTransport(), policy: { timeoutMs: 500 }, handoffState: jevHandoff() });
       assert.equal(result.status, 'SELECTED', `count ${count}`);
       assert.equal(baseline.status, 'SELECTED', `count ${count}`);
       if (result.status !== 'SELECTED' || baseline.status !== 'SELECTED') continue;

@@ -70,8 +70,26 @@ export function trustedCost(quote: ProviderRouteQuote, patch: Partial<TrustedRou
   };
 }
 
+/**
+ * The fixture mandate as a SELL.
+ *
+ * `economicLimit` has to be re-read, not just inherited: on a BUY it is a
+ * maximum total debit and on a SELL it is a minimum total credit (ADR 0014), so
+ * carrying the BUY value over would demand proceeds of twice the notional and
+ * refuse every route. Half the notional is a live floor that the fixture's
+ * zero-fee routes clear comfortably; tests about the floor itself set their own.
+ */
 export function sellMandate(): CanonicalMandate {
-  return { ...ROUTER_MANDATE, side: 'SELL' };
+  return {
+    ...ROUTER_MANDATE,
+    side: 'SELL',
+    economicLimit: { ...ROUTER_MANDATE.economicLimit, atoms: parsedCandidate.notional.atoms / 2n },
+  };
+}
+
+/** A SELL mandate with an explicit minimum-credit floor, in notional atoms. */
+export function sellMandateWithFloor(atoms: bigint): CanonicalMandate {
+  return { ...sellMandate(), economicLimit: { ...ROUTER_MANDATE.economicLimit, atoms } };
 }
 
 export function stateWithReference(atoms: bigint): TrustedState {
@@ -79,5 +97,49 @@ export function stateWithReference(atoms: bigint): TrustedState {
   return {
     ...ROUTER_STATE,
     market: { ...ROUTER_STATE.market, value: { ...ROUTER_STATE.market.value, referencePrice: { ...ROUTER_STATE.market.value.referencePrice, atoms } } },
+  };
+}
+
+/**
+ * Handoff inputs for a world that evaluates and hands off against one snapshot.
+ *
+ * Schema v2 and ADR 0016 make the handoff explicit, so tests that are not about
+ * time or state change say so by passing this. Tests that *are* about it build
+ * their own, which is the point: reusing the evaluation state is now a visible
+ * choice rather than the default.
+ */
+export function routerHandoff(overrides: Partial<{ trustedMarketState: unknown; clock: unknown }> = {}) {
+  return {
+    trustedMarketState: ROUTER_STATE,
+    clock: { nowUnixSeconds: ROUTER_CLOCK },
+    ...overrides,
+  };
+}
+
+/**
+ * Handoff inputs derived from a request's own inputs.
+ *
+ * For worlds that build their own trusted state — a re-signed mandate changes
+ * the replay record, for instance — so the handoff sees the same world the
+ * evaluation did rather than the module-level fixture.
+ */
+export function handoffFor(request: { readonly trustedMarketState: unknown; readonly clock: unknown }) {
+  return { trustedMarketState: request.trustedMarketState, clock: request.clock };
+}
+
+/** The recorded state with trading halted, for handoff-freshness tests. */
+export function haltedRouterState(): TrustedState {
+  if (ROUTER_STATE.market === null) throw new Error('fixture has no market state');
+  return { ...ROUTER_STATE, market: { ...ROUTER_STATE.market, value: { ...ROUTER_STATE.market.value, haltStatus: 'HALTED' } } };
+}
+
+/** The recorded state with one representation paused, for handoff-freshness tests. */
+export function pausedRepresentationState(): TrustedState {
+  return {
+    ...ROUTER_STATE,
+    representations: ROUTER_STATE.representations.map((observed) => ({
+      ...observed,
+      value: { ...observed.value, operationalState: 'PAUSED' as const },
+    })),
   };
 }

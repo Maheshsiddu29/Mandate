@@ -13,6 +13,7 @@ import { evaluateRoutes, route, selectEvaluated, type ProviderRouteQuote, type T
 import {
   ROUTER_AUTHORIZATION, ROUTER_CLOCK, ROUTER_DOMAIN, ROUTER_MANDATE, ROUTER_REGISTRY_INPUT,
   ROUTER_REQUESTED_QUANTITY, ROUTER_STATE, routeQuote, trustedCost, zeroFee,
+  routerHandoff,
 } from './support/fixture.ts';
 
 const opened = openRegistry(ROUTER_REGISTRY_INPUT);
@@ -41,11 +42,11 @@ function withFee(routeId: string, atoms: bigint): ProviderRouteQuote {
 describe('route evaluation and selection', () => {
   it('reproduces route() exactly as evaluate-then-select-index-zero', () => {
     const input = request([withFee('route.c', 300n), withFee('route.a', 100n), withFee('route.b', 200n)]);
-    const baseline = route(input);
+    const baseline = route(input, routerHandoff());
     const evaluated = evaluateRoutes(input);
     assert.equal(evaluated.status, 'EVALUATED');
     if (evaluated.status !== 'EVALUATED') return;
-    const split = selectEvaluated(evaluated.evaluation, 0);
+    const split = selectEvaluated(evaluated.evaluation, 0, routerHandoff());
     assert.equal(baseline.status, 'SELECTED');
     assert.equal(split.status, 'SELECTED');
     if (baseline.status !== 'SELECTED' || split.status !== 'SELECTED') return;
@@ -77,7 +78,7 @@ describe('route evaluation and selection', () => {
     const evaluated = evaluateRoutes(request([withFee('route.a', 100n), withFee('route.b', 200n)]));
     assert.equal(evaluated.status, 'EVALUATED');
     if (evaluated.status !== 'EVALUATED') return;
-    const second = selectEvaluated(evaluated.evaluation, 1);
+    const second = selectEvaluated(evaluated.evaluation, 1, routerHandoff());
     assert.equal(second.status, 'SELECTED');
     if (second.status !== 'SELECTED') return;
     assert.equal(second.selected.routeId, 'route.b');
@@ -89,7 +90,7 @@ describe('route evaluation and selection', () => {
     assert.equal(evaluated.status, 'EVALUATED');
     if (evaluated.status !== 'EVALUATED') return;
     for (const index of [-1, 1, 2, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
-      const result = selectEvaluated(evaluated.evaluation, index);
+      const result = selectEvaluated(evaluated.evaluation, index, routerHandoff());
       assert.equal(result.status, 'INVALID_INPUT', `index ${index}`);
       if (result.status !== 'INVALID_INPUT') continue;
       assert.equal(result.errors[0]?.code, 'INPUT_INVALID');
@@ -106,9 +107,9 @@ describe('route evaluation and selection', () => {
     assert.equal(evaluated.status, 'EVALUATED');
     if (evaluated.status !== 'EVALUATED') return;
     assert.equal(evaluated.evaluation.admissible.length, 0);
-    const baseline = route(input);
+    const baseline = route(input, routerHandoff());
     for (const index of [0, 7, -3]) {
-      const result = selectEvaluated(evaluated.evaluation, index);
+      const result = selectEvaluated(evaluated.evaluation, index, routerHandoff());
       assert.equal(result.status, 'NO_VALID_ROUTE');
       if (result.status !== 'NO_VALID_ROUTE' || baseline.status !== 'NO_VALID_ROUTE') continue;
       assert.equal(result.receipt.receiptDigest, baseline.receipt.receiptDigest);

@@ -1,18 +1,19 @@
 /**
- * Executable evidence for the production architecture pressure test.
+ * Regression tests for the router findings of the production architecture
+ * pressure test.
  *
- * **These tests pin defects, not desired behaviour.** See
+ * These began as defect-pinning tests. Phase 5R remediated the findings, so each
+ * has been **inverted**: it asserts the safe behaviour and fails if the
+ * vulnerability returns. See
  * [docs/production-architecture-pressure-test.md](../../../docs/production-architecture-pressure-test.md).
- * When a finding is remediated the corresponding test here fails and must be
- * inverted deliberately.
  */
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Decision, parseTrustedState, verify } from '@mandate/kernel';
+import { Decision, MAX_STATE_REPRESENTATIONS, parseTrustedState, verify } from '@mandate/kernel';
+import { openRegistry, registrySnapshotDigest } from '@mandate/registry';
 import { buildRoutingCandidate } from '../src/candidate.ts';
 import { evaluateRoutes, route, selectEvaluated } from '../src/router.ts';
-import { openRegistry } from '@mandate/registry';
 import {
   ROUTER_AUTHORIZATION,
   ROUTER_CLOCK,
@@ -21,7 +22,10 @@ import {
   ROUTER_REGISTRY_INPUT,
   ROUTER_REQUESTED_QUANTITY,
   ROUTER_STATE,
+  haltedRouterState,
+  pausedRepresentationState,
   routeQuote,
+  routerHandoff,
   trustedCost,
   zeroFee,
 } from './support/fixture.ts';
@@ -49,160 +53,169 @@ function fee(atoms: bigint) {
   return { ...zeroFee(), atoms };
 }
 
-// --- F-2 (HIGH): the all-in cost bound sits outside the authoritative layer --
+// --- F-2: the router no longer carries an economic permission ---------------
 
-/**
- * `ExecutionCandidate` carries no fee field and `encodeCandidate` commits to
- * none, so the kernel's `maxNotional` check bounds the notional alone. The
- * all-in bound is `TOTAL_COST_EXCEEDS_MANDATE`, which lives in the router. The
- * component described as the only one that authorizes cannot see the fees, and
- * neither can anything reconstructed from `candidateDigest`.
- */
-test('F-2 (HIGH): the kernel passes a route whose fees exceed the mandate cap', () => {
+test('F-2 REGRESSION: the router hands the fee total to the kernel and does not gate on it', () => {
   const quote = routeQuote({
     costs: { venueFee: fee(ROUTER_MANDATE.maxNotional.atoms), executionFee: zeroFee(), settlementFee: zeroFee(), routeFee: zeroFee() },
   });
 
-  const kernelVerdict = verify({
+  const built = buildRoutingCandidate({
+    mandate: ROUTER_MANDATE,
+    quote,
+    trustedState: ROUTER_STATE,
+    trustedCost: trustedCost(quote),
+    requestedQuantity: ROUTER_REQUESTED_QUANTITY,
+    nowUnixSeconds: ROUTER_CLOCK,
+  });
+  assert.ok(built.ok, 'construction is not authorization');
+  assert.equal(built.candidate.executionCandidate.feeTotal.atoms, ROUTER_MANDATE.maxNotional.atoms);
+
+  // And the kernel — not the router — is what refuses it.
+  const verdict = verify({
     mandate: ROUTER_MANDATE,
     authorization: ROUTER_AUTHORIZATION,
-    candidate: {
-      version: 1,
-      representationId: quote.representationId,
-      canonicalAsset: quote.canonicalAsset,
-      issuer: quote.issuer,
-      chain: quote.chain,
-      venue: quote.venue,
-      side: quote.side,
-      agent: quote.agent,
-      quantity: quote.quantity,
-      executionPrice: quote.executionPrice,
-      notional: quote.notional,
-      referenceStateId: quote.referenceStateId,
-      corporateActionEpoch: quote.corporateActionEpoch,
-    },
+    candidate: built.candidate.executionCandidate,
     trustedState: ROUTER_STATE,
     clock: { nowUnixSeconds: ROUTER_CLOCK },
     expectedDomain: ROUTER_DOMAIN,
   });
-  assert.equal(kernelVerdict.decision, Decision.PASS, 'the verifier never sees the fee');
-
-  const routerVerdict = buildRoutingCandidate({
-    mandate: ROUTER_MANDATE,
-    quote,
-    trustedState: ROUTER_STATE,
-    trustedCost: trustedCost(quote),
-    requestedQuantity: ROUTER_REQUESTED_QUANTITY,
-    nowUnixSeconds: ROUTER_CLOCK,
-  });
-  assert.equal(routerVerdict.ok, false, 'only the router catches it');
-  assert.ok(!routerVerdict.ok);
-  assert.ok(routerVerdict.exclusions.some((item) => item.code === 'TOTAL_COST_EXCEEDS_MANDATE'));
+  assert.equal(verdict.decision, Decision.REJECT);
+  assert.ok(verdict.reasonCodes.includes('TOTAL_DEBIT_EXCEEDED'), verdict.reasonCodes.join(', '));
 });
 
-// --- F-4 (HIGH): a SELL mandate cannot bound its own proceeds ----------------
-
-/**
- * `SELL_FEES_EXCEED_PROCEEDS` triggers only when fees reach the whole notional.
- * There is no mandate field for a minimum proceed or a maximum fee, so a sale
- * that nets one atom is admissible: technically valid, economically ruinous.
- */
-test('F-4 (HIGH): a SELL netting one atom of proceeds is admissible', () => {
-  const baseline = routeQuote();
-  const proceeds = baseline.notional.atoms;
+test('F-2 REGRESSION: an over-budget route is excluded end to end, by the kernel', () => {
   const quote = routeQuote({
-    side: 'SELL',
-    costs: { venueFee: fee(proceeds - 1n), executionFee: zeroFee(), settlementFee: zeroFee(), routeFee: zeroFee() },
+    costs: { venueFee: fee(ROUTER_MANDATE.maxNotional.atoms), executionFee: zeroFee(), settlementFee: zeroFee(), routeFee: zeroFee() },
   });
-  const built = buildRoutingCandidate({
-    mandate: { ...ROUTER_MANDATE, side: 'SELL' },
-    quote,
-    trustedState: ROUTER_STATE,
-    trustedCost: trustedCost(quote),
-    requestedQuantity: ROUTER_REQUESTED_QUANTITY,
-    nowUnixSeconds: ROUTER_CLOCK,
-  });
-  assert.ok(built.ok, 'no bound refuses it');
-  assert.equal(built.quality.economicValue.atoms, 1n);
+  const result = route(request([quote]), routerHandoff());
+  assert.equal(result.status, 'NO_VALID_ROUTE');
+  if (result.status === 'NO_VALID_ROUTE') {
+    const excluded = result.receipt.outcomes.find((outcome) => outcome.status === 'EXCLUDED');
+    assert.ok(excluded);
+    assert.ok(
+      excluded.exclusions.some((item) => item.code === 'TOTAL_DEBIT_EXCEEDED'),
+      excluded.exclusions.map((item) => item.code).join(', '),
+    );
+  }
 });
 
-// --- F-5 (HIGH): the final re-verification reads the evaluation-time state ---
+// --- F-5: the handoff re-verification reads state supplied for the handoff ---
 
-/**
- * `selectEvaluated` re-verifies against `context.trustedState` and
- * `context.clock` — the very objects `evaluateRoutes` decided over. The check is
- * therefore a tautology for a deterministic verifier, and `route()` exposes no
- * parameter through which a later state could be supplied, so
- * `FINAL_REVERIFICATION_FAILED` is unreachable on the deterministic path.
- */
-test('F-5 (HIGH): every verifier call in route() sees one identical trusted state', () => {
+test('F-5 REGRESSION: a halt arriving after evaluation rejects at handoff', () => {
+  const result = route(
+    request([routeQuote({ routeId: 'route.one' })]),
+    routerHandoff({ trustedMarketState: haltedRouterState() }),
+  );
+  assert.equal(result.status, 'NO_VALID_ROUTE', 'the halt must reach the re-verification');
+  if (result.status === 'NO_VALID_ROUTE') {
+    const failed = result.receipt.outcomes.find((outcome) =>
+      outcome.status === 'EXCLUDED' && outcome.exclusions.some((item) => item.code === 'FINAL_REVERIFICATION_FAILED'));
+    assert.ok(failed, 'FINAL_REVERIFICATION_FAILED is reachable, which it was not before Phase 5R');
+    assert.equal(result.receipt.selectedCandidateDigest, null);
+  }
+});
+
+test('F-5 REGRESSION: the handoff re-verification reads the handoff state, not the evaluation state', () => {
   const seen: unknown[] = [];
   const spy = (input: Parameters<typeof verify>[0]) => {
     seen.push(input.trustedState);
     return verify(input);
   };
-  const result = route(request([routeQuote({ routeId: 'route.one' }), routeQuote({ routeId: 'route.two' })]), spy);
-  assert.equal(result.status, 'SELECTED');
-  assert.ok(seen.length >= 2, 'evaluation and the final re-verification both ran');
-  assert.ok(seen.every((state) => state === seen[0]), 'the re-verification cannot observe a later state');
+  const handoffState = pausedRepresentationState();
+  route(request([routeQuote({ routeId: 'route.one' })]), routerHandoff({ trustedMarketState: handoffState }), spy);
+
+  assert.ok(seen.length >= 2);
+  const last = seen[seen.length - 1];
+  assert.notEqual(last, seen[0], 'the final call must not see the evaluation state object');
 });
 
-test('F-5 (HIGH): a halt arriving after evaluation cannot reach selectEvaluated', () => {
-  const evaluated = evaluateRoutes(request([routeQuote({ routeId: 'route.one' }), routeQuote({ routeId: 'route.two' })]));
+test('F-5 REGRESSION: each kind of state change between evaluation and handoff rejects', () => {
+  const cases: readonly { readonly label: string; readonly handoff: ReturnType<typeof routerHandoff> }[] = [
+    { label: 'trading halted', handoff: routerHandoff({ trustedMarketState: haltedRouterState() }) },
+    { label: 'representation paused', handoff: routerHandoff({ trustedMarketState: pausedRepresentationState() }) },
+    {
+      label: 'mandate expired',
+      handoff: routerHandoff({ clock: { nowUnixSeconds: ROUTER_MANDATE.expiresAtUnixSeconds } }),
+    },
+    {
+      label: 'price observation now stale',
+      handoff: routerHandoff({ clock: { nowUnixSeconds: ROUTER_CLOCK + ROUTER_MANDATE.maxPriceAgeSeconds + 1n } }),
+    },
+  ];
+  for (const item of cases) {
+    const result = route(request([routeQuote({ routeId: 'route.one' })]), item.handoff);
+    assert.equal(result.status, 'NO_VALID_ROUTE', item.label);
+  }
+});
+
+test('F-5 REGRESSION: a handoff cannot be omitted, and an unusable one is not silently replaced', () => {
+  const evaluated = evaluateRoutes(request([routeQuote({ routeId: 'route.one' })]));
   assert.ok(evaluated.status === 'EVALUATED');
 
-  // Trading halts between closing the set and handing off. `selectEvaluated`
-  // takes only the evaluation, an index and a verifier, so there is no
-  // parameter through which the halt could be supplied, and it selects anyway.
-  assert.equal(selectEvaluated(evaluated.evaluation, 0).status, 'SELECTED');
+  const missing = selectEvaluated(evaluated.evaluation, 0, undefined as never);
+  assert.equal(missing.status, 'INVALID_INPUT');
+  if (missing.status === 'INVALID_INPUT') assert.equal(missing.errors[0]?.code, 'HANDOFF_STATE_MISSING');
 
-  // The same candidate against the halted state is a REJECT, which is what the
-  // re-verification would have caught had it been able to see it.
-  const market = ROUTER_STATE.market;
-  assert.ok(market !== null);
-  const halted = { ...ROUTER_STATE, market: { ...market, value: { ...market.value, haltStatus: 'HALTED' as const } } };
-  const selected = evaluated.evaluation.admissible[0];
-  assert.ok(selected !== undefined);
-  const wouldReject = verify({
-    mandate: ROUTER_MANDATE,
-    authorization: ROUTER_AUTHORIZATION,
-    candidate: selected.candidate.executionCandidate,
-    trustedState: halted,
-    clock: { nowUnixSeconds: ROUTER_CLOCK },
-    expectedDomain: ROUTER_DOMAIN,
-  });
-  assert.equal(wouldReject.decision, Decision.REJECT);
-  assert.ok(wouldReject.reasonCodes.includes('TRADING_HALTED'));
+  const unparseable = selectEvaluated(evaluated.evaluation, 0, { trustedMarketState: 'not a state', clock: { nowUnixSeconds: ROUTER_CLOCK } });
+  assert.equal(unparseable.status, 'INVALID_INPUT', 'no fallback to evaluation state');
 });
 
-// --- F-3 (HIGH): the u16 defect propagates into route() ----------------------
+// --- F-9: pipeline time does not run backwards ------------------------------
 
-/**
- * `route()` documents `INVALID_INPUT` for unusable input. An oversized
- * representation collection escapes as a throw instead, from
- * `trustedStateDigest` inside `finishReceipt`.
- */
-test('F-3 (HIGH): route() throws rather than returning INVALID_INPUT on an oversized state', () => {
+test('F-9 REGRESSION: a handoff instant earlier than the evaluation instant is refused', () => {
+  const rewound = route(
+    request([routeQuote({ routeId: 'route.one' })]),
+    routerHandoff({ clock: { nowUnixSeconds: ROUTER_CLOCK - 1n } }),
+  );
+  assert.equal(rewound.status, 'INVALID_INPUT');
+  if (rewound.status === 'INVALID_INPUT') assert.equal(rewound.errors[0]?.code, 'HANDOFF_TIME_REGRESSED');
+
+  // Equal is permitted: a pipeline that completes within one second is normal.
+  const same = route(request([routeQuote({ routeId: 'route.one' })]), routerHandoff());
+  assert.equal(same.status, 'SELECTED');
+});
+
+// --- F-7: the registry snapshot is bound to the trusted state ---------------
+
+test('F-7 REGRESSION: a trusted state declaring another registry snapshot is refused', () => {
+  const foreign = { ...ROUTER_STATE, registrySnapshotDigest: `0x${'ab'.repeat(32)}` };
+  const mismatched = route(request([routeQuote()], { trustedMarketState: foreign }), routerHandoff({ trustedMarketState: foreign }));
+  assert.equal(mismatched.status, 'INVALID_INPUT');
+  if (mismatched.status === 'INVALID_INPUT') assert.equal(mismatched.errors[0]?.code, 'REGISTRY_SNAPSHOT_MISMATCH');
+
+  // The matching digest is accepted.
+  const bound = { ...ROUTER_STATE, registrySnapshotDigest: registrySnapshotDigest(REGISTRY.snapshot) };
+  const matched = route(request([routeQuote()], { trustedMarketState: bound }), routerHandoff({ trustedMarketState: bound }));
+  assert.equal(matched.status, 'SELECTED');
+});
+
+// --- F-3: route() returns a verdict rather than throwing --------------------
+
+test('F-3 REGRESSION: an oversized trusted state is INVALID_INPUT, not a throw', () => {
   const base = ROUTER_STATE.representations[0];
   assert.ok(base !== undefined);
   const representations: unknown[] = [{ provenance: { ...base.provenance }, value: { ...base.value } }];
-  for (let index = 1; index < 65_536; index += 1) {
+  for (let index = 1; index <= MAX_STATE_REPRESENTATIONS; index += 1) {
     representations.push({
       provenance: { ...base.provenance },
       value: { ...base.value, representationId: `eip155:4663/erc20:0x${index.toString(16).padStart(40, '0')}` },
     });
   }
   const inflated = {
-    version: 1,
+    version: 2,
     stateId: ROUTER_STATE.stateId,
+    registrySnapshotDigest: null,
     representations,
     market: ROUTER_STATE.market,
     corporateAction: ROUTER_STATE.corporateAction,
     replay: ROUTER_STATE.replay,
   };
-  assert.equal(parseTrustedState(inflated).ok, true, 'the kernel parser accepts it');
-  assert.throws(
-    () => route(request([routeQuote()], { trustedMarketState: inflated })),
-    /exceeds 2-byte unsigned field/,
-  );
+  assert.equal(parseTrustedState(inflated).ok, false, 'the kernel parser now bounds it');
+
+  const result = route(request([routeQuote()], { trustedMarketState: inflated }), routerHandoff());
+  assert.equal(result.status, 'INVALID_INPUT');
+  if (result.status === 'INVALID_INPUT') {
+    assert.ok(result.errors.some((item) => item.detail['cause'] === 'RESOURCE_LIMIT_EXCEEDED'), JSON.stringify(result.errors));
+  }
 });

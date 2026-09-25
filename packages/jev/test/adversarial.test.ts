@@ -26,8 +26,7 @@ import {
   movedPriceState,
   quoteWithFee,
   routeRequest,
-  validRoutes,
-} from './support/world.ts';
+  validRoutes, jevHandoff, ROUTER_STATE,} from './support/world.ts';
 
 /** Three valid routes and three the registry or the kernel refuses. */
 function mixedWorld() {
@@ -64,8 +63,7 @@ describe('adversarial jev behaviour', () => {
       const result = await selectWithJev({
         route: routeRequest(routes),
         transport: adversarialTransport(behaviour, 'route.attacker.issuer'),
-        policy: { timeoutMs: 60 },
-      });
+        policy: { timeoutMs: 60 }, handoffState: jevHandoff() });
 
       if (result.status === 'SELECTED') {
         assert.ok(baseline.digests.has(result.selected.candidateDigest), `${behaviour} selected a candidate outside the closed set`);
@@ -79,7 +77,7 @@ describe('adversarial jev behaviour', () => {
 
   it('never lets an excluded route reach the closed set under any behaviour', async () => {
     for (const behaviour of ALL_ADVERSARIAL_BEHAVIOURS) {
-      const result = await selectWithJev({ route: routeRequest(routes), transport: adversarialTransport(behaviour, 'route.attacker.issuer'), policy: { timeoutMs: 60 } });
+      const result = await selectWithJev({ route: routeRequest(routes), transport: adversarialTransport(behaviour, 'route.attacker.issuer'), policy: { timeoutMs: 60 }, handoffState: jevHandoff() });
       const ids = result.jevReceipt?.candidateIds ?? [];
       assert.equal(ids.length, 3, behaviour);
       for (const excluded of baseline.excluded) {
@@ -90,7 +88,7 @@ describe('adversarial jev behaviour', () => {
 
   it('ignores an address, an amount and a side smuggled alongside a valid name', async () => {
     for (const behaviour of ['ATTACKER_ADDRESS', 'ALTERED_AMOUNT', 'ALTERED_SIDE', 'ALTERED_CANDIDATE'] as const) {
-      const result = await selectWithJev({ route: routeRequest(validRoutes(3)), transport: adversarialTransport(behaviour) });
+      const result = await selectWithJev({ route: routeRequest(validRoutes(3)), transport: adversarialTransport(behaviour), handoffState: jevHandoff() });
       assert.equal(result.status, 'SELECTED', behaviour);
       if (result.status !== 'SELECTED') continue;
       // The smuggled values were never read: the candidate is the local one the
@@ -104,20 +102,20 @@ describe('adversarial jev behaviour', () => {
 
   it('refuses a name that is not exactly in the set, rather than approximating', async () => {
     for (const behaviour of ['EXCLUDED_ROUTE', 'NONEXISTENT_ROUTE', 'PROTOTYPE_KEY'] as const) {
-      const result = await selectWithJev({ route: routeRequest(routes), transport: adversarialTransport(behaviour, 'route.attacker.issuer') });
+      const result = await selectWithJev({ route: routeRequest(routes), transport: adversarialTransport(behaviour, 'route.attacker.issuer'), handoffState: jevHandoff() });
       assert.equal(result.selectionMode, 'JEV_FALLBACK', behaviour);
       assert.equal(result.jevReceipt?.fallbackReason, 'CHOICE_OUT_OF_SET', behaviour);
     }
   });
 
   it('refuses a malformed identifier at the parser rather than at the lookup', async () => {
-    const result = await selectWithJev({ route: routeRequest(routes), transport: adversarialTransport('MALFORMED_IDENTIFIER') });
+    const result = await selectWithJev({ route: routeRequest(routes), transport: adversarialTransport('MALFORMED_IDENTIFIER'), handoffState: jevHandoff() });
     assert.equal(result.jevReceipt?.fallbackReason, 'SCHEMA_MISMATCH');
   });
 
   it('refuses NaN and out-of-range probabilities', async () => {
     for (const behaviour of ['NAN_PROBABILITY', 'OUT_OF_RANGE_PROBABILITY', 'EMPTY_RESULT'] as const) {
-      const result = await selectWithJev({ route: routeRequest(routes), transport: adversarialTransport(behaviour) });
+      const result = await selectWithJev({ route: routeRequest(routes), transport: adversarialTransport(behaviour), handoffState: jevHandoff() });
       assert.equal(result.jevReceipt?.fallbackReason, 'SCHEMA_MISMATCH', behaviour);
       assert.equal(result.selectionMode, 'JEV_FALLBACK', behaviour);
     }
@@ -127,7 +125,7 @@ describe('adversarial jev behaviour', () => {
     // Full confidence over a flat distribution is a lie about the model's own
     // state. It is not a safety event: the choice is still in the closed set
     // and is still re-verified. It is recorded so the lie is auditable.
-    const result = await selectWithJev({ route: routeRequest(validRoutes(3)), transport: adversarialTransport('INCONSISTENT_CONFIDENCE') });
+    const result = await selectWithJev({ route: routeRequest(validRoutes(3)), transport: adversarialTransport('INCONSISTENT_CONFIDENCE'), handoffState: jevHandoff() });
     assert.equal(result.status, 'SELECTED');
     if (result.status !== 'SELECTED') return;
     assert.equal(result.jevReceipt?.confidence, 1);
@@ -138,8 +136,7 @@ describe('adversarial jev behaviour', () => {
   it('cannot select anything when the deterministic filter admitted nothing', async () => {
     const result = await selectWithJev({
       route: routeRequest([maliciousQuote('route.attacker.a'), maliciousQuote('route.attacker.b')]),
-      transport: worstChoiceTransport(),
-    });
+      transport: worstChoiceTransport(), handoffState: jevHandoff() });
     assert.equal(result.status, 'NO_VALID_ROUTE');
     assert.equal(result.jevReceipt?.candidateIds.length, 0);
     assert.equal(result.jevReceipt?.fallbackReason, 'CARDINALITY_BELOW_MINIMUM');
@@ -177,7 +174,10 @@ describe('state change during inference', () => {
     const result = await selectWithJev({
       route: routeRequest(routes),
       transport: worstChoiceTransport(),
-      handoffState: { trustedMarketState: undefined, clock: { nowUnixSeconds: ROUTER_CLOCK + 10_000_000n } },
+      // Real state, later clock: the mandate has expired while the model was
+      // thinking. Handoff state is required now, so the world is stated in full
+      // rather than left to a default (ADR 0016).
+      handoffState: { trustedMarketState: ROUTER_STATE, clock: { nowUnixSeconds: ROUTER_CLOCK + 10_000_000n } },
     });
     assert.equal(result.status, 'NO_VALID_ROUTE');
     if (result.status !== 'NO_VALID_ROUTE') return;

@@ -17,10 +17,10 @@ import {
   selectWithJev,
 } from '../src/index.ts';
 import { abstainingTransport, choosingTransport, failingTransport } from '../src/testing/index.ts';
-import { maliciousQuote, routeRequest, validRoutes, haltedState, ROUTER_CLOCK } from './support/world.ts';
+import { maliciousQuote, routeRequest, validRoutes, haltedState, ROUTER_CLOCK, jevHandoff, } from './support/world.ts';
 
 async function decide(count: number, transport: Parameters<typeof selectWithJev>[0]['transport']) {
-  return selectWithJev({ route: routeRequest(validRoutes(count)), transport });
+  return selectWithJev({ route: routeRequest(validRoutes(count)), transport, handoffState: jevHandoff() });
 }
 
 describe('jev decision receipt', () => {
@@ -56,8 +56,7 @@ describe('jev decision receipt', () => {
     const result = await selectWithJev({
       route: routeRequest(validRoutes(3)),
       transport: choosingTransport('route_001', 0.9, { model: 'jev-1.13.0' }),
-      policy: { model: 'jev-latest' },
-    });
+      policy: { model: 'jev-latest' }, handoffState: jevHandoff() });
     assert.equal(result.jevReceipt?.modelRequested, 'jev-latest');
     assert.equal(result.jevReceipt?.modelReturned, 'jev-1.13.0');
   });
@@ -133,7 +132,7 @@ describe('jev selection receipt', () => {
   });
 
   it('records a refusal with no selected candidate and no handoff', async () => {
-    const result = await selectWithJev({ route: routeRequest([maliciousQuote('route.attacker')]), transport: choosingTransport('route_000') });
+    const result = await selectWithJev({ route: routeRequest([maliciousQuote('route.attacker')]), transport: choosingTransport('route_000'), handoffState: jevHandoff() });
     assert.equal(result.status, 'NO_VALID_ROUTE');
     assert.equal(result.selectionReceipt?.selectedCandidateDigest, null);
     assert.equal(result.selectionReceipt?.deterministicCandidateDigest, null);
@@ -151,7 +150,13 @@ describe('jev selection receipt', () => {
     if (result.status !== 'NO_VALID_ROUTE') return;
     assert.equal(result.handoffRejected, true);
     assert.equal(result.selectionReceipt?.handoffDecision, 'REJECT');
-    // The routing stage still passed at t0; only the handoff check refused.
-    assert.equal(result.routing.status, 'SELECTED');
+    // A handoff rejection is distinguishable from an empty admissible set: a
+    // final verification ran and refused, so its digest is recorded, and the
+    // ranked set is non-empty.
+    assert.equal(result.routing.status, 'NO_VALID_ROUTE');
+    if (result.routing.status !== 'NO_VALID_ROUTE') return;
+    assert.notEqual(result.routing.receipt.finalVerificationReceiptDigest, null);
+    assert.ok(result.routing.receipt.rankedCandidateDigests.length > 0);
+    assert.notEqual(result.routing.receipt.handoffStateDigest, null);
   });
 });

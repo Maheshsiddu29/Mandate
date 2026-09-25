@@ -61,10 +61,13 @@ function summarize(timings: number[]): { readonly medianMilliseconds: number; re
 async function measure(count: number, iterations: number) {
   const request = input(count);
   const transport = choosingTransport('route_001');
+  // The benchmark measures the advisory layer's own cost, so it hands off
+  // against the state it evaluated. Explicit, per ADR 0016.
+  const jevHandoff = () => ({ trustedMarketState: request.trustedMarketState, clock: request.clock });
 
-  route(request); // warm-up
-  await selectWithJev({ route: request, transport: null });
-  await selectWithJev({ route: request, transport });
+  route(request, jevHandoff()); // warm-up
+  await selectWithJev({ route: request, transport: null, handoffState: jevHandoff() });
+  await selectWithJev({ route: request, transport, handoffState: jevHandoff() });
 
   const deterministic: number[] = [];
   const advisoryDisabled: number[] = [];
@@ -72,15 +75,15 @@ async function measure(count: number, iterations: number) {
 
   for (let index = 0; index < iterations; index += 1) {
     let start = performance.now();
-    if (route(request).status !== 'SELECTED') throw new Error('deterministic benchmark did not select');
+    if (route(request, jevHandoff()).status !== 'SELECTED') throw new Error('deterministic benchmark did not select');
     deterministic.push(performance.now() - start);
 
     start = performance.now();
-    if ((await selectWithJev({ route: request, transport: null })).status !== 'SELECTED') throw new Error('disabled benchmark did not select');
+    if ((await selectWithJev({ route: request, transport: null, handoffState: jevHandoff() })).status !== 'SELECTED') throw new Error('disabled benchmark did not select');
     advisoryDisabled.push(performance.now() - start);
 
     start = performance.now();
-    if ((await selectWithJev({ route: request, transport })).status !== 'SELECTED') throw new Error('stubbed benchmark did not select');
+    if ((await selectWithJev({ route: request, transport, handoffState: jevHandoff() })).status !== 'SELECTED') throw new Error('stubbed benchmark did not select');
     advisoryStubbed.push(performance.now() - start);
   }
 

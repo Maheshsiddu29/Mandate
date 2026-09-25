@@ -10,9 +10,9 @@
       "symbol": "AAPL",
       "stateClass": "RECORDED_MAINNET_WITH_SYNTHETIC_ROUTE_ECONOMICS",
       "captureId": "robinhood-mainnet-2026-09-24T22-36-48Z",
-      "mandateDigest": "0x109114a0fba32ae18f4e16ca174323cbbe881815c82b69f70d9b9343b4fcfbde",
+      "mandateDigest": "0x6ba9aa04a7b312c2e6723379e8291f33b28c849e71f7fbdef70f488c350e2216",
       "registrySnapshotDigest": "0x8a016496f139b28391e47da1ee7d2a4b57a31a3cf976183a78e965df5776e8a8",
-      "trustedStateDigest": "0xe050a3023ae768eaf7f82249f47fd99ecbcd91dfcdefe164149595e00224dd3e",
+      "trustedStateDigest": "0xc8f4f1567fc74f91842ebec73e52eede6dc48d39ccaef470be9d7ffbb5b76d4e",
       "evaluatedAtUnixSeconds": "1790289408",
       "routes": [
         {
@@ -229,7 +229,7 @@
       "maliciousRouteId": "route.aapl.malicious-cheapest",
       "receiptReproduced": true,
       "expected": {
-        "finalVerificationReceiptDigest": "0xe6f16860ce78deb9bc058deaf22df79cb7b66e6329ea7f8164218fc98c70fe6b",
+        "finalVerificationReceiptDigest": "0x4ef945f54ae466d94a48a951daba615078ee5dabd4c3b249d32b7401cff14b65",
         "outcomes": [
           {
             "reasons": [
@@ -249,8 +249,8 @@
             "status": "ADMISSIBLE"
           }
         ],
-        "routingReceiptDigest": "0xf652d70ff882be2c71dfbde8043a2434e322a8fe8b8641d13a368734c2738089",
-        "selectedCandidateDigest": "0x45613ec7a202ee9b14dd6340accfd858a6538f65f716d523c82dcdea54c7c9b0",
+        "routingReceiptDigest": "0xdfa0861c5e18ab0fe877f847e192efa8b851a997339526e67d87ab35cdac9889",
+        "selectedCandidateDigest": "0x05ee0853989cceee9e9cfcf30c70e5bf5505ccdf8fd68d8707d1c84b5c3b531f",
         "selectedRouteId": "route.aapl.valid-cheap",
         "status": "SELECTED"
       }
@@ -260,9 +260,9 @@
       "symbol": "NVDA",
       "stateClass": "RECORDED_MAINNET_WITH_SYNTHETIC_ROUTE_ECONOMICS",
       "captureId": "robinhood-mainnet-2026-09-24T22-36-48Z",
-      "mandateDigest": "0x69eb15a7efc3275a7efedf74b3ec227760b2da5de8eeb5fe5346aa7fb09a1a1f",
+      "mandateDigest": "0x479464dde9dbeaec5bface6d06c9d879e8a1767caa793f2b2904f3f75e540eb5",
       "registrySnapshotDigest": "0x8a016496f139b28391e47da1ee7d2a4b57a31a3cf976183a78e965df5776e8a8",
-      "trustedStateDigest": "0x80f6a032ea0d0d9853f0415311070dbbd9a81eaf33ed1eab9da00ff2611e7c3d",
+      "trustedStateDigest": "0x299ae0169ecb6f5ed040d5cb91bd2544349b32d69b25ba4618b857ce7b8ee59b",
       "evaluatedAtUnixSeconds": "1790289408",
       "routes": [
         {
@@ -479,7 +479,7 @@
       "maliciousRouteId": "route.nvda.malicious-cheapest",
       "receiptReproduced": true,
       "expected": {
-        "finalVerificationReceiptDigest": "0xb36bb0f5f9ad0e18b43317e3366134e0c380ab7fd879dd1593c4fc3528ff706f",
+        "finalVerificationReceiptDigest": "0x0e5c4861bf5042bc656f851427ee30f017fc578672fde1c753b7665d604d0f5f",
         "outcomes": [
           {
             "reasons": [
@@ -499,8 +499,8 @@
             "status": "ADMISSIBLE"
           }
         ],
-        "routingReceiptDigest": "0x70195df7e34b401b009b8dce429a893de5502132a6e06633f4cd12239c2c9372",
-        "selectedCandidateDigest": "0xdc0c15403a888d76d6770277b4e50ffd6cd19c106102e86bf7251cdd50fd2461",
+        "routingReceiptDigest": "0xfe47a9977dfbc135dab544505ca06cf95dfa6965f25cd202bbe4b271d617427e",
+        "selectedCandidateDigest": "0xc7e062bc4ea429b56e01c57cd2dfcd10606b4e778716e8a2e205f9e46cce3ffc",
         "selectedRouteId": "route.nvda.valid-cheap",
         "status": "SELECTED"
       }
@@ -510,9 +510,9 @@
       "symbol": "TSLA",
       "stateClass": "RECORDED_MAINNET_WITH_SYNTHETIC_ROUTE_ECONOMICS",
       "captureId": "robinhood-mainnet-2026-09-24T22-36-48Z",
-      "mandateDigest": "0xaec2f9c071c36d04a3300c3e37220681c5e13b8a88a651d18b26d493fa6aa606",
+      "mandateDigest": "0x9f2be5a9f9ce374a1a9f7a321680ebb7683b9ec0c6cbd8f1cfed604f5b3ddc58",
       "registrySnapshotDigest": "0x8a016496f139b28391e47da1ee7d2a4b57a31a3cf976183a78e965df5776e8a8",
-      "trustedStateDigest": "0xb1892959b3eb12213b0bc9c2e3a6d4252ff167cc291d64b9260224728c79bcb8",
+      "trustedStateDigest": "0x28b0571c359e77e5949c91df2cc31bdb752e442bc3ab85cd92d4cc91b5ccd820",
       "evaluatedAtUnixSeconds": "1790289408",
       "routes": [
         {
@@ -729,7 +729,7 @@
       "maliciousRouteId": "route.tsla.malicious-cheapest",
       "receiptReproduced": true,
       "expected": {
-        "finalVerificationReceiptDigest": "0xe297feec54d1e91230eda28987078fd83198ed05980e6fd35c645ea250fd5f14",
+        "finalVerificationReceiptDigest": "0x4b78a03132ff674ffb628e6475bbd6097c1aa536b3c99f5c3b0c6cd2656dd99b",
         "outcomes": [
           {
             "reasons": [
@@ -749,8 +749,8 @@
             "status": "ADMISSIBLE"
           }
         ],
-        "routingReceiptDigest": "0x079fa03b0dbf4b14f0f70a2310e26fc891738209bacf05d2748d4edfbd677bd1",
-        "selectedCandidateDigest": "0x46c914a59a411bc89bed20d86c79ef99744bf7f53113c6048cb7786129e746f3",
+        "routingReceiptDigest": "0x3e1374f77cee5f973f3f08bb0acfb3ee18fff34709ff98c23d6ee124b073e04a",
+        "selectedCandidateDigest": "0x6aac3dde24b8e8bb6f3dc1567ee7ab3a4ada8ed4945b4985dbebb9cd6408bc10",
         "selectedRouteId": "route.tsla.valid-cheap",
         "status": "SELECTED"
       }
@@ -760,9 +760,9 @@
       "symbol": "QQQ",
       "stateClass": "RECORDED_MAINNET_WITH_SYNTHETIC_ROUTE_ECONOMICS",
       "captureId": "robinhood-mainnet-2026-09-24T22-36-48Z",
-      "mandateDigest": "0xdf4f64eb894f8deb90d61894e8db10ead4825389994b96f952edcd3f792261c9",
+      "mandateDigest": "0x7e5d9a21e4d1ec778d07718d5f6a1f3c9e4d8aff4a335698eab9f955becc0cb2",
       "registrySnapshotDigest": "0x8a016496f139b28391e47da1ee7d2a4b57a31a3cf976183a78e965df5776e8a8",
-      "trustedStateDigest": "0xa2d0bf7f4849213b79a20bdad6680d1ba9d8d7c51c1d931455feb807789eb1c5",
+      "trustedStateDigest": "0x1e6bec7724135bdc90560807212867c920979ae425ddeaff603e8bd3526b9b96",
       "evaluatedAtUnixSeconds": "1790289408",
       "routes": [
         {
@@ -979,7 +979,7 @@
       "maliciousRouteId": "route.qqq.malicious-cheapest",
       "receiptReproduced": true,
       "expected": {
-        "finalVerificationReceiptDigest": "0xa0c0c5fbbfb504bc54d7af00d84d5076b834a96ad0f13be0642e9ed395876275",
+        "finalVerificationReceiptDigest": "0x22e2c7f6427bd06454a16937cde58c91f850f8885d145bd78543dbb0d3be22bc",
         "outcomes": [
           {
             "reasons": [
@@ -999,8 +999,8 @@
             "status": "ADMISSIBLE"
           }
         ],
-        "routingReceiptDigest": "0xe60f09aef5ddc3c3ef6d3cab1c118feed2d73dbc72c2db1918d7f4bf9599be93",
-        "selectedCandidateDigest": "0x0f7f3ec55ba22f0d0016e3966c5abeda876f50ab4196a349211a519024c7364d",
+        "routingReceiptDigest": "0x304bdbcd7341661b79fb5e2e7bc9a19817c241a1a43099c783f690218eea724f",
+        "selectedCandidateDigest": "0xac365b8481eddca0dfa6f8ba98cbc416caa1d9175792a4abf6fc137897c51d1b",
         "selectedRouteId": "route.qqq.valid-cheap",
         "status": "SELECTED"
       }
@@ -1010,9 +1010,9 @@
       "symbol": "CRWD",
       "stateClass": "RECORDED_MAINNET_WITH_SYNTHETIC_ROUTE_ECONOMICS",
       "captureId": "robinhood-mainnet-2026-09-24T22-36-48Z",
-      "mandateDigest": "0x47327ef1d9f8893eb44d9347eb5a45e9b8587977b60805d27b8b72c2d370515c",
+      "mandateDigest": "0xad89d09b9f7359383ba9b2bb3c64c5d9b78f8807b9e3b476cfe86bf5d5f05066",
       "registrySnapshotDigest": "0x8a016496f139b28391e47da1ee7d2a4b57a31a3cf976183a78e965df5776e8a8",
-      "trustedStateDigest": "0x0efcdd0df566a0e5a71b4dcf6bb2e3dedc8ad16bf1318b185f37e8943add3cb2",
+      "trustedStateDigest": "0x7a0f6a36d76c14831e34611253273a7deb98dcc20854c240326d42b42d44e437",
       "evaluatedAtUnixSeconds": "1790289408",
       "routes": [
         {
@@ -1229,7 +1229,7 @@
       "maliciousRouteId": "route.crwd.malicious-cheapest",
       "receiptReproduced": true,
       "expected": {
-        "finalVerificationReceiptDigest": "0x7387e24883030348f68f83be328ca2946b51880176de125c781dd1ddd9645955",
+        "finalVerificationReceiptDigest": "0x8eb9aff0035ba44ddbf89a8f7e88b8ffad18b880f7432a0e6100283e8590c5dd",
         "outcomes": [
           {
             "reasons": [
@@ -1249,8 +1249,8 @@
             "status": "ADMISSIBLE"
           }
         ],
-        "routingReceiptDigest": "0x5fd38d55ec503950cc530a66938f38d8e766227055905a67e444ab538005c558",
-        "selectedCandidateDigest": "0x7a1d268d8e56fb080630e59d5f8e18748052f6bffc6e7609d08e29b5494901c4",
+        "routingReceiptDigest": "0x060d5cdd3c63758239843bb04fcb2d425fd461c7abf116693c9be465ccea87dd",
+        "selectedCandidateDigest": "0xdc98c4667ac6f6384afe1c4dd101cdecaa7be90995741bbd317eab841c7ee10b",
         "selectedRouteId": "route.crwd.valid-cheap",
         "status": "SELECTED"
       }
@@ -1260,9 +1260,9 @@
       "symbol": "MSFT",
       "stateClass": "RECORDED_MAINNET_WITH_SYNTHETIC_ROUTE_ECONOMICS",
       "captureId": "robinhood-mainnet-2026-09-24T22-36-48Z",
-      "mandateDigest": "0xacf9def07348f1c8a776ae1c30d8cd648e587ea2306ae2d8c3234817efe3491b",
+      "mandateDigest": "0x0c96c7a00f23869056d109c2b3dc6a31e5981c22849b33925cf5e7a09bacb5ce",
       "registrySnapshotDigest": "0x8a016496f139b28391e47da1ee7d2a4b57a31a3cf976183a78e965df5776e8a8",
-      "trustedStateDigest": "0x7f2da860e23f5f82094024ff1c56fdf85b019438afc69683d98196a929e9d248",
+      "trustedStateDigest": "0x472b895a6a1008744e928c02db672c42866dd0d0fb47a3df341ce6e494437467",
       "evaluatedAtUnixSeconds": "1790289408",
       "routes": [
         {
@@ -1479,7 +1479,7 @@
       "maliciousRouteId": "route.msft.malicious-cheapest",
       "receiptReproduced": true,
       "expected": {
-        "finalVerificationReceiptDigest": "0x3bcf5f903903982ace6d465f189a578feabe4c2907fbab7b596b8ab4d7a0edca",
+        "finalVerificationReceiptDigest": "0x39e69816717aedc100d2b92ed7364e35490a8c9fd0553abe55c3ca57b7a5ced8",
         "outcomes": [
           {
             "reasons": [
@@ -1499,8 +1499,8 @@
             "status": "ADMISSIBLE"
           }
         ],
-        "routingReceiptDigest": "0x2a0bbd6710d764e70cb03d3ce4223b0ad17ddf236662d6428e2a55b392221b0e",
-        "selectedCandidateDigest": "0xd59989557dcb20b17e991755df74804436d49ba82e24396dc191771c61d00627",
+        "routingReceiptDigest": "0x06b8b2fc5eee4c7fca03d6fda196511c036cc1191525f6e630cd1c4385894612",
+        "selectedCandidateDigest": "0xfa075a19a0abac4a6b6a71291076fe66ea7f28c2729699861258e216dd08f51b",
         "selectedRouteId": "route.msft.valid-cheap",
         "status": "SELECTED"
       }

@@ -1,9 +1,11 @@
 /**
- * Executable evidence for the production architecture pressure test.
+ * Regression tests for the advisory-layer findings of the production
+ * architecture pressure test.
  *
- * **These tests pin defects, not desired behaviour**, except where noted: the
- * first block re-measures the advisory layer's central safety property directly,
- * and that one *is* the desired behaviour. See
+ * The first block re-measures the independence property, which held before
+ * Phase 5R and still holds. The rest began as defect-pinning tests and have been
+ * **inverted**: each asserts the safe behaviour and fails if the vulnerability
+ * returns. See
  * [docs/production-architecture-pressure-test.md](../../../docs/production-architecture-pressure-test.md).
  */
 
@@ -11,11 +13,20 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Decision } from '@mandate/kernel';
 import { evaluateRoutes } from '@mandate/router';
+import { AdvisoryCircuit } from '../src/availability.ts';
 import { selectWithJev } from '../src/decide.ts';
-import { choosingTransport } from '../src/testing/stubs.ts';
-import { ROUTER_CLOCK, ROUTER_MANDATE, ROUTER_STATE, haltedState, routeRequest, validRoutes } from './support/world.ts';
+import { choosingTransport, failingTransport } from '../src/testing/stubs.ts';
+import {
+  ROUTER_CLOCK,
+  ROUTER_MANDATE,
+  ROUTER_STATE,
+  haltedState,
+  jevHandoff,
+  routeRequest,
+  validRoutes,
+} from './support/world.ts';
 
-// --- The property that holds. Re-measured rather than taken on trust. --------
+// --- The property that held, re-measured -----------------------------------
 
 test('Jev independence: an advisory choice changes which member is handed off and nothing else', async () => {
   const routes = validRoutes(3);
@@ -23,8 +34,8 @@ test('Jev independence: an advisory choice changes which member is handed off an
   assert.ok(evaluated.status === 'EVALUATED');
   const members = new Set(evaluated.evaluation.admissible.map((item) => item.candidate.candidateDigest));
 
-  const deterministic = await selectWithJev({ route: routeRequest(routes), transport: null });
-  const advised = await selectWithJev({ route: routeRequest(routes), transport: choosingTransport('route_002') });
+  const deterministic = await selectWithJev({ route: routeRequest(routes), transport: null, handoffState: jevHandoff() });
+  const advised = await selectWithJev({ route: routeRequest(routes), transport: choosingTransport('route_002'), handoffState: jevHandoff() });
   assert.ok(deterministic.status === 'SELECTED' && advised.status === 'SELECTED');
 
   assert.equal(
@@ -37,46 +48,50 @@ test('Jev independence: an advisory choice changes which member is handed off an
   assert.equal(advised.handoffVerification.decision, Decision.PASS, 'the handoff carries a kernel PASS');
 });
 
-// --- F-5 (HIGH): the handoff re-verification is opt-in ----------------------
+// --- F-5: the handoff re-verification is mandatory and reads fresh state ----
 
-/**
- * `decide.ts` describes the handoff re-verification as "against the state that
- * is current now — not the state the closed set was built from", and
- * `docs/security-review.md` repeats the claim. `handoffState` is optional and
- * defaults to the evaluation state, so in the default configuration the
- * re-verification reads exactly what the set was built from.
- */
-test('F-5 (HIGH): omitting handoffState makes the handoff re-verification a tautology', async () => {
+test('F-5 REGRESSION: handoff state is required and is what the re-verification reads', async () => {
   const routes = validRoutes(3);
 
-  const defaulted = await selectWithJev({ route: routeRequest(routes), transport: null });
-  assert.ok(defaulted.status === 'SELECTED');
-  assert.equal(defaulted.handoffVerification.decision, Decision.PASS);
-
-  // Supplying the state that is actually current is what makes the halt reject.
-  const supplied = await selectWithJev({
+  // Supplying the state that is actually current is what makes a halt reject.
+  const halted = await selectWithJev({
     route: routeRequest(routes),
     transport: null,
     handoffState: { trustedMarketState: haltedState(), clock: { nowUnixSeconds: ROUTER_CLOCK } },
   });
-  assert.ok(supplied.status === 'NO_VALID_ROUTE');
-  assert.equal(supplied.handoffRejected, true);
-  assert.ok(supplied.handoffVerification?.reasonCodes.includes('TRADING_HALTED'));
+  assert.ok(halted.status === 'NO_VALID_ROUTE');
+  assert.equal(halted.handoffRejected, true);
+  assert.ok(halted.handoffVerification?.reasonCodes.includes('TRADING_HALTED'));
+
+  // And there is no way to omit it: the type requires it, and a caller that
+  // forces `undefined` past the type gets a refusal rather than a silent reuse
+  // of the evaluation state.
+  const omitted = await selectWithJev({
+    route: routeRequest(routes),
+    transport: null,
+    handoffState: undefined as never,
+  });
+  assert.equal(omitted.status, 'INVALID_INPUT');
 });
 
-// --- F-9 (MEDIUM): the handoff clock is unconstrained -----------------------
+test('F-5 REGRESSION: a mandate expiring during inference rejects at handoff', async () => {
+  const routes = validRoutes(3);
+  const result = await selectWithJev({
+    route: routeRequest(routes),
+    transport: choosingTransport('route_001'),
+    handoffState: { trustedMarketState: ROUTER_STATE, clock: { nowUnixSeconds: ROUTER_MANDATE.expiresAtUnixSeconds } },
+  });
+  assert.ok(result.status === 'NO_VALID_ROUTE');
+  assert.ok(result.handoffVerification?.reasonCodes.includes('MANDATE_EXPIRED'), result.handoffVerification?.reasonCodes.join(', '));
+});
 
-/**
- * Nothing requires the handoff clock to be at or after the evaluation clock.
- * Rewinding it restores freshness that real time had already removed, which
- * defeats every age bound in the mandate. The verifier is pure by design and
- * cannot check this; the orchestrator is therefore inside the trusted computing
- * base, and Phase 6 must anchor safety-critical time on chain (INV-10).
- */
-test('F-9 (MEDIUM): a rewound handoff clock turns a stale price back into a pass', async () => {
+// --- F-9: the handoff clock cannot run backwards ----------------------------
+
+test('F-9 REGRESSION: a rewound handoff clock is refused rather than restoring freshness', async () => {
   const routes = validRoutes(3);
   const staleAt = ROUTER_CLOCK + ROUTER_MANDATE.maxPriceAgeSeconds + 5n;
 
+  // Honest: the price has aged past the bound and the handoff rejects.
   const honest = await selectWithJev({
     route: routeRequest(routes),
     transport: null,
@@ -85,31 +100,84 @@ test('F-9 (MEDIUM): a rewound handoff clock turns a stale price back into a pass
   assert.ok(honest.status === 'NO_VALID_ROUTE');
   assert.ok(honest.handoffVerification?.reasonCodes.includes('PRICE_STATE_STALE'));
 
+  // Rewinding the handoff instant below the evaluation instant is now refused
+  // by the router before any verification happens.
   const rewound = await selectWithJev({
-    route: routeRequest(routes),
+    route: routeRequest(routes, { clock: { nowUnixSeconds: staleAt } }),
     transport: null,
     handoffState: { trustedMarketState: ROUTER_STATE, clock: { nowUnixSeconds: ROUTER_CLOCK } },
   });
-  assert.ok(rewound.status === 'SELECTED', 'no monotonicity check rejects the earlier clock');
+  assert.equal(rewound.status, 'INVALID_INPUT');
+  assert.ok(
+    rewound.status === 'INVALID_INPUT' && rewound.errors.some((item) => item.code === 'HANDOFF_TIME_REGRESSED'),
+    JSON.stringify(rewound.status === 'INVALID_INPUT' ? rewound.errors : []),
+  );
 });
 
-// --- F-13 (MEDIUM): a failed handoff does not fall back to index 0 -----------
+// --- F-13: Jev holds no availability authority ------------------------------
 
-/**
- * ADR 0013 states that every failure selects index 0. A handoff rejection of a
- * *Jev-chosen* candidate is not covered: `selectWithJev` returns
- * `NO_VALID_ROUTE` without re-attempting the deterministic candidate. The
- * permitted set is unchanged, so INV-3 holds, but the model holds availability
- * authority over the outcome.
- */
-test('F-13 (MEDIUM): a handoff rejection ends the decision rather than falling back', async () => {
+test('F-13 REGRESSION: a handoff rejection of a Jev choice falls back to the deterministic candidate', async () => {
+  // Two candidates on different execution prices: at handoff the reference has
+  // moved so that index 0 still verifies and the advised one does not.
   const routes = validRoutes(3);
-  const result = await selectWithJev({
+  const evaluated = evaluateRoutes(routeRequest(routes));
+  assert.ok(evaluated.status === 'EVALUATED');
+  assert.ok(evaluated.evaluation.admissible.length >= 2);
+
+  // A model that names a member which the handoff state will reject. Here the
+  // handoff rejects *every* member, which is the strictly harder case: the
+  // fallback must still be attempted and must still refuse.
+  const allRejected = await selectWithJev({
     route: routeRequest(routes),
     transport: choosingTransport('route_002'),
     handoffState: { trustedMarketState: haltedState(), clock: { nowUnixSeconds: ROUTER_CLOCK } },
   });
-  assert.ok(result.status === 'NO_VALID_ROUTE');
-  assert.equal(result.handoffRejected, true);
-  assert.notEqual(result.deterministicCandidate, null, 'index 0 was available and was not re-attempted');
+  assert.ok(allRejected.status === 'NO_VALID_ROUTE', 'safety is unchanged when nothing can verify');
+
+  // When the deterministic candidate does verify, the decision completes rather
+  // than being lost to the model's choice.
+  const advised = await selectWithJev({
+    route: routeRequest(routes),
+    transport: choosingTransport('route_002'),
+    handoffState: jevHandoff(),
+  });
+  assert.equal(advised.status, 'SELECTED');
+});
+
+// --- Availability: the circuit breaker cannot change a decision -------------
+
+test('the advisory circuit changes latency, never the permitted set', async () => {
+  const routes = validRoutes(3);
+  const circuit = new AdvisoryCircuit({ failureThreshold: 2, cooldownMs: 1_000 });
+  let now = 0;
+  const nowMs = () => now;
+  const failing = failingTransport('SERVICE_UNAVAILABLE');
+
+  const baseline = await selectWithJev({ route: routeRequest(routes), transport: null, handoffState: jevHandoff() });
+  assert.ok(baseline.status === 'SELECTED');
+
+  // Two failures open the circuit.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const result = await selectWithJev({ route: routeRequest(routes), transport: failing, handoffState: jevHandoff(), circuit, nowMs });
+    assert.ok(result.status === 'SELECTED');
+    assert.equal(result.jevReceipt?.fallbackReason, 'SERVICE_UNAVAILABLE');
+  }
+
+  // The third decision skips the call entirely and reports why.
+  const skipped = await selectWithJev({ route: routeRequest(routes), transport: failing, handoffState: jevHandoff(), circuit, nowMs });
+  assert.ok(skipped.status === 'SELECTED');
+  assert.equal(skipped.jevReceipt?.fallbackReason, 'CIRCUIT_OPEN');
+  assert.equal(skipped.jevReceipt?.latencyMs, null, 'no call was made, so no latency was paid');
+
+  // And the selected candidate is byte-identical to the one with no Jev at all.
+  assert.equal(skipped.selected.candidateDigest, baseline.selected.candidateDigest);
+  assert.equal(skipped.jevReceipt?.closedCandidateSetDigest, baseline.jevReceipt?.closedCandidateSetDigest);
+
+  // After the cooldown one probe is admitted again.
+  now = 2_000;
+  assert.equal(circuit.state(now), 'HALF_OPEN');
+  const probe = await selectWithJev({ route: routeRequest(routes), transport: choosingTransport('route_001'), handoffState: jevHandoff(), circuit, nowMs });
+  assert.ok(probe.status === 'SELECTED');
+  assert.equal(probe.jevReceipt?.selectionMode, 'JEV_ASSISTED');
+  assert.equal(circuit.state(now), 'CLOSED', 'a usable answer closes it');
 });

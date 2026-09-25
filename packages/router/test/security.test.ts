@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { mandateDigest, parseIdentifier } from '@mandate/kernel';
+import { mandateDigest, trustedStateDigest, parseIdentifier } from '@mandate/kernel';
 import { openRegistry } from '@mandate/registry';
 import { envelopeFor, TEST_PRIVATE_KEY } from '../../kernel/test/support/signing.ts';
 import { collectProviderRoutes, route, routingCandidateDigest, type ProviderRouteQuote } from '../src/index.ts';
 import {
   ROUTER_CLOCK, ROUTER_DOMAIN, ROUTER_MANDATE, ROUTER_REGISTRY_INPUT, ROUTER_REQUESTED_QUANTITY, ROUTER_STATE,
-  routeQuote, trustedCost, zeroFee,
+  routeQuote, trustedCost, zeroFee, sellMandate as sellMandateFixture, handoffFor,
+  routerHandoff,
 } from './support/fixture.ts';
 
 const registry = openRegistry(ROUTER_REGISTRY_INPUT);
@@ -59,7 +60,7 @@ describe('adversarial route providers', () => {
       routeQuote({ side: 'SELL' }),
       routeQuote({ corporateActionEpoch: routeQuote().corporateActionEpoch + 1n }),
     ];
-    for (const quote of mutations) assert.notEqual(route(signedRequest(quote)).status, 'SELECTED');
+    for (const quote of mutations) assert.notEqual(route(signedRequest(quote), handoffFor(signedRequest(quote))).status, 'SELECTED');
   });
 
   it('enforces BUY upper and SELL lower price boundaries at one atom', () => {
@@ -68,25 +69,25 @@ describe('adversarial route providers', () => {
       executionPrice: { ...reference, atoms: reference.atoms + 1n },
       notional: { ...routeQuote().notional, atoms: routeQuote().notional.atoms + 1n },
     });
-    assert.equal(route(signedRequest(buyAbove)).status, 'NO_VALID_ROUTE');
-    assert.equal(route(signedRequest(routeQuote())).status, 'SELECTED');
+    assert.equal(route(signedRequest(buyAbove), handoffFor(signedRequest(buyAbove))).status, 'NO_VALID_ROUTE');
+    assert.equal(route(signedRequest(routeQuote()), handoffFor(signedRequest(routeQuote()))).status, 'SELECTED');
 
-    const sellMandate = { ...ROUTER_MANDATE, side: 'SELL' as const };
+    const sellMandate = sellMandateFixture();
     const sellExact = routeQuote({ side: 'SELL' });
-    assert.equal(route(signedRequest(sellExact, sellMandate)).status, 'SELECTED');
+    assert.equal(route(signedRequest(sellExact, sellMandate), handoffFor(signedRequest(sellExact, sellMandate))).status, 'SELECTED');
     const sellBelow = routeQuote({
       side: 'SELL',
       executionPrice: { ...reference, atoms: reference.atoms - 1n },
       notional: { ...routeQuote().notional, atoms: routeQuote().notional.atoms - 1n },
     });
-    assert.equal(route(signedRequest(sellBelow, sellMandate)).status, 'NO_VALID_ROUTE');
+    assert.equal(route(signedRequest(sellBelow, sellMandate), handoffFor(signedRequest(sellBelow, sellMandate))).status, 'NO_VALID_ROUTE');
   });
 
   it('detects malicious zero fees against independent cost state', () => {
     const quote = routeQuote();
     const trusted = trustedCost(quote, { costs: { ...quote.costs, routeFee: { ...zeroFee(), atoms: 1n } } });
     const input = signedRequest(quote);
-    const result = route({ ...input, trustedCosts: [trusted] });
+    const result = route({ ...input, trustedCosts: [trusted] }, handoffFor(input));
     assert.equal(result.status, 'NO_VALID_ROUTE');
   });
 
@@ -102,11 +103,15 @@ describe('adversarial route providers', () => {
       trustedCostObservedAtUnixSeconds: ROUTER_CLOCK,
       costs: { venueFee: zeroFee(), executionFee: zeroFee(), settlementFee: zeroFee(), routeFee: zeroFee() },
       steps: quote.steps,
+      feeTotal: zeroFee(),
       executionCandidate: {
-        version: 1, representationId: quote.representationId, canonicalAsset: quote.canonicalAsset,
+        version: 2, representationId: quote.representationId, canonicalAsset: quote.canonicalAsset,
         issuer: quote.issuer, chain: quote.chain, venue: quote.venue, side: quote.side, agent: quote.agent,
         quantity: quote.quantity, executionPrice: quote.executionPrice, notional: quote.notional,
-        referenceStateId: quote.referenceStateId, corporateActionEpoch: quote.corporateActionEpoch,
+        feeTotal: zeroFee(),
+        referenceStateId: quote.referenceStateId,
+        referenceStateDigest: trustedStateDigest(ROUTER_STATE),
+        corporateActionEpoch: quote.corporateActionEpoch,
       },
     };
     const changedVenue = parseIdentifier('venue.changed');
@@ -122,12 +127,12 @@ describe('adversarial route providers', () => {
 
   it('reproduces receipts and changes them when the explicit clock changes', () => {
     const input = signedRequest(routeQuote());
-    const first = route(input);
-    const second = route(input);
+    const first = route(input, routerHandoff());
+    const second = route(input, routerHandoff());
     assert.equal(first.status, 'SELECTED');
     assert.equal(second.status, 'SELECTED');
     if (first.status === 'SELECTED' && second.status === 'SELECTED') assert.equal(first.receipt.receiptDigest, second.receipt.receiptDigest);
-    const later = route({ ...input, clock: { nowUnixSeconds: ROUTER_CLOCK + 1n } });
+    const later = route({ ...input, clock: { nowUnixSeconds: ROUTER_CLOCK + 1n } }, routerHandoff());
     if (first.status === 'SELECTED' && later.status === 'SELECTED') assert.notEqual(first.receipt.receiptDigest, later.receipt.receiptDigest);
   });
 
@@ -136,8 +141,8 @@ describe('adversarial route providers', () => {
     if (!attacker.ok) throw new Error('invalid attacker issuer');
     const quote = routeQuote({ issuer: attacker.value });
     const input = signedRequest(quote);
-    const first = route(input);
-    const second = route({ ...input, requestedQuantity: { ...ROUTER_REQUESTED_QUANTITY, atoms: ROUTER_REQUESTED_QUANTITY.atoms - 1n } });
+    const first = route(input, routerHandoff());
+    const second = route({ ...input, requestedQuantity: { ...ROUTER_REQUESTED_QUANTITY, atoms: ROUTER_REQUESTED_QUANTITY.atoms - 1n } }, routerHandoff());
     assert.equal(first.status, 'NO_VALID_ROUTE');
     assert.equal(second.status, 'NO_VALID_ROUTE');
     if (first.status === 'NO_VALID_ROUTE' && second.status === 'NO_VALID_ROUTE') assert.notEqual(first.receipt.receiptDigest, second.receipt.receiptDigest);

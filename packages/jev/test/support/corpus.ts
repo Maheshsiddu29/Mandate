@@ -275,7 +275,12 @@ async function evaluateScenario(scenarioItem: JevScenario, transport: JevTranspo
     transport,
     advisoryByRouteId: scenarioItem.advisoryByRouteId,
     policy: { timeoutMs: 250 },
-    ...(scenarioItem.handoffState === undefined ? {} : { handoffState: scenarioItem.handoffState }),
+    // A scenario that does not name its own handoff state hands off against
+    // what it evaluated. Explicit, per ADR 0016.
+    handoffState: scenarioItem.handoffState ?? {
+      trustedMarketState: scenarioItem.route.trustedMarketState,
+      clock: scenarioItem.route.clock,
+    },
   });
 }
 

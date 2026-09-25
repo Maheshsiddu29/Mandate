@@ -86,3 +86,17 @@ export function movedPriceState(multiplier: bigint): TrustedState {
     market: { ...ROUTER_STATE.market, value: { ...ROUTER_STATE.market.value, referencePrice: { ...price, atoms: price.atoms * multiplier } } },
   };
 }
+
+/**
+ * Handoff inputs for a world that evaluates and hands off against one snapshot.
+ *
+ * Mandatory since ADR 0016. Scenarios that are about state change during
+ * inference build their own; passing this one is how a scenario says it is not.
+ */
+export function jevHandoff(overrides: Partial<{ trustedMarketState: unknown; clock: unknown }> = {}) {
+  return {
+    trustedMarketState: ROUTER_STATE,
+    clock: { nowUnixSeconds: ROUTER_CLOCK },
+    ...overrides,
+  };
+}

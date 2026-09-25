@@ -32,11 +32,12 @@ function input(count: number) {
 
 function benchmark(count: number, iterations: number) {
   const request = input(count);
-  route(request); // warm-up
+  const handoff = { trustedMarketState: request.trustedMarketState, clock: request.clock };
+  route(request, handoff); // warm-up
   const timings: number[] = [];
   for (let index = 0; index < iterations; index += 1) {
     const start = performance.now();
-    const result = route(request);
+    const result = route(request, handoff);
     timings.push(performance.now() - start);
     if (result.status !== 'SELECTED') throw new Error(`benchmark ${count} did not select`);
   }

@@ -26,10 +26,10 @@ import {
   throwingTransport,
   worstChoiceTransport,
 } from '../src/testing/index.ts';
-import { maliciousQuote, routeRequest, validRoutes } from './support/world.ts';
+import { maliciousQuote, routeRequest, validRoutes, jevHandoff, } from './support/world.ts';
 
 async function run(count: number, transport: Parameters<typeof selectWithJev>[0]['transport'], policy: Parameters<typeof selectWithJev>[0]['policy'] = {}) {
-  return selectWithJev({ route: routeRequest(validRoutes(count)), transport, policy });
+  return selectWithJev({ route: routeRequest(validRoutes(count)), transport, policy, handoffState: jevHandoff() });
 }
 
 describe('jev selection modes', () => {
@@ -119,7 +119,7 @@ describe('jev fallback behaviour', () => {
 
   it('contains a transport that never settles, using its own deadline', async () => {
     const started = Date.now();
-    const result = await selectWithJev({ route: routeRequest(validRoutes(3)), transport: hangingTransport(), policy: { timeoutMs: 60 } });
+    const result = await selectWithJev({ route: routeRequest(validRoutes(3)), transport: hangingTransport(), policy: { timeoutMs: 60 }, handoffState: jevHandoff() });
     assert.ok(Date.now() - started < 5_000, 'the decision path waited on a hanging transport');
     assert.equal(result.status, 'SELECTED');
     if (result.status !== 'SELECTED') return;
@@ -146,7 +146,7 @@ describe('jev fallback behaviour', () => {
     ];
     const digests = new Set<string>();
     for (const transport of transports) {
-      const result = await selectWithJev({ route: routeRequest(validRoutes(4)), transport });
+      const result = await selectWithJev({ route: routeRequest(validRoutes(4)), transport, handoffState: jevHandoff() });
       assert.equal(result.status, 'SELECTED');
       if (result.status !== 'SELECTED') continue;
       digests.add(result.selected.candidateDigest);
@@ -159,7 +159,7 @@ describe('jev cardinality boundary', () => {
   it('makes no call below the minimum', async () => {
     for (const count of [0, 1]) {
       const routes = count === 0 ? [maliciousQuote('route.attacker')] : validRoutes(1);
-      const result = await selectWithJev({ route: routeRequest(routes), transport: worstChoiceTransport() });
+      const result = await selectWithJev({ route: routeRequest(routes), transport: worstChoiceTransport(), handoffState: jevHandoff() });
       assert.equal(result.selectionMode, 'DETERMINISTIC');
       assert.equal(result.jevReceipt?.fallbackReason, JevFallbackReason.CARDINALITY_BELOW_MINIMUM);
     }

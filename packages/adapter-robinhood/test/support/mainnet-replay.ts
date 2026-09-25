@@ -7,6 +7,8 @@ import {
   parseMandate,
   verify,
   type VerifyRequest,
+  parseTrustedState,
+  trustedStateDigest,
 } from '@mandate/kernel';
 import {
   DataClass,
@@ -154,7 +156,7 @@ export function buildReplayWorld(spec: ReplaySpec): BuiltReplayWorld {
   const tokenAsk = expectAdapter(tokenEquivalentPrice(price.underlyingAsk, asset.currentMultiplier), `${spec.symbol} token ask`);
   const now = spec.mutation === 'STALE_PRICE' ? FIXTURE_BLOCK_TIMESTAMP + 61n : FIXTURE_BLOCK_TIMESTAMP;
   const mandateRaw = {
-    version: 1,
+    version: 2,
     mandateId: keccak256(new TextEncoder().encode(spec.id)),
     nonce: 1n,
     principal: { kind: 'eip155-address', value: addressOf(TEST_PRIVATE_KEY) },
@@ -162,6 +164,10 @@ export function buildReplayWorld(spec: ReplaySpec): BuiltReplayWorld {
     canonicalAsset: mapped.identity.value,
     side: 'BUY',
     maxNotional: { unit: 'USD', decimals: 18, atoms: tokenAsk.value.atoms * 2n },
+    // BUY: the most the principal may be debited, fees included. The replay
+    // worlds carry a zero fee, so this is the notional plus the headroom the
+    // gross bound already allows.
+    economicLimit: { unit: 'USD', decimals: 18, atoms: tokenAsk.value.atoms * 2n },
     maxDeviationBps: 0n,
     syntheticPolicy: 'FORBIDDEN',
     allowedIssuers: [ROBINHOOD_ISSUER_ID],
@@ -190,11 +196,36 @@ export function buildReplayWorld(spec: ReplaySpec): BuiltReplayWorld {
   const marketProvenance = spec.mutation === 'SYNTHETIC_HALT'
     ? { trustClass: TrustClass.VERIFIED, sourceId: 'synthetic.halt.world', observedAtUnixSeconds: price.generatedAtUnixSeconds }
     : tokenAsk.provenance;
+  const trustedState = {
+    version: 2,
+    stateId,
+    registrySnapshotDigest: registrySnapshotDigest(opened.value.snapshot),
+    representations: [representationState.value],
+    market: {
+      provenance: marketProvenance,
+      value: {
+        canonicalAsset: mapped.identity.value,
+        referencePrice: tokenAsk.value,
+        haltStatus: spec.mutation === 'SYNTHETIC_HALT' ? 'HALTED' : price.tradingHalt.value ? 'HALTED' : 'TRADING',
+      },
+    },
+    corporateAction: corporate,
+    replay: {
+      provenance: { trustClass: TrustClass.VERIFIED, sourceId: 'replay.mainnet.dataset', observedAtUnixSeconds: now },
+      value: { mandateDigest: digest, status: 'UNUSED' },
+    },
+  };
+  // Schema v2 binds a candidate to the content of the state it was built
+  // against, so the world computes that digest rather than naming a snapshot.
+  const parsedState = parseTrustedState(trustedState);
+  if (!parsedState.ok) throw new Error(`replay state failed: ${parsedState.error}`);
+  const stateDigest = trustedStateDigest(parsedState.value);
+
   const request: VerifyRequest = {
     mandate: mandateRaw,
     authorization: envelopeFor(digest, TEST_PRIVATE_KEY, MAINNET_REPLAY_DOMAIN),
     candidate: {
-      version: 1,
+      version: 2,
       representationId: candidateRepresentation,
       canonicalAsset: mapped.identity.value,
       issuer: ROBINHOOD_ISSUER_ID,
@@ -205,27 +236,12 @@ export function buildReplayWorld(spec: ReplaySpec): BuiltReplayWorld {
       quantity: { unit: 'TOKEN', decimals: 18, atoms: 1_000_000_000_000_000_000n },
       executionPrice: tokenAsk.value,
       notional: { unit: 'USD', decimals: 18, atoms: tokenAsk.value.atoms },
+      feeTotal: { unit: 'USD', decimals: 18, atoms: 0n },
       referenceStateId: stateId,
+      referenceStateDigest: stateDigest,
       corporateActionEpoch: currentEpoch,
     },
-    trustedState: {
-      version: 1,
-      stateId,
-      representations: [representationState.value],
-      market: {
-        provenance: marketProvenance,
-        value: {
-          canonicalAsset: mapped.identity.value,
-          referencePrice: tokenAsk.value,
-          haltStatus: spec.mutation === 'SYNTHETIC_HALT' ? 'HALTED' : price.tradingHalt.value ? 'HALTED' : 'TRADING',
-        },
-      },
-      corporateAction: corporate,
-      replay: {
-        provenance: { trustClass: TrustClass.VERIFIED, sourceId: 'replay.mainnet.dataset', observedAtUnixSeconds: now },
-        value: { mandateDigest: digest, status: 'UNUSED' },
-      },
-    },
+    trustedState,
     clock: { nowUnixSeconds: now },
     expectedDomain: MAINNET_REPLAY_DOMAIN,
   };

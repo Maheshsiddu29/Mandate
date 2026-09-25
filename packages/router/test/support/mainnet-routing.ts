@@ -73,9 +73,12 @@ function json(value: unknown): unknown {
 export function buildMainnetRoutingCorpus(): Record<string, unknown> {
   const vectors = FIXTURE_SYMBOLS.map((symbol) => {
     const world = makeWorld(symbol);
-    const result = route(world.request);
+    const result = route(world.request, { trustedMarketState: world.request.trustedMarketState, clock: world.request.clock });
     if (result.status !== 'SELECTED') throw new Error(`${symbol} routing did not select`);
-    const replayed = route({ ...world.request, routes: [...world.routes].reverse() });
+    const replayed = route(
+      { ...world.request, routes: [...world.routes].reverse() },
+      { trustedMarketState: world.request.trustedMarketState, clock: world.request.clock },
+    );
     if (replayed.status === 'INVALID_INPUT') throw new Error(`${symbol} routing replay invalid`);
     const maliciousRouteId = `route.${symbol.toLowerCase()}.malicious-cheapest`;
     return {

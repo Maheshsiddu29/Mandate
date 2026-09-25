@@ -76,10 +76,12 @@ describe('routing-candidate digest', () => {
     assert.equal(parsed.ok, true);
     if (!parsed.ok) return;
     const executionCandidate = parseCandidate({
-      version: 1, representationId: REP, canonicalAsset: ASSET, issuer: 'issuer.fixture',
+      version: 2, representationId: REP, canonicalAsset: ASSET, issuer: 'issuer.fixture',
       chain: 'eip155:4663', venue: 'venue.fixture', side: 'BUY', agent: AGENT,
       quantity: parsed.value.quantity, executionPrice: parsed.value.executionPrice,
-      notional: parsed.value.notional, referenceStateId: 'state.fixture', corporateActionEpoch: 0n,
+      notional: parsed.value.notional, feeTotal: ZERO,
+      referenceStateId: 'state.fixture', referenceStateDigest: '0x' + '11'.repeat(32),
+      corporateActionEpoch: 0n,
     });
     assert.equal(executionCandidate.ok, true);
     if (!executionCandidate.ok) return;
@@ -95,12 +97,13 @@ describe('routing-candidate digest', () => {
       trustedCostSourceId: 'trusted.fixture.costs',
       trustedCostObservedAtUnixSeconds: parsed.value.quoteObservedAtUnixSeconds,
       costs: { venueFee: ZERO, executionFee: ZERO, settlementFee: ZERO, routeFee: ZERO },
-      steps: parsed.value.steps, executionCandidate: executionCandidate.value,
+      steps: parsed.value.steps, feeTotal: ZERO, executionCandidate: executionCandidate.value,
     };
     const digest = routingCandidateDigest(base);
     assert.notEqual(digest, routingCandidateDigest({ ...base, routeId: 'route.beta' }));
     assert.notEqual(digest, routingCandidateDigest({ ...base, costs: { ...base.costs, venueFee: { ...ZERO, atoms: 1n } } }));
     assert.notEqual(digest, routingCandidateDigest({ ...base, quoteObservedAtUnixSeconds: base.quoteObservedAtUnixSeconds - 1n }));
+    assert.notEqual(digest, routingCandidateDigest({ ...base, feeTotal: { ...ZERO, atoms: 1n } }), 'the fee total is committed');
     assert.equal(candidateDigest(executionCandidate.value), candidateDigest(executionCandidate.value));
   });
 });

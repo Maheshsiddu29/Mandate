@@ -6,7 +6,7 @@ import { envelopeFor, TEST_PRIVATE_KEY } from '../../kernel/test/support/signing
 import { route, type ProviderRouteQuote } from '../src/index.ts';
 import {
   ROUTER_CLOCK, ROUTER_DOMAIN, ROUTER_MANDATE, ROUTER_REGISTRY_INPUT,
-  ROUTER_REQUESTED_QUANTITY, ROUTER_STATE, routeQuote, trustedCost, zeroFee,
+  ROUTER_REQUESTED_QUANTITY, ROUTER_STATE, routeQuote, routerHandoff, sellMandate, trustedCost, zeroFee,
 } from './support/fixture.ts';
 
 const opened = openRegistry(ROUTER_REGISTRY_INPUT);
@@ -29,7 +29,7 @@ function run(mandate: CanonicalMandate, routes: readonly ProviderRouteQuote[]) {
     trustedCosts: routes.map((quote) => trustedCost(quote)),
     clock: { nowUnixSeconds: ROUTER_CLOCK },
     expectedDomain: ROUTER_DOMAIN,
-  });
+  }, routerHandoff({ trustedMarketState: state }));
 }
 
 function feeQuote(routeId: string, atoms: bigint, patch: Partial<ProviderRouteQuote> = {}): ProviderRouteQuote {
@@ -67,7 +67,7 @@ describe('lexicographic route quality', () => {
   });
 
   it('ranks SELL routes by higher net proceeds', () => {
-    const mandate = { ...ROUTER_MANDATE, side: 'SELL' as const };
+    const mandate = sellMandate();
     const lowerFee = feeQuote('route.sell-low-fee', 10n, { side: 'SELL' });
     const higherFee = feeQuote('route.sell-high-fee', 20n, { side: 'SELL' });
     const result = run(mandate, [higherFee, lowerFee]);

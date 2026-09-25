@@ -167,8 +167,8 @@
       "selectedResults": 11,
       "noValidRouteResults": 2,
       "handoffRejections": 1,
-      "agreementWithDeterministicBaseline": 10,
-      "disagreementWithDeterministicBaseline": 1,
+      "agreementWithDeterministicBaseline": 11,
+      "disagreementWithDeterministicBaseline": 0,
       "confidenceObserved": [
         0.2,
         0.2,

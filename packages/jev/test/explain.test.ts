@@ -10,11 +10,11 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { renderSelectionSummary, selectWithJev, summarizeSelection } from '../src/index.ts';
 import { abstainingTransport, choosingTransport, failingTransport } from '../src/testing/index.ts';
-import { ROUTER_CLOCK, haltedState, maliciousQuote, routeRequest, validRoutes } from './support/world.ts';
+import { ROUTER_CLOCK, haltedState, maliciousQuote, routeRequest, validRoutes, jevHandoff, } from './support/world.ts';
 
 describe('selection summary', () => {
   it('leads with the outcome, not the mechanism', async () => {
-    const result = await selectWithJev({ route: routeRequest(validRoutes(3)), transport: choosingTransport('route_001', 0.94) });
+    const result = await selectWithJev({ route: routeRequest(validRoutes(3)), transport: choosingTransport('route_001', 0.94), handoffState: jevHandoff() });
     const summary = summarizeSelection(result);
     assert.equal(summary.headline, 'Best valid execution found');
     assert.equal(summary.decisionMode, 'Jev-assisted');
@@ -23,12 +23,12 @@ describe('selection summary', () => {
   });
 
   it('renders the two-or-three line trader view', async () => {
-    const result = await selectWithJev({ route: routeRequest(validRoutes(3)), transport: choosingTransport('route_001', 0.94) });
+    const result = await selectWithJev({ route: routeRequest(validRoutes(3)), transport: choosingTransport('route_001', 0.94), handoffState: jevHandoff() });
     assert.equal(renderSelectionSummary(summarizeSelection(result)), 'Best valid execution found\nDecision mode: Jev-assisted\nConfidence: 94%');
   });
 
   it('withholds probabilities unless they are asked for', async () => {
-    const result = await selectWithJev({ route: routeRequest(validRoutes(3)), transport: choosingTransport('route_001', 0.94) });
+    const result = await selectWithJev({ route: routeRequest(validRoutes(3)), transport: choosingTransport('route_001', 0.94), handoffState: jevHandoff() });
     assert.equal(summarizeSelection(result).detail.some((line) => line.includes('%')), false);
     const verbose = summarizeSelection(result, { includeProbabilities: true });
     assert.ok(verbose.detail.some((line) => line.trimStart().startsWith('route_000:')));
@@ -36,7 +36,7 @@ describe('selection summary', () => {
 
   it('shows no confidence when the advisory layer did not decide', async () => {
     for (const transport of [null, abstainingTransport(), failingTransport('RATE_LIMITED')]) {
-      const result = await selectWithJev({ route: routeRequest(validRoutes(3)), transport });
+      const result = await selectWithJev({ route: routeRequest(validRoutes(3)), transport, handoffState: jevHandoff() });
       const summary = summarizeSelection(result);
       assert.equal(summary.confidencePercent, null);
       assert.equal(summary.headline, 'Best valid execution found');
@@ -45,7 +45,7 @@ describe('selection summary', () => {
   });
 
   it('names the reason when advice was unavailable, without alarming the trader', async () => {
-    const result = await selectWithJev({ route: routeRequest(validRoutes(3)), transport: failingTransport('SERVICE_UNAVAILABLE') });
+    const result = await selectWithJev({ route: routeRequest(validRoutes(3)), transport: failingTransport('SERVICE_UNAVAILABLE'), handoffState: jevHandoff() });
     const summary = summarizeSelection(result);
     assert.equal(summary.decisionMode, 'Deterministic (Jev unavailable)');
     assert.ok(summary.detail.some((line) => line.includes('SERVICE_UNAVAILABLE')));
@@ -54,12 +54,12 @@ describe('selection summary', () => {
   });
 
   it('distinguishes abstention from failure', async () => {
-    const result = await selectWithJev({ route: routeRequest(validRoutes(3)), transport: abstainingTransport() });
+    const result = await selectWithJev({ route: routeRequest(validRoutes(3)), transport: abstainingTransport(), handoffState: jevHandoff() });
     assert.equal(summarizeSelection(result).decisionMode, 'Deterministic (Jev abstained)');
   });
 
   it('reports a refusal as a refusal', async () => {
-    const result = await selectWithJev({ route: routeRequest([maliciousQuote('route.attacker')]), transport: choosingTransport('route_000') });
+    const result = await selectWithJev({ route: routeRequest([maliciousQuote('route.attacker')]), transport: choosingTransport('route_000'), handoffState: jevHandoff() });
     const summary = summarizeSelection(result);
     assert.equal(summary.headline, 'No valid execution found');
     assert.equal(summary.confidencePercent, null);
@@ -79,7 +79,7 @@ describe('selection summary', () => {
   });
 
   it('labels routes readably past the alphabet', async () => {
-    const result = await selectWithJev({ route: routeRequest(validRoutes(30)), transport: choosingTransport('route_027') });
+    const result = await selectWithJev({ route: routeRequest(validRoutes(30)), transport: choosingTransport('route_027'), handoffState: jevHandoff() });
     assert.ok(summarizeSelection(result).detail.includes('Jev selected Route #28'));
   });
 });

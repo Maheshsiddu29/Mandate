@@ -80,22 +80,36 @@ describe('execution candidate construction', () => {
     assert.equal(overflow.ok, false);
     if (!overflow.ok) assert.ok(overflow.exclusions.some((item) => item.code === 'COST_OVERFLOW'));
 
+    // A SELL whose fees consume the whole notional still *builds*: it is the
+    // kernel that refuses it, with FEES_EXCEED_NOTIONAL (ADR 0014). The router
+    // establishes the fee total and ranks on it; it does not authorize.
     const proceeds = routeQuote({ side: 'SELL' });
     const fee = { ...zeroFee(), atoms: proceeds.notional.atoms };
     const expensive = { ...proceeds, costs: { venueFee: fee, executionFee: zeroFee(), settlementFee: zeroFee(), routeFee: zeroFee() } };
     const result = build(sellMandate(), expensive, trustedCost(expensive));
-    assert.equal(result.ok, false);
-    if (!result.ok) assert.ok(result.exclusions.some((item) => item.code === 'SELL_FEES_EXCEED_PROCEEDS'));
+    assert.equal(result.ok, true, 'construction is not authorization');
+    if (result.ok) {
+      assert.equal(result.candidate.feeTotal.atoms, proceeds.notional.atoms);
+      assert.equal(result.candidate.executionCandidate.feeTotal.atoms, proceeds.notional.atoms, 'the kernel sees the fee');
+      assert.equal(result.quality.economicValue.atoms, 0n, 'a net debit ranks last rather than being refused here');
+    }
   });
 
-  it('applies the mandate maximum to all-in BUY cost', () => {
+  it('hands the all-in BUY cost to the kernel rather than deciding it', () => {
     const quote = routeQuote();
     const remaining = ROUTER_MANDATE.maxNotional.atoms - quote.notional.atoms;
     const fee = { ...zeroFee(), atoms: remaining + 1n };
     const over = { ...quote, costs: { venueFee: fee, executionFee: zeroFee(), settlementFee: zeroFee(), routeFee: zeroFee() } };
     const result = build(ROUTER_MANDATE, over, trustedCost(over));
-    assert.equal(result.ok, false);
-    if (!result.ok) assert.ok(result.exclusions.some((item) => item.code === 'TOTAL_COST_EXCEEDS_MANDATE'));
+    assert.equal(result.ok, true, 'the router no longer carries an economic permission');
+    if (result.ok) {
+      assert.equal(result.candidate.executionCandidate.feeTotal.atoms, remaining + 1n);
+      // And the candidate digest commits to it, so a Phase 6 gate can re-assert
+      // the bound the kernel enforced.
+      const cheaper = build(ROUTER_MANDATE, quote, trustedCost(quote));
+      assert.ok(cheaper.ok);
+      if (cheaper.ok) assert.notEqual(result.candidate.kernelCandidateDigest, cheaper.candidate.kernelCandidateDigest);
+    }
   });
 });
 
