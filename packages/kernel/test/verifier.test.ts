@@ -14,6 +14,7 @@ import {
   ALL_REASON_CODE_NAMES,
   CHECKS,
   Decision,
+  MAX_STATE_REPRESENTATIONS,
   REASON_CODES,
   explain,
   reasonCode,
@@ -25,6 +26,7 @@ import {
   AMD,
   CHAIN,
   EPOCH,
+  FOREIGN_CHAIN_REPRESENTATION_ID,
   EXPIRES_AT,
   NOT_BEFORE,
   NOW,
@@ -327,7 +329,7 @@ test('a candidate misdescribing its representation rejects', () => {
 });
 
 test('an unsupported mandate version rejects as such', () => {
-  assertRejects({ mandate: { version: 2 } }, 'UNSUPPORTED_MANDATE_VERSION');
+  assertRejects({ mandate: { version: 3 } }, 'UNSUPPORTED_MANDATE_VERSION');
 });
 
 test('an unsupported authorization scheme rejects', () => {
@@ -510,7 +512,7 @@ test('both PASS and REJECT produce receipts with stable digests', () => {
   assert.notEqual(pass.receiptDigest, reject.receiptDigest);
   for (const r of [pass, reject]) {
     assert.match(r.receiptDigest, /^0x[0-9a-f]{64}$/);
-    assert.equal(r.verifierVersion, 'mandate-kernel/1');
+    assert.equal(r.verifierVersion, 'mandate-kernel/2');
   }
 });
 
@@ -556,6 +558,18 @@ test('reason codes are unique, well-formed and complete', () => {
   }
   assert.equal(ids.size, ALL_REASON_CODE_NAMES.length);
 });
+
+/**
+ * One representation past the parser's bound, built lazily so the cost is paid
+ * only by the coverage test that needs it.
+ */
+function oversizedRepresentations(): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = [];
+  for (let i = 0; i <= MAX_STATE_REPRESENTATIONS; i += 1) {
+    out.push(representationInput({ value: { representationId: `eip155:42161/erc20:0x${i.toString(16).padStart(40, '0')}` } }));
+  }
+  return out;
+}
 
 test('every reason code the verifier can emit is reachable by a test in this suite', () => {
   // Codes produced by construction paths outside the verifier's own checks are
@@ -604,11 +618,19 @@ test('every reason code the verifier can emit is reachable by a test in this sui
     { state: { market: { provenance: { trustClass: 'ADVISORY' } } } },
     { candidate: { side: 'SELL' } },
     { candidate: { issuer: UNAPPROVED_ISSUER } },
-    { mandate: { version: 2 } },
+    { mandate: { version: 3 } },
     { signDomain: { ...TEST_DOMAIN, chainId: 1n } },
     { authorization: { scheme: 'eip712-secp256k1', signature: 'nope' } },
     { authorization: { scheme: 'ed25519-solana' } },
     { candidate: { referenceStateId: 'snapshot.9999' } },
+    // --- Phase 5R: the codes the remediation added ---------------------------
+    { candidate: { referenceStateDigest: '0x' + 'ab'.repeat(32) }, unboundState: true },
+    { candidate: { feeTotal: { unit: 'USD', decimals: 2, atoms: 1_000n } } },
+    { mandate: { side: 'SELL', economicLimit: { unit: 'USD', decimals: 2, atoms: 99_999n } }, candidate: { side: 'SELL' } },
+    { mandate: { side: 'SELL' }, candidate: { side: 'SELL', feeTotal: { unit: 'USD', decimals: 2, atoms: 100_000n } } },
+    { candidate: { representationId: FOREIGN_CHAIN_REPRESENTATION_ID }, representations: [representationInput({ value: { representationId: FOREIGN_CHAIN_REPRESENTATION_ID } })] },
+    { state: { replay: { value: { status: 'QUARANTINED' } } } },
+    { state: { representations: oversizedRepresentations() } },
   ];
   for (const w of worlds) for (const c of verify(buildWorld(w)).reasonCodes) emitted.add(c);
 

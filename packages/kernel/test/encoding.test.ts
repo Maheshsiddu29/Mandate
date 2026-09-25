@@ -97,8 +97,15 @@ test('every security-relevant field change changes the mandate digest', () => {
     canonicalAsset: { canonicalAsset: { assetClass: 'equity', idScheme: 'figi', value: 'BBG000000000' } },
     side: { side: 'SELL' },
     maxNotionalAtoms: { maxNotional: { unit: 'USD', decimals: 2, atoms: 100_001n } },
-    maxNotionalUnit: { maxNotional: { unit: 'EUR', decimals: 2, atoms: 100_000n } },
+    // Both economic bounds must name one currency (ADR 0014), so the currency is
+    // mutated on both at once. It is still one signed change to one field group.
+    currency: {
+      maxNotional: { unit: 'EUR', decimals: 2, atoms: 100_000n },
+      economicLimit: { unit: 'EUR', decimals: 2, atoms: 100_650n },
+    },
     maxNotionalDecimals: { maxNotional: { unit: 'USD', decimals: 6, atoms: 100_000n } },
+    economicLimitAtoms: { economicLimit: { unit: 'USD', decimals: 2, atoms: 100_651n } },
+    economicLimitDecimals: { economicLimit: { unit: 'USD', decimals: 6, atoms: 100_650n } },
     maxDeviationBps: { maxDeviationBps: 41n },
     syntheticPolicy: { syntheticPolicy: 'ALLOWED' },
     allowedIssuers: { allowedIssuers: [ISSUER, 'issuer.beta'] },
@@ -162,7 +169,7 @@ test('an unknown mandate version rejects as such, not as malformed', () => {
   const bytes = encodeMandate(validMandate());
   const mutated = new Uint8Array(bytes);
   // The two bytes immediately after the ASCII tag are the schema version.
-  mutated[DomainTag.MANDATE.length + 1] = 2;
+  mutated[DomainTag.MANDATE.length + 1] = 3;
   const r = decodeMandate(mutated);
   assert.equal(r.ok, false);
   assert.equal(r.ok ? '' : r.error, 'UNSUPPORTED_MANDATE_VERSION');

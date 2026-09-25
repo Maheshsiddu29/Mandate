@@ -5,8 +5,8 @@
  * names the difference rather than restating the world.
  */
 
-import { mandateDigest, parseMandate, type VerifyRequest } from '../../src/index.ts';
-import { candidateInput, mandateInput, stateInput, NOW, MANDATE_ID } from './fixtures.ts';
+import { mandateDigest, parseMandate, parseTrustedState, trustedStateDigest, type VerifyRequest } from '../../src/index.ts';
+import { candidateInput, mandateInput, stateInput, NOW, MANDATE_ID, PLACEHOLDER_STATE_DIGEST } from './fixtures.ts';
 import { TEST_DOMAIN, TEST_PRIVATE_KEY, envelopeFor } from './signing.ts';
 
 type Json = Record<string, unknown>;
@@ -24,6 +24,26 @@ export interface WorldOverrides {
   readonly expectedDomain?: unknown;
   /** Replace the whole authorization, for malformed-envelope cases. */
   readonly authorization?: unknown;
+  /**
+   * Leave the candidate's `referenceStateDigest` as the placeholder instead of
+   * binding it to the assembled state, for tests about the binding itself.
+   */
+  readonly unboundState?: boolean;
+}
+
+/**
+ * Bind a raw candidate to the state the world actually assembled.
+ *
+ * Schema v2 binds a candidate to the *content* of its reference state, so every
+ * world has to compute that digest rather than name a snapshot. A test that
+ * overrode the digest explicitly keeps its override.
+ */
+function bindState(candidate: Json, state: Json, unbound: boolean | undefined): Json {
+  if (unbound === true) return candidate;
+  if (candidate['referenceStateDigest'] !== PLACEHOLDER_STATE_DIGEST) return candidate;
+  const parsed = parseTrustedState(state);
+  if (!parsed.ok) return candidate;
+  return { ...candidate, referenceStateDigest: trustedStateDigest(parsed.value) };
 }
 
 /**
@@ -43,11 +63,12 @@ export function buildWorld(o: WorldOverrides = {}): VerifyRequest {
     // A deliberately malformed mandate still needs a request to be built; the
     // digest is then meaningless and the signature will not match, which is the
     // correct outcome for such a case.
+    const malformedState = stateInput(o.state ?? {}, o.representations);
     return {
       mandate: mandateRaw,
       authorization: o.authorization ?? envelope,
-      candidate: candidateInput(o.candidate ?? {}),
-      trustedState: stateInput(o.state ?? {}, o.representations),
+      candidate: bindState(candidateInput(o.candidate ?? {}), malformedState, o.unboundState),
+      trustedState: malformedState,
       clock: { nowUnixSeconds: o.now ?? NOW },
       expectedDomain: o.expectedDomain ?? { ...TEST_DOMAIN },
     };
@@ -71,7 +92,7 @@ export function buildWorld(o: WorldOverrides = {}): VerifyRequest {
   return {
     mandate: mandateRaw,
     authorization: o.authorization ?? signed,
-    candidate: candidateInput(o.candidate ?? {}),
+    candidate: bindState(candidateInput(o.candidate ?? {}), state, o.unboundState),
     trustedState: state,
     clock: { nowUnixSeconds: o.now ?? NOW },
     expectedDomain: o.expectedDomain ?? { ...TEST_DOMAIN },

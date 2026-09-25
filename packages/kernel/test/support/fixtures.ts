@@ -40,6 +40,11 @@ export const OTHER_AGENT = { kind: 'eip155-address', value: '0x33333333333333333
 export const REPRESENTATION_ID = 'eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 export const SYNTHETIC_REPRESENTATION_ID = 'eip155:42161/erc20:0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 export const UNREGISTERED_REPRESENTATION_ID = 'eip155:42161/erc20:0xcccccccccccccccccccccccccccccccccccccccc';
+/**
+ * A contract on a chain the mandate does not allow, presented with the allowed
+ * chain in the `chain` field beside it. Before Phase 5R this passed.
+ */
+export const FOREIGN_CHAIN_REPRESENTATION_ID = 'eip155:1/erc20:0xdddddddddddddddddddddddddddddddddddddddd';
 
 export const ISSUER = 'issuer.alpha';
 export const UNAPPROVED_ISSUER = 'issuer.omega';
@@ -50,6 +55,15 @@ export const OTHER_VENUE = 'venue.omega';
 export const STATE_ID = 'snapshot.0001';
 
 export const MANDATE_ID = '0x' + '11'.repeat(32);
+
+/**
+ * Stand-in for the trusted-state digest in a raw candidate.
+ *
+ * `buildWorld` replaces it with the digest of the state it actually assembled,
+ * so a test that does not care about the binding gets a correct one and a test
+ * that does can override it. It is never a valid digest by accident.
+ */
+export const PLACEHOLDER_STATE_DIGEST = '0x' + '00'.repeat(32);
 
 /** Evaluation instant used by the valid world. */
 export const NOW = 1_800_000_000n;
@@ -76,6 +90,17 @@ export const REFERENCE_PRICE = {
 export const QUANTITY = { unit: 'SHARE', decimals: 2, atoms: 1_000n } as const;
 export const NOTIONAL = { unit: 'USD', decimals: 2, atoms: 100_000n } as const;
 export const MAX_NOTIONAL = { unit: 'USD', decimals: 2, atoms: 100_000n } as const;
+/** 2.50 USD of explicit route cost on a 1000.00 USD notional. */
+export const FEE_TOTAL = { unit: 'USD', decimals: 2, atoms: 250n } as const;
+/**
+ * BUY: the most the principal may be debited, fees included. 1006.50 USD.
+ *
+ * Set to the widest debit the rest of the valid world can reach — the notional
+ * at the maximum permitted 40 bps deviation, plus the fee — so that the bound is
+ * live without silently gating the price and notional boundary tests. The
+ * economic-limit tests set their own.
+ */
+export const ECONOMIC_LIMIT = { unit: 'USD', decimals: 2, atoms: 100_650n } as const;
 
 type Json = Record<string, unknown>;
 
@@ -98,7 +123,7 @@ function deepMerge(base: Json, patch: Json): Json {
 export function mandateInput(overrides: Json = {}): Json {
   return deepMerge(
     {
-      version: 1,
+      version: 2,
       mandateId: MANDATE_ID,
       nonce: 1n,
       principal: { ...PRINCIPAL },
@@ -106,6 +131,7 @@ export function mandateInput(overrides: Json = {}): Json {
       canonicalAsset: { ...NVDA },
       side: 'BUY',
       maxNotional: { ...MAX_NOTIONAL },
+      economicLimit: { ...ECONOMIC_LIMIT },
       maxDeviationBps: 40n,
       syntheticPolicy: 'FORBIDDEN',
       allowedIssuers: [ISSUER],
@@ -126,7 +152,7 @@ export function mandateInput(overrides: Json = {}): Json {
 export function candidateInput(overrides: Json = {}): Json {
   return deepMerge(
     {
-      version: 1,
+      version: 2,
       representationId: REPRESENTATION_ID,
       canonicalAsset: { ...NVDA },
       issuer: ISSUER,
@@ -137,7 +163,9 @@ export function candidateInput(overrides: Json = {}): Json {
       quantity: { ...QUANTITY },
       executionPrice: { ...REFERENCE_PRICE },
       notional: { ...NOTIONAL },
+      feeTotal: { ...FEE_TOTAL },
       referenceStateId: STATE_ID,
+      referenceStateDigest: PLACEHOLDER_STATE_DIGEST,
       corporateActionEpoch: EPOCH,
     },
     overrides,
@@ -180,8 +208,9 @@ export function syntheticRepresentationInput(overrides: Json = {}): Json {
 export function stateInput(overrides: Json = {}, representations?: Json[]): Json {
   return deepMerge(
     {
-      version: 1,
+      version: 2,
       stateId: STATE_ID,
+      registrySnapshotDigest: null,
       representations: representations ?? [representationInput()],
       market: {
         provenance: { ...PROVENANCE },

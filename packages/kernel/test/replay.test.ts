@@ -12,10 +12,12 @@ import assert from 'node:assert/strict';
 
 import {
   Decision,
+  ReconciledOutcome,
   ReplayError,
   ReplayStatus,
   ReplayTransition,
   applyTransition,
+  isAvailable,
   mandateDigest,
   replayKey,
   unusedRecord,
@@ -88,7 +90,7 @@ test('consumption is terminal', () => {
 
 test('commit and release are only valid from a reservation', () => {
   const unused = unusedRecord(KEY, NOW);
-  for (const transition of [ReplayTransition.COMMIT, ReplayTransition.RELEASE, ReplayTransition.RECLAIM] as const) {
+  for (const transition of [ReplayTransition.COMMIT, ReplayTransition.RELEASE, ReplayTransition.QUARANTINE] as const) {
     assert.equal(
       errorOf(applyTransition({ current: unused, transition, nowUnixSeconds: NOW })),
       ReplayError.NOT_RESERVED,
@@ -108,14 +110,80 @@ test('release returns a reserved mandate to unused, so a failed attempt can retr
   assert.equal(expectOk(reserve(released, NOW + 4n)).status, ReplayStatus.RESERVED);
 });
 
-test('a reservation can only be reclaimed after it expires', () => {
+test('a reservation can only be quarantined after it expires', () => {
   const reserved = expectOk(reserve(unusedRecord(KEY, NOW), NOW, 120n));
-  const reclaim = (now: bigint) =>
-    applyTransition({ current: reserved, transition: ReplayTransition.RECLAIM, nowUnixSeconds: now });
+  const quarantine = (now: bigint) =>
+    applyTransition({ current: reserved, transition: ReplayTransition.QUARANTINE, nowUnixSeconds: now });
 
-  assert.equal(errorOf(reclaim(NOW + 119n)), ReplayError.RESERVATION_NOT_EXPIRED);
-  assert.equal(expectOk(reclaim(NOW + 120n)).status, ReplayStatus.UNUSED, 'at the boundary it is reclaimable');
-  assert.equal(expectOk(reclaim(NOW + 121n)).status, ReplayStatus.UNUSED);
+  assert.equal(errorOf(quarantine(NOW + 119n)), ReplayError.RESERVATION_NOT_EXPIRED);
+  // At and past the boundary it quarantines. It never returns to UNUSED: the
+  // reservation lapsing says the attempt stopped reporting, not that it failed.
+  assert.equal(expectOk(quarantine(NOW + 120n)).status, ReplayStatus.QUARANTINED, 'at the boundary');
+  assert.equal(expectOk(quarantine(NOW + 121n)).status, ReplayStatus.QUARANTINED);
+  assert.equal(expectOk(quarantine(NOW + 120n)).reservationExpiresAtUnixSeconds, null);
+});
+
+test('a lapsed reservation never restores permission, however long it has been', () => {
+  const reserved = expectOk(reserve(unusedRecord(KEY, NOW), NOW, 120n));
+  for (const elapsed of [120n, 121n, 10_000n, 10n ** 9n]) {
+    const after = expectOk(
+      applyTransition({ current: reserved, transition: ReplayTransition.QUARANTINE, nowUnixSeconds: NOW + elapsed }),
+    );
+    assert.equal(after.status, ReplayStatus.QUARANTINED, `+${elapsed}s`);
+    assert.equal(isAvailable(after), false, `+${elapsed}s must not be available`);
+  }
+});
+
+test('only reconciliation leaves a quarantine, and it must state what it found', () => {
+  const reserved = expectOk(reserve(unusedRecord(KEY, NOW), NOW, 120n));
+  const quarantined = expectOk(
+    applyTransition({ current: reserved, transition: ReplayTransition.QUARANTINE, nowUnixSeconds: NOW + 120n }),
+  );
+
+  // Nothing else may act on it. RELEASE in particular claims an observation the
+  // quarantine exists to record that nobody has.
+  for (const transition of [ReplayTransition.RESERVE, ReplayTransition.COMMIT, ReplayTransition.RELEASE, ReplayTransition.QUARANTINE] as const) {
+    assert.equal(
+      errorOf(applyTransition({ current: quarantined, transition, nowUnixSeconds: NOW + 200n, reservationSeconds: 60n })),
+      ReplayError.NOT_QUARANTINED,
+      transition,
+    );
+  }
+
+  // RECONCILE without an outcome is refused rather than defaulting either way.
+  assert.equal(
+    errorOf(applyTransition({ current: quarantined, transition: ReplayTransition.RECONCILE, nowUnixSeconds: NOW + 200n })),
+    ReplayError.OUTCOME_REQUIRED,
+  );
+
+  const settled = expectOk(applyTransition({
+    current: quarantined, transition: ReplayTransition.RECONCILE,
+    nowUnixSeconds: NOW + 200n, reconciledOutcome: ReconciledOutcome.SETTLED,
+  }));
+  assert.equal(settled.status, ReplayStatus.CONSUMED);
+  assert.equal(isAvailable(settled), false);
+
+  const failed = expectOk(applyTransition({
+    current: quarantined, transition: ReplayTransition.RECONCILE,
+    nowUnixSeconds: NOW + 200n, reconciledOutcome: ReconciledOutcome.FAILED,
+  }));
+  assert.equal(failed.status, ReplayStatus.UNUSED);
+  assert.equal(isAvailable(failed), true);
+});
+
+test('a consumed authorization is terminal even against reconciliation', () => {
+  const consumed = expectOk(applyTransition({
+    current: expectOk(reserve(unusedRecord(KEY, NOW))),
+    transition: ReplayTransition.COMMIT,
+    nowUnixSeconds: NOW + 5n,
+  }));
+  assert.equal(
+    errorOf(applyTransition({
+      current: consumed, transition: ReplayTransition.RECONCILE,
+      nowUnixSeconds: NOW + 9n, reconciledOutcome: ReconciledOutcome.FAILED,
+    })),
+    ReplayError.ALREADY_CONSUMED,
+  );
 });
 
 test('a reservation never outlives the mandate it holds', () => {

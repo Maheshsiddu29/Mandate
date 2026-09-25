@@ -11,7 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-import { ALL_REASON_CODE_NAMES, Decision, verify } from '../src/index.ts';
+import { ALL_REASON_CODE_NAMES, Decision, VERIFIER_VERSION, verify } from '../src/index.ts';
 import { CORPUS_PATH, CORPUS_VERSION, serializeCorpus } from './support/generate-corpus.ts';
 
 interface Vector {
@@ -45,7 +45,7 @@ test('the committed corpus is the one this kernel generates', () => {
 
 test('corpus metadata is consistent', () => {
   assert.equal(corpus.corpusVersion, CORPUS_VERSION);
-  assert.equal(corpus.verifierVersion, 'mandate-kernel/1');
+  assert.equal(corpus.verifierVersion, VERIFIER_VERSION);
   assert.equal(corpus.vectorCount, corpus.vectors.length);
   const ids = corpus.vectors.map((v) => v.id);
   assert.equal(new Set(ids).size, ids.length, 'vector ids must be unique');

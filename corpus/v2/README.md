@@ -1,10 +1,19 @@
-# Decision-vector corpus, v1
+# Decision-vector corpus, v2
 
 A cross-implementation compatibility contract for the Mandate verifier.
 
-> **Status: Phase 1.** Generated from `@mandate/kernel`. `vectors.json` is
+> **Status: Phase 5R.** Generated from `@mandate/kernel`. `vectors.json` is
 > committed and the kernel's `corpus.test.ts` fails if it drifts from what the
 > generator produces.
+>
+> **This corpus replaces `corpus/v1`.** MCE schema v2
+> ([ADR 0014](../../docs/adr/0014-symmetric-signed-economic-authorization.md))
+> added the signed economic limit, the candidate fee total and the content-
+> addressed state binding, and moved the object domain tags to `.V2`. A v2
+> kernel rejects a v1 mandate with `UNSUPPORTED_MANDATE_VERSION` by design, so
+> it cannot replay v1 vectors and keeping them under a `v1` directory alongside
+> v2 content would have been misleading. The directory was renamed and
+> regenerated; no v1 vector was silently reinterpreted.
 
 ## What this is for
 
@@ -15,16 +24,16 @@ vulnerability, not a bug
 ([design §10.5](../../docs/mandate-design.md#105-differential-verification)).
 
 This corpus is how they are kept in step. **Any implementation claiming to
-verify Mandate v1 must reproduce every field of `expected` for every vector.**
+verify Mandate v2 must reproduce every field of `expected` for every vector.**
 
 ## Format
 
 ```jsonc
 {
-  "corpusVersion": 1,
-  "verifierVersion": "mandate-kernel/1",
-  "encoding": "MCE v1, keccak-256",
-  "vectorCount": 57,
+  "corpusVersion": 2,
+  "verifierVersion": "mandate-kernel/2",
+  "encoding": "MCE v2, keccak-256",
+  "vectorCount": 67,
   "vectors": [
     {
       "id": "synthetic-001",
@@ -80,8 +89,9 @@ record is anchored to.
 
 ## Families
 
-24 families, 57 vectors, covering the twenty required cases plus the pairs that
-distinguish codes which are easy to conflate.
+27 families, 67 vectors, covering the twenty required cases, the pairs that
+distinguish codes which are easy to conflate, and the four families Phase 5R
+added when it corrected the economic, chain and state-binding findings.
 
 | Family | Vectors | What it pins |
 | --- | --- | --- |
@@ -103,12 +113,15 @@ distinguish codes which are easy to conflate.
 | `expired-mandate` | 2 | Exactly at expiry (rejects); one second before (passes) |
 | `not-yet-active-mandate` | 2 | One second before not-before; exactly at it |
 | `invalid-signature` | 5 | Forged signer; honest wrong party; foreign domain; unsupported scheme; wrong agent |
-| `replay` | 4 | Consumed; reserved; unknown; a record about another mandate |
+| `replay` | 5 | Consumed; reserved; unknown; a record about another mandate; quarantined after a lapsed reservation |
 | `unit-mismatch` | 3 | Wrong currency; wrong price denominator; a different but explicit decimal scale that passes |
 | `malformed-identifier` | 5 | Bad charset; trailing separator; unknown version; structurally wrong state; negative quantity |
 | `untrusted-state` | 3 | Advisory provenance; untrusted provenance; absent |
 | `maximum-size-values` | 3 | `uint64` and `uint16` maxima; 38 decimal places; one past the `uint256` maximum |
 | `multiple-violations` | 1 | Four independent violations reported together |
+| `economic-limit` | 6 | BUY at and one atom past the signed maximum total debit; SELL at and one atom below the signed minimum total credit; fees equal to the notional; a fee in the wrong currency |
+| `representation-chain` | 2 | A contract on a forbidden chain carrying an allowed chain field; a candidate disagreeing with the chain inside its own identifier |
+| `state-binding` | 1 | A candidate committing to a state digest that is not the digest of the state supplied |
 
 ## Extending it
 

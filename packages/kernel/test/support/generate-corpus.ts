@@ -25,6 +25,7 @@ import { verify, type VerifyRequest } from '../../src/index.ts';
 import {
   AMD,
   EPOCH,
+  FOREIGN_CHAIN_REPRESENTATION_ID,
   EXPIRES_AT,
   NOT_BEFORE,
   NOW,
@@ -40,7 +41,7 @@ import {
 import { buildWorld, type WorldOverrides } from './world.ts';
 import { TEST_DOMAIN, TEST_PRIVATE_KEY_2 } from './signing.ts';
 
-export const CORPUS_VERSION = 1;
+export const CORPUS_VERSION = 2;
 
 interface VectorSpec {
   readonly id: string;
@@ -130,6 +131,17 @@ const SPECS: readonly VectorSpec[] = [
   { id: 'maxvalue-003', family: 'maximum-size-values', description: 'An atom count one above the uint256 maximum, which must not wrap.', world: { candidate: { notional: { unit: 'USD', decimals: 2, atoms: (2n ** 256n) } } } },
 
   { id: 'multi-001', family: 'multiple-violations', description: 'Four independent violations at once. All must be reported, not just the first.', world: { candidate: { issuer: UNAPPROVED_ISSUER, venue: OTHER_VENUE, quantity: { unit: 'SHARE', decimals: 2, atoms: 10_000n }, notional: { unit: 'USD', decimals: 2, atoms: 1_000_000n } }, representations: [representationInput({ value: { issuer: UNAPPROVED_ISSUER } })], state: { market: { provenance: { observedAtUnixSeconds: NOW - 3600n } } } } },
+  // --- Phase 5R: the families the remediation introduced --------------------
+  { id: 'economic-001', family: 'economic-limit', description: 'BUY at the signed maximum total debit exactly: notional plus fees equals the limit.', world: {} },
+  { id: 'economic-002', family: 'economic-limit', description: 'BUY one atom of fee past the signed maximum total debit.', world: { candidate: { feeTotal: { unit: 'USD', decimals: 2, atoms: 901n } } } },
+  { id: 'economic-003', family: 'economic-limit', description: 'SELL at the signed minimum total credit exactly: notional minus fees equals the floor.', world: { mandate: { side: 'SELL', economicLimit: { unit: 'USD', decimals: 2, atoms: 99_000n } }, candidate: { side: 'SELL', feeTotal: { unit: 'USD', decimals: 2, atoms: 1_000n } } } },
+  { id: 'economic-004', family: 'economic-limit', description: 'SELL one atom of fee below the signed minimum total credit.', world: { mandate: { side: 'SELL', economicLimit: { unit: 'USD', decimals: 2, atoms: 99_000n } }, candidate: { side: 'SELL', feeTotal: { unit: 'USD', decimals: 2, atoms: 1_001n } } } },
+  { id: 'economic-005', family: 'economic-limit', description: 'SELL whose fees equal the notional: a net debit, refused before any credit comparison.', world: { mandate: { side: 'SELL', economicLimit: { unit: 'USD', decimals: 2, atoms: 1n } }, candidate: { side: 'SELL', feeTotal: { unit: 'USD', decimals: 2, atoms: 100_000n } } } },
+  { id: 'economic-006', family: 'economic-limit', description: 'A fee denominated in a unit the notional does not use.', world: { candidate: { feeTotal: { unit: 'EUR', decimals: 2, atoms: 250n } } } },
+  { id: 'repchain-001', family: 'representation-chain', description: 'A contract on a chain the mandate forbids, presented with an allowed chain in the field beside it.', world: { candidate: { representationId: FOREIGN_CHAIN_REPRESENTATION_ID }, representations: [representationInput({ value: { representationId: FOREIGN_CHAIN_REPRESENTATION_ID } })] } },
+  { id: 'repchain-002', family: 'representation-chain', description: 'A candidate whose chain field disagrees with the chain inside its own representation identifier.', world: { candidate: { chain: 'eip155:1' } } },
+  { id: 'binding-001', family: 'state-binding', description: 'A candidate committing to a trusted-state digest that is not the digest of the state supplied.', world: { candidate: { referenceStateDigest: '0x' + 'ab'.repeat(32) }, unboundState: true } },
+  { id: 'replay-005', family: 'replay', description: 'An authorization quarantined after a reservation lapsed with its outcome unestablished.', world: { state: { replay: { value: { status: 'QUARANTINED' } } } } },
 ];
 
 /** JSON cannot hold a bigint. Decimal strings round-trip exactly through every parser in the kernel. */
@@ -178,15 +190,15 @@ export function buildCorpus(): Record<string, unknown> {
 
   return {
     corpusVersion: CORPUS_VERSION,
-    verifierVersion: 'mandate-kernel/1',
-    encoding: 'MCE v1, keccak-256 (docs/adr/0002-canonical-mandate-encoding.md)',
+    verifierVersion: 'mandate-kernel/2',
+    encoding: 'MCE v2, keccak-256 (docs/adr/0002-canonical-mandate-encoding.md, docs/adr/0014-symmetric-signed-economic-authorization.md)',
     note: 'Integers are decimal strings because JSON has no integer type wide enough. Vectors are self-contained VerifyRequests.',
     vectorCount: vectors.length,
     vectors,
   };
 }
 
-export const CORPUS_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../corpus/v1/vectors.json');
+export const CORPUS_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../corpus/v2/vectors.json');
 
 export function serializeCorpus(): string {
   return `${JSON.stringify(buildCorpus(), null, 2)}\n`;
