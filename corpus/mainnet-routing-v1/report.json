@@ -1,0 +1,21 @@
+{
+  "reportVersion": 1,
+  "captureId": "robinhood-mainnet-2026-09-24T22-36-48Z",
+  "worldsEvaluated": 6,
+  "realAssets": [
+    "AAPL",
+    "NVDA",
+    "TSLA",
+    "QQQ",
+    "CRWD",
+    "MSFT"
+  ],
+  "candidatesGenerated": 18,
+  "candidatesExcluded": 6,
+  "admissibleCandidates": 12,
+  "selectedRoutes": 6,
+  "maliciousCandidatesGenerated": 6,
+  "maliciousCandidatesSelected": 0,
+  "unsafeCandidatesReachingExecutionHandoff": 0,
+  "receiptReproductionFailures": 0
+}

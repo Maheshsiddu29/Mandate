@@ -1,0 +1,1509 @@
+{
+  "corpusVersion": 1,
+  "routerVersion": "mandate-router/1",
+  "fixtureManifest": "packages/adapter-robinhood/test/fixtures/mainnet/2026-09-24/manifest.json",
+  "note": "Representation, price, multiplier, contract and epoch state are recorded mainnet observations. Route fees and alternate venue routes are synthetic.",
+  "vectorCount": 6,
+  "vectors": [
+    {
+      "id": "mainnet-routing-aapl",
+      "symbol": "AAPL",
+      "stateClass": "RECORDED_MAINNET_WITH_SYNTHETIC_ROUTE_ECONOMICS",
+      "captureId": "robinhood-mainnet-2026-09-24T22-36-48Z",
+      "mandateDigest": "0x109114a0fba32ae18f4e16ca174323cbbe881815c82b69f70d9b9343b4fcfbde",
+      "registrySnapshotDigest": "0x8a016496f139b28391e47da1ee7d2a4b57a31a3cf976183a78e965df5776e8a8",
+      "trustedStateDigest": "0xe050a3023ae768eaf7f82249f47fd99ecbcd91dfcdefe164149595e00224dd3e",
+      "evaluatedAtUnixSeconds": "1790289408",
+      "routes": [
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x2222222222222222222222222222222222222222"
+          },
+          "canonicalAsset": {
+            "assetClass": "equity",
+            "idScheme": "isin",
+            "value": "US0378331005"
+          },
+          "chain": "eip155:4663",
+          "corporateActionEpoch": "1786720366",
+          "costs": {
+            "executionFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "routeFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "settlementFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "venueFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            }
+          },
+          "executionPrice": {
+            "atoms": "336190202900527058496",
+            "decimals": 18,
+            "denominatorUnit": "TOKEN",
+            "numeratorUnit": "USD"
+          },
+          "fillPolicy": "FILL_OR_KILL",
+          "issuer": "issuer.attacker",
+          "notional": {
+            "atoms": "336190202900527058496",
+            "decimals": 18,
+            "unit": "USD"
+          },
+          "providerClass": "SYNTHETIC_TEST",
+          "providerId": "provider.mainnet-routing-replay",
+          "quantity": {
+            "atoms": "1000000000000000000",
+            "decimals": 18,
+            "unit": "TOKEN"
+          },
+          "quoteObservedAtUnixSeconds": "1790289408",
+          "referenceStateId": "mainnet-aapl-pass.state",
+          "representationId": "eip155:4663/erc20:0xaf3d76f1834a1d425780943c99ea8a608f8a93f9",
+          "routeId": "route.aapl.malicious-cheapest",
+          "side": "BUY",
+          "steps": [
+            {
+              "chain": "eip155:4663",
+              "kind": "TRADE",
+              "representationId": "eip155:4663/erc20:0xaf3d76f1834a1d425780943c99ea8a608f8a93f9",
+              "venue": "venue.robinhood.replay"
+            }
+          ],
+          "venue": "venue.robinhood.replay",
+          "version": 1
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x2222222222222222222222222222222222222222"
+          },
+          "canonicalAsset": {
+            "assetClass": "equity",
+            "idScheme": "isin",
+            "value": "US0378331005"
+          },
+          "chain": "eip155:4663",
+          "corporateActionEpoch": "1786720366",
+          "costs": {
+            "executionFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "routeFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "settlementFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "venueFee": {
+              "atoms": "500",
+              "decimals": 18,
+              "unit": "USD"
+            }
+          },
+          "executionPrice": {
+            "atoms": "336190202900527058496",
+            "decimals": 18,
+            "denominatorUnit": "TOKEN",
+            "numeratorUnit": "USD"
+          },
+          "fillPolicy": "FILL_OR_KILL",
+          "issuer": "robinhood-assets-jersey-limited",
+          "notional": {
+            "atoms": "336190202900527058496",
+            "decimals": 18,
+            "unit": "USD"
+          },
+          "providerClass": "SYNTHETIC_TEST",
+          "providerId": "provider.mainnet-routing-replay",
+          "quantity": {
+            "atoms": "1000000000000000000",
+            "decimals": 18,
+            "unit": "TOKEN"
+          },
+          "quoteObservedAtUnixSeconds": "1790289408",
+          "referenceStateId": "mainnet-aapl-pass.state",
+          "representationId": "eip155:4663/erc20:0xaf3d76f1834a1d425780943c99ea8a608f8a93f9",
+          "routeId": "route.aapl.valid-expensive",
+          "side": "BUY",
+          "steps": [
+            {
+              "chain": "eip155:4663",
+              "kind": "TRADE",
+              "representationId": "eip155:4663/erc20:0xaf3d76f1834a1d425780943c99ea8a608f8a93f9",
+              "venue": "venue.robinhood.replay"
+            }
+          ],
+          "venue": "venue.robinhood.replay",
+          "version": 1
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x2222222222222222222222222222222222222222"
+          },
+          "canonicalAsset": {
+            "assetClass": "equity",
+            "idScheme": "isin",
+            "value": "US0378331005"
+          },
+          "chain": "eip155:4663",
+          "corporateActionEpoch": "1786720366",
+          "costs": {
+            "executionFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "routeFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "settlementFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "venueFee": {
+              "atoms": "100",
+              "decimals": 18,
+              "unit": "USD"
+            }
+          },
+          "executionPrice": {
+            "atoms": "336190202900527058496",
+            "decimals": 18,
+            "denominatorUnit": "TOKEN",
+            "numeratorUnit": "USD"
+          },
+          "fillPolicy": "FILL_OR_KILL",
+          "issuer": "robinhood-assets-jersey-limited",
+          "notional": {
+            "atoms": "336190202900527058496",
+            "decimals": 18,
+            "unit": "USD"
+          },
+          "providerClass": "SYNTHETIC_TEST",
+          "providerId": "provider.mainnet-routing-replay",
+          "quantity": {
+            "atoms": "1000000000000000000",
+            "decimals": 18,
+            "unit": "TOKEN"
+          },
+          "quoteObservedAtUnixSeconds": "1790289408",
+          "referenceStateId": "mainnet-aapl-pass.state",
+          "representationId": "eip155:4663/erc20:0xaf3d76f1834a1d425780943c99ea8a608f8a93f9",
+          "routeId": "route.aapl.valid-cheap",
+          "side": "BUY",
+          "steps": [
+            {
+              "chain": "eip155:4663",
+              "kind": "TRADE",
+              "representationId": "eip155:4663/erc20:0xaf3d76f1834a1d425780943c99ea8a608f8a93f9",
+              "venue": "venue.robinhood.replay"
+            }
+          ],
+          "venue": "venue.robinhood.replay",
+          "version": 1
+        }
+      ],
+      "maliciousRouteId": "route.aapl.malicious-cheapest",
+      "receiptReproduced": true,
+      "expected": {
+        "finalVerificationReceiptDigest": "0xe6f16860ce78deb9bc058deaf22df79cb7b66e6329ea7f8164218fc98c70fe6b",
+        "outcomes": [
+          {
+            "reasons": [
+              "PROVIDER_IDENTITY_MISMATCH"
+            ],
+            "routeId": "route.aapl.malicious-cheapest",
+            "status": "EXCLUDED"
+          },
+          {
+            "reasons": [],
+            "routeId": "route.aapl.valid-cheap",
+            "status": "ADMISSIBLE"
+          },
+          {
+            "reasons": [],
+            "routeId": "route.aapl.valid-expensive",
+            "status": "ADMISSIBLE"
+          }
+        ],
+        "routingReceiptDigest": "0xb2838d4fff6fc3e42d355311ebcc493533eb1c0af5de437b76ca8d1d74ffc8a4",
+        "selectedCandidateDigest": "0xc20274b59a18dcf716a4dd6cc25ff3b2f8a10f9433f45d125293d23053b59260",
+        "selectedRouteId": "route.aapl.valid-cheap",
+        "status": "SELECTED"
+      }
+    },
+    {
+      "id": "mainnet-routing-nvda",
+      "symbol": "NVDA",
+      "stateClass": "RECORDED_MAINNET_WITH_SYNTHETIC_ROUTE_ECONOMICS",
+      "captureId": "robinhood-mainnet-2026-09-24T22-36-48Z",
+      "mandateDigest": "0x69eb15a7efc3275a7efedf74b3ec227760b2da5de8eeb5fe5346aa7fb09a1a1f",
+      "registrySnapshotDigest": "0x8a016496f139b28391e47da1ee7d2a4b57a31a3cf976183a78e965df5776e8a8",
+      "trustedStateDigest": "0x80f6a032ea0d0d9853f0415311070dbbd9a81eaf33ed1eab9da00ff2611e7c3d",
+      "evaluatedAtUnixSeconds": "1790289408",
+      "routes": [
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x2222222222222222222222222222222222222222"
+          },
+          "canonicalAsset": {
+            "assetClass": "equity",
+            "idScheme": "isin",
+            "value": "US67066G1040"
+          },
+          "chain": "eip155:4663",
+          "corporateActionEpoch": "1788998430",
+          "costs": {
+            "executionFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "routeFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "settlementFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "venueFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            }
+          },
+          "executionPrice": {
+            "atoms": "224153620149693960668",
+            "decimals": 18,
+            "denominatorUnit": "TOKEN",
+            "numeratorUnit": "USD"
+          },
+          "fillPolicy": "FILL_OR_KILL",
+          "issuer": "issuer.attacker",
+          "notional": {
+            "atoms": "224153620149693960668",
+            "decimals": 18,
+            "unit": "USD"
+          },
+          "providerClass": "SYNTHETIC_TEST",
+          "providerId": "provider.mainnet-routing-replay",
+          "quantity": {
+            "atoms": "1000000000000000000",
+            "decimals": 18,
+            "unit": "TOKEN"
+          },
+          "quoteObservedAtUnixSeconds": "1790289408",
+          "referenceStateId": "mainnet-nvda-pass.state",
+          "representationId": "eip155:4663/erc20:0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec",
+          "routeId": "route.nvda.malicious-cheapest",
+          "side": "BUY",
+          "steps": [
+            {
+              "chain": "eip155:4663",
+              "kind": "TRADE",
+              "representationId": "eip155:4663/erc20:0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec",
+              "venue": "venue.robinhood.replay"
+            }
+          ],
+          "venue": "venue.robinhood.replay",
+          "version": 1
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x2222222222222222222222222222222222222222"
+          },
+          "canonicalAsset": {
+            "assetClass": "equity",
+            "idScheme": "isin",
+            "value": "US67066G1040"
+          },
+          "chain": "eip155:4663",
+          "corporateActionEpoch": "1788998430",
+          "costs": {
+            "executionFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "routeFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "settlementFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "venueFee": {
+              "atoms": "500",
+              "decimals": 18,
+              "unit": "USD"
+            }
+          },
+          "executionPrice": {
+            "atoms": "224153620149693960668",
+            "decimals": 18,
+            "denominatorUnit": "TOKEN",
+            "numeratorUnit": "USD"
+          },
+          "fillPolicy": "FILL_OR_KILL",
+          "issuer": "robinhood-assets-jersey-limited",
+          "notional": {
+            "atoms": "224153620149693960668",
+            "decimals": 18,
+            "unit": "USD"
+          },
+          "providerClass": "SYNTHETIC_TEST",
+          "providerId": "provider.mainnet-routing-replay",
+          "quantity": {
+            "atoms": "1000000000000000000",
+            "decimals": 18,
+            "unit": "TOKEN"
+          },
+          "quoteObservedAtUnixSeconds": "1790289408",
+          "referenceStateId": "mainnet-nvda-pass.state",
+          "representationId": "eip155:4663/erc20:0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec",
+          "routeId": "route.nvda.valid-expensive",
+          "side": "BUY",
+          "steps": [
+            {
+              "chain": "eip155:4663",
+              "kind": "TRADE",
+              "representationId": "eip155:4663/erc20:0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec",
+              "venue": "venue.robinhood.replay"
+            }
+          ],
+          "venue": "venue.robinhood.replay",
+          "version": 1
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x2222222222222222222222222222222222222222"
+          },
+          "canonicalAsset": {
+            "assetClass": "equity",
+            "idScheme": "isin",
+            "value": "US67066G1040"
+          },
+          "chain": "eip155:4663",
+          "corporateActionEpoch": "1788998430",
+          "costs": {
+            "executionFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "routeFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "settlementFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "venueFee": {
+              "atoms": "100",
+              "decimals": 18,
+              "unit": "USD"
+            }
+          },
+          "executionPrice": {
+            "atoms": "224153620149693960668",
+            "decimals": 18,
+            "denominatorUnit": "TOKEN",
+            "numeratorUnit": "USD"
+          },
+          "fillPolicy": "FILL_OR_KILL",
+          "issuer": "robinhood-assets-jersey-limited",
+          "notional": {
+            "atoms": "224153620149693960668",
+            "decimals": 18,
+            "unit": "USD"
+          },
+          "providerClass": "SYNTHETIC_TEST",
+          "providerId": "provider.mainnet-routing-replay",
+          "quantity": {
+            "atoms": "1000000000000000000",
+            "decimals": 18,
+            "unit": "TOKEN"
+          },
+          "quoteObservedAtUnixSeconds": "1790289408",
+          "referenceStateId": "mainnet-nvda-pass.state",
+          "representationId": "eip155:4663/erc20:0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec",
+          "routeId": "route.nvda.valid-cheap",
+          "side": "BUY",
+          "steps": [
+            {
+              "chain": "eip155:4663",
+              "kind": "TRADE",
+              "representationId": "eip155:4663/erc20:0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec",
+              "venue": "venue.robinhood.replay"
+            }
+          ],
+          "venue": "venue.robinhood.replay",
+          "version": 1
+        }
+      ],
+      "maliciousRouteId": "route.nvda.malicious-cheapest",
+      "receiptReproduced": true,
+      "expected": {
+        "finalVerificationReceiptDigest": "0xb36bb0f5f9ad0e18b43317e3366134e0c380ab7fd879dd1593c4fc3528ff706f",
+        "outcomes": [
+          {
+            "reasons": [
+              "PROVIDER_IDENTITY_MISMATCH"
+            ],
+            "routeId": "route.nvda.malicious-cheapest",
+            "status": "EXCLUDED"
+          },
+          {
+            "reasons": [],
+            "routeId": "route.nvda.valid-cheap",
+            "status": "ADMISSIBLE"
+          },
+          {
+            "reasons": [],
+            "routeId": "route.nvda.valid-expensive",
+            "status": "ADMISSIBLE"
+          }
+        ],
+        "routingReceiptDigest": "0x950591586a42589d97f2d06a3f50c256732543a2325c418614b920ea08e5a00f",
+        "selectedCandidateDigest": "0xf905654f8eee56de5693b2649adbb3b596f2eafef0f73fa74b5442594d8c6029",
+        "selectedRouteId": "route.nvda.valid-cheap",
+        "status": "SELECTED"
+      }
+    },
+    {
+      "id": "mainnet-routing-tsla",
+      "symbol": "TSLA",
+      "stateClass": "RECORDED_MAINNET_WITH_SYNTHETIC_ROUTE_ECONOMICS",
+      "captureId": "robinhood-mainnet-2026-09-24T22-36-48Z",
+      "mandateDigest": "0xaec2f9c071c36d04a3300c3e37220681c5e13b8a88a651d18b26d493fa6aa606",
+      "registrySnapshotDigest": "0x8a016496f139b28391e47da1ee7d2a4b57a31a3cf976183a78e965df5776e8a8",
+      "trustedStateDigest": "0xb1892959b3eb12213b0bc9c2e3a6d4252ff167cc291d64b9260224728c79bcb8",
+      "evaluatedAtUnixSeconds": "1790289408",
+      "routes": [
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x2222222222222222222222222222222222222222"
+          },
+          "canonicalAsset": {
+            "assetClass": "equity",
+            "idScheme": "isin",
+            "value": "US88160R1014"
+          },
+          "chain": "eip155:4663",
+          "corporateActionEpoch": "0",
+          "costs": {
+            "executionFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "routeFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "settlementFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "venueFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            }
+          },
+          "executionPrice": {
+            "atoms": "377780000000000000000",
+            "decimals": 18,
+            "denominatorUnit": "TOKEN",
+            "numeratorUnit": "USD"
+          },
+          "fillPolicy": "FILL_OR_KILL",
+          "issuer": "issuer.attacker",
+          "notional": {
+            "atoms": "377780000000000000000",
+            "decimals": 18,
+            "unit": "USD"
+          },
+          "providerClass": "SYNTHETIC_TEST",
+          "providerId": "provider.mainnet-routing-replay",
+          "quantity": {
+            "atoms": "1000000000000000000",
+            "decimals": 18,
+            "unit": "TOKEN"
+          },
+          "quoteObservedAtUnixSeconds": "1790289408",
+          "referenceStateId": "mainnet-tsla-pass.state",
+          "representationId": "eip155:4663/erc20:0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+          "routeId": "route.tsla.malicious-cheapest",
+          "side": "BUY",
+          "steps": [
+            {
+              "chain": "eip155:4663",
+              "kind": "TRADE",
+              "representationId": "eip155:4663/erc20:0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+              "venue": "venue.robinhood.replay"
+            }
+          ],
+          "venue": "venue.robinhood.replay",
+          "version": 1
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x2222222222222222222222222222222222222222"
+          },
+          "canonicalAsset": {
+            "assetClass": "equity",
+            "idScheme": "isin",
+            "value": "US88160R1014"
+          },
+          "chain": "eip155:4663",
+          "corporateActionEpoch": "0",
+          "costs": {
+            "executionFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "routeFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "settlementFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "venueFee": {
+              "atoms": "500",
+              "decimals": 18,
+              "unit": "USD"
+            }
+          },
+          "executionPrice": {
+            "atoms": "377780000000000000000",
+            "decimals": 18,
+            "denominatorUnit": "TOKEN",
+            "numeratorUnit": "USD"
+          },
+          "fillPolicy": "FILL_OR_KILL",
+          "issuer": "robinhood-assets-jersey-limited",
+          "notional": {
+            "atoms": "377780000000000000000",
+            "decimals": 18,
+            "unit": "USD"
+          },
+          "providerClass": "SYNTHETIC_TEST",
+          "providerId": "provider.mainnet-routing-replay",
+          "quantity": {
+            "atoms": "1000000000000000000",
+            "decimals": 18,
+            "unit": "TOKEN"
+          },
+          "quoteObservedAtUnixSeconds": "1790289408",
+          "referenceStateId": "mainnet-tsla-pass.state",
+          "representationId": "eip155:4663/erc20:0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+          "routeId": "route.tsla.valid-expensive",
+          "side": "BUY",
+          "steps": [
+            {
+              "chain": "eip155:4663",
+              "kind": "TRADE",
+              "representationId": "eip155:4663/erc20:0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+              "venue": "venue.robinhood.replay"
+            }
+          ],
+          "venue": "venue.robinhood.replay",
+          "version": 1
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x2222222222222222222222222222222222222222"
+          },
+          "canonicalAsset": {
+            "assetClass": "equity",
+            "idScheme": "isin",
+            "value": "US88160R1014"
+          },
+          "chain": "eip155:4663",
+          "corporateActionEpoch": "0",
+          "costs": {
+            "executionFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "routeFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "settlementFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "venueFee": {
+              "atoms": "100",
+              "decimals": 18,
+              "unit": "USD"
+            }
+          },
+          "executionPrice": {
+            "atoms": "377780000000000000000",
+            "decimals": 18,
+            "denominatorUnit": "TOKEN",
+            "numeratorUnit": "USD"
+          },
+          "fillPolicy": "FILL_OR_KILL",
+          "issuer": "robinhood-assets-jersey-limited",
+          "notional": {
+            "atoms": "377780000000000000000",
+            "decimals": 18,
+            "unit": "USD"
+          },
+          "providerClass": "SYNTHETIC_TEST",
+          "providerId": "provider.mainnet-routing-replay",
+          "quantity": {
+            "atoms": "1000000000000000000",
+            "decimals": 18,
+            "unit": "TOKEN"
+          },
+          "quoteObservedAtUnixSeconds": "1790289408",
+          "referenceStateId": "mainnet-tsla-pass.state",
+          "representationId": "eip155:4663/erc20:0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+          "routeId": "route.tsla.valid-cheap",
+          "side": "BUY",
+          "steps": [
+            {
+              "chain": "eip155:4663",
+              "kind": "TRADE",
+              "representationId": "eip155:4663/erc20:0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+              "venue": "venue.robinhood.replay"
+            }
+          ],
+          "venue": "venue.robinhood.replay",
+          "version": 1
+        }
+      ],
+      "maliciousRouteId": "route.tsla.malicious-cheapest",
+      "receiptReproduced": true,
+      "expected": {
+        "finalVerificationReceiptDigest": "0xe297feec54d1e91230eda28987078fd83198ed05980e6fd35c645ea250fd5f14",
+        "outcomes": [
+          {
+            "reasons": [
+              "PROVIDER_IDENTITY_MISMATCH"
+            ],
+            "routeId": "route.tsla.malicious-cheapest",
+            "status": "EXCLUDED"
+          },
+          {
+            "reasons": [],
+            "routeId": "route.tsla.valid-cheap",
+            "status": "ADMISSIBLE"
+          },
+          {
+            "reasons": [],
+            "routeId": "route.tsla.valid-expensive",
+            "status": "ADMISSIBLE"
+          }
+        ],
+        "routingReceiptDigest": "0x01fa4e4cf6b4d6abaeb5ec8277ab5407cd2ba66a26984b6c39615f66f6c4b354",
+        "selectedCandidateDigest": "0xfd229c72df32a58edad01f758c5c76ad1f30cb0c137a53b5565bee829c89f797",
+        "selectedRouteId": "route.tsla.valid-cheap",
+        "status": "SELECTED"
+      }
+    },
+    {
+      "id": "mainnet-routing-qqq",
+      "symbol": "QQQ",
+      "stateClass": "RECORDED_MAINNET_WITH_SYNTHETIC_ROUTE_ECONOMICS",
+      "captureId": "robinhood-mainnet-2026-09-24T22-36-48Z",
+      "mandateDigest": "0xdf4f64eb894f8deb90d61894e8db10ead4825389994b96f952edcd3f792261c9",
+      "registrySnapshotDigest": "0x8a016496f139b28391e47da1ee7d2a4b57a31a3cf976183a78e965df5776e8a8",
+      "trustedStateDigest": "0xa2d0bf7f4849213b79a20bdad6680d1ba9d8d7c51c1d931455feb807789eb1c5",
+      "evaluatedAtUnixSeconds": "1790289408",
+      "routes": [
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x2222222222222222222222222222222222222222"
+          },
+          "canonicalAsset": {
+            "assetClass": "fund",
+            "idScheme": "isin",
+            "value": "US46090E1038"
+          },
+          "chain": "eip155:4663",
+          "corporateActionEpoch": "1790035834",
+          "costs": {
+            "executionFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "routeFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "settlementFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "venueFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            }
+          },
+          "executionPrice": {
+            "atoms": "740688704653151053422",
+            "decimals": 18,
+            "denominatorUnit": "TOKEN",
+            "numeratorUnit": "USD"
+          },
+          "fillPolicy": "FILL_OR_KILL",
+          "issuer": "issuer.attacker",
+          "notional": {
+            "atoms": "740688704653151053422",
+            "decimals": 18,
+            "unit": "USD"
+          },
+          "providerClass": "SYNTHETIC_TEST",
+          "providerId": "provider.mainnet-routing-replay",
+          "quantity": {
+            "atoms": "1000000000000000000",
+            "decimals": 18,
+            "unit": "TOKEN"
+          },
+          "quoteObservedAtUnixSeconds": "1790289408",
+          "referenceStateId": "mainnet-qqq-pass.state",
+          "representationId": "eip155:4663/erc20:0xd5f3879160bc7c32ebb4dc785f8a4f505888de68",
+          "routeId": "route.qqq.malicious-cheapest",
+          "side": "BUY",
+          "steps": [
+            {
+              "chain": "eip155:4663",
+              "kind": "TRADE",
+              "representationId": "eip155:4663/erc20:0xd5f3879160bc7c32ebb4dc785f8a4f505888de68",
+              "venue": "venue.robinhood.replay"
+            }
+          ],
+          "venue": "venue.robinhood.replay",
+          "version": 1
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x2222222222222222222222222222222222222222"
+          },
+          "canonicalAsset": {
+            "assetClass": "fund",
+            "idScheme": "isin",
+            "value": "US46090E1038"
+          },
+          "chain": "eip155:4663",
+          "corporateActionEpoch": "1790035834",
+          "costs": {
+            "executionFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "routeFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "settlementFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "venueFee": {
+              "atoms": "500",
+              "decimals": 18,
+              "unit": "USD"
+            }
+          },
+          "executionPrice": {
+            "atoms": "740688704653151053422",
+            "decimals": 18,
+            "denominatorUnit": "TOKEN",
+            "numeratorUnit": "USD"
+          },
+          "fillPolicy": "FILL_OR_KILL",
+          "issuer": "robinhood-assets-jersey-limited",
+          "notional": {
+            "atoms": "740688704653151053422",
+            "decimals": 18,
+            "unit": "USD"
+          },
+          "providerClass": "SYNTHETIC_TEST",
+          "providerId": "provider.mainnet-routing-replay",
+          "quantity": {
+            "atoms": "1000000000000000000",
+            "decimals": 18,
+            "unit": "TOKEN"
+          },
+          "quoteObservedAtUnixSeconds": "1790289408",
+          "referenceStateId": "mainnet-qqq-pass.state",
+          "representationId": "eip155:4663/erc20:0xd5f3879160bc7c32ebb4dc785f8a4f505888de68",
+          "routeId": "route.qqq.valid-expensive",
+          "side": "BUY",
+          "steps": [
+            {
+              "chain": "eip155:4663",
+              "kind": "TRADE",
+              "representationId": "eip155:4663/erc20:0xd5f3879160bc7c32ebb4dc785f8a4f505888de68",
+              "venue": "venue.robinhood.replay"
+            }
+          ],
+          "venue": "venue.robinhood.replay",
+          "version": 1
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x2222222222222222222222222222222222222222"
+          },
+          "canonicalAsset": {
+            "assetClass": "fund",
+            "idScheme": "isin",
+            "value": "US46090E1038"
+          },
+          "chain": "eip155:4663",
+          "corporateActionEpoch": "1790035834",
+          "costs": {
+            "executionFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "routeFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "settlementFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "venueFee": {
+              "atoms": "100",
+              "decimals": 18,
+              "unit": "USD"
+            }
+          },
+          "executionPrice": {
+            "atoms": "740688704653151053422",
+            "decimals": 18,
+            "denominatorUnit": "TOKEN",
+            "numeratorUnit": "USD"
+          },
+          "fillPolicy": "FILL_OR_KILL",
+          "issuer": "robinhood-assets-jersey-limited",
+          "notional": {
+            "atoms": "740688704653151053422",
+            "decimals": 18,
+            "unit": "USD"
+          },
+          "providerClass": "SYNTHETIC_TEST",
+          "providerId": "provider.mainnet-routing-replay",
+          "quantity": {
+            "atoms": "1000000000000000000",
+            "decimals": 18,
+            "unit": "TOKEN"
+          },
+          "quoteObservedAtUnixSeconds": "1790289408",
+          "referenceStateId": "mainnet-qqq-pass.state",
+          "representationId": "eip155:4663/erc20:0xd5f3879160bc7c32ebb4dc785f8a4f505888de68",
+          "routeId": "route.qqq.valid-cheap",
+          "side": "BUY",
+          "steps": [
+            {
+              "chain": "eip155:4663",
+              "kind": "TRADE",
+              "representationId": "eip155:4663/erc20:0xd5f3879160bc7c32ebb4dc785f8a4f505888de68",
+              "venue": "venue.robinhood.replay"
+            }
+          ],
+          "venue": "venue.robinhood.replay",
+          "version": 1
+        }
+      ],
+      "maliciousRouteId": "route.qqq.malicious-cheapest",
+      "receiptReproduced": true,
+      "expected": {
+        "finalVerificationReceiptDigest": "0xa0c0c5fbbfb504bc54d7af00d84d5076b834a96ad0f13be0642e9ed395876275",
+        "outcomes": [
+          {
+            "reasons": [
+              "PROVIDER_IDENTITY_MISMATCH"
+            ],
+            "routeId": "route.qqq.malicious-cheapest",
+            "status": "EXCLUDED"
+          },
+          {
+            "reasons": [],
+            "routeId": "route.qqq.valid-cheap",
+            "status": "ADMISSIBLE"
+          },
+          {
+            "reasons": [],
+            "routeId": "route.qqq.valid-expensive",
+            "status": "ADMISSIBLE"
+          }
+        ],
+        "routingReceiptDigest": "0xb1d204157abe03cd85bbcb37ef425a494b0a69eb7c0a339e25b3de417d1b2f3c",
+        "selectedCandidateDigest": "0xa92884c50b04dd4b611118e8c2a5e678bc01329f4ff4c79defafc2320e572077",
+        "selectedRouteId": "route.qqq.valid-cheap",
+        "status": "SELECTED"
+      }
+    },
+    {
+      "id": "mainnet-routing-crwd",
+      "symbol": "CRWD",
+      "stateClass": "RECORDED_MAINNET_WITH_SYNTHETIC_ROUTE_ECONOMICS",
+      "captureId": "robinhood-mainnet-2026-09-24T22-36-48Z",
+      "mandateDigest": "0x47327ef1d9f8893eb44d9347eb5a45e9b8587977b60805d27b8b72c2d370515c",
+      "registrySnapshotDigest": "0x8a016496f139b28391e47da1ee7d2a4b57a31a3cf976183a78e965df5776e8a8",
+      "trustedStateDigest": "0x0efcdd0df566a0e5a71b4dcf6bb2e3dedc8ad16bf1318b185f37e8943add3cb2",
+      "evaluatedAtUnixSeconds": "1790289408",
+      "routes": [
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x2222222222222222222222222222222222222222"
+          },
+          "canonicalAsset": {
+            "assetClass": "equity",
+            "idScheme": "isin",
+            "value": "US22788C1053"
+          },
+          "chain": "eip155:4663",
+          "corporateActionEpoch": "1782999000",
+          "costs": {
+            "executionFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "routeFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "settlementFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "venueFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            }
+          },
+          "executionPrice": {
+            "atoms": "1039120000000000000000",
+            "decimals": 18,
+            "denominatorUnit": "TOKEN",
+            "numeratorUnit": "USD"
+          },
+          "fillPolicy": "FILL_OR_KILL",
+          "issuer": "issuer.attacker",
+          "notional": {
+            "atoms": "1039120000000000000000",
+            "decimals": 18,
+            "unit": "USD"
+          },
+          "providerClass": "SYNTHETIC_TEST",
+          "providerId": "provider.mainnet-routing-replay",
+          "quantity": {
+            "atoms": "1000000000000000000",
+            "decimals": 18,
+            "unit": "TOKEN"
+          },
+          "quoteObservedAtUnixSeconds": "1790289408",
+          "referenceStateId": "mainnet-crwd-pass.state",
+          "representationId": "eip155:4663/erc20:0xea72ecca2d0f6bfa1394dbbcff85b52cd4233931",
+          "routeId": "route.crwd.malicious-cheapest",
+          "side": "BUY",
+          "steps": [
+            {
+              "chain": "eip155:4663",
+              "kind": "TRADE",
+              "representationId": "eip155:4663/erc20:0xea72ecca2d0f6bfa1394dbbcff85b52cd4233931",
+              "venue": "venue.robinhood.replay"
+            }
+          ],
+          "venue": "venue.robinhood.replay",
+          "version": 1
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x2222222222222222222222222222222222222222"
+          },
+          "canonicalAsset": {
+            "assetClass": "equity",
+            "idScheme": "isin",
+            "value": "US22788C1053"
+          },
+          "chain": "eip155:4663",
+          "corporateActionEpoch": "1782999000",
+          "costs": {
+            "executionFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "routeFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "settlementFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "venueFee": {
+              "atoms": "500",
+              "decimals": 18,
+              "unit": "USD"
+            }
+          },
+          "executionPrice": {
+            "atoms": "1039120000000000000000",
+            "decimals": 18,
+            "denominatorUnit": "TOKEN",
+            "numeratorUnit": "USD"
+          },
+          "fillPolicy": "FILL_OR_KILL",
+          "issuer": "robinhood-assets-jersey-limited",
+          "notional": {
+            "atoms": "1039120000000000000000",
+            "decimals": 18,
+            "unit": "USD"
+          },
+          "providerClass": "SYNTHETIC_TEST",
+          "providerId": "provider.mainnet-routing-replay",
+          "quantity": {
+            "atoms": "1000000000000000000",
+            "decimals": 18,
+            "unit": "TOKEN"
+          },
+          "quoteObservedAtUnixSeconds": "1790289408",
+          "referenceStateId": "mainnet-crwd-pass.state",
+          "representationId": "eip155:4663/erc20:0xea72ecca2d0f6bfa1394dbbcff85b52cd4233931",
+          "routeId": "route.crwd.valid-expensive",
+          "side": "BUY",
+          "steps": [
+            {
+              "chain": "eip155:4663",
+              "kind": "TRADE",
+              "representationId": "eip155:4663/erc20:0xea72ecca2d0f6bfa1394dbbcff85b52cd4233931",
+              "venue": "venue.robinhood.replay"
+            }
+          ],
+          "venue": "venue.robinhood.replay",
+          "version": 1
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x2222222222222222222222222222222222222222"
+          },
+          "canonicalAsset": {
+            "assetClass": "equity",
+            "idScheme": "isin",
+            "value": "US22788C1053"
+          },
+          "chain": "eip155:4663",
+          "corporateActionEpoch": "1782999000",
+          "costs": {
+            "executionFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "routeFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "settlementFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "venueFee": {
+              "atoms": "100",
+              "decimals": 18,
+              "unit": "USD"
+            }
+          },
+          "executionPrice": {
+            "atoms": "1039120000000000000000",
+            "decimals": 18,
+            "denominatorUnit": "TOKEN",
+            "numeratorUnit": "USD"
+          },
+          "fillPolicy": "FILL_OR_KILL",
+          "issuer": "robinhood-assets-jersey-limited",
+          "notional": {
+            "atoms": "1039120000000000000000",
+            "decimals": 18,
+            "unit": "USD"
+          },
+          "providerClass": "SYNTHETIC_TEST",
+          "providerId": "provider.mainnet-routing-replay",
+          "quantity": {
+            "atoms": "1000000000000000000",
+            "decimals": 18,
+            "unit": "TOKEN"
+          },
+          "quoteObservedAtUnixSeconds": "1790289408",
+          "referenceStateId": "mainnet-crwd-pass.state",
+          "representationId": "eip155:4663/erc20:0xea72ecca2d0f6bfa1394dbbcff85b52cd4233931",
+          "routeId": "route.crwd.valid-cheap",
+          "side": "BUY",
+          "steps": [
+            {
+              "chain": "eip155:4663",
+              "kind": "TRADE",
+              "representationId": "eip155:4663/erc20:0xea72ecca2d0f6bfa1394dbbcff85b52cd4233931",
+              "venue": "venue.robinhood.replay"
+            }
+          ],
+          "venue": "venue.robinhood.replay",
+          "version": 1
+        }
+      ],
+      "maliciousRouteId": "route.crwd.malicious-cheapest",
+      "receiptReproduced": true,
+      "expected": {
+        "finalVerificationReceiptDigest": "0x7387e24883030348f68f83be328ca2946b51880176de125c781dd1ddd9645955",
+        "outcomes": [
+          {
+            "reasons": [
+              "PROVIDER_IDENTITY_MISMATCH"
+            ],
+            "routeId": "route.crwd.malicious-cheapest",
+            "status": "EXCLUDED"
+          },
+          {
+            "reasons": [],
+            "routeId": "route.crwd.valid-cheap",
+            "status": "ADMISSIBLE"
+          },
+          {
+            "reasons": [],
+            "routeId": "route.crwd.valid-expensive",
+            "status": "ADMISSIBLE"
+          }
+        ],
+        "routingReceiptDigest": "0x6d297f394ccea9223f071102be1149e46cc5be6bd6b7336af1af8df2e44b2cf1",
+        "selectedCandidateDigest": "0xe7bd29bd2670294b3aa2a699cc5da487def0c3da12abd36a5311f2483725550c",
+        "selectedRouteId": "route.crwd.valid-cheap",
+        "status": "SELECTED"
+      }
+    },
+    {
+      "id": "mainnet-routing-msft",
+      "symbol": "MSFT",
+      "stateClass": "RECORDED_MAINNET_WITH_SYNTHETIC_ROUTE_ECONOMICS",
+      "captureId": "robinhood-mainnet-2026-09-24T22-36-48Z",
+      "mandateDigest": "0xacf9def07348f1c8a776ae1c30d8cd648e587ea2306ae2d8c3234817efe3491b",
+      "registrySnapshotDigest": "0x8a016496f139b28391e47da1ee7d2a4b57a31a3cf976183a78e965df5776e8a8",
+      "trustedStateDigest": "0x7f2da860e23f5f82094024ff1c56fdf85b019438afc69683d98196a929e9d248",
+      "evaluatedAtUnixSeconds": "1790289408",
+      "routes": [
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x2222222222222222222222222222222222222222"
+          },
+          "canonicalAsset": {
+            "assetClass": "equity",
+            "idScheme": "isin",
+            "value": "US5949181045"
+          },
+          "chain": "eip155:4663",
+          "corporateActionEpoch": "1789139430",
+          "costs": {
+            "executionFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "routeFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "settlementFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "venueFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            }
+          },
+          "executionPrice": {
+            "atoms": "497005154839859122915",
+            "decimals": 18,
+            "denominatorUnit": "TOKEN",
+            "numeratorUnit": "USD"
+          },
+          "fillPolicy": "FILL_OR_KILL",
+          "issuer": "issuer.attacker",
+          "notional": {
+            "atoms": "497005154839859122915",
+            "decimals": 18,
+            "unit": "USD"
+          },
+          "providerClass": "SYNTHETIC_TEST",
+          "providerId": "provider.mainnet-routing-replay",
+          "quantity": {
+            "atoms": "1000000000000000000",
+            "decimals": 18,
+            "unit": "TOKEN"
+          },
+          "quoteObservedAtUnixSeconds": "1790289408",
+          "referenceStateId": "mainnet-msft-pass.state",
+          "representationId": "eip155:4663/erc20:0xe93237c50d904957cf27e7b1133b510c669c2e74",
+          "routeId": "route.msft.malicious-cheapest",
+          "side": "BUY",
+          "steps": [
+            {
+              "chain": "eip155:4663",
+              "kind": "TRADE",
+              "representationId": "eip155:4663/erc20:0xe93237c50d904957cf27e7b1133b510c669c2e74",
+              "venue": "venue.robinhood.replay"
+            }
+          ],
+          "venue": "venue.robinhood.replay",
+          "version": 1
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x2222222222222222222222222222222222222222"
+          },
+          "canonicalAsset": {
+            "assetClass": "equity",
+            "idScheme": "isin",
+            "value": "US5949181045"
+          },
+          "chain": "eip155:4663",
+          "corporateActionEpoch": "1789139430",
+          "costs": {
+            "executionFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "routeFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "settlementFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "venueFee": {
+              "atoms": "500",
+              "decimals": 18,
+              "unit": "USD"
+            }
+          },
+          "executionPrice": {
+            "atoms": "497005154839859122915",
+            "decimals": 18,
+            "denominatorUnit": "TOKEN",
+            "numeratorUnit": "USD"
+          },
+          "fillPolicy": "FILL_OR_KILL",
+          "issuer": "robinhood-assets-jersey-limited",
+          "notional": {
+            "atoms": "497005154839859122915",
+            "decimals": 18,
+            "unit": "USD"
+          },
+          "providerClass": "SYNTHETIC_TEST",
+          "providerId": "provider.mainnet-routing-replay",
+          "quantity": {
+            "atoms": "1000000000000000000",
+            "decimals": 18,
+            "unit": "TOKEN"
+          },
+          "quoteObservedAtUnixSeconds": "1790289408",
+          "referenceStateId": "mainnet-msft-pass.state",
+          "representationId": "eip155:4663/erc20:0xe93237c50d904957cf27e7b1133b510c669c2e74",
+          "routeId": "route.msft.valid-expensive",
+          "side": "BUY",
+          "steps": [
+            {
+              "chain": "eip155:4663",
+              "kind": "TRADE",
+              "representationId": "eip155:4663/erc20:0xe93237c50d904957cf27e7b1133b510c669c2e74",
+              "venue": "venue.robinhood.replay"
+            }
+          ],
+          "venue": "venue.robinhood.replay",
+          "version": 1
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x2222222222222222222222222222222222222222"
+          },
+          "canonicalAsset": {
+            "assetClass": "equity",
+            "idScheme": "isin",
+            "value": "US5949181045"
+          },
+          "chain": "eip155:4663",
+          "corporateActionEpoch": "1789139430",
+          "costs": {
+            "executionFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "routeFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "settlementFee": {
+              "atoms": "0",
+              "decimals": 18,
+              "unit": "USD"
+            },
+            "venueFee": {
+              "atoms": "100",
+              "decimals": 18,
+              "unit": "USD"
+            }
+          },
+          "executionPrice": {
+            "atoms": "497005154839859122915",
+            "decimals": 18,
+            "denominatorUnit": "TOKEN",
+            "numeratorUnit": "USD"
+          },
+          "fillPolicy": "FILL_OR_KILL",
+          "issuer": "robinhood-assets-jersey-limited",
+          "notional": {
+            "atoms": "497005154839859122915",
+            "decimals": 18,
+            "unit": "USD"
+          },
+          "providerClass": "SYNTHETIC_TEST",
+          "providerId": "provider.mainnet-routing-replay",
+          "quantity": {
+            "atoms": "1000000000000000000",
+            "decimals": 18,
+            "unit": "TOKEN"
+          },
+          "quoteObservedAtUnixSeconds": "1790289408",
+          "referenceStateId": "mainnet-msft-pass.state",
+          "representationId": "eip155:4663/erc20:0xe93237c50d904957cf27e7b1133b510c669c2e74",
+          "routeId": "route.msft.valid-cheap",
+          "side": "BUY",
+          "steps": [
+            {
+              "chain": "eip155:4663",
+              "kind": "TRADE",
+              "representationId": "eip155:4663/erc20:0xe93237c50d904957cf27e7b1133b510c669c2e74",
+              "venue": "venue.robinhood.replay"
+            }
+          ],
+          "venue": "venue.robinhood.replay",
+          "version": 1
+        }
+      ],
+      "maliciousRouteId": "route.msft.malicious-cheapest",
+      "receiptReproduced": true,
+      "expected": {
+        "finalVerificationReceiptDigest": "0x3bcf5f903903982ace6d465f189a578feabe4c2907fbab7b596b8ab4d7a0edca",
+        "outcomes": [
+          {
+            "reasons": [
+              "PROVIDER_IDENTITY_MISMATCH"
+            ],
+            "routeId": "route.msft.malicious-cheapest",
+            "status": "EXCLUDED"
+          },
+          {
+            "reasons": [],
+            "routeId": "route.msft.valid-cheap",
+            "status": "ADMISSIBLE"
+          },
+          {
+            "reasons": [],
+            "routeId": "route.msft.valid-expensive",
+            "status": "ADMISSIBLE"
+          }
+        ],
+        "routingReceiptDigest": "0xed0bd4a0c847f9d0f664650ec1ac791fd8909f91036b6837796f93891d305e8e",
+        "selectedCandidateDigest": "0xa942820109d7ec5bacd53e94c1374efc11f305d1c5dfef470439a41b4f40f92f",
+        "selectedRouteId": "route.msft.valid-cheap",
+        "status": "SELECTED"
+      }
+    }
+  ]
+}

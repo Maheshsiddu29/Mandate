@@ -25,7 +25,9 @@
     "robinhood:capture": "node packages/adapter-robinhood/scripts/capture-mainnet.ts",
     "robinhood:live": "node packages/adapter-robinhood/scripts/live-check.ts",
     "credentials:scan": "node scripts/scan-credentials.ts",
-    "routing-simulation:generate": "node packages/router/scripts/generate-simulation-report.ts"
+    "routing-simulation:generate": "node packages/router/scripts/generate-simulation-report.ts",
+    "mainnet-routing:generate": "node packages/router/scripts/generate-mainnet-routing.ts",
+    "mainnet-routing:validate": "node --test packages/router/test/mainnet-routing.test.ts"
   },
   "devDependencies": {
     "@types/node": "22.20.2",
