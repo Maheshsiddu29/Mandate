@@ -28,7 +28,19 @@ import { parseObserved, type Observed } from './trust.ts';
 import { parseBytes32, type Bytes32 } from './bytes.ts';
 import { UINT64_MAX } from './mandate.ts';
 
-export const STATE_SCHEMA_VERSION = 1;
+export const STATE_SCHEMA_VERSION = 2;
+
+/**
+ * Bound on the representation collection.
+ *
+ * Chosen to equal the `u16` count the encoder writes, and matched to the
+ * registry's own `MAX_SNAPSHOT_ENTRIES`. Before this bound existed the parser
+ * accepted a collection the encoder could not represent, so `verify` threw from
+ * `trustedStateDigest` instead of returning a verdict — the totality defect the
+ * architecture pressure test found. The limit belongs at the parser, where the
+ * refusal is a typed reason code.
+ */
+export const MAX_STATE_REPRESENTATIONS = 65_535;
 
 /** Three-valued, because "we could not establish it" is a distinct answer from yes or no. */
 export const TriState = { YES: 'YES', NO: 'NO', UNKNOWN: 'UNKNOWN' } as const;
@@ -51,6 +63,16 @@ export const ReplayStatus = {
   /** Reserved by an in-flight execution attempt. Not yet consumed, and not available. */
   RESERVED: 'RESERVED',
   CONSUMED: 'CONSUMED',
+  /**
+   * A reservation whose outcome was never established.
+   *
+   * Terminal for this authorization: an attempt that submitted and then lost
+   * track of its transaction may still settle, so restoring permission would
+   * authorize a second execution of a trade that already happened. The
+   * authorization stays unavailable until reconciliation proves what occurred,
+   * and reconciliation moves it to CONSUMED or UNUSED — a timer never does.
+   */
+  QUARANTINED: 'QUARANTINED',
   UNKNOWN: 'UNKNOWN',
 } as const;
 export type ReplayStatus = (typeof ReplayStatus)[keyof typeof ReplayStatus];
@@ -94,8 +116,23 @@ export interface ReplayState {
 
 export interface TrustedState {
   readonly version: number;
-  /** Snapshot identifier. A candidate names the snapshot it was built against. */
+  /**
+   * Snapshot label. A candidate names the snapshot it was built against.
+   *
+   * Not a security binding on its own: a candidate commits to
+   * `trustedStateDigest`, which covers this field and everything beside it.
+   */
   readonly stateId: Identifier;
+  /**
+   * Digest of the registry snapshot the representation entries below were
+   * derived from, or null when none was declared.
+   *
+   * The kernel carries it, includes it in its own digest and never interprets
+   * it — it cannot, since it has no registry types. The router compares it
+   * against the snapshot it evaluated, which is what stops an admissibility
+   * decision and a semantics check reading two different registries.
+   */
+  readonly registrySnapshotDigest: Bytes32 | null;
   readonly representations: readonly Observed<RepresentationState>[];
   readonly market: Observed<MarketState> | null;
   readonly corporateAction: Observed<CorporateActionState> | null;
@@ -194,8 +231,19 @@ export function parseTrustedState(raw: unknown): Result<TrustedState, ReasonCode
   const stateId = parseIdentifier(r['stateId']);
   if (!stateId.ok) return err('MALFORMED_TRUSTED_STATE');
 
+  const rawRegistryDigest = r['registrySnapshotDigest'];
+  let registrySnapshotDigest: Bytes32 | null = null;
+  if (rawRegistryDigest !== null && rawRegistryDigest !== undefined) {
+    const parsed = parseBytes32(rawRegistryDigest, 'MALFORMED_TRUSTED_STATE');
+    if (!parsed.ok) return parsed;
+    registrySnapshotDigest = parsed.value;
+  }
+
   const rawReps = r['representations'];
   if (!Array.isArray(rawReps)) return err('MALFORMED_TRUSTED_STATE');
+  // Bounded before iteration: an oversized collection is refused rather than
+  // parsed and then discovered to be unencodable.
+  if (rawReps.length > MAX_STATE_REPRESENTATIONS) return err('RESOURCE_LIMIT_EXCEEDED');
   const representations: Observed<RepresentationState>[] = [];
   for (const entry of rawReps) {
     const parsed = parseObserved(entry, parseRepresentationState);
@@ -217,6 +265,7 @@ export function parseTrustedState(raw: unknown): Result<TrustedState, ReasonCode
   return ok({
     version,
     stateId: stateId.value,
+    registrySnapshotDigest,
     representations,
     market: market === null ? null : market.value,
     corporateAction: corporateAction === null ? null : corporateAction.value,

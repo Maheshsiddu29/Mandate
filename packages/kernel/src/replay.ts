@@ -55,10 +55,36 @@ export const ReplayTransition = {
   COMMIT: 'COMMIT',
   /** Taken only when failure is observed. Returns the mandate to UNUSED. */
   RELEASE: 'RELEASE',
-  /** Taken when a reservation has passed its own expiry without resolving. */
-  RECLAIM: 'RECLAIM',
+  /**
+   * Taken when a reservation has passed its own expiry without resolving.
+   *
+   * Moves the record to `QUARANTINED`, which the verifier refuses. It marks the
+   * authorization as needing reconciliation; it does not decide what happened.
+   */
+  QUARANTINE: 'QUARANTINE',
+  /**
+   * Taken by reconciliation, which carries the outcome it established.
+   *
+   * This is the only way out of `QUARANTINED`, and it requires an observation:
+   * `SETTLED` consumes the authorization, `FAILED` returns it to `UNUSED`.
+   */
+  RECONCILE: 'RECONCILE',
 } as const;
 export type ReplayTransition = (typeof ReplayTransition)[keyof typeof ReplayTransition];
+
+/**
+ * What reconciliation established about a quarantined attempt.
+ *
+ * There is deliberately no `UNKNOWN` member. A reconciliation that could not
+ * establish the outcome does not apply a transition at all — the record stays
+ * quarantined — because an enum member meaning "still don't know" would be a
+ * place for a caller to pass its uncertainty off as a decision.
+ */
+export const ReconciledOutcome = {
+  SETTLED: 'SETTLED',
+  FAILED: 'FAILED',
+} as const;
+export type ReconciledOutcome = (typeof ReconciledOutcome)[keyof typeof ReconciledOutcome];
 
 export const ReplayError = {
   NOT_RESERVABLE: 'NOT_RESERVABLE',
@@ -67,6 +93,10 @@ export const ReplayError = {
   UNKNOWN_STATE: 'UNKNOWN_STATE',
   RESERVATION_NOT_EXPIRED: 'RESERVATION_NOT_EXPIRED',
   KEY_MISMATCH: 'KEY_MISMATCH',
+  /** A transition that only reconciliation may apply was attempted elsewhere. */
+  NOT_QUARANTINED: 'NOT_QUARANTINED',
+  /** `RECONCILE` was applied without stating what was established. */
+  OUTCOME_REQUIRED: 'OUTCOME_REQUIRED',
 } as const;
 export type ReplayError = (typeof ReplayError)[keyof typeof ReplayError];
 
@@ -85,6 +115,8 @@ export interface TransitionRequest {
    */
   readonly reservationSeconds?: bigint;
   readonly mandateExpiresAtUnixSeconds?: UnixSeconds;
+  /** Required for RECONCILE, and meaningless for every other transition. */
+  readonly reconciledOutcome?: ReconciledOutcome;
 }
 
 /**
@@ -98,6 +130,14 @@ export function applyTransition(request: TransitionRequest): Result<ReplayRecord
     // An unknown record cannot be transitioned into a known one by asserting a
     // transition over it. It has to be established first.
     return err(ReplayError.UNKNOWN_STATE);
+  }
+
+  // A quarantined record admits exactly one transition. Listing it here rather
+  // than relying on each case's own guard makes the containment explicit: no
+  // RESERVE, no COMMIT and in particular no RELEASE can act on it, because
+  // RELEASE claims an observation the quarantine exists to say nobody has.
+  if (current.status === ReplayStatus.QUARANTINED && transition !== ReplayTransition.RECONCILE) {
+    return err(ReplayError.NOT_QUARANTINED);
   }
 
   switch (transition) {
@@ -138,11 +178,45 @@ export function applyTransition(request: TransitionRequest): Result<ReplayRecord
       return ok(unusedRecord(current.key, now));
     }
 
-    case ReplayTransition.RECLAIM: {
+    case ReplayTransition.QUARANTINE: {
+      if (current.status === ReplayStatus.CONSUMED) return err(ReplayError.ALREADY_CONSUMED);
       if (current.status !== ReplayStatus.RESERVED) return err(ReplayError.NOT_RESERVED);
       const expiry = current.reservationExpiresAtUnixSeconds;
       if (expiry === null || now < expiry) return err(ReplayError.RESERVATION_NOT_EXPIRED);
+      // Quarantine, never UNUSED. The reservation expiring says the attempt
+      // stopped reporting, not that it failed.
+      return ok({
+        key: current.key,
+        status: ReplayStatus.QUARANTINED,
+        updatedAtUnixSeconds: now,
+        reservationExpiresAtUnixSeconds: null,
+      });
+    }
+
+    case ReplayTransition.RECONCILE: {
+      if (current.status === ReplayStatus.CONSUMED) return err(ReplayError.ALREADY_CONSUMED);
+      if (current.status !== ReplayStatus.QUARANTINED) return err(ReplayError.NOT_QUARANTINED);
+      const outcome = request.reconciledOutcome;
+      if (outcome === undefined) return err(ReplayError.OUTCOME_REQUIRED);
+      if (outcome === ReconciledOutcome.SETTLED) {
+        return ok({
+          key: current.key,
+          status: ReplayStatus.CONSUMED,
+          updatedAtUnixSeconds: now,
+          reservationExpiresAtUnixSeconds: null,
+        });
+      }
       return ok(unusedRecord(current.key, now));
     }
   }
+}
+
+/**
+ * Whether an authorization is available for a fresh attempt.
+ *
+ * `QUARANTINED` is unavailable, and that is the whole point of it: the only
+ * statuses that permit a new attempt are the ones whose outcome is known.
+ */
+export function isAvailable(record: ReplayRecord): boolean {
+  return record.status === ReplayStatus.UNUSED;
 }
