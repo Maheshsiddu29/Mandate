@@ -16,7 +16,7 @@ export const ROUTER_STATE = stateResult.value;
 export const ROUTER_CLOCK = clockResult.value.nowUnixSeconds;
 export const ROUTER_AUTHORIZATION = replay.request.authorization;
 export const ROUTER_DOMAIN = replay.request.expectedDomain;
-export const ROUTER_REGISTRY = replay.registrySnapshot;
+export const ROUTER_REGISTRY_INPUT = replay.registryInput;
 
 const sourceCandidate = replay.request.candidate as Record<string, unknown>;
 const parsedCandidate = sourceCandidate as unknown as {
