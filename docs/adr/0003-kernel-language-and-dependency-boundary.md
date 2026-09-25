@@ -64,7 +64,7 @@ verdict.
 
 ```
 packages/kernel/        the verifier and everything it needs
-corpus/v1/              cross-implementation decision vectors
+corpus/v2/              cross-implementation decision vectors
 ```
 
 The kernel has no dependency on adapters, registries, model clients, chain

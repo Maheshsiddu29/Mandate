@@ -371,14 +371,33 @@ closed set.
 ### Handoff re-verification
 
 The selected candidate is verified by the kernel again before handoff, against
-the trusted state and clock that are current **then** — not the ones the set
-was built from. If the price moved past the mandate's bound, trading halted,
-the corporate-action epoch changed, the mandate expired or the state snapshot
-was replaced while the model was thinking, the handoff verification rejects.
+the trusted state and clock the caller supplies **for the handoff**. If the
+price moved past the mandate's bound, trading halted, the corporate-action epoch
+changed, the mandate expired or a representation paused while the model was
+thinking, the handoff verification rejects.
+
+**`handoffState` is required** ([ADR 0016](adr/0016-pipeline-time-and-handoff-freshness.md)).
+Until Phase 5R it was optional and defaulted to the evaluation state, which made
+the check a tautology for a deterministic verifier — this section described it as
+being against state "current then" when by default it was not. A caller that
+genuinely has only one snapshot now passes it twice, which is a visible decision;
+a caller that cannot obtain fresh state has nothing to pass and the decision
+fails. **No fresh state, no handoff.**
+
+The router performs the re-verification, inside `selectEvaluated`, and refuses a
+handoff instant earlier than the evaluation instant with `HANDOFF_TIME_REGRESSED`.
+This layer reports that verdict rather than running a second check of its own:
+two implementations of one safety check is a differential-consistency risk.
 
 An earlier choice does not grandfather a route. `handoffRejected` distinguishes
-this from an empty admissible set: the routing stage passed at t0 and the
-handoff check refused at t1.
+a handoff refusal from an empty admissible set: a final verification ran, its
+receipt digest is in the routing receipt, and the ranked set is non-empty.
+
+If the *Jev-chosen* candidate fails the handoff, the deterministic candidate is
+verified in its place and the substitution is recorded as
+`HANDOFF_REJECTED_FALLBACK`. Before Phase 5R the decision simply ended, which
+gave a hostile model authority over whether anything executed at all — safety
+was unaffected, availability was not.
 
 ## 9. What Jev is actually for
 

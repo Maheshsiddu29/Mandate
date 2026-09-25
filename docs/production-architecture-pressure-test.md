@@ -4,15 +4,22 @@ An adversarial review of the Mandate system as built through the end of Phase 5,
 conducted on the assumption that it will eventually protect and route real-money
 tokenized-asset transactions.
 
-> **Status: review document, 2026-09-25.** This is an internal engineering
-> pressure test, not a third-party audit. It reviews the repository at commit
-> `d9c2580` plus the three evidence commits it produced. It does **not** open
-> Phase 6, and it changes no production code.
+> **Status: review document, 2026-09-25. Findings remediated in Phase 5R.**
+> This is an internal engineering pressure test, not a third-party audit. It
+> reviews the repository at commit `d9c2580` plus the three evidence commits it
+> produced. It did **not** open Phase 6 and changed no production code.
 >
 > Claims in prior phase documents were not taken on trust. Every property
 > asserted below as verified was re-derived from the implementation, and the ones
-> that failed are pinned as executable tests in
+> that failed were pinned as executable tests in
 > `packages/{kernel,router,jev}/test/pressure-test-findings.test.ts`.
+>
+> **The body of this report is preserved as written.** Phase 5R remediated the
+> findings; it did not revise the history. The remediation status of every
+> finding is in [§24](#24-remediation-status-phase-5r), and the defect-pinning
+> tests have been inverted into regression tests in place, so no test in this
+> repository now passes because a vulnerability was retained. Where this document
+> says a thing is broken, read it as *was broken at `d9c2580`*.
 
 ---
 
@@ -916,9 +923,9 @@ in two implementations:
 
 | Decision | TypeScript | Solidity | Shared vector source |
 | --- | --- | --- | --- |
-| MCE encoding and `mandateDigest` | `encoding/codec.ts` | gate | `corpus/v1` |
-| EIP-712 signing hash and recovery | `authorization/` | gate | `corpus/v1` |
-| `candidateDigest` | `encoding/codec.ts` | gate | `corpus/v1` |
+| MCE encoding and `mandateDigest` | `encoding/codec.ts` | gate | `corpus/v1` (now `corpus/v2`) |
+| EIP-712 signing hash and recovery | `authorization/` | gate | `corpus/v1` (now `corpus/v2`) |
+| `candidateDigest` | `encoding/codec.ts` | gate | `corpus/v1` (now `corpus/v2`) |
 | Notional consistency and the one-atom band | `units.ts` | gate | new |
 | `maxNotional` / all-in cost | `checks.ts` + `candidate.ts` (**two places today — F-2**) | gate | new |
 | Deviation in bps, rounding up | `units.ts` | gate | new |
@@ -1025,3 +1032,78 @@ Each is fixable without moving a boundary. That is the difference between
 state (F-7); extend the corpora to multi-representation worlds with real
 substitution mutations (F-10); bound response bodies (F-11); make the Jev
 fallback total (F-13).
+
+
+---
+
+## 24. Remediation status (Phase 5R)
+
+Phase 5R closed the findings that had to be closed before the Solidity execution
+boundary freezes the protocol. This section records what happened to each one;
+the analysis above is unchanged.
+
+### HIGH
+
+| # | Finding | Status | Where |
+| --- | --- | --- | --- |
+| **F-1** | `RECLAIM` reopens a live authorization | **REMEDIATED** | `RECLAIM` replaced by `QUARANTINE` + `RECONCILE`; new `QUARANTINED` status the verifier refuses with `MANDATE_QUARANTINED`; `ReconciledOutcome` has no `UNKNOWN` member ([ADR 0015](adr/0015-replay-quarantine-and-reconciliation.md)) |
+| **F-2** | All-in cost enforced outside the authority and outside the commitment | **REMEDIATED** | `economicLimit` added to the signed mandate, `feeTotal` to the candidate; `checkEconomicLimit` is the sole enforcement point; the router's `TOTAL_COST_EXCEEDS_MANDATE` is gone; `candidateDigest` commits to the fee ([ADR 0014](adr/0014-symmetric-signed-economic-authorization.md)) |
+| **F-3** | `verify()` and `route()` throw instead of returning a verdict | **REMEDIATED** | Bounds on trusted-state representations, registry claim sets, source versions, listings and aliases, each equal to its encoder's `u16`; digest step guarded so an internal failure rejects with a receipt |
+| **F-4** | A SELL mandate cannot bound its own proceeds | **REMEDIATED** | Same field as F-2, read as `MIN_TOTAL_CREDIT` on a SELL; `FEES_EXCEED_NOTIONAL` for a net debit |
+| **F-5** | Handoff re-verification reads evaluation-time state | **REMEDIATED** | `HandoffInputs` required by `route()`, `selectEvaluated()` and `selectWithJev()`; no default; `FINAL_REVERIFICATION_FAILED` now reachable and tested against five kinds of state change ([ADR 0016](adr/0016-pipeline-time-and-handoff-freshness.md)) |
+| **F-44/45** | No atomic replay store, no reorg handling | **PHASE 6** — unchanged, and correctly scoped there |
+
+### MEDIUM
+
+| # | Finding | Status | Where |
+| --- | --- | --- | --- |
+| **F-6** | Chain inside `representationId` never reconciled | **REMEDIATED** | `checkRepresentationChain` on the candidate and every state entry; `chainSegmentOf` reads only the chain half, so INV-7 is unchanged |
+| **F-7** | Registry snapshot not bound to trusted state | **REMEDIATED** | `TrustedState.registrySnapshotDigest`, carried opaquely by the kernel and compared by the router against the snapshot it evaluated |
+| **F-8** | `referenceStateId` binds a name, not content | **REMEDIATED** | `referenceStateDigest` added to the candidate and compared against the digest `verify` computes; the label check remains for its diagnostic |
+| **F-9** | Clock is an unconstrained caller input | **PARTIALLY REMEDIATED** | The router enforces that the handoff instant is not earlier than the evaluation instant (`HANDOFF_TIME_REGRESSED`), and the time-authority model is now stated rather than assumed. A caller that rewinds both instants consistently still defeats every age bound; no off-chain component can detect that, and `block.timestamp` at the Phase 6 gate closes it (INV-10) |
+| **F-10** | Adversarial coverage is one mutation class over single-representation worlds | **REMEDIATED** | `packages/router/test/adversarial-worlds.test.ts`: six registered representations of one asset across two chains, with combined economic-plus-identity attacks, conflicting and mixed-age claims, a corporate action across the set, a halt between evaluation and handoff, and a 256-candidate boundary set |
+| **F-11** | No response-size bound on either network client | **REMEDIATED** | Incremental size-bounded body reading in both clients, tested below and above each limit |
+| **F-12** | A schema bump invalidates every outstanding mandate | **ACCEPTED, DOCUMENTED** | Exercised deliberately by this phase: v1 mandates are rejected, not migrated, because none exists outside a fixture. What a post-launch schema change needs instead — a declared acceptance window with one frozen codec per version — is recorded in ADR 0014 as a production-readiness requirement rather than built for a population of zero |
+| **F-13** | Jev holds availability authority | **REMEDIATED** | A handoff rejection of a Jev-chosen candidate falls back to index 0 and re-verifies it, recorded as `HANDOFF_REJECTED_FALLBACK`; an optional local circuit breaker stops a sustained outage taxing every decision |
+| **F-48** | Single-source price accuracy | **PHASE 6+** — unchanged. Cross-surface agreement is still reported, not gated |
+
+### LOW and INFORMATIONAL
+
+| # | Finding | Status |
+| --- | --- | --- |
+| **F-14** | Deviation is symmetric | **ACCEPTED.** A favourable fill outside the bound still rejects. Making the bound one-sided is a product decision about what a principal is authorizing, not a defect, and it was not in Phase 5R's scope |
+| **F-15** | A zero-quantity candidate is authorized | **ACCEPTED, NARROWED.** Still passes the kernel; the router requires the quote to match the caller's `requestedQuantity` exactly, so reaching it means the caller asked for zero. A minimum-size field would be another mandate schema change and no requirement for one has appeared |
+| **F-16** | No persistence anywhere | **PHASE 6** — unchanged |
+| INFO | `validateCosts` dead branch | **OPEN.** Harmless |
+| INFO | Two detail-sorting conventions | **OPEN.** Both deterministic |
+| INFO | Two reason codes for an unregistered contract | **OPEN, now pinned.** `REPRESENTATION_NOT_DISCOVERABLE` through the router and `REPRESENTATION_UNKNOWN` through the registry filter. A test asserts which path produces which, so the divergence is visible rather than latent |
+| INFO | A Jev choice is not bound to the set digest it answered | **OPEN.** Harmless: a choice is only an index into that set's own members |
+
+### What Phase 5R did not change
+
+The architecture. No component boundary, dependency direction, trust level or
+decision ownership moved. The one structural change was moving economic
+authority *into* the verifier, which is where §5 of this report said it already
+belonged.
+
+### Verdict after remediation
+
+The report's verdict was **ARCHITECTURE SOUND WITH REQUIRED REMEDIATIONS**, and
+listed five items as required before Phase 6 opens. All five are done:
+
+1. Fix `RECLAIM` — done (F-1).
+2. Add the all-in economic bound to the mandate and the fee total to the
+   candidate — done (F-2, F-4).
+3. Bound the four unbounded collections — done (F-3).
+4. Require the handoff state and correct the two documents that overstate it —
+   done (F-5); `jev-integration.md` and `security-review.md` both carry the
+   correction rather than a quiet rewording.
+5. Reconcile the chain inside `representationId` and bind the state by digest —
+   done (F-6, F-8).
+
+All four recommended items are also done: F-7, F-10, F-11 and F-13.
+
+**No known HIGH finding remains in the off-chain architecture.** What remains is
+owned by Phase 6 and named there: atomic on-chain consumption, chain-sourced
+time, transaction binding, reorg reconciliation, and a reconciliation path for
+quarantined authorizations.

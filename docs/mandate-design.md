@@ -1032,7 +1032,7 @@ corpus of decision vectors — inputs plus expected verdict and reason codes —
 that every implementation is tested against, plus property tests over generated
 inputs asserting that independent implementations agree on every case.
 
-**Partially implemented.** The corpus exists: `corpus/v1`, 57 vectors across 24
+**Partially implemented.** The corpus exists: `corpus/v2`, 67 vectors across 27
 families, with a format specification and a test asserting the committed file
 matches what the kernel generates. What does not exist yet is a *second*
 implementation to run it against — the mechanism is built, the differential

@@ -136,7 +136,7 @@ second time before returning a handoff candidate.
 | `packages/adapter-robinhood` | Strict Robinhood assets, price, capability, corporate-action, ERC-20/ERC-8056 and Chainlink normalization; explicit live failure handling and capture tooling |
 | `packages/router` | Strict provider boundary, committed routing candidates, fail-closed cost model, lexicographic BUY/SELL ranking, re-verification, selection receipts and seeded simulation |
 | `packages/jev` | TypeSafe client and strict response parser, closed-set choice projection, explicit abstention, deterministic fallback across eighteen failure reasons, advisory receipts, handoff re-verification, adversarial stubs and the trader-facing summary |
-| `corpus/v1` | 57 verifier decision vectors across 24 families |
+| `corpus/v2` | 67 verifier decision vectors across 27 families (MCE v2) |
 | `corpus/registry-v1` | 27 registry decision vectors covering resolution and admissibility |
 | `corpus/mainnet-v1` | 11 recorded-mainnet registry-plus-kernel replay vectors and a machine-readable report |
 | `corpus/mainnet-routing-v1` | Six hybrid recorded-mainnet candidate-set routing worlds with deterministic receipts |
@@ -183,7 +183,7 @@ npm run check      # 567 offline tests plus fixtures, replays, boundaries and re
 | [docs/ci.md](docs/ci.md) | Offline continuous-integration and drift gates. |
 | [docs/simulation.md](docs/simulation.md) | Seeded hybrid-world generation, metrics and replay methodology. |
 | [docs/adr/](docs/adr/) | Architecture decision records: authorization architecture, canonical encoding, kernel language and dependency boundary. |
-| [corpus/v1/README.md](corpus/v1/README.md) | Verifier decision-vector format, for reimplementers. |
+| [corpus/v2/README.md](corpus/v2/README.md) | Verifier decision-vector format, for reimplementers. |
 | [corpus/registry-v1/README.md](corpus/registry-v1/README.md) | Registry decision-vector format, and exactly which fixture data is real and which is synthetic. |
 | [AGENTS.md](AGENTS.md) | Operating rules for coding agents working in this repository. Read before making any change. |
 
@@ -225,7 +225,7 @@ See [MVP scope](docs/mandate-design.md#20-buildathon-mvp-scope) and
 ├── packages/adapter-robinhood/ strict Robinhood REST/RPC normalization
 │   ├── src/               adapters, provenance, exact price and epoch semantics
 │   └── test/              recorded fixtures, offline replay and failure tests
-├── corpus/v1/             cross-implementation verifier decision vectors
+├── corpus/v2/             cross-implementation verifier decision vectors
 ├── corpus/registry-v1/    cross-implementation registry decision vectors
 ├── corpus/mainnet-v1/     recorded mainnet replay vectors and metrics
 └── docs/

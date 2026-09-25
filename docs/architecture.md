@@ -2,9 +2,16 @@
 
 System structure, component boundaries, and where each concern is enforced.
 
-> **Status: Phase 5 complete.** The kernel, registry, read-only Robinhood
+> **Status: Phase 5R complete.** The kernel, registry, read-only Robinhood
 > external-data adapter, deterministic router and the optional Jev advisory
-> layer are built. Transaction construction and submission, execution
+> layer are built, and the remediations the
+> [architecture pressure test](production-architecture-pressure-test.md)
+> required before the execution boundary are applied: symmetric signed economic
+> authorization ([ADR 0014](adr/0014-symmetric-signed-economic-authorization.md)),
+> replay quarantine ([ADR 0015](adr/0015-replay-quarantine-and-reconciliation.md)),
+> and mandatory fresh handoff state with monotonic pipeline time
+> ([ADR 0016](adr/0016-pipeline-time-and-handoff-freshness.md)). MCE is at
+> schema v2. Transaction construction and submission, execution
 > contracts, funding and web work remain planned. Jev has not been
 > characterized against a live account
 > ([jev-characterization.md](jev-characterization.md)).
@@ -78,7 +85,7 @@ trusts none of its callers.
 | Deterministic verifier | `verify(mandate, candidate, state, clock) -> Verdict`. Pure, total, fail-closed, model-free | 1 | **implemented** — `packages/kernel/src/verifier/` |
 | Reason-code registry | Stable namespaced codes with data-driven explanations | 1 | **implemented** — 43 codes; [reason-codes.md](reason-codes.md) |
 | Replay semantics | Pure consumption state machine; the store stays outside the kernel | 1 | **implemented** — [replay-semantics.md](replay-semantics.md) |
-| Decision-vector corpus | Cross-implementation compatibility contract | 1 | **implemented** — `corpus/v1`, 57 vectors |
+| Decision-vector corpus | Cross-implementation compatibility contract | 1, reissued 5R | **implemented** — `corpus/v2`, 67 vectors |
 | Canonical asset registry | Canonical identities and their external identifier schemes | 2 | **implemented** — `packages/registry/src/asset-id.ts`, `asset.ts` |
 | Representation registry | Tokenized representations, their metadata and provenance | 2 | **implemented** — `packages/registry/src/representation.ts`, `claims.ts`, `semantics.ts` |
 | Resolution | Human reference → canonical asset → admissible representations | 2 | **implemented** — `packages/registry/src/reference.ts`, `asset-index.ts`, `evaluate.ts` |
@@ -107,7 +114,7 @@ packages/registry/   canonical assets, representations, resolution (ADR 0004)
 packages/adapter-robinhood/ strict external I/O and normalization (ADR 0008)
 packages/router/     pure candidate construction, filtering and ranking
 packages/jev/        optional advisory selection over a closed set (ADR 0012)
-corpus/v1/           cross-implementation verifier decision vectors
+corpus/v2/           cross-implementation verifier decision vectors (MCE v2)
 corpus/registry-v1/  cross-implementation registry decision vectors
 corpus/mainnet-v1/   recorded mainnet registry-plus-kernel replay vectors
 corpus/mainnet-routing-v1/ recorded state plus synthetic route economics
@@ -164,12 +171,14 @@ constraints come from the signed mandate.
 | What financial asset did a human mean? | Registry resolution — ambiguity rejects | The verifier, which is handed an identity, not a reference |
 | Is this representation acceptable? | Registry admissibility, then re-checked by the verifier (semantics checks) against registry metadata | Discovery, ranking |
 | Do the data sources about a representation agree? | Registry claim resolution — conflict fails closed | The verifier, which reads one resolved value |
-| Is the amount within authority? | Verifier (economic checks) | Candidate engine |
+| Is the amount within authority? | Verifier (economic checks) — `maxNotional` for gross exposure and `economicLimit` for cash flow, fees included | Candidate engine, which establishes the fee total and ranks on it but holds no economic permission (ADR 0014) |
 | Is the state fresh enough? | Verifier (state checks) against observation times | Adapters |
 | Is the corporate-action state current? | Verifier (epoch check) | Adapters |
 | Is the agent authorized? | Verifier (authorization checks) | Authentication layer |
 | Is the submitted transaction the verified one? | Execution gate | Off-chain code |
 | Which admissible candidate is best? | Ranking, optionally Jev | Verifier — it does not rank |
+| Is the decision still valid at handoff? | Verifier, re-run on caller-supplied handoff state; the router requires it and refuses a handoff instant earlier than the evaluation instant | Evaluation-time state, which is never reused as handoff state (ADR 0016) |
+| Did the registry and the trusted state come from one snapshot? | Router, comparing the state's declared `registrySnapshotDigest` against the registry it evaluated | Kernel, which carries the digest opaquely and has no registry types |
 
 Read the table as a boundary specification: a component appearing in the
 right-hand column must not acquire the corresponding responsibility later.
@@ -210,10 +219,10 @@ What was built, and the decisions that shaped it.
 | --- | --- | --- |
 | Language | TypeScript on Node 22; runtime dependency allowlist of exactly two audited, network-free crypto packages, machine-checked | [ADR 0003](adr/0003-kernel-language-and-dependency-boundary.md) |
 | Authorization | Chain-agnostic mandate digest; EIP-712 domain confined to the authorization envelope; one scheme implemented behind a registry | [ADR 0001](adr/0001-mandate-authorization-architecture.md) |
-| Encoding | MCE v1 — flat, versioned, length-explicit binary, keccak-256, reproducible in Solidity | [ADR 0002](adr/0002-canonical-mandate-encoding.md) |
-| Verification | 17 independent checks, unioned and sorted, so a rejection names every violation and the verdict cannot depend on check order | [verifier-invariants.md](verifier-invariants.md) |
-| Replay | Pure transition rules in the kernel; the store outside it. Reserve before signing, commit on observed settlement, release only on observed failure | [replay-semantics.md](replay-semantics.md) |
-| Compatibility | 57 decision vectors as a contract any future implementation must reproduce | [corpus/v1/README.md](../corpus/v1/README.md) |
+| Encoding | MCE v2 — flat, versioned, length-explicit binary, keccak-256, reproducible in Solidity | [ADR 0002](adr/0002-canonical-mandate-encoding.md), [ADR 0014](adr/0014-symmetric-signed-economic-authorization.md) |
+| Verification | 19 independent checks, unioned and sorted, so a rejection names every violation and the verdict cannot depend on check order | [verifier-invariants.md](verifier-invariants.md) |
+| Replay | Pure transition rules in the kernel; the store outside it. Reserve before signing, commit on observed settlement, release only on observed failure, **quarantine when the outcome was never established** | [replay-semantics.md](replay-semantics.md), [ADR 0015](adr/0015-replay-quarantine-and-reconciliation.md) |
+| Compatibility | 67 decision vectors as a contract any future implementation must reproduce | [corpus/v2/README.md](../corpus/v2/README.md) |
 
 The kernel's entry point is one function:
 
@@ -221,6 +230,11 @@ The kernel's entry point is one function:
 verify({ mandate, authorization, candidate, trustedState, clock, expectedDomain })
     -> VerificationReceipt { decision, reasonCodes[], violations[], digests, receiptDigest }
 ```
+
+Totality is a property of that signature and was found to be false at the
+encoding boundary before Phase 5R: an unbounded collection made the digest step
+throw, so a refusal produced no receipt. Every collection the encoders count is
+now bounded by its parser.
 
 It accepts `unknown` for each input and parses at the boundary. That is what
 makes totality real: a caller cannot hand it something unparseable and receive
@@ -262,7 +276,7 @@ rather than substituting a permissive default.
 | Confidence | No threshold ships: the distribution it would be derived from has not been observed | [ADR 0013](adr/0013-jev-fallback-and-confidence-policy.md) |
 | Cardinality | The API's 255-option limit never truncates an admissible set; above 254 the layer is skipped | [jev-integration.md](jev-integration.md) |
 | Data minimization | Twelve declared view fields, built individually, enforced by an allowlist test over every payload key | [security-review.md](security-review.md) |
-| Handoff | The selected candidate is re-verified against state current at handoff, not at set construction | [jev-integration.md](jev-integration.md) |
+| Handoff | The selected candidate is re-verified against state the caller supplies for the handoff, which is **required** rather than defaulting to the evaluation state | [ADR 0016](adr/0016-pipeline-time-and-handoff-freshness.md), [jev-integration.md](jev-integration.md) |
 
 The router was split into `evaluateRoutes` and `selectEvaluated` so the
 advisory layer addresses the same ranked array the deterministic path selects
@@ -318,7 +332,9 @@ architecture most:
   behaviour and every failure reason, the closed-set digest is unchanged, every
   handoff is a member of the deterministic admissible set, and every handoff
   carries a kernel `PASS`.
-- **INV-5** — fail closed. This is why `UNKNOWN` is a value in the type system.
+- **INV-5** — fail closed. This is why `UNKNOWN` is a value in the type system,
+  and why a lapsed reservation quarantines rather than clearing itself: the
+  passage of time is not an observation.
 - **INV-7** — execution addresses come only from the registry. This is why
   resolution is a distinct stage that the agent cannot bypass, and why
   admissibility is evaluated by identifier rather than by a record a caller

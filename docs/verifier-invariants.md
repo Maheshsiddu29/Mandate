@@ -2,7 +2,7 @@
 
 What the Phase 1 kernel guarantees, and how each guarantee is established.
 
-> **Status: Phase 1, implemented.** Everything below is enforced by
+> **Status: Phase 5R, implemented.** Everything below is enforced by
 > `packages/kernel` and covered by its test suite. Product-level invariants
 > INV-1…INV-18 are in
 > [mandate-design.md §16](mandate-design.md#16-major-invariants); this document
@@ -18,7 +18,7 @@ behavioural tests. **PROPERTY** — established over generated inputs.
 | # | Property | How | Status |
 | --- | --- | --- | --- |
 | V-1 | **Pure.** No network, filesystem, clock, randomness or environment. Time is a parameter. | `structure.test.ts` scans every kernel source for forbidden imports and for `Date.now`, `new Date`, `Math.random`, `process.env`, `fetch(`, timers | CODE |
-| V-2 | **Total.** Every input yields a receipt; nothing throws to signal a financial outcome. | `verify` takes `unknown` and parses at the boundary. 400 generated junk inputs, a 16×16 junk matrix, and 200 partially-valid inputs all produce receipts | TEST, PROPERTY |
+| V-2 | **Total.** Every input yields a receipt; nothing throws to signal a financial outcome. | `verify` takes `unknown` and parses at the boundary. 400 generated junk inputs, a 16×16 junk matrix, and 200 partially-valid inputs all produce receipts. **Corrected in Phase 5R:** this claim was false at the encoding boundary — an unbounded collection made `trustedStateDigest` throw a `u16` range assertion, so a refusal produced no receipt at all. Every collection the encoders count is now bounded by its parser, tested immediately below, at and above each limit, and the digest step is guarded so an internal invariant failure rejects with `VERIFIER_INTERNAL_ERROR` rather than escaping | TEST, PROPERTY |
 | V-3 | **Deterministic.** Same inputs, same receipt, including the receipt digest. | Repeated verification is deep-equal; the corpus pins 57 receipts byte-for-byte | TEST |
 | V-4 | **Fail-closed.** No path returns PASS when a constraint could not be established. `UNKNOWN` is a value that rejects. | Every `UNKNOWN` and every absent trusted input has a test asserting REJECT | TEST |
 | V-5 | **Model-free.** No inference client is reachable, directly or transitively. | `structure.test.ts` scans import specifiers and asserts the runtime dependency set is exactly `@noble/hashes` and `@noble/curves`, whose own trees are verified dependency-free | CODE |
@@ -37,6 +37,9 @@ behavioural tests. **PROPERTY** — established over generated inputs.
 | V-14 | Deviation is never understated. | `deviationBps` rounds up | TEST |
 | V-15 | Arithmetic never wraps. | Every parser bounds its value; a value one past the `uint256` maximum is `VALUE_OUT_OF_RANGE`, pinned by a corpus vector | TEST |
 | V-16 | A declared notional that disagrees with quantity × price rejects. | Accepted only if it equals the product rounded down or up — a one-atom band, which still catches a 10× error or a decimal transposition | TEST |
+| V-17 | **The signed economic bound is enforced here, and is symmetric.** BUY bounds notional plus fees against a maximum total debit; SELL bounds notional minus fees against a minimum total credit. | `checkEconomicLimit`, the only enforcement point. Boundary vectors at and one atom past each bound, both sides ([ADR 0014](adr/0014-symmetric-signed-economic-authorization.md)) | TEST |
+| V-18 | Fee arithmetic takes no rounding decision. | `addAmounts` and `subtractAmounts` lift the coarser scale by a power of ten, which is exact. Only a unit mismatch, an overflow and a negative result can fail, and all three reject. A tolerance here would be a gap a fee could hide in | TEST |
+| V-19 | A SELL whose fees reach the notional fails closed before any comparison. | `FEES_EXCEED_NOTIONAL`: a net debit has no defensible minimum credit to compare against | TEST |
 
 ## 3. Encoding, digests and authorization
 
@@ -65,6 +68,8 @@ behavioural tests. **PROPERTY** — established over generated inputs.
 | V-35 | Validity-window boundaries are exact and expiry is exclusive. | `expiresAt − 1` passes, `expiresAt` and `expiresAt + 1` reject; `notBefore − 1` rejects, `notBefore` passes | TEST |
 | V-36 | Ageing state never restores eligibility. | Monotonicity over an increasing age sequence | PROPERTY |
 | V-37 | An address used in execution originates only from trusted state (INV-7). | The candidate's `representationId` resolves through trusted state or it is `REPRESENTATION_UNKNOWN`; the kernel never parses an address out of an identifier | TEST |
+| V-38 | **The chain a representation identifier carries is reconciled with the chain field beside it.** | `checkRepresentationChain`, on the candidate and on every trusted-state entry. `chainSegmentOf` reads only the half before the first `/`; the contract half is never touched, so V-37 is unchanged. Added in Phase 5R after a mainnet contract passed under an Arbitrum-only mandate | TEST |
+| V-39 | **A candidate binds the *content* of the state it was built against.** | `referenceStateDigest` is compared against the digest `verify` computes over the state it was handed. The `stateId` comparison remains for its clearer diagnostic; it is no longer the binding, because two different states can share one caller-chosen label | TEST |
 
 ## 5. Corporate actions and replay
 
@@ -74,7 +79,8 @@ behavioural tests. **PROPERTY** — established over generated inputs.
 | V-41 | An epoch behind the authorization is inconsistent, not merely changed. | Distinct code, because an epoch feed running behind is a different fault | TEST |
 | V-42 | An epoch feed is itself state that can go stale. | Corporate-action freshness is checked separately from the epoch value | TEST |
 | V-43 | A candidate built against a different epoch or snapshot rejects. | `CANDIDATE_STATE_MISMATCH` | TEST |
-| V-44 | A consumed, reserved or unknown authorization never executes (INV-12). | Three distinct codes; a replay record about another mandate is unknown, not unused | TEST |
+| V-44 | A consumed, reserved, quarantined or unknown authorization never executes (INV-12). | Four distinct codes; a replay record about another mandate is unknown, not unused | TEST |
+| V-46 | **The passage of time never restores an authorization.** | A lapsed reservation quarantines; only `RECONCILE`, carrying an observed outcome, leaves that state ([ADR 0015](adr/0015-replay-quarantine-and-reconciliation.md)). A property test walks the whole transition vocabulary against a quarantined record | TEST, PROPERTY |
 | V-45 | Replay rules are pure; the store is outside the kernel. | `applyTransition` is a pure state transition. See [replay-semantics.md](replay-semantics.md) | CODE |
 
 ## 6. Explicitly not guaranteed by Phase 1
@@ -89,4 +95,6 @@ Named so nothing downstream assumes them.
 | V-53 | That the replay store applies transitions atomically. A read-then-write store with no compare-and-swap permits a double reserve the kernel cannot detect. | Integrator. Stated in [replay-semantics.md §8](replay-semantics.md#8-what-the-kernel-does-not-do) |
 | V-54 | Anything about partial fills. | Settlement abstraction, `FUTURE` |
 | V-55 | That two independent implementations agree. The corpus is the *mechanism*; only one implementation exists today. | Phase 6, when the on-chain gate becomes the second |
-| V-56 | Jev independence as an end-to-end claim. Phase 1 establishes the structural half — no inference client is reachable — but there is no pipeline yet to test adversarially (INV-3). | Phase 5 |
+| V-56 | Jev independence as an end-to-end claim. Phase 1 establishes the structural half — no inference client is reachable — but there is no pipeline yet to test adversarially (INV-3). | **Established in Phase 5**, re-measured in Phase 5R |
+| V-57 | That the evaluation instant is honest. The kernel accepts the instant it is given, which is what makes a verdict reproducible. The router enforces that the handoff instant is not earlier than the evaluation instant, but a caller that rewinds both consistently defeats every age bound and no off-chain component can detect it. | Execution gate, Phase 6 (INV-10) |
+| V-58 | That a quarantined authorization is ever reconciled. Reconciliation needs chain observation. Its absence fails closed — the authorization stays unavailable — but liveness depends on it existing. | Phase 6 |

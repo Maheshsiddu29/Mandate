@@ -22,7 +22,14 @@ Read it before proposing architectural changes. If a change contradicts it,
 either the change is wrong or the document needs updating first — resolve which
 before writing code.
 
-The repository is currently at the end of **Phase 5**: the mandate core kernel
+The repository is currently at the end of **Phase 5R** — Phase 5 plus the
+production-architecture remediation recorded in
+[docs/production-architecture-pressure-test.md](docs/production-architecture-pressure-test.md)
+§24. The canonical encoding is at **MCE v2**
+([ADR 0014](docs/adr/0014-symmetric-signed-economic-authorization.md)): a
+mandate carries a signed side-appropriate economic bound, a candidate carries
+its fee total and a digest of the state it was built against, and trusted state
+carries the registry snapshot digest it was derived from. Built as of Phase 5R: the mandate core kernel
 (`packages/kernel`), the canonical asset and representation registry
 (`packages/registry`), the read-only Robinhood external adapter
 (`packages/adapter-robinhood`), the deterministic candidate/router package
@@ -150,6 +157,20 @@ The deterministic verifier and anything it depends on are safety-critical.
 - **Every quantity carries its unit and decimals.** Unit-less quantities must
   not be representable.
 - **Every observed value carries provenance and an observation time.**
+- **Economic authority lives in the verifier.** A component that does not
+  authorize must not carry an economic permission. The router establishes costs
+  and ranks on them; `checkEconomicLimit` decides
+  ([ADR 0014](docs/adr/0014-symmetric-signed-economic-authorization.md)).
+- **Every counted collection is bounded by its parser, at the width of the count
+  its encoder writes.** A parser that accepts more than the encoder can
+  represent turns a refusal into a thrown error, which is how totality was
+  broken before Phase 5R.
+- **The passage of time never restores an authorization.** Only an observed
+  outcome does
+  ([ADR 0015](docs/adr/0015-replay-quarantine-and-reconciliation.md)).
+- **Handoff state is explicit and required.** Reusing evaluation state for the
+  handoff re-verification must be a visible decision, never a default
+  ([ADR 0016](docs/adr/0016-pipeline-time-and-handoff-freshness.md)).
 
 ### 4.3 Model output
 
@@ -188,7 +209,7 @@ build step; `tsc` runs as a typecheck only.
 npm run typecheck     # tsc --noEmit, strict
 npm test              # node --test over packages/**/test/*.test.ts
 npm run check         # both
-npm run corpus:generate   # regenerate corpus/v1/vectors.json
+npm run corpus:generate   # regenerate corpus/v2/vectors.json
 npm run docs:generate     # regenerate docs/reason-codes.md
 npm run robinhood:fixtures:validate  # verify pinned real-data digests
 npm run mainnet-replay:validate      # replay registry + kernel corpus

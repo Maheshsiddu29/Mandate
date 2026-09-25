@@ -1,7 +1,14 @@
 # Internal security review
 
 > **Status:** living internal engineering review, updated 2026-09-25 for
-> Phase 5. This is not a third-party audit.
+> Phase 5R. This is not a third-party audit.
+>
+> The [architecture pressure test](production-architecture-pressure-test.md)
+> contradicted two claims in the Phase 5 revision of this document. Both are
+> corrected below rather than quietly reworded: the handoff re-verification was
+> described as reading state current at handoff when by default it read the
+> evaluation state, and resource exhaustion was described as bounded per
+> invocation when four counted collections had no parser bound at all.
 
 ## Current dependency review
 
@@ -71,13 +78,26 @@ kernel, registry and router neither declare nor import `@mandate/jev`.
 
 ### Resource exhaustion
 
-- **Affected component:** provider parsing and sorting.
-- **Control:** 256 candidates, 8 steps per route and 128-byte identifier limits;
-  bounds are checked before verification.
-- **Evidence:** oversized candidate/step tests and maximum-size benchmark.
+- **Affected component:** provider parsing, registry parsing, trusted-state
+  parsing, and both network clients.
+- **Control:** 256 candidates, 8 steps per route, 128-byte identifiers, 65 535
+  trusted-state representations, 65 535 claims per registry property, 65 535
+  source versions, listings and aliases, and byte bounds on every response body
+  (1 MiB for a Jev choice, 4 MiB for the model listing, 8 MiB for Robinhood).
+  Each collection bound equals the width of the count its encoder writes.
+- **Correction (Phase 5R).** "Bounded per invocation" was not true of four
+  collections. Their parsers accepted more than the encoder could represent, so
+  `trustedStateDigest` and `registrySnapshotDigest` threw a `u16` range
+  assertion instead of the parser returning a verdict — which also broke
+  totality, since `verify()` and `route()` threw rather than refusing
+  (pressure-test findings F-3 and F-11). Response bodies had no bound at all: a
+  request deadline bounds a slow body, not a fast large one.
+- **Evidence:** oversized candidate/step tests, the maximum-size benchmark, and
+  boundary tests immediately below, at and above every collection and body
+  limit, including that a collection at its bound still digests.
 - **Residual risk:** callers can repeatedly invoke the bounded operation; API
   rate limiting is outside the pure router.
-- **Status:** bounded per invocation.
+- **Status:** bounded per invocation, and now actually so.
 
 ### Secrets enter the repository
 
@@ -199,21 +219,40 @@ local array. There is no deserialization of model output into a domain object.
 - **Residual risk:** a permanently broken integration is invisible to users by
   design and visible only in metrics, so the fallback counters have to be
   watched.
+- **Availability (Phase 5R).** Two gaps closed. A Jev-chosen candidate failing
+  handoff re-verification used to end the decision rather than falling back to
+  index 0, which gave a hostile model authority over whether anything executed;
+  it now falls back and records `HANDOFF_REJECTED_FALLBACK`. And an optional
+  local circuit breaker stops a sustained outage costing every decision the full
+  deadline. The breaker cannot change a decision: opening it selects index 0,
+  and a test asserts the selected candidate and closed-set digest are identical
+  to the no-Jev baseline.
 - **Status:** controlled; the monitoring obligation is real and is recorded
   here rather than assumed.
 
 ### Stale decision across model latency
 
 - **Affected component:** execution handoff.
-- **Control:** the selected candidate is re-verified against the trusted state
-  and clock current at handoff, not those the closed set was built from. A
-  halt, a price move past the mandate bound, a corporate-action epoch change or
-  an expiry occurring during inference rejects.
-- **Evidence:** the state-change tests in `adversarial.test.ts` and the
-  `market-change-during-decision` corpus scenario, which rejects in all five
-  modes including deterministic-only.
-- **Residual risk:** the handoff state is supplied by the caller. Binding it to
-  chain-observed state at submission is Phase 6 work (INV-13).
+- **Control:** the selected candidate is re-verified against trusted state and a
+  clock the caller supplies **for the handoff**, which is a required input. A
+  halt, a price move past the mandate bound, a corporate-action epoch change, a
+  representation pausing or an expiry occurring during inference rejects. The
+  router refuses a handoff instant earlier than the evaluation instant.
+- **Correction (Phase 5R).** The previous revision described this control as
+  unconditional. It was not: `handoffState` was optional and defaulted to the
+  evaluation state, so in the default configuration the re-verification read
+  exactly what the set was built from and `FINAL_REVERIFICATION_FAILED` was
+  unreachable through `route()`. The mechanism worked when supplied; nothing
+  required supplying it (pressure-test finding F-5).
+- **Evidence:** the state-change tests in `adversarial.test.ts`, the
+  `market-change-during-decision` corpus scenario, and the handoff regression
+  tests in `pressure-test-findings.test.ts`, which cover a halt, a pause, an
+  expiry, a stale price and a rewound clock.
+- **Residual risk:** the handoff state is still supplied by the caller, and a
+  caller that rewinds both the evaluation and the handoff instant consistently
+  defeats every age bound. No off-chain component can detect that. Binding to
+  chain-observed state and `block.timestamp` at submission is Phase 6 work
+  (INV-10, INV-13).
 - **Status:** controlled off-chain; atomic binding remains open.
 
 ## Solidity analysis

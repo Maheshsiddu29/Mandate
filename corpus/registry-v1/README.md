@@ -27,7 +27,7 @@ This corpus is how they are kept in step. **Any implementation claiming to
 implement Mandate registry v1 must reproduce every field of `expected` for every
 vector.**
 
-It is the registry counterpart to [`corpus/v1`](../v1/README.md), which pins the
+It is the registry counterpart to [`corpus/v2`](../v2/README.md), which pins the
 verifier's decisions. The two are separate because they version independently: the
 registry schema changes when a metadata dimension is added, and that must not
 invalidate a single mandate digest
@@ -191,7 +191,7 @@ vector derived from it vacuous.
 
 - Anything needing network or chain access. The registry has none
   ([ADR 0004](../../docs/adr/0004-registry-package-boundary.md)).
-- The verifier's own decisions. Those are [`corpus/v1`](../v1/README.md).
+- The verifier's own decisions. Those are [`corpus/v2`](../v2/README.md).
   Cross-layer agreement is tested separately, in
   `packages/registry/test/bridge.test.ts`.
 - Routing, ranking or candidate construction. Phase 4.

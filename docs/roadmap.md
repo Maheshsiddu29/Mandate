@@ -47,7 +47,7 @@ phases can be reviewed against. No implementation.
 
 ## Phase 1 — Mandate core types and deterministic verifier ✅
 
-**Delivered.** `packages/kernel` and `corpus/v1`. Exit criteria met; evidence
+**Delivered.** `packages/kernel` and `corpus/v2` (reissued at MCE v2 in Phase 5R). Exit criteria met; evidence
 per property in [verifier-invariants.md](verifier-invariants.md).
 
 | Delivered | Where |
@@ -60,7 +60,7 @@ per property in [verifier-invariants.md](verifier-invariants.md).
 | Receipts for PASS and REJECT | `src/receipt.ts` |
 | Human-readable layer, kept separate | `src/explain.ts` |
 | Replay semantics and transition rules | [replay-semantics.md](replay-semantics.md) |
-| Decision-vector corpus, 57 vectors | [corpus/v1](../corpus/v1/README.md) |
+| Decision-vector corpus, 67 vectors | [corpus/v2](../corpus/v2/README.md) |
 | ADR format adopted | [docs/adr](adr/) |
 
 116 tests pass; typecheck clean. Two decisions Phase 0 flagged as blocking were
