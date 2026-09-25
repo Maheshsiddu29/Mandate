@@ -80,6 +80,22 @@ export const JevFallbackReason = {
   CONFIDENCE_BELOW_THRESHOLD: 'CONFIDENCE_BELOW_THRESHOLD',
   TRANSPORT_EXCEPTION: 'TRANSPORT_EXCEPTION',
   MISSING_CREDENTIAL: 'MISSING_CREDENTIAL',
+  /**
+   * The advisory layer is being skipped because recent calls failed.
+   *
+   * A sustained outage otherwise costs every decision the full deadline for no
+   * benefit, which turns an optional dependency into a latency tax on the
+   * trading path. Skipping is safe by construction: it is the same deterministic
+   * index-0 result every other fallback reason produces.
+   */
+  CIRCUIT_OPEN: 'CIRCUIT_OPEN',
+  /**
+   * The Jev-chosen candidate failed handoff re-verification and the
+   * deterministic candidate was verified in its place.
+   *
+   * Recorded so the substitution is visible in the receipt rather than silent.
+   */
+  HANDOFF_REJECTED_FALLBACK: 'HANDOFF_REJECTED_FALLBACK',
 } as const;
 export type JevFallbackReason = (typeof JevFallbackReason)[keyof typeof JevFallbackReason];
 

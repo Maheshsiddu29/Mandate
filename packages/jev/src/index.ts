@@ -18,6 +18,8 @@ export * from './choices.ts';
 export * from './question.ts';
 export * from './encoding.ts';
 export * from './parse.ts';
+export * from './availability.ts';
+export * from './body.ts';
 export * from './client.ts';
 export * from './decide.ts';
 export * from './explain.ts';

@@ -8,7 +8,9 @@
  * 2. A choice — from Jev or from the deterministic baseline — is an *index*
  *    into that array. `selectEvaluated` refuses any index outside it.
  * 3. The selected candidate is verified by the kernel again, against the state
- *    that is current at handoff rather than the state the set was built from.
+ *    the caller supplies for handoff. That state is **required**: it used to
+ *    default to the evaluation state, which made the check a tautology
+ *    (ADR 0016).
  *
  * Every failure between steps 1 and 3 resolves to index 0, the deterministic
  * preferred candidate. There is no path that fails a transaction because an
@@ -24,12 +26,14 @@ import {
 import {
   evaluateRoutes,
   selectEvaluated,
+  type HandoffInputs,
   type RouteExclusion,
   type RouteRequest,
   type RoutingCandidate,
   type RoutingEvaluation,
   type RoutingResult,
 } from '@mandate/router';
+import { AdvisoryCircuit } from './availability.ts';
 import {
   ChoiceSetStatus,
   buildClosedChoiceSet,
@@ -61,11 +65,13 @@ import type { RouteAdvisoryContext } from './view.ts';
 
 type Verifier = (request: VerifyRequest) => VerificationReceipt;
 
-/** Trusted state and clock as they are at handoff, which may be later than t0. */
-export interface HandoffState {
-  readonly trustedMarketState: unknown;
-  readonly clock: unknown;
-}
+/**
+ * Trusted state and clock as they are at handoff, which may be later than t0.
+ *
+ * Mandatory since Phase 5R. It used to default to the evaluation state, which
+ * made the re-verification a tautology (ADR 0016).
+ */
+export type HandoffState = HandoffInputs;
 
 export interface JevRoutingRequest {
   readonly route: RouteRequest;
@@ -74,11 +80,20 @@ export interface JevRoutingRequest {
   readonly policy?: Partial<JevPolicy>;
   readonly advisoryByRouteId?: Readonly<Record<string, RouteAdvisoryContext>>;
   /**
-   * State to re-verify against before handoff. Defaults to the state the set
-   * was built from; supplying a later snapshot is what makes an inference-time
-   * state change reject rather than being grandfathered in.
+   * State to re-verify against before handoff. **Required.**
+   *
+   * A caller that genuinely has only one snapshot passes it twice, which is a
+   * visible decision. A caller that cannot obtain fresh state has nothing to
+   * pass, and the decision fails rather than silently reusing evaluation state.
    */
-  readonly handoffState?: HandoffState;
+  readonly handoffState: HandoffState;
+  /**
+   * Optional latency guard for a sustained outage. Purely local, and it cannot
+   * change which candidates are permitted (`availability.ts`).
+   */
+  readonly circuit?: AdvisoryCircuit;
+  /** Milliseconds for the circuit's own bookkeeping. Defaults to `Date.now`. */
+  readonly nowMs?: () => number;
   readonly verifier?: Verifier;
 }
 
@@ -250,6 +265,8 @@ export async function selectWithJev(request: JevRoutingRequest): Promise<JevRout
   }
 
   const evaluation = evaluated.evaluation;
+  const nowMs = request.nowMs ?? (() => Date.now());
+  const circuit = request.circuit;
   const set = buildClosedChoiceSet(evaluation.admissible, request.advisoryByRouteId ?? {});
   const deterministicCandidate = evaluation.admissible[0]?.candidate ?? null;
 
@@ -264,50 +281,78 @@ export async function selectWithJev(request: JevRoutingRequest): Promise<JevRout
     decided = deterministic(JevFallbackReason.CARDINALITY_UNSUPPORTED, SelectionMode.JEV_FALLBACK);
   } else if (policy.allowedModels !== null && !policy.allowedModels.includes(policy.model)) {
     decided = deterministic(JevFallbackReason.MODEL_UNAVAILABLE, SelectionMode.JEV_FALLBACK);
+  } else if (circuit !== undefined && !circuit.shouldAttempt(nowMs())) {
+    // Sustained outage: skip the call rather than paying the deadline again.
+    // The result is the same index 0 every other fallback reason produces.
+    decided = deterministic(JevFallbackReason.CIRCUIT_OPEN, SelectionMode.JEV_FALLBACK);
   } else {
     decided = await consult(request.transport, policy, evaluation, set);
+    if (circuit !== undefined) {
+      // An abstention is a working model, not a failure.
+      if (decided.outcome === JevOutcome.FALLBACK) circuit.recordFailure(nowMs());
+      else circuit.recordSuccess();
+    }
   }
 
-  const routing = selectEvaluated(evaluation, decided.index, verifier);
+  let routing = selectEvaluated(evaluation, decided.index, request.handoffState, verifier);
+
+  // If the advisory choice fails handoff re-verification, fall back to index 0
+  // and verify *that* — rather than ending the decision.
+  //
+  // ADR 0013 says every failure selects index 0, and this path was the one
+  // exception: a hostile or merely unlucky model could turn an executable
+  // decision into NO_VALID_ROUTE where the deterministic path would have
+  // executed (finding F-13). Index 0 is a member of the same closed set and is
+  // re-verified on the same handoff state, so nothing is relaxed — the model
+  // simply no longer holds availability authority.
+  if (routing.status === 'NO_VALID_ROUTE' && decided.index !== 0 && evaluation.admissible.length > 0) {
+    const deterministicRouting = selectEvaluated(evaluation, 0, request.handoffState, verifier);
+    if (deterministicRouting.status === 'SELECTED') {
+      routing = deterministicRouting;
+      decided = {
+        ...decided,
+        index: 0,
+        outcome: JevOutcome.FALLBACK,
+        mode: SelectionMode.JEV_FALLBACK,
+        fallbackReason: JevFallbackReason.HANDOFF_REJECTED_FALLBACK,
+      };
+    }
+  }
   const jevReceipt = decisionReceipt(evaluation, set, policy, decided);
+
+  // There is exactly one handoff re-verification and the router performs it,
+  // inside `selectEvaluated`, against the state supplied for the handoff. This
+  // layer used to run a second one of its own; two implementations of one safety
+  // check is the differential-consistency risk the pressure test warned about,
+  // so the advisory layer now reports the router's verdict rather than repeating
+  // the work.
+  const handoffVerification = routing.status === 'SELECTED'
+    ? routing.finalVerificationReceipt
+    : routing.status === 'NO_VALID_ROUTE' ? routing.finalVerificationReceipt : null;
 
   if (routing.status !== 'SELECTED') {
     return {
       status: routing.status === 'INVALID_INPUT' ? 'INVALID_INPUT' : 'NO_VALID_ROUTE',
       errors: routing.status === 'INVALID_INPUT' ? routing.errors : [],
-      handoffRejected: false,
+      // True when a candidate passed at evaluation and stopped passing at
+      // handoff, as distinct from nothing having been admissible at all.
+      handoffRejected: handoffVerification !== null && handoffVerification.decision !== Decision.PASS,
       selectionMode: decided.mode,
       jevReceipt,
       routing,
-      handoffVerification: null,
-      selectionReceipt: selectionReceipt(evaluation, routing, jevReceipt, null, deterministicCandidate),
+      handoffVerification,
+      selectionReceipt: selectionReceipt(evaluation, routing, jevReceipt, handoffVerification, deterministicCandidate),
       deterministicCandidate,
     } as JevRoutingResult;
   }
-
-  // Mandatory, unconditional, and against the state that is current now — not
-  // the state the closed set was built from. A choice made before a corporate
-  // action, a halt or a price move does not survive it.
-  const handoffVerification = verifier({
-    mandate: evaluation.context.mandate,
-    authorization: evaluation.context.authorization,
-    candidate: routing.selected.executionCandidate,
-    trustedState: request.handoffState?.trustedMarketState ?? evaluation.context.trustedState,
-    clock: request.handoffState?.clock ?? evaluation.context.clock,
-    expectedDomain: evaluation.context.expectedDomain,
-  });
 
   const common = {
     selectionMode: decided.mode,
     jevReceipt,
     routing,
-    handoffVerification,
-    selectionReceipt: selectionReceipt(evaluation, routing, jevReceipt, handoffVerification, deterministicCandidate),
+    handoffVerification: routing.finalVerificationReceipt,
+    selectionReceipt: selectionReceipt(evaluation, routing, jevReceipt, routing.finalVerificationReceipt, deterministicCandidate),
     deterministicCandidate,
   };
-
-  if (handoffVerification.decision !== Decision.PASS) {
-    return { ...common, status: 'NO_VALID_ROUTE', handoffRejected: true };
-  }
-  return { ...common, status: 'SELECTED', selected: routing.selected, handoffVerification };
+  return { ...common, status: 'SELECTED', selected: routing.selected, handoffVerification: routing.finalVerificationReceipt };
 }
