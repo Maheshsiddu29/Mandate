@@ -69,7 +69,7 @@ function worldFor(symbol: typeof FIXTURE_SYMBOLS[number]): SymbolWorld {
     representationId: ExecutionCandidate['representationId']; canonicalAsset: CanonicalMandate['canonicalAsset'];
     issuer: ExecutionCandidate['issuer']; chain: ExecutionCandidate['chain']; venue: ExecutionCandidate['venue'];
     side: 'BUY' | 'SELL'; agent: ExecutionCandidate['agent']; quantity: Amount;
-    executionPrice: ExecutionCandidate['executionPrice']; notional: Amount; referenceStateId: string;
+    executionPrice: ExecutionCandidate['executionPrice']; notional: Amount; evaluationStateId: string;
     corporateActionEpoch: bigint;
   };
   const zero = { unit: source.notional.unit, decimals: source.notional.decimals, atoms: 0n };
@@ -91,7 +91,7 @@ function worldFor(symbol: typeof FIXTURE_SYMBOLS[number]): SymbolWorld {
         quoteObservedAtUnixSeconds: clock.nowUnixSeconds, fillPolicy: 'FILL_OR_KILL',
         costs: { venueFee: { ...zero, atoms: feeAtoms }, executionFee: zero, settlementFee: zero, routeFee: zero },
         steps: [{ kind: 'TRADE', venue: source.venue, chain: source.chain, representationId: source.representationId }],
-        referenceStateId: source.referenceStateId, corporateActionEpoch: source.corporateActionEpoch,
+        referenceStateId: source.evaluationStateId, corporateActionEpoch: source.corporateActionEpoch,
         ...patch,
       };
     },

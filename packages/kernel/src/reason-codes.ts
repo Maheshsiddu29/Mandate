@@ -437,6 +437,22 @@ const DEFINITIONS = [
     developerMessage: 'The corporate-action epoch the candidate was constructed against differs from the observed epoch. The candidate was built against a different world than the one being verified.',
     humanMessage: 'The proposed trade was prepared against outdated information.',
   },
+  {
+    id: 'MND-STATE-009',
+    name: 'REGISTRY_SNAPSHOT_MISMATCH',
+    family: F.STATE,
+    enforcementPoint: E.G_INTENT_FIDELITY,
+    developerMessage: 'The registry snapshot the candidate was constructed against is not the snapshot the trusted state being verified declares. A registry snapshot is structural: a different snapshot can retire a representation, rename an issuer or move a contract, so it must be identical rather than merely re-observed. Rerouting against the current snapshot is the remedy.',
+    humanMessage: 'The list of tokenized assets changed while this trade was being prepared, so it was not executed.',
+  },
+  {
+    id: 'MND-STATE-010',
+    name: 'REGISTRY_SNAPSHOT_UNKNOWN',
+    family: F.STATE,
+    enforcementPoint: E.G_INTENT_FIDELITY,
+    developerMessage: 'The trusted state declares no registry snapshot digest, so the candidate\u2019s structural binding to a registry snapshot cannot be established. Absent provenance fails closed; it is not treated as agreement.',
+    humanMessage: 'The source of the tokenized asset list could not be established, so this trade was not executed.',
+  },
 
   // --- NET: network and venue ----------------------------------------------
   {

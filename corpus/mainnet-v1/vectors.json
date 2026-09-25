@@ -1143,6 +1143,8 @@
           },
           "chain": "eip155:4663",
           "corporateActionEpoch": "1786720366",
+          "evaluationStateDigest": "0xc8f4f1567fc74f91842ebec73e52eede6dc48d39ccaef470be9d7ffbb5b76d4e",
+          "evaluationStateId": "mainnet-aapl-pass.state",
           "executionPrice": {
             "atoms": "336190202900527058496",
             "decimals": 18,
@@ -1165,12 +1167,11 @@
             "decimals": 18,
             "unit": "TOKEN"
           },
-          "referenceStateDigest": "0xc8f4f1567fc74f91842ebec73e52eede6dc48d39ccaef470be9d7ffbb5b76d4e",
-          "referenceStateId": "mainnet-aapl-pass.state",
+          "registrySnapshotDigest": "0x8a016496f139b28391e47da1ee7d2a4b57a31a3cf976183a78e965df5776e8a8",
           "representationId": "eip155:4663/erc20:0xaf3d76f1834a1d425780943c99ea8a608f8a93f9",
           "side": "BUY",
           "venue": "venue.robinhood.replay",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1790289408"
@@ -1304,11 +1305,11 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x8d0fd886a760322d8d98757626ea034b0280b29a16bf61e2ceeaef181db05bed",
+        "candidateDigest": "0x64048bb3e63b2bc38a80c7894dff8a84fea9d3a2f6db7f15310f677faf09b087",
         "decision": "PASS",
         "mandateDigest": "0x6ba9aa04a7b312c2e6723379e8291f33b28c849e71f7fbdef70f488c350e2216",
         "reasonCodes": [],
-        "receiptDigest": "0xa7cc9305a6856c6ded49fe3fc836c4d44ccc4d3315bddc1817046a20ee0a73bc",
+        "receiptDigest": "0x00fd8c2ed0915b4db4b061efba727e0a822605a20912405760bdc806ffe75478",
         "trustedStateDigest": "0xc8f4f1567fc74f91842ebec73e52eede6dc48d39ccaef470be9d7ffbb5b76d4e"
       }
     },
@@ -2449,6 +2450,8 @@
           },
           "chain": "eip155:4663",
           "corporateActionEpoch": "1788998430",
+          "evaluationStateDigest": "0x299ae0169ecb6f5ed040d5cb91bd2544349b32d69b25ba4618b857ce7b8ee59b",
+          "evaluationStateId": "mainnet-nvda-pass.state",
           "executionPrice": {
             "atoms": "224153620149693960668",
             "decimals": 18,
@@ -2471,12 +2474,11 @@
             "decimals": 18,
             "unit": "TOKEN"
           },
-          "referenceStateDigest": "0x299ae0169ecb6f5ed040d5cb91bd2544349b32d69b25ba4618b857ce7b8ee59b",
-          "referenceStateId": "mainnet-nvda-pass.state",
+          "registrySnapshotDigest": "0x8a016496f139b28391e47da1ee7d2a4b57a31a3cf976183a78e965df5776e8a8",
           "representationId": "eip155:4663/erc20:0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec",
           "side": "BUY",
           "venue": "venue.robinhood.replay",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1790289408"
@@ -2610,11 +2612,11 @@
         }
       },
       "expected": {
-        "candidateDigest": "0xa3aeccb4701046f6ae7b7d5660c38a92754b1efeeca5a8b153d20da8dc3b9848",
+        "candidateDigest": "0x55d223a0b38979ffcb8e3f4938905f56d9a3d8c0a74633dfc8a2cf4c8c62bc4c",
         "decision": "PASS",
         "mandateDigest": "0x479464dde9dbeaec5bface6d06c9d879e8a1767caa793f2b2904f3f75e540eb5",
         "reasonCodes": [],
-        "receiptDigest": "0x017a87b205fa30935d06282ee4a5afd9e20f136bc357c03d53c9dcc5a24c0852",
+        "receiptDigest": "0x88b7c9db14082783812244ad37d689b8c1c3208a89558e35e860b654716980aa",
         "trustedStateDigest": "0x299ae0169ecb6f5ed040d5cb91bd2544349b32d69b25ba4618b857ce7b8ee59b"
       }
     },
@@ -3755,6 +3757,8 @@
           },
           "chain": "eip155:4663",
           "corporateActionEpoch": "0",
+          "evaluationStateDigest": "0x28b0571c359e77e5949c91df2cc31bdb752e442bc3ab85cd92d4cc91b5ccd820",
+          "evaluationStateId": "mainnet-tsla-pass.state",
           "executionPrice": {
             "atoms": "377780000000000000000",
             "decimals": 18,
@@ -3777,12 +3781,11 @@
             "decimals": 18,
             "unit": "TOKEN"
           },
-          "referenceStateDigest": "0x28b0571c359e77e5949c91df2cc31bdb752e442bc3ab85cd92d4cc91b5ccd820",
-          "referenceStateId": "mainnet-tsla-pass.state",
+          "registrySnapshotDigest": "0x8a016496f139b28391e47da1ee7d2a4b57a31a3cf976183a78e965df5776e8a8",
           "representationId": "eip155:4663/erc20:0x322f0929c4625ed5bad873c95208d54e1c003b2d",
           "side": "BUY",
           "venue": "venue.robinhood.replay",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1790289408"
@@ -3916,11 +3919,11 @@
         }
       },
       "expected": {
-        "candidateDigest": "0xdf7d34be3a7cba9df9ffb6658ae9c4f0242cddb1535aa7697ac9160d29bda743",
+        "candidateDigest": "0x46a63fc1e1a1684c74b242ebff292cf6432fb1358e39b186231b07374bad28d9",
         "decision": "PASS",
         "mandateDigest": "0x9f2be5a9f9ce374a1a9f7a321680ebb7683b9ec0c6cbd8f1cfed604f5b3ddc58",
         "reasonCodes": [],
-        "receiptDigest": "0x6a6059503ba55a5e4e5a3898e17aaeaff1b885fb21e88902bfe979a6be81a3b9",
+        "receiptDigest": "0x1b23400b30fce5def146023633fc5e0bfbfe124c87395afc1953a6dd1e0ec0ab",
         "trustedStateDigest": "0x28b0571c359e77e5949c91df2cc31bdb752e442bc3ab85cd92d4cc91b5ccd820"
       }
     },
@@ -5061,6 +5064,8 @@
           },
           "chain": "eip155:4663",
           "corporateActionEpoch": "1790035834",
+          "evaluationStateDigest": "0x1e6bec7724135bdc90560807212867c920979ae425ddeaff603e8bd3526b9b96",
+          "evaluationStateId": "mainnet-qqq-pass.state",
           "executionPrice": {
             "atoms": "740688704653151053422",
             "decimals": 18,
@@ -5083,12 +5088,11 @@
             "decimals": 18,
             "unit": "TOKEN"
           },
-          "referenceStateDigest": "0x1e6bec7724135bdc90560807212867c920979ae425ddeaff603e8bd3526b9b96",
-          "referenceStateId": "mainnet-qqq-pass.state",
+          "registrySnapshotDigest": "0x8a016496f139b28391e47da1ee7d2a4b57a31a3cf976183a78e965df5776e8a8",
           "representationId": "eip155:4663/erc20:0xd5f3879160bc7c32ebb4dc785f8a4f505888de68",
           "side": "BUY",
           "venue": "venue.robinhood.replay",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1790289408"
@@ -5222,11 +5226,11 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x73bcb68373966ab0aa7f763d613e7fcc0f81e9a751c33acd79d8aefda2f55340",
+        "candidateDigest": "0x18b0dfe761aab99da743105305fb19923955d2696cddc0212dd14d88513a1d64",
         "decision": "PASS",
         "mandateDigest": "0x7e5d9a21e4d1ec778d07718d5f6a1f3c9e4d8aff4a335698eab9f955becc0cb2",
         "reasonCodes": [],
-        "receiptDigest": "0x727e96b3b72742c1c4c88b97360bb8ec418411fb8357185991107ce105aaab00",
+        "receiptDigest": "0x7b9b935e246503f07f0e6857a7c729949f4ceb20416323eb1bf1dedc9911af66",
         "trustedStateDigest": "0x1e6bec7724135bdc90560807212867c920979ae425ddeaff603e8bd3526b9b96"
       }
     },
@@ -6367,6 +6371,8 @@
           },
           "chain": "eip155:4663",
           "corporateActionEpoch": "1782999000",
+          "evaluationStateDigest": "0x7a0f6a36d76c14831e34611253273a7deb98dcc20854c240326d42b42d44e437",
+          "evaluationStateId": "mainnet-crwd-pass.state",
           "executionPrice": {
             "atoms": "1039120000000000000000",
             "decimals": 18,
@@ -6389,12 +6395,11 @@
             "decimals": 18,
             "unit": "TOKEN"
           },
-          "referenceStateDigest": "0x7a0f6a36d76c14831e34611253273a7deb98dcc20854c240326d42b42d44e437",
-          "referenceStateId": "mainnet-crwd-pass.state",
+          "registrySnapshotDigest": "0x8a016496f139b28391e47da1ee7d2a4b57a31a3cf976183a78e965df5776e8a8",
           "representationId": "eip155:4663/erc20:0xea72ecca2d0f6bfa1394dbbcff85b52cd4233931",
           "side": "BUY",
           "venue": "venue.robinhood.replay",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1790289408"
@@ -6528,11 +6533,11 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x0caf649f316ec6d409f4066a9a329faaf48c98e12761adc3882f7f01aa998f82",
+        "candidateDigest": "0x99f7193cf66f88546c583e8cc6e53ae2e7a544d6a7a20da0d0f58cb7d17aa81d",
         "decision": "PASS",
         "mandateDigest": "0xad89d09b9f7359383ba9b2bb3c64c5d9b78f8807b9e3b476cfe86bf5d5f05066",
         "reasonCodes": [],
-        "receiptDigest": "0x1ec90e520262ee561f095c366af5c2560242b51521f9671b88733f13c2f146c7",
+        "receiptDigest": "0xffda492c4e3b9e408dd317f10ddad3ace01a6129e310d3451f530af130d8d442",
         "trustedStateDigest": "0x7a0f6a36d76c14831e34611253273a7deb98dcc20854c240326d42b42d44e437"
       }
     },
@@ -7673,6 +7678,8 @@
           },
           "chain": "eip155:4663",
           "corporateActionEpoch": "1789139430",
+          "evaluationStateDigest": "0x472b895a6a1008744e928c02db672c42866dd0d0fb47a3df341ce6e494437467",
+          "evaluationStateId": "mainnet-msft-pass.state",
           "executionPrice": {
             "atoms": "497005154839859122915",
             "decimals": 18,
@@ -7695,12 +7702,11 @@
             "decimals": 18,
             "unit": "TOKEN"
           },
-          "referenceStateDigest": "0x472b895a6a1008744e928c02db672c42866dd0d0fb47a3df341ce6e494437467",
-          "referenceStateId": "mainnet-msft-pass.state",
+          "registrySnapshotDigest": "0x8a016496f139b28391e47da1ee7d2a4b57a31a3cf976183a78e965df5776e8a8",
           "representationId": "eip155:4663/erc20:0xe93237c50d904957cf27e7b1133b510c669c2e74",
           "side": "BUY",
           "venue": "venue.robinhood.replay",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1790289408"
@@ -7834,11 +7840,11 @@
         }
       },
       "expected": {
-        "candidateDigest": "0xe551d9f5ad64cb946fe08db26a97e77b74be7b4abc9c8badc1d79e005be73166",
+        "candidateDigest": "0x0db56e8e01a544b8896ffb8c5ab07de5e847f0aa4db15d179cd4a188ec267e8f",
         "decision": "PASS",
         "mandateDigest": "0x0c96c7a00f23869056d109c2b3dc6a31e5981c22849b33925cf5e7a09bacb5ce",
         "reasonCodes": [],
-        "receiptDigest": "0xc467b4ae05e1d3c780f7ff776e9af96658ac05f839172750c8647665e29dd874",
+        "receiptDigest": "0xd070151fa200656f42eb783c2faf8e8c1bf1cef624aa2478839773e2d359667e",
         "trustedStateDigest": "0x472b895a6a1008744e928c02db672c42866dd0d0fb47a3df341ce6e494437467"
       }
     },
@@ -8979,6 +8985,8 @@
           },
           "chain": "eip155:4663",
           "corporateActionEpoch": "1786720366",
+          "evaluationStateDigest": "0xa6272cdd422153480dadd9bff427d8931e28e1c3527e5bafcecc29e579fa8cec",
+          "evaluationStateId": "mainnet-aapl-stale.state",
           "executionPrice": {
             "atoms": "336190202900527058496",
             "decimals": 18,
@@ -9001,12 +9009,11 @@
             "decimals": 18,
             "unit": "TOKEN"
           },
-          "referenceStateDigest": "0xa6272cdd422153480dadd9bff427d8931e28e1c3527e5bafcecc29e579fa8cec",
-          "referenceStateId": "mainnet-aapl-stale.state",
+          "registrySnapshotDigest": "0x8a016496f139b28391e47da1ee7d2a4b57a31a3cf976183a78e965df5776e8a8",
           "representationId": "eip155:4663/erc20:0xaf3d76f1834a1d425780943c99ea8a608f8a93f9",
           "side": "BUY",
           "venue": "venue.robinhood.replay",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1790289469"
@@ -9140,13 +9147,13 @@
         }
       },
       "expected": {
-        "candidateDigest": "0xa8b4c8e756aa276f28c4554071e1c5dc5224dfbf7d8358c42c3bff395247ce83",
+        "candidateDigest": "0xe1ac49e1637818cbb22f5f42f7e68f2a756caf47b84c4c4a4169b0586130811e",
         "decision": "REJECT",
         "mandateDigest": "0x444e3c2e6957b05c334b0a0e69bc02260cd9c2b71503418d96bf17fd8bf8e8fe",
         "reasonCodes": [
           "PRICE_STATE_STALE"
         ],
-        "receiptDigest": "0x19213417b538a163d321e6ef5f81714263c9e3561323d8360672646b3ef6769a",
+        "receiptDigest": "0x77bc169e958c418c3633829eae0ffe35c240f5950a314f4617c5afa25c9fda96",
         "trustedStateDigest": "0xa6272cdd422153480dadd9bff427d8931e28e1c3527e5bafcecc29e579fa8cec"
       }
     },
@@ -10287,6 +10294,8 @@
           },
           "chain": "eip155:4663",
           "corporateActionEpoch": "1788998430",
+          "evaluationStateDigest": "0x455cf0790bd98011cfc75e2a6f52c79f8a7fad1eb01fc915f7b9b1dceed317c6",
+          "evaluationStateId": "synthetic-nvda-halt.state",
           "executionPrice": {
             "atoms": "224153620149693960668",
             "decimals": 18,
@@ -10309,12 +10318,11 @@
             "decimals": 18,
             "unit": "TOKEN"
           },
-          "referenceStateDigest": "0x455cf0790bd98011cfc75e2a6f52c79f8a7fad1eb01fc915f7b9b1dceed317c6",
-          "referenceStateId": "synthetic-nvda-halt.state",
+          "registrySnapshotDigest": "0x8a016496f139b28391e47da1ee7d2a4b57a31a3cf976183a78e965df5776e8a8",
           "representationId": "eip155:4663/erc20:0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec",
           "side": "BUY",
           "venue": "venue.robinhood.replay",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1790289408"
@@ -10448,13 +10456,13 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x877fe638743b02cb89db119c3c5fe55f3e16e3895a41714e49afafae46320516",
+        "candidateDigest": "0xa9d708f327bd74043c36ac1ba84e1cdce4ecb7e19e0aedca2364074b7a745852",
         "decision": "REJECT",
         "mandateDigest": "0x40196864760ad8503d09b5d325c329268e3047c7ff83553acb518756746e0704",
         "reasonCodes": [
           "TRADING_HALTED"
         ],
-        "receiptDigest": "0xa7f0e1cbf6653f157514eacc7003917fcf0e467673dcc51f42df746d3cd045a1",
+        "receiptDigest": "0x3b32669bbb7d57c05da107f40ee1c6c17194aec39cb2ee01f24a15ca0c4b6834",
         "trustedStateDigest": "0x455cf0790bd98011cfc75e2a6f52c79f8a7fad1eb01fc915f7b9b1dceed317c6"
       }
     },
@@ -11597,6 +11605,8 @@
           },
           "chain": "eip155:4663",
           "corporateActionEpoch": "0",
+          "evaluationStateDigest": "0x18356e2b242d236c35cfe7d2798161d716e90f4715a5c6ce3097452878b3eec7",
+          "evaluationStateId": "synthetic-tsla-inactive.state",
           "executionPrice": {
             "atoms": "377780000000000000000",
             "decimals": 18,
@@ -11619,12 +11629,11 @@
             "decimals": 18,
             "unit": "TOKEN"
           },
-          "referenceStateDigest": "0x18356e2b242d236c35cfe7d2798161d716e90f4715a5c6ce3097452878b3eec7",
-          "referenceStateId": "synthetic-tsla-inactive.state",
+          "registrySnapshotDigest": "0x951f426043c2bf158250f1a194c81c61bcf1c1e9cdf3b4048408d1b9fa28d1bd",
           "representationId": "eip155:4663/erc20:0x322f0929c4625ed5bad873c95208d54e1c003b2d",
           "side": "BUY",
           "venue": "venue.robinhood.replay",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1790289408"
@@ -11758,13 +11767,13 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x87d53d882cf76b1668fd727957530718b958f94a78b84ead94b190778c0a22f1",
+        "candidateDigest": "0x42834bf739ac0ce6238d986731d686aca5ee3e00ca7a644c7868ba540bfde463",
         "decision": "REJECT",
         "mandateDigest": "0x15f0a483ade09455ae33f14125fa226b66c0c1fa4675dff439b9ca4443b57bae",
         "reasonCodes": [
           "REPRESENTATION_INACTIVE"
         ],
-        "receiptDigest": "0xee0388f401cfd169770f09dc2a8988ca63dc1ca11889fa79bd9c5b99d51eaa34",
+        "receiptDigest": "0x4c6e291aed9cd0a1ee66f7e4c3f2de3832631ad886e88316d69e81c9e8d37c78",
         "trustedStateDigest": "0x18356e2b242d236c35cfe7d2798161d716e90f4715a5c6ce3097452878b3eec7"
       }
     },
@@ -12905,6 +12914,8 @@
           },
           "chain": "eip155:4663",
           "corporateActionEpoch": "1782999000",
+          "evaluationStateDigest": "0xc0efcbb954a71612af8d9c5a08366decfb8f61ff58baa6b20af068f62b3f86d3",
+          "evaluationStateId": "mainnet-crwd-old-epoch.state",
           "executionPrice": {
             "atoms": "1039120000000000000000",
             "decimals": 18,
@@ -12927,12 +12938,11 @@
             "decimals": 18,
             "unit": "TOKEN"
           },
-          "referenceStateDigest": "0xc0efcbb954a71612af8d9c5a08366decfb8f61ff58baa6b20af068f62b3f86d3",
-          "referenceStateId": "mainnet-crwd-old-epoch.state",
+          "registrySnapshotDigest": "0x8a016496f139b28391e47da1ee7d2a4b57a31a3cf976183a78e965df5776e8a8",
           "representationId": "eip155:4663/erc20:0xea72ecca2d0f6bfa1394dbbcff85b52cd4233931",
           "side": "BUY",
           "venue": "venue.robinhood.replay",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1790289408"
@@ -13066,13 +13076,13 @@
         }
       },
       "expected": {
-        "candidateDigest": "0xcf04dea700b7504eacf13e01afb4a258328c51eddf3be170f3eb4a45d02790be",
+        "candidateDigest": "0x57c1cb058c2a8d3b35eb112c3d6633d6d1b9113d9f180312261b32372c9120a9",
         "decision": "REJECT",
         "mandateDigest": "0x818c517df075698ad121dda572ed1572e4149168ae5c7c6f67641d521f84c32a",
         "reasonCodes": [
           "CORPORATE_ACTION_STATE_CHANGED"
         ],
-        "receiptDigest": "0x725fa6eddd1ee20f16307776b8acb5055288caa2ca00cd363e83ef253ea7315d",
+        "receiptDigest": "0x7fc45e901733a3bb8b70b78b39a5f70d5c61cc1897163fd568b85f35972e0fda",
         "trustedStateDigest": "0xc0efcbb954a71612af8d9c5a08366decfb8f61ff58baa6b20af068f62b3f86d3"
       }
     },
@@ -14215,6 +14225,8 @@
           },
           "chain": "eip155:4663",
           "corporateActionEpoch": "1788998430",
+          "evaluationStateDigest": "0xd6830d47ff1d94ea12a46690428047d02b30dd2cc8c28423a7c951c04bde6674",
+          "evaluationStateId": "adversarial-nvda-same-symbol.state",
           "executionPrice": {
             "atoms": "224153620149693960668",
             "decimals": 18,
@@ -14237,12 +14249,11 @@
             "decimals": 18,
             "unit": "TOKEN"
           },
-          "referenceStateDigest": "0xd6830d47ff1d94ea12a46690428047d02b30dd2cc8c28423a7c951c04bde6674",
-          "referenceStateId": "adversarial-nvda-same-symbol.state",
+          "registrySnapshotDigest": "0x8a016496f139b28391e47da1ee7d2a4b57a31a3cf976183a78e965df5776e8a8",
           "representationId": "eip155:4663/erc20:0x1111111111111111111111111111111111111111",
           "side": "BUY",
           "venue": "venue.robinhood.replay",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1790289408"
@@ -14376,13 +14387,13 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x32c5dbf06f77906be28a76024a7243d6453a16c9dce06ae9b4ef6d21feaed339",
+        "candidateDigest": "0xd89f90c6bee29afdd621d5b755fee3a3fddd96ddb50546f3d2674bb840f2faeb",
         "decision": "REJECT",
         "mandateDigest": "0xe72d3c9ac3549ae5d18af0db0e0dbbe65a58eebb0e84763b6abad4ccbb23bddb",
         "reasonCodes": [
           "REPRESENTATION_UNKNOWN"
         ],
-        "receiptDigest": "0x2110f44cff03d0e6a71f7eb193658a0ae3b9e37e01fa11fa4f47a90b3c09b84a",
+        "receiptDigest": "0xf7c5718dabcca13a404d324b3080561d10fed5161b0880d92b14140b3572eda7",
         "trustedStateDigest": "0xd6830d47ff1d94ea12a46690428047d02b30dd2cc8c28423a7c951c04bde6674"
       }
     }

@@ -148,12 +148,22 @@ export function evaluateRoutes(request: RouteRequest, verifier: Verifier = verif
   // inputs describing the same representations, and before Phase 5R nothing
   // required them to have come from the same snapshot (finding F-7). The
   // admissibility pass and the kernel's semantics checks could therefore read
-  // two different registries. A state that declares its provenance must agree
-  // with the registry actually being evaluated; a state that declares none is
-  // accepted, because the binding is opt-in until every adapter emits it.
+  // two different registries.
+  //
+  // The binding is no longer opt-in (Phase 5R.1, finding N-8). It used to accept
+  // a state that declared no snapshot, on the grounds that the whole-state digest
+  // on the candidate covered it incidentally. Removing that digest equality
+  // (ADR 0017) removed the incidental cover, so an undeclared snapshot is now an
+  // unestablished binding, and unestablished fails closed.
   const snapshotDigest = registrySnapshotDigest(request.registry.snapshot);
   const declared = trustedState.value.registrySnapshotDigest;
-  if (declared !== null && declared !== snapshotDigest) {
+  if (declared === null) {
+    return {
+      status: 'INVALID_INPUT',
+      errors: [{ code: 'REGISTRY_SNAPSHOT_UNKNOWN', detail: { input: 'trustedMarketState', evaluated: snapshotDigest } }],
+    };
+  }
+  if (declared !== snapshotDigest) {
     return {
       status: 'INVALID_INPUT',
       errors: [{ code: 'REGISTRY_SNAPSHOT_MISMATCH', detail: { declared, evaluated: snapshotDigest } }],
@@ -188,6 +198,7 @@ export function evaluateRoutes(request: RouteRequest, verifier: Verifier = verif
       trustedCost: costs.value.get(quote.routeId),
       requestedQuantity: requestedQuantity.value,
       nowUnixSeconds: clock.value.nowUnixSeconds,
+      registrySnapshotDigest: snapshotDigest,
     });
     if (!built.ok) {
       outcomes.push(excluded(quote.routeId, built.exclusions));
@@ -297,8 +308,9 @@ export type ResolvedHandoff =
   | { readonly ok: false; readonly errors: readonly RouteExclusion[] };
 
 /**
- * Parse the handoff inputs and enforce the one pipeline invariant the router
- * can enforce: **time does not run backwards between stages**.
+ * Parse the handoff inputs and enforce the two pipeline invariants the router can
+ * enforce: **time does not run backwards between stages**, and **the registry
+ * snapshot does not change under an already-ranked candidate**.
  *
  * The kernel stays pure and accepts whatever instant it is given, which is what
  * makes a verdict reproducible. It sees one instant per call and cannot know it
@@ -330,6 +342,36 @@ export function resolveHandoff(handoff: HandoffInputs | undefined, context: Rout
       }],
     };
   }
+
+  // The second pipeline invariant, and the one the removal of whole-state digest
+  // equality made load-bearing (finding N-8): **the registry does not change
+  // under a candidate.** Fresh dynamic state is the point of the handoff; a fresh
+  // *registry* is not, because the admissible set was computed against the old
+  // one. The kernel repeats this comparison against the candidate's own
+  // commitment; the router states it here as well so the refusal says "reroute"
+  // rather than arriving as one rejected candidate among several.
+  //
+  // There is no compatibility proof in this phase, so this fails closed. A later
+  // phase may add one — a proof that the entries a candidate depends on are
+  // unchanged across two snapshots — and this is where it would go.
+  const evaluatedSnapshot = registrySnapshotDigest(context.registry.snapshot);
+  const declaredSnapshot = state.value.registrySnapshotDigest;
+  if (declaredSnapshot === null) {
+    return {
+      ok: false,
+      errors: [{ code: 'REGISTRY_SNAPSHOT_UNKNOWN', detail: { input: 'handoff.trustedMarketState', evaluated: evaluatedSnapshot } }],
+    };
+  }
+  if (declaredSnapshot !== evaluatedSnapshot) {
+    return {
+      ok: false,
+      errors: [{
+        code: 'REGISTRY_SNAPSHOT_MISMATCH',
+        detail: { input: 'handoff.trustedMarketState', declared: declaredSnapshot, evaluated: evaluatedSnapshot },
+      }],
+    };
+  }
+
   return { ok: true, trustedState: state.value, clock: clock.value };
 }
 

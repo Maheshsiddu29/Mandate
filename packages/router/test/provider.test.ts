@@ -76,11 +76,12 @@ describe('routing-candidate digest', () => {
     assert.equal(parsed.ok, true);
     if (!parsed.ok) return;
     const executionCandidate = parseCandidate({
-      version: 2, representationId: REP, canonicalAsset: ASSET, issuer: 'issuer.fixture',
+      version: 3, representationId: REP, canonicalAsset: ASSET, issuer: 'issuer.fixture',
       chain: 'eip155:4663', venue: 'venue.fixture', side: 'BUY', agent: AGENT,
       quantity: parsed.value.quantity, executionPrice: parsed.value.executionPrice,
       notional: parsed.value.notional, feeTotal: ZERO,
-      referenceStateId: 'state.fixture', referenceStateDigest: '0x' + '11'.repeat(32),
+      evaluationStateId: 'state.fixture', evaluationStateDigest: '0x' + '11'.repeat(32),
+      registrySnapshotDigest: '0x' + '22'.repeat(32),
       corporateActionEpoch: 0n,
     });
     assert.equal(executionCandidate.ok, true);

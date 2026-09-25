@@ -1,5 +1,5 @@
 import { parseAmount, parseIdentifier, parseUnixSeconds } from '@mandate/kernel';
-import type { RouteCosts, RouteExclusion, TrustedRouteCost } from './types.ts';
+import { MAX_TRUSTED_ROUTE_COSTS, type RouteCosts, type RouteExclusion, type TrustedRouteCost } from './types.ts';
 
 type ParseResult<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: RouteExclusion };
 
@@ -11,6 +11,18 @@ function nullableAmount(raw: unknown): RouteCosts['venueFee'] | undefined {
 
 export function parseTrustedRouteCosts(raw: unknown): ParseResult<ReadonlyMap<string, TrustedRouteCost>> {
   if (!Array.isArray(raw)) return { ok: false, error: { code: 'INPUT_INVALID', detail: { input: 'trustedCosts' } } };
+  // Bounded before iteration, like every other externally sized collection in the
+  // system: an oversized input is a typed resource-limit refusal rather than work
+  // performed and then discarded (finding N-9).
+  if (raw.length > MAX_TRUSTED_ROUTE_COSTS) {
+    return {
+      ok: false,
+      error: {
+        code: 'RESOURCE_LIMIT_EXCEEDED',
+        detail: { input: 'trustedCosts', limit: String(MAX_TRUSTED_ROUTE_COSTS), observed: String(raw.length) },
+      },
+    };
+  }
   const result = new Map<string, TrustedRouteCost>();
   for (let index = 0; index < raw.length; index += 1) {
     const item = raw[index];

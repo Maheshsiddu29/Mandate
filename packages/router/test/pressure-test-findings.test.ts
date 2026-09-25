@@ -21,6 +21,7 @@ import {
   ROUTER_MANDATE,
   ROUTER_REGISTRY_INPUT,
   ROUTER_REQUESTED_QUANTITY,
+  ROUTER_REGISTRY_SNAPSHOT_DIGEST,
   ROUTER_STATE,
   haltedRouterState,
   pausedRepresentationState,
@@ -67,6 +68,7 @@ test('F-2 REGRESSION: the router hands the fee total to the kernel and does not 
     trustedCost: trustedCost(quote),
     requestedQuantity: ROUTER_REQUESTED_QUANTITY,
     nowUnixSeconds: ROUTER_CLOCK,
+    registrySnapshotDigest: ROUTER_REGISTRY_SNAPSHOT_DIGEST,
   });
   assert.ok(built.ok, 'construction is not authorization');
   assert.equal(built.candidate.executionCandidate.feeTotal.atoms, ROUTER_MANDATE.maxNotional.atoms);

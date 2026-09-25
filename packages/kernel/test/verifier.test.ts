@@ -31,6 +31,7 @@ import {
   NOT_BEFORE,
   NOW,
   OTHER_AGENT,
+  OTHER_REGISTRY_SNAPSHOT_DIGEST,
   OTHER_CHAIN,
   OTHER_VENUE,
   SYNTHETIC_REPRESENTATION_ID,
@@ -280,8 +281,42 @@ test('a candidate built against a different epoch rejects', () => {
   assertRejects({ candidate: { corporateActionEpoch: EPOCH + 5n } }, 'CANDIDATE_STATE_MISMATCH');
 });
 
-test('a candidate built against a different state snapshot rejects', () => {
-  assertRejects({ candidate: { referenceStateId: 'snapshot.9999' } }, 'CANDIDATE_STATE_MISMATCH');
+test('a candidate built against a different registry snapshot rejects', () => {
+  assertRejects(
+    { candidate: { registrySnapshotDigest: OTHER_REGISTRY_SNAPSHOT_DIGEST } },
+    'REGISTRY_SNAPSHOT_MISMATCH',
+  );
+});
+
+test('a trusted state that declares no registry snapshot cannot establish the binding', () => {
+  assertRejects({ state: { registrySnapshotDigest: null } }, 'REGISTRY_SNAPSHOT_UNKNOWN');
+});
+
+/**
+ * Evaluation-state provenance is committed, not compared (ADR 0017).
+ *
+ * This is the property that makes a fresh handoff verification possible at all:
+ * the verifier sees one instant per call and cannot know whether it is the
+ * evaluation or the re-verification, so requiring the candidate's evaluation
+ * digest to equal the digest of the state in hand would make every honest
+ * handoff fail. The digest is still committed — it changes the candidate digest,
+ * asserted below — so an auditor can still identify the world a candidate came
+ * out of.
+ */
+test('evaluation-state provenance does not decide the verdict, and is still committed', () => {
+  // A candidate whose evaluation digest names some other world still passes,
+  // because every fact that matters is re-checked against the state in hand.
+  const foreignProvenance = verify(buildWorld({
+    candidate: { evaluationStateDigest: '0x' + 'ab'.repeat(32), evaluationStateId: 'snapshot.9999' },
+    unboundState: true,
+  }));
+  assert.equal(foreignProvenance.decision, Decision.PASS, foreignProvenance.reasonCodes.join(', '));
+
+  // And it is not ignored: it is inside the candidate digest, so the receipt
+
+  // distinguishes the two candidates.
+  const bound = verify(buildWorld({}));
+  assert.notEqual(foreignProvenance.candidateDigest, bound.candidateDigest);
 });
 
 test('a unit mismatch rejects rather than being converted', () => {
@@ -622,15 +657,16 @@ test('every reason code the verifier can emit is reachable by a test in this sui
     { signDomain: { ...TEST_DOMAIN, chainId: 1n } },
     { authorization: { scheme: 'eip712-secp256k1', signature: 'nope' } },
     { authorization: { scheme: 'ed25519-solana' } },
-    { candidate: { referenceStateId: 'snapshot.9999' } },
     // --- Phase 5R: the codes the remediation added ---------------------------
-    { candidate: { referenceStateDigest: '0x' + 'ab'.repeat(32) }, unboundState: true },
     { candidate: { feeTotal: { unit: 'USD', decimals: 2, atoms: 1_000n } } },
     { mandate: { side: 'SELL', economicLimit: { unit: 'USD', decimals: 2, atoms: 99_999n } }, candidate: { side: 'SELL' } },
     { mandate: { side: 'SELL' }, candidate: { side: 'SELL', feeTotal: { unit: 'USD', decimals: 2, atoms: 100_000n } } },
     { candidate: { representationId: FOREIGN_CHAIN_REPRESENTATION_ID }, representations: [representationInput({ value: { representationId: FOREIGN_CHAIN_REPRESENTATION_ID } })] },
     { state: { replay: { value: { status: 'QUARANTINED' } } } },
     { state: { representations: oversizedRepresentations() } },
+    // --- Phase 5R.1: the structural state binding ----------------------------
+    { candidate: { registrySnapshotDigest: OTHER_REGISTRY_SNAPSHOT_DIGEST } },
+    { state: { registrySnapshotDigest: null } },
   ];
   for (const w of worlds) for (const c of verify(buildWorld(w)).reasonCodes) emitted.add(c);
 

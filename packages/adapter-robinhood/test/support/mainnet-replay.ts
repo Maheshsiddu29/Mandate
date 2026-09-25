@@ -215,8 +215,9 @@ export function buildReplayWorld(spec: ReplaySpec): BuiltReplayWorld {
       value: { mandateDigest: digest, status: 'UNUSED' },
     },
   };
-  // Schema v2 binds a candidate to the content of the state it was built
-  // against, so the world computes that digest rather than naming a snapshot.
+  // Schema v3 records the evaluation state's digest on the candidate for audit
+  // and binds the registry snapshot for equality (ADR 0017), so the world
+  // computes both rather than naming a snapshot.
   const parsedState = parseTrustedState(trustedState);
   if (!parsedState.ok) throw new Error(`replay state failed: ${parsedState.error}`);
   const stateDigest = trustedStateDigest(parsedState.value);
@@ -225,7 +226,7 @@ export function buildReplayWorld(spec: ReplaySpec): BuiltReplayWorld {
     mandate: mandateRaw,
     authorization: envelopeFor(digest, TEST_PRIVATE_KEY, MAINNET_REPLAY_DOMAIN),
     candidate: {
-      version: 2,
+      version: 3,
       representationId: candidateRepresentation,
       canonicalAsset: mapped.identity.value,
       issuer: ROBINHOOD_ISSUER_ID,
@@ -237,8 +238,9 @@ export function buildReplayWorld(spec: ReplaySpec): BuiltReplayWorld {
       executionPrice: tokenAsk.value,
       notional: { unit: 'USD', decimals: 18, atoms: tokenAsk.value.atoms },
       feeTotal: { unit: 'USD', decimals: 18, atoms: 0n },
-      referenceStateId: stateId,
-      referenceStateDigest: stateDigest,
+      evaluationStateId: stateId,
+      evaluationStateDigest: stateDigest,
+      registrySnapshotDigest: registrySnapshotDigest(opened.value.snapshot),
       corporateActionEpoch: currentEpoch,
     },
     trustedState,

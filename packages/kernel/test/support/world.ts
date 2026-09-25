@@ -25,25 +25,30 @@ export interface WorldOverrides {
   /** Replace the whole authorization, for malformed-envelope cases. */
   readonly authorization?: unknown;
   /**
-   * Leave the candidate's `referenceStateDigest` as the placeholder instead of
-   * binding it to the assembled state, for tests about the binding itself.
+   * Leave the candidate's `evaluationStateDigest` as the placeholder instead of
+   * binding it to the assembled state.
+   *
+   * Since schema v3 this changes the candidate digest and nothing about the
+   * verdict, which is the point: evaluation-state provenance is committed for
+   * audit and is not a predicate about the world being verified (ADR 0017).
    */
   readonly unboundState?: boolean;
 }
 
 /**
- * Bind a raw candidate to the state the world actually assembled.
+ * Record, on the candidate, the digest of the state the world actually assembled.
  *
- * Schema v2 binds a candidate to the *content* of its reference state, so every
- * world has to compute that digest rather than name a snapshot. A test that
- * overrode the digest explicitly keeps its override.
+ * Provenance rather than a binding: schema v3 commits the evaluation-state digest
+ * so the construction is auditable, and compares only the registry snapshot
+ * digest for equality (ADR 0017). A test that overrode the digest keeps its
+ * override.
  */
 function bindState(candidate: Json, state: Json, unbound: boolean | undefined): Json {
   if (unbound === true) return candidate;
-  if (candidate['referenceStateDigest'] !== PLACEHOLDER_STATE_DIGEST) return candidate;
+  if (candidate['evaluationStateDigest'] !== PLACEHOLDER_STATE_DIGEST) return candidate;
   const parsed = parseTrustedState(state);
   if (!parsed.ok) return candidate;
-  return { ...candidate, referenceStateDigest: trustedStateDigest(parsed.value) };
+  return { ...candidate, evaluationStateDigest: trustedStateDigest(parsed.value) };
 }
 
 /**

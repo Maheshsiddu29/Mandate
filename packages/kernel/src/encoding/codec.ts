@@ -43,7 +43,7 @@ import { TrustClass, type Observed, type Provenance } from '../trust.ts';
 
 export const DomainTag = {
   MANDATE: 'MANDATE.MANDATE.V2',
-  CANDIDATE: 'MANDATE.CANDIDATE.V2',
+  CANDIDATE: 'MANDATE.CANDIDATE.V3',
   STATE: 'MANDATE.STATE.V2',
   AUTHZ: 'MANDATE.AUTHZ.V1',
   RECEIPT: 'MANDATE.RECEIPT.V1',
@@ -250,8 +250,9 @@ export function encodeCandidate(c: ExecutionCandidate): Uint8Array {
   writePrice(w, c.executionPrice);
   writeAmount(w, c.notional);
   writeAmount(w, c.feeTotal);
-  w.str(c.referenceStateId);
-  w.bytes32(bytes32ToBytes(c.referenceStateDigest));
+  w.str(c.evaluationStateId);
+  w.bytes32(bytes32ToBytes(c.evaluationStateDigest));
+  w.bytes32(bytes32ToBytes(c.registrySnapshotDigest));
   w.u64(c.corporateActionEpoch);
   return w.finish();
 }
@@ -285,8 +286,9 @@ export function decodeCandidate(bytes: Uint8Array): Result<ExecutionCandidate, R
   const feeUnit = r.str();
   const feeDecimals = r.u8();
   const feeAtoms = r.u256();
-  const referenceStateId = r.str();
-  const referenceStateDigest = r.bytes32();
+  const evaluationStateId = r.str();
+  const evaluationStateDigest = r.bytes32();
+  const registrySnapshotDigest = r.bytes32();
   const epoch = r.u64();
 
   if (
@@ -297,8 +299,9 @@ export function decodeCandidate(bytes: Uint8Array): Result<ExecutionCandidate, R
     priceNum === undefined || priceDen === undefined || priceDecimals === undefined ||
     priceAtoms === undefined || notionalUnit === undefined || notionalDecimals === undefined ||
     notionalAtoms === undefined || feeUnit === undefined || feeDecimals === undefined ||
-    feeAtoms === undefined || referenceStateId === undefined ||
-    referenceStateDigest === undefined || epoch === undefined
+    feeAtoms === undefined || evaluationStateId === undefined ||
+    evaluationStateDigest === undefined || registrySnapshotDigest === undefined ||
+    epoch === undefined
   ) {
     return err('MALFORMED_CANDIDATE');
   }
@@ -325,8 +328,9 @@ export function decodeCandidate(bytes: Uint8Array): Result<ExecutionCandidate, R
     },
     notional: { unit: notionalUnit, decimals: Number(notionalDecimals), atoms: notionalAtoms },
     feeTotal: { unit: feeUnit, decimals: Number(feeDecimals), atoms: feeAtoms },
-    referenceStateId,
-    referenceStateDigest: bytesToHex(referenceStateDigest),
+    evaluationStateId,
+    evaluationStateDigest: bytesToHex(evaluationStateDigest),
+    registrySnapshotDigest: bytesToHex(registrySnapshotDigest),
     corporateActionEpoch: epoch,
   });
 }

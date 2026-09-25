@@ -16,6 +16,21 @@ export const ROUTING_RECEIPT_SCHEMA_VERSION = 1;
 export const MAX_ROUTE_CANDIDATES = 256;
 export const MAX_ROUTE_STEPS = 8;
 
+/**
+ * Bound on the independently established cost set (finding N-9).
+ *
+ * Derived from the architecture rather than picked: a `TrustedRouteCost` is keyed
+ * by `routeId`, one per route quote, duplicate route ids are refused, and the
+ * route set itself is bounded at `MAX_ROUTE_CANDIDATES`. So the largest cost set
+ * that can describe a meaningful routing request has exactly
+ * `MAX_ROUTE_CANDIDATES` entries; anything beyond that is either duplicate keys
+ * or costs for routes that were never offered.
+ *
+ * It is the same number deliberately, and it is defined in terms of the route
+ * bound so the two cannot drift apart.
+ */
+export const MAX_TRUSTED_ROUTE_COSTS = MAX_ROUTE_CANDIDATES;
+
 export const ProviderClass = {
   RECORDED_REAL: 'RECORDED_REAL',
   SYNTHETIC_TEST: 'SYNTHETIC_TEST',
@@ -132,7 +147,10 @@ export type RoutingReasonCode =
   | 'COST_OVERFLOW'
   | 'COST_STATE_STALE'
   | 'COST_STATE_FUTURE'
-  | 'REGISTRY_SNAPSHOT_MISMATCH'
+  // REGISTRY_SNAPSHOT_MISMATCH and REGISTRY_SNAPSHOT_UNKNOWN are kernel reason
+  // codes (MND-STATE-007/008), reached through `RegistryReasonCode`. They used to
+  // be router-local literals with no definition behind them, which meant a
+  // routing refusal carried a code an integrator could not look up.
   | 'HANDOFF_TIME_REGRESSED'
   | 'HANDOFF_STATE_MISSING'
   | 'QUOTE_STALE'

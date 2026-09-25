@@ -3,7 +3,7 @@
   "verifierVersion": "mandate-kernel/2",
   "encoding": "MCE v2, keccak-256 (docs/adr/0002-canonical-mandate-encoding.md, docs/adr/0014-symmetric-signed-economic-authorization.md)",
   "note": "Integers are decimal strings because JSON has no integer type wide enough. Vectors are self-contained VerifyRequests.",
-  "vectorCount": 67,
+  "vectorCount": 70,
   "vectors": [
     {
       "id": "valid-001",
@@ -36,6 +36,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -58,12 +60,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -158,7 +159,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -197,12 +198,12 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x5c2d9f7e0f5b1a1fd71e22d399e6cf724694264c32ffa6278762a19dad971110",
+        "candidateDigest": "0x648494e1bfdde18490cbd87e648bd17e1b784aa4c6fefa89bdef4935090aa66d",
         "decision": "PASS",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [],
-        "receiptDigest": "0xc18c6500f05f1e20e78c5d7cef54136705cc6632fd3a6c87726a5d08788e53a7",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0x304da1b4e1a99ee6c8525f2f5a65752a07bcebb26376c7659e5514b50a3f9e4d",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
@@ -236,6 +237,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0x620139f44db0930bd8f154e0ab7712dc78bf8f9c2d1e57e6851d8c612a4b5574",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -258,12 +261,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xcef3de8e37fca33f220b2f095366057484f3a47f0bf247f30b67bc68a175c794",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -358,7 +360,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -397,12 +399,12 @@
         }
       },
       "expected": {
-        "candidateDigest": "0xad56415ea739182766a82309e8284470e78609bd504ba3956394a66e1f1afe28",
+        "candidateDigest": "0x3d29e242be8f35db07fe5eb3d32f161f67bcf8f8b00e90e87133482da9a360ab",
         "decision": "PASS",
         "mandateDigest": "0x27f7fc6814e082b1638f8119080c298792910bbba279101a8a3c190f5208755e",
         "reasonCodes": [],
-        "receiptDigest": "0x9da5dae28be7cf6263be1494a5b5fe269f3c49d830cfb7746143b1c22016470b",
-        "trustedStateDigest": "0xcef3de8e37fca33f220b2f095366057484f3a47f0bf247f30b67bc68a175c794"
+        "receiptDigest": "0x96fa7bf46706187b41c00ec5aae135d2dff801fda1079c1eed3a72462774e694",
+        "trustedStateDigest": "0x620139f44db0930bd8f154e0ab7712dc78bf8f9c2d1e57e6851d8c612a4b5574"
       }
     },
     {
@@ -436,6 +438,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xce7e1e3bf19f856e17dd3567b0c8e07157f2d1e9987fad86892822c5331453a3",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -458,12 +462,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0x3d87710b7b3f4e4476713579880241dc4ef4b0ea57eeef7bd76a628e36f89224",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -558,7 +561,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -597,12 +600,12 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x24e328ba6ec86ad6e6941799833dac0b16cdce3e08bf4f4e51b450eb569c8510",
+        "candidateDigest": "0xe132da5638807b25073361a47c0c80d30ba716c03be1629cf067ee8f4ba073e7",
         "decision": "PASS",
         "mandateDigest": "0x669e1909311560c9ac00913724050b412bb13bad40a427538103bf5fdc39bf11",
         "reasonCodes": [],
-        "receiptDigest": "0x4a2dc091a65da45696f19f4f9bb322e4e4e10e21e934235e95cc8a76375a6bce",
-        "trustedStateDigest": "0x3d87710b7b3f4e4476713579880241dc4ef4b0ea57eeef7bd76a628e36f89224"
+        "receiptDigest": "0x079d3c5e960a0fbd70a191189145072bfcfcd35400305cda9e2b1c68b6689d07",
+        "trustedStateDigest": "0xce7e1e3bf19f856e17dd3567b0c8e07157f2d1e9987fad86892822c5331453a3"
       }
     },
     {
@@ -636,6 +639,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -658,12 +663,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -758,7 +762,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -797,14 +801,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0xe1c6a7dd46ff47ee58c24db1afd462693a8ab4e0854827ead0c64c5628abc24f",
+        "candidateDigest": "0x86a019d849b398fa6e8c51fb4e016ecfb8196b46654747b5bbf62f9bf2fecc1f",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "CANONICAL_ASSET_MISMATCH"
         ],
-        "receiptDigest": "0x09968186064af9cd9c3dd44843984a6b527593b08c9377e1c6eb2f4aa27fef39",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0xf62e7251a0a7dd623f7db9b5e270c97009032fc8377bc2d538de3dd4ccee629a",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
@@ -838,6 +842,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xfd921363d2f216cf0626e6b04cde2dec51c4ce680188caf04bae6bf7c121be0d",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -860,12 +866,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xd4e0a756710cd01bde799c7a2c8fb9ed5fdb8d6ea4a480168bcccad908ba4cb5",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -960,7 +965,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -999,14 +1004,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x423f5588ebcd0918cde2194cd7c071a13596f894ebe5ea6ad49cec91c2b127f7",
+        "candidateDigest": "0x64fda80174a1e24e8c48790411af83912c703365cd81fd98db9d4be44de52f5f",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "REPRESENTATION_ASSET_MISMATCH"
         ],
-        "receiptDigest": "0xaeda3af359e95015d9cbe4b66a9cd3dfa6e69799be22ef6a2f7dc8e9834e990d",
-        "trustedStateDigest": "0xd4e0a756710cd01bde799c7a2c8fb9ed5fdb8d6ea4a480168bcccad908ba4cb5"
+        "receiptDigest": "0xaa1ccd79804192509813c67426cfba66efa4bff7be38c91012e59664b350dda6",
+        "trustedStateDigest": "0xfd921363d2f216cf0626e6b04cde2dec51c4ce680188caf04bae6bf7c121be0d"
       }
     },
     {
@@ -1040,6 +1045,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -1062,12 +1069,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xcccccccccccccccccccccccccccccccccccccccc",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -1162,7 +1168,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -1201,14 +1207,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0xf1afdb68187652b137f3783b245d3aed3387c1f8ed2c7a087eb2717d7211ed64",
+        "candidateDigest": "0xded59213457b7915ef349f25eef2bd8c9a7ef1b953e8d903a23018dcf5056b2b",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "REPRESENTATION_UNKNOWN"
         ],
-        "receiptDigest": "0x47812b58a22e493963f5f494798d8f12a45aaded59c4f26c88f3aa1bfbd43ca4",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0xe5953fc64f1a1841066c6f56bb10dc19129f14bdc09badc4ad97aee310558908",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
@@ -1242,6 +1248,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -1264,12 +1272,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -1364,7 +1371,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -1403,14 +1410,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x0c99b5892a47ffb1c13538ddccc10c5ccb695af7a73ec824356bd6458cb4ec56",
+        "candidateDigest": "0x61df5dc9dd8ad56dc76b83296e75abf9c5788cc5c1dd83ec534c54f7e93dd710",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "REPRESENTATION_ATTRIBUTES_MISMATCH"
         ],
-        "receiptDigest": "0x4e0f7b80a9d0bd64a8088c0b207d4fe4cfc7ad759d3af0e801ac76310b7dbcb3",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0xd38be5bf778779c2199d03518c7e8d3a6fa0babf0efb3cdf626d0b910b279b82",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
@@ -1444,6 +1451,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0x90e90a9557c8d4fcfeb289424e31761a1b4a6e73e099c584e6de9ccb8bd5078d",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -1466,12 +1475,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0x5ef8c0d874214c027c85a1dbcf738798efce4e84729f36b6ae105181a7305b48",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -1566,7 +1574,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -1605,14 +1613,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x834344e2f749fb3213f5b3ed978d9db36dcaf159f53f9b2a86a9f9a7ca72443e",
+        "candidateDigest": "0xed25fb0003090da1cf9be59f43a6a339cd24d4fe54d41af1d82eb1d18b6fa468",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "ISSUER_NOT_ALLOWED"
         ],
-        "receiptDigest": "0x4b722dcaa27aa4a546fc9c648089b349712a913ecbdb935ccfcd770d8ae953d1",
-        "trustedStateDigest": "0x5ef8c0d874214c027c85a1dbcf738798efce4e84729f36b6ae105181a7305b48"
+        "receiptDigest": "0xe5efaaa5387207962d59e8fe71331276223a28202ce72d1aed1c5b336f06c38c",
+        "trustedStateDigest": "0x90e90a9557c8d4fcfeb289424e31761a1b4a6e73e099c584e6de9ccb8bd5078d"
       }
     },
     {
@@ -1646,6 +1654,8 @@
           },
           "chain": "eip155:1",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0x99a2790861c3b7a17aa27ebfc99f93227eb02089f8dc2752f622ed2d593ce848",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -1668,12 +1678,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xd036450ec2406b0d25d4f9025dc526188706d3135baa59f61503ef0a60526642",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -1768,7 +1777,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -1807,15 +1816,15 @@
         }
       },
       "expected": {
-        "candidateDigest": "0xe48761b91debb82f8c6d405f42f6d6345bd687a2038ca7e5ac69a42180206781",
+        "candidateDigest": "0x4a9b5e8530a60cf44ba70b447946257bfb58a45d563796f35381b28d30223fc4",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "CHAIN_NOT_ALLOWED",
           "REPRESENTATION_CHAIN_INCONSISTENT"
         ],
-        "receiptDigest": "0xc5a76d39bcf23c0d95b52c85ff7787029daeb65bb48e3df1cd6016839006df82",
-        "trustedStateDigest": "0xd036450ec2406b0d25d4f9025dc526188706d3135baa59f61503ef0a60526642"
+        "receiptDigest": "0x07d9dc2f149666a1afddfb4b2faee97353b6218923ec8838d263b62cdcb1d657",
+        "trustedStateDigest": "0x99a2790861c3b7a17aa27ebfc99f93227eb02089f8dc2752f622ed2d593ce848"
       }
     },
     {
@@ -1849,6 +1858,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -1871,12 +1882,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.omega",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -1971,7 +1981,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -2010,14 +2020,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x4e21cdc5235d0dcfc46c6334b41dd4b7bfb70b7e0e1959090a49218137e09c29",
+        "candidateDigest": "0x554c992b35ca078f6c7a8ef5fcd8f5c1b2f6cc412754441bd523717372f23439",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "VENUE_NOT_ALLOWED"
         ],
-        "receiptDigest": "0x8a3d5c89079f68458809c631faaa7ebb9001169344e2657df628d646d6818aa6",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0x7fb0fdaacba64a1641c5011be100a654baf901741f6fa9e6de767d119e051489",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
@@ -2051,6 +2061,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0x0f1c4e2b78d722440670f9a18b2b4e2a24121e97b6d092b6a79f97261ab2f24f",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -2073,12 +2085,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0x27a665a387e451af49951eff5259051960965b402d98d48b29a8532a6e44735b",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -2173,7 +2184,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -2212,14 +2223,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0xff4ab79071abd885e59b494179eefd38e095ae67d52b5a6a28b4021efbb1ecbb",
+        "candidateDigest": "0x27262c788979023d8f02114fd476cb2d251f7314383dc44d97c2e5c66d1e5acd",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "SYNTHETIC_NOT_ALLOWED"
         ],
-        "receiptDigest": "0xdc2715232cf9db9a16f0cdfbf77e5b449536c282752fbd5cdf3727cdc1b715f3",
-        "trustedStateDigest": "0x27a665a387e451af49951eff5259051960965b402d98d48b29a8532a6e44735b"
+        "receiptDigest": "0x36fda0251ec0e18af556890753566c68364fd3d9fd31abd18e77d32ed2cba9aa",
+        "trustedStateDigest": "0x0f1c4e2b78d722440670f9a18b2b4e2a24121e97b6d092b6a79f97261ab2f24f"
       }
     },
     {
@@ -2253,6 +2264,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0x543d8d300248f43582fb55acd5ce1e90b0d4a256c826163511cdad5a41341944",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -2275,12 +2288,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0x81c1784b9773210de12f6076ecf70d9721e41a85895b02feaa957f5f76a4a450",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -2375,7 +2387,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -2414,14 +2426,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x5eb2b4ce54a83cebafc8db6ab36f12a3f6e8d3c60913d6af1f6d3bd05d27d774",
+        "candidateDigest": "0x29e392e8ea6c14314fb6fcafde4c35e95cc165c093bb028ad8e9fb36bb05fb80",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "REPRESENTATION_METADATA_UNKNOWN"
         ],
-        "receiptDigest": "0x3f1c7b5bbe79b0b22dcae9a123ed1815dd22ff59d1c4628c9e8ff0a0a4c3df31",
-        "trustedStateDigest": "0x81c1784b9773210de12f6076ecf70d9721e41a85895b02feaa957f5f76a4a450"
+        "receiptDigest": "0x3053d28ea5ae42d3ae9b6f8d1373c011191699bd523246b900ad10294a92f432",
+        "trustedStateDigest": "0x543d8d300248f43582fb55acd5ce1e90b0d4a256c826163511cdad5a41341944"
       }
     },
     {
@@ -2455,6 +2467,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -2477,12 +2491,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -2577,7 +2590,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -2616,15 +2629,15 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x6e243db659bcc464e5630eb694386d69c005cdd89038cf3a91ffa13d215141e7",
+        "candidateDigest": "0xe2f09d38bf9db52a2950734956052e2bfdb6959f8b5142c4ba76fa0640fb976a",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "MAX_NOTIONAL_EXCEEDED",
           "TOTAL_DEBIT_EXCEEDED"
         ],
-        "receiptDigest": "0xafc4322c59684c16385635b2616c628df1b6809ed928ed69f1ebe35144abb105",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0xcc8b316dbfda3280ed8f8f5cbfe2b8e859ccefee3b10d1a242f5c83cdcfa7f76",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
@@ -2658,6 +2671,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -2680,12 +2695,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -2780,7 +2794,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -2819,14 +2833,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x2aca3c9691d092d6d9ab09495729cfc977f0b9ae2b0e3593e557dd4f5d28ceee",
+        "candidateDigest": "0x6b0e3531f6540d40ec4c7020d16907979156d5d20ad7c0de80bbe430415361e7",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "MAX_NOTIONAL_EXCEEDED"
         ],
-        "receiptDigest": "0x9118a310ad51ed33a12ece6b05ccbef7067236d65dfb844c270650f91c3b7dfd",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0x4296c96a92caeac9ceff8e63bb477ab99e722758eeeaf542f1d0739b746bc521",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
@@ -2860,6 +2874,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -2882,12 +2898,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -2982,7 +2997,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -3021,12 +3036,12 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x5c2d9f7e0f5b1a1fd71e22d399e6cf724694264c32ffa6278762a19dad971110",
+        "candidateDigest": "0x648494e1bfdde18490cbd87e648bd17e1b784aa4c6fefa89bdef4935090aa66d",
         "decision": "PASS",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [],
-        "receiptDigest": "0xc18c6500f05f1e20e78c5d7cef54136705cc6632fd3a6c87726a5d08788e53a7",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0x304da1b4e1a99ee6c8525f2f5a65752a07bcebb26376c7659e5514b50a3f9e4d",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
@@ -3060,6 +3075,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -3082,12 +3099,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -3182,7 +3198,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -3221,14 +3237,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x2d25ff76af091963c45889e11e7fcaa21d4a3ac638ff068e215f3a10f6c14e26",
+        "candidateDigest": "0x62ab66ded45b74db1141ba6545bf734e523d71f3a2613854b9b3819324782177",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "NOTIONAL_INCONSISTENT"
         ],
-        "receiptDigest": "0xf2f41ad6807fd9be2b9b52b29badde9dfb105afddc18bfb6dbc340f01119f409",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0x12d40d2e07f0f0f9fd76f3c70c0b1bd024e31de625243bcb1ce2084a644fed2c",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
@@ -3262,6 +3278,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xf0a161a800ef24081e70ec072d8a123bf19c37fae3f290fff8759b9b2f3018c8",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10040",
             "decimals": 2,
@@ -3284,12 +3302,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0x3aa0a7273a24a9e8eede0a80967abec1ae9f18e9142408b84cd9dd03cff43596",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -3384,7 +3401,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -3423,12 +3440,12 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x8e650a0f78014f3c26d72bdc55284fb8eac58ff48b66f9df1a0df538bed504a8",
+        "candidateDigest": "0xba01a9702ce17d8225444fec41896132f2f78bb6dc7f62a46f7a17414fc71dce",
         "decision": "PASS",
         "mandateDigest": "0xb497b563cc699515d403afafdc4d00b1b1486b35a2517c156b39ce1b082a5c9f",
         "reasonCodes": [],
-        "receiptDigest": "0x6f7e3e53f9c9274c55dbab819ef4092e6716c685e90de8d23d2886d20fbd2a18",
-        "trustedStateDigest": "0x3aa0a7273a24a9e8eede0a80967abec1ae9f18e9142408b84cd9dd03cff43596"
+        "receiptDigest": "0x98bb74c9be8858e454e9d57f41a968e102c290378825f3b665232f9d99d7553b",
+        "trustedStateDigest": "0xf0a161a800ef24081e70ec072d8a123bf19c37fae3f290fff8759b9b2f3018c8"
       }
     },
     {
@@ -3462,6 +3479,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xf0a161a800ef24081e70ec072d8a123bf19c37fae3f290fff8759b9b2f3018c8",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10041",
             "decimals": 2,
@@ -3484,12 +3503,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0x3aa0a7273a24a9e8eede0a80967abec1ae9f18e9142408b84cd9dd03cff43596",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -3584,7 +3602,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -3623,15 +3641,15 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x8f54957cd81d55dab9855e4d2d683e41d8caa9f29901707b592c4c955cbfd5be",
+        "candidateDigest": "0xcaa8a8c9d40e2cce3eef03dc2cfee0d2614859c096c19624619ec13f8d19dee2",
         "decision": "REJECT",
         "mandateDigest": "0xb497b563cc699515d403afafdc4d00b1b1486b35a2517c156b39ce1b082a5c9f",
         "reasonCodes": [
           "PRICE_DEVIATION_EXCEEDED",
           "TOTAL_DEBIT_EXCEEDED"
         ],
-        "receiptDigest": "0xd6e0a123612d8c02a51c152508387bc7f9b5dd1dc25424e68b4ac8a7b11fb67e",
-        "trustedStateDigest": "0x3aa0a7273a24a9e8eede0a80967abec1ae9f18e9142408b84cd9dd03cff43596"
+        "receiptDigest": "0x9e1aa4f286c2b76855369566eff92e004ff5b02a166216be966d8a0d9739c7c1",
+        "trustedStateDigest": "0xf0a161a800ef24081e70ec072d8a123bf19c37fae3f290fff8759b9b2f3018c8"
       }
     },
     {
@@ -3665,6 +3683,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xec8cc99e42bb8800d50cf00cd8a1a7dddc2999420f4cdaf7917724d79428fecf",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -3687,12 +3707,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0x44e12fda73a041cd28dfb730e29786b016f0e0995175c93fb7740ec836dbacf2",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -3787,7 +3806,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -3826,14 +3845,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x91ca96b35ba90fb1595b0eedcfd060a89bdf64421bb3b6e1d8d0a383d238b257",
+        "candidateDigest": "0xb737f729a14ecfcb17c9f584573ba981f2acf13370e10cd01f81c90e70c8a54b",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "PRICE_STATE_STALE"
         ],
-        "receiptDigest": "0x785c5d597fc93c1fc98405adbae134e85c841569f36382f0c1a246297dda85be",
-        "trustedStateDigest": "0x44e12fda73a041cd28dfb730e29786b016f0e0995175c93fb7740ec836dbacf2"
+        "receiptDigest": "0x1dbc3f9c45fff83336d4c67bcc4ed130e70fb052a4e1af5cceb540d6bbcb4690",
+        "trustedStateDigest": "0xec8cc99e42bb8800d50cf00cd8a1a7dddc2999420f4cdaf7917724d79428fecf"
       }
     },
     {
@@ -3867,6 +3886,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0x47cff7e507c1d8b95fc8e5091efc5962d596d06b1852d62c32936c8d6161cf17",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -3889,12 +3910,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe97095ea2314efa07efd28793509db8f0c351fef2e01ac490838fb3bf15ff312",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -3989,7 +4009,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -4028,14 +4048,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x830bba2130c5f4f2aa59fc2532399533a4583d91029136c60cc1521fd8b96b0c",
+        "candidateDigest": "0x2f9e85784dbfe73404f47051887d868c56850d5e488add512e70349d425e3d17",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "MARKET_STATE_UNKNOWN"
         ],
-        "receiptDigest": "0x9704c76f6906f8ef7f41730527ad8ed6386d6f7d33130e8c9220cc47d1f4ad12",
-        "trustedStateDigest": "0xe97095ea2314efa07efd28793509db8f0c351fef2e01ac490838fb3bf15ff312"
+        "receiptDigest": "0x7a2619fff915941103721f2ee938c8fd391330cbd9a4a38a67c149203a7abe37",
+        "trustedStateDigest": "0x47cff7e507c1d8b95fc8e5091efc5962d596d06b1852d62c32936c8d6161cf17"
       }
     },
     {
@@ -4069,6 +4089,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0x8a9f6f514cd46a9c441db8d0f9bfebf099484833d11e53d64e064d3d8b1344be",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -4091,12 +4113,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xb394be81307da8be11c1999263759d1d4e69b5494bc25db26998cd7c852fb1d5",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -4191,7 +4212,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -4230,14 +4251,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x395f32c816b144b390a3257f5e207696155c1ecab2128efa406e7686aa6b6a24",
+        "candidateDigest": "0x9bf2298e9f1d0d971b091e2681d2a110fa5ae2ce36810ffaf0283ecebf449cb9",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "TRADING_HALTED"
         ],
-        "receiptDigest": "0x6effcfc5cea537bf2e189739255eb0424f0fda214f6ef6b418f4a2076ac92ecb",
-        "trustedStateDigest": "0xb394be81307da8be11c1999263759d1d4e69b5494bc25db26998cd7c852fb1d5"
+        "receiptDigest": "0x6aa8debd8310ea360a2e24c08a8974664455b6feefde8fb1bcbd3b4f1e4544ac",
+        "trustedStateDigest": "0x8a9f6f514cd46a9c441db8d0f9bfebf099484833d11e53d64e064d3d8b1344be"
       }
     },
     {
@@ -4271,6 +4292,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xfd3f5a057e6b0fbcb841caecc6205fdf1803e18438a2c4ebe63ce1d822323e3e",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -4293,12 +4316,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0x76e50a6e31776529e8f8299fef63182ab67793c6d5230fba4a1c730a2064d1c0",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -4393,7 +4415,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -4432,14 +4454,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x7c16b8b5132922d5595174454c20d895e0b8e9c5d5e0c56435595a2683f09ecc",
+        "candidateDigest": "0x472d68cdddd48630d495c97a00fe09d1711451e8ebfa34f38115c513ef56d00d",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "MARKET_STATE_UNKNOWN"
         ],
-        "receiptDigest": "0x4b24aa2c670de702514446a4c99d1ab7a197d207ef27c2cc1b3ed25d711f6af4",
-        "trustedStateDigest": "0x76e50a6e31776529e8f8299fef63182ab67793c6d5230fba4a1c730a2064d1c0"
+        "receiptDigest": "0x4a6bb54fb425986b48a395a8b68cb6b9c3e110cbc3258336f27da62d2905b752",
+        "trustedStateDigest": "0xfd3f5a057e6b0fbcb841caecc6205fdf1803e18438a2c4ebe63ce1d822323e3e"
       }
     },
     {
@@ -4473,6 +4495,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0x407eb776ffc1c8b06606bb425851d8339bf46daaee9cd754da7c8780113dfddd",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -4495,12 +4519,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xd09dc76b5e22244282bb914704e9d3a768cab672d5396c2d0266ae3a30aa9e9d",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -4595,7 +4618,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -4634,14 +4657,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x09a6ff33d451fc1a94bdac99e3f4f73474d8688739a6192bd3133eb274844a7c",
+        "candidateDigest": "0x169437c34b91f1b8d483a7f06ff8379b759d8ef0392b3c0633ff5626750f7306",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "REPRESENTATION_INACTIVE"
         ],
-        "receiptDigest": "0x2b6ff691b89f665f744caa4c4f6ad51222c07011d3ae7863d7c1dec21e9bba8d",
-        "trustedStateDigest": "0xd09dc76b5e22244282bb914704e9d3a768cab672d5396c2d0266ae3a30aa9e9d"
+        "receiptDigest": "0xea59a7a6f6c41f7d59e8e3aaba89bb3090c402da2cd453f0fe92193f9866c41f",
+        "trustedStateDigest": "0x407eb776ffc1c8b06606bb425851d8339bf46daaee9cd754da7c8780113dfddd"
       }
     },
     {
@@ -4675,6 +4698,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa7e2f9bc896c8990c1243ec4bad95155e8e12c3101c55d9939ecd4093caed5bd",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -4697,12 +4722,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0x13a4282e5d62cabb5c1603083ec5933a8cc57340a883446f5ab0a308237c8a19",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -4797,7 +4821,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -4836,14 +4860,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x22958e877856ef770e25ea0a66e113889f7caae32d337f440c7b6827149ddf0a",
+        "candidateDigest": "0x1fbdcb33e3228d808e54996e28c4ae9c843bd67a3ba2861d31cff37258b9b087",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "REPRESENTATION_INACTIVE"
         ],
-        "receiptDigest": "0x4f59e3a3dbe799254204f2b9a57fcddf78e5e3b515d5872bd2b7cd50681e277d",
-        "trustedStateDigest": "0x13a4282e5d62cabb5c1603083ec5933a8cc57340a883446f5ab0a308237c8a19"
+        "receiptDigest": "0x2d7dc1996c3e00c2d698cc803eaa0d8a29b117c88fb6354d5cf6efa75d159811",
+        "trustedStateDigest": "0xa7e2f9bc896c8990c1243ec4bad95155e8e12c3101c55d9939ecd4093caed5bd"
       }
     },
     {
@@ -4877,6 +4901,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "8",
+          "evaluationStateDigest": "0xc7fb01745c60102364abedc453d2ee3eec4d6f37c6cad7ad8649a086aa82959d",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -4899,12 +4925,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xa4453bd279cf0dbae938b75a02ad4a3a519672abb0bdf8e24bd8b46a98d00901",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -4999,7 +5024,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -5038,14 +5063,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0xa5dba807622887220a0c1a0cd33c8a02f243860de248a466be4ff63433aff7b4",
+        "candidateDigest": "0x503dc6a0aa1032d9d6825bb6b7d61f8b78a3086ad8a42937ddafee2d6c6337f3",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "CORPORATE_ACTION_STATE_CHANGED"
         ],
-        "receiptDigest": "0x7c61f18cd683394a258e85a208c5ece4005ca01a768e2c6a18885a05b045944a",
-        "trustedStateDigest": "0xa4453bd279cf0dbae938b75a02ad4a3a519672abb0bdf8e24bd8b46a98d00901"
+        "receiptDigest": "0x5428c986e8bee8e06eda51bc302b1b716f76a7857730b8a46a028b2933d15fb5",
+        "trustedStateDigest": "0xc7fb01745c60102364abedc453d2ee3eec4d6f37c6cad7ad8649a086aa82959d"
       }
     },
     {
@@ -5079,6 +5104,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "6",
+          "evaluationStateDigest": "0x1ba17b475b7ee8eef44c9caad0f21af0138d3551b77a962ca342d5006bb2c0f8",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -5101,12 +5128,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xa6e8d1a12de65bee64b8e55ad229f4755941b672717fdd05388dfbb2e5c09fa3",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -5201,7 +5227,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -5240,14 +5266,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0xf21d7ba0e872e36eb05141a348167392c46452450e33a82cb373a673b3483642",
+        "candidateDigest": "0x84f51a5240fc98628b60b33af01037cc1fd9c3e279b186b946bf7e26616bc453",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "CORPORATE_ACTION_STATE_INCONSISTENT"
         ],
-        "receiptDigest": "0xf457809c4a557f6f3ab56977e1db833aaf77f03b5a767a828d398cbe52aa4693",
-        "trustedStateDigest": "0xa6e8d1a12de65bee64b8e55ad229f4755941b672717fdd05388dfbb2e5c09fa3"
+        "receiptDigest": "0x4696d6724b24e1d6bb35a37c076ca346cd54ce7d69b7f8703624b58513f9e841",
+        "trustedStateDigest": "0x1ba17b475b7ee8eef44c9caad0f21af0138d3551b77a962ca342d5006bb2c0f8"
       }
     },
     {
@@ -5281,6 +5307,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xe85aaf97de02ba5765b9e762847723d5ba6db80f2f872d4f65338aa3ab043b0d",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -5303,12 +5331,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xd21695501168744ca7d9289c7178497567e18b7dfa1016fadadb342e74cd6fd6",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -5403,7 +5430,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -5442,14 +5469,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x8ef5c5ae72193d4e2082ca1b7570a24eab862bbab9765ea65776ef5383d32743",
+        "candidateDigest": "0x5134684f19ea28d10bf75de330e2b4f2e626012f704c4d4dcd72ed434cc15a17",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "CORPORATE_ACTION_STATE_UNKNOWN"
         ],
-        "receiptDigest": "0xd965e8f7cdcb1812026355226f65a70ae8fe55fae232c0a7408b7424deb96d60",
-        "trustedStateDigest": "0xd21695501168744ca7d9289c7178497567e18b7dfa1016fadadb342e74cd6fd6"
+        "receiptDigest": "0x2c868750eeceea863794725f61a4950ea3376ffc3624c810d2e2501b8897a70c",
+        "trustedStateDigest": "0xe85aaf97de02ba5765b9e762847723d5ba6db80f2f872d4f65338aa3ab043b0d"
       }
     },
     {
@@ -5483,6 +5510,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0x2fdc10082fd8dd9f7246bcfd379776f7c2abb8d5b654f1e7fc9442acea8cb3f3",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -5505,12 +5534,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0x1e93809e74fb019967317e50555b1afcddacbc9d22b139a733cfbb52155449ec",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -5605,7 +5633,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -5644,14 +5672,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x9be6fa0873e667d3b52ee48fc7bc57ac0f939fba1ac14df1d75890f4d52c50cd",
+        "candidateDigest": "0x36ed4963e5d13f644c50e9ffea376e571f3b2f9bb885a3b1871f004af3ad863d",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "CORPORATE_ACTION_STATE_STALE"
         ],
-        "receiptDigest": "0x8b6c8a9bf608c97c7e028eeab1eef06c0eef831a1e7855a9193f3e287f5b51b9",
-        "trustedStateDigest": "0x1e93809e74fb019967317e50555b1afcddacbc9d22b139a733cfbb52155449ec"
+        "receiptDigest": "0x12e4f975c9c9288ebfb3d8a5022f64a2ee45de765e0fbc48b19b6755be2db914",
+        "trustedStateDigest": "0x2fdc10082fd8dd9f7246bcfd379776f7c2abb8d5b654f1e7fc9442acea8cb3f3"
       }
     },
     {
@@ -5685,6 +5713,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "12",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -5707,12 +5737,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -5807,7 +5836,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -5846,14 +5875,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x6688a6abf58de617be3e8e366a535894db221a73ceca5ecc643725537f927c1e",
+        "candidateDigest": "0xa93721a44523336d3f3223a1813ec713ff8d51249689a73f28b914e633a909f9",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "CANDIDATE_STATE_MISMATCH"
         ],
-        "receiptDigest": "0xeec827266a5fa6d307920013542048990fcaf66ed60166e9832569cfb5a7c23f",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0x94940b220e500083d0997c41a4488615111bcd4a65c249b36d28b5441ca4be09",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
@@ -5887,6 +5916,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xf9cce2fcb77f8dedb7b08c1296a8c68cf969e7a3add8f499d06e4e171958e5e4",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -5909,12 +5940,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe180bae2fe6ef45e19e6e5792e7ea540dbfac75c745bee437a0938501fcd1eee",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000600"
@@ -6009,7 +6039,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -6048,14 +6078,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x7716368044dac5d3c81bdffd98c575e10dad61386145f3c9536d5a35609b75ac",
+        "candidateDigest": "0xe93c6624d6ac8bdca45785915ef19762c9410439a078adff859f364766b575c0",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "MANDATE_EXPIRED"
         ],
-        "receiptDigest": "0x45896e1ae7c4f270c25390448e78b1468ba3e08493855ce111310174f3bf353c",
-        "trustedStateDigest": "0xe180bae2fe6ef45e19e6e5792e7ea540dbfac75c745bee437a0938501fcd1eee"
+        "receiptDigest": "0xe9515fd55faa3eb29064e3064eb17626b8bdc6fdabf8ffd6cecca66b09c960cd",
+        "trustedStateDigest": "0xf9cce2fcb77f8dedb7b08c1296a8c68cf969e7a3add8f499d06e4e171958e5e4"
       }
     },
     {
@@ -6089,6 +6119,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0x76bd7d9a70a6dd3a0c2de5941005ec65d3dea107f1d63ca0c2db95eb9cb31ac4",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -6111,12 +6143,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0x006f541139142f139951ff290830ed864c59e0e32e68d9cb3facf943b159cafc",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000599"
@@ -6211,7 +6242,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -6250,12 +6281,12 @@
         }
       },
       "expected": {
-        "candidateDigest": "0xa0510b19b7d0613f397361604afd5d58ad91f2b4026a2c54403d93aac346ec01",
+        "candidateDigest": "0x439d925ab5acddb680e080a408ce7daac2d989e7abe29cb8815878f07e94ec71",
         "decision": "PASS",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [],
-        "receiptDigest": "0xdd6cee9882989a201b822d47d553907e7c313ee063a3e1154a9b6db22e6e9c39",
-        "trustedStateDigest": "0x006f541139142f139951ff290830ed864c59e0e32e68d9cb3facf943b159cafc"
+        "receiptDigest": "0xb45927e2912f9dbc8429bed6c0df560d0ceb105bf9fa2cb64696002d56e40310",
+        "trustedStateDigest": "0x76bd7d9a70a6dd3a0c2de5941005ec65d3dea107f1d63ca0c2db95eb9cb31ac4"
       }
     },
     {
@@ -6289,6 +6320,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0x051c3e087b433aada8fe61006a1ab4d6211b22cb21e485dfd117fd5ba1ed0889",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -6311,12 +6344,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0x2ebbf20d469c120faec210f3c2795ed27d2c97dafafc1603484c1486a2cfc0a9",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1799999399"
@@ -6411,7 +6443,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -6450,14 +6482,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x2c6dd000535951bb6edf241d5925ce4d486b906cfbd7c12a567fa0ceb41df67d",
+        "candidateDigest": "0x16bd1ae5d394e8182f96f3eddb5d3b51566c7f8731afa9d369718d213444088e",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "MANDATE_NOT_YET_ACTIVE"
         ],
-        "receiptDigest": "0x362b1a0938f67424377e709a89ba7190e310b9d577ddee219e9e022d61ae378c",
-        "trustedStateDigest": "0x2ebbf20d469c120faec210f3c2795ed27d2c97dafafc1603484c1486a2cfc0a9"
+        "receiptDigest": "0x21ad07dab28b0cf56f81998e6d69e1ccf73400a15fe98dc0134a1822d58d659a",
+        "trustedStateDigest": "0x051c3e087b433aada8fe61006a1ab4d6211b22cb21e485dfd117fd5ba1ed0889"
       }
     },
     {
@@ -6491,6 +6523,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa3d959f7d5cce5d3080f5bb7b858148e716315082d209430966262c276f120a6",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -6513,12 +6547,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xb12aa8db674b4f31613cab424e7ac1b996227cb2ce044ac911b0d55e3e1b1df6",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1799999400"
@@ -6613,7 +6646,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -6652,12 +6685,12 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x0bccb577493c65e09bc3fc60d0ef24983b3175f29dfbde4a6d6a51d8649b617f",
+        "candidateDigest": "0xfe6a6608b2f0c5afe757fe3fd65b087776f1a955f7050ad59d2859b771444fb1",
         "decision": "PASS",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [],
-        "receiptDigest": "0x618fceab286fa6101418d620bd0117679ac21b3c994d4b1bf9def6871438eedd",
-        "trustedStateDigest": "0xb12aa8db674b4f31613cab424e7ac1b996227cb2ce044ac911b0d55e3e1b1df6"
+        "receiptDigest": "0xd5a952a7dd86c68a8f537d839b7d4842b7701cb5c35de4c2db2aee098b50f64c",
+        "trustedStateDigest": "0xa3d959f7d5cce5d3080f5bb7b858148e716315082d209430966262c276f120a6"
       }
     },
     {
@@ -6691,6 +6724,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -6713,12 +6748,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -6813,7 +6847,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -6852,14 +6886,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x5c2d9f7e0f5b1a1fd71e22d399e6cf724694264c32ffa6278762a19dad971110",
+        "candidateDigest": "0x648494e1bfdde18490cbd87e648bd17e1b784aa4c6fefa89bdef4935090aa66d",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "SIGNATURE_INVALID"
         ],
-        "receiptDigest": "0x37c1028c2953592f5eb242df0943589ea75b52926306305b718c576e0c4d25f1",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0xa383ebe0269cbcbda7b4ef3fdcbde2813a667ca8a2c17dbbeb899ba06418b303",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
@@ -6893,6 +6927,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -6915,12 +6951,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -7015,7 +7050,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -7054,14 +7089,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x5c2d9f7e0f5b1a1fd71e22d399e6cf724694264c32ffa6278762a19dad971110",
+        "candidateDigest": "0x648494e1bfdde18490cbd87e648bd17e1b784aa4c6fefa89bdef4935090aa66d",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "SIGNER_UNAUTHORIZED"
         ],
-        "receiptDigest": "0xaa6dcf977690372528c571ae34c285253cbb5572eb897818716324facf83c186",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0xd404e9923b5dcf21f5c364490c804e2adc97b4f64599c71264864d0390e61bf5",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
@@ -7095,6 +7130,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -7117,12 +7154,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -7217,7 +7253,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -7256,14 +7292,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x5c2d9f7e0f5b1a1fd71e22d399e6cf724694264c32ffa6278762a19dad971110",
+        "candidateDigest": "0x648494e1bfdde18490cbd87e648bd17e1b784aa4c6fefa89bdef4935090aa66d",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "AUTHORIZATION_DOMAIN_MISMATCH"
         ],
-        "receiptDigest": "0xc0a48ea09f4d6d8754db64a398531c49407fc3eeae4d1d40b9fc290852e50629",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0x6b7e54d19d028b8758979fb3987e22af222e1bb5049250c27f8531dfc4efe5cd",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
@@ -7297,6 +7333,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -7319,12 +7357,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -7419,7 +7456,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -7458,14 +7495,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x5c2d9f7e0f5b1a1fd71e22d399e6cf724694264c32ffa6278762a19dad971110",
+        "candidateDigest": "0x648494e1bfdde18490cbd87e648bd17e1b784aa4c6fefa89bdef4935090aa66d",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "AUTHORIZATION_SCHEME_UNSUPPORTED"
         ],
-        "receiptDigest": "0xa419adf608daa64add6c4bf36c2348d617dea9f2a6d0dfcd05957721a832598c",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0xf4276c25eb4758b64c8c5fb441b35c6cc3e489deb5ffbf6e166c58f6e91f0d43",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
@@ -7499,6 +7536,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -7521,12 +7560,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -7621,7 +7659,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -7660,14 +7698,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x2565a1c26772bcfd9165209b176bf2b7fe2e797e537bea6f18a1de0cb2dff995",
+        "candidateDigest": "0x3dd8a1075bf88e34d0724a74894483c8cbd1c7492790d3afe9dd5df4ea36c54a",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "AGENT_UNAUTHORIZED"
         ],
-        "receiptDigest": "0xab767e4305183a5dcc086e445cc6e117445e2b2e96d36b7f2141cccdc81b3a49",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0x618b689583e75b6e0c17b0c18095c4539551541adb04a55d6a2ed3263fc01389",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
@@ -7701,6 +7739,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xcb1b8b7645792fe119ecc59b7aa87776ffe70452b1fcc4b67ba375317e950028",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -7723,12 +7763,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xef82bc807b1270e98d07c0b325565f99072b3a29ba0386ea12ae0d4c1597b343",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -7823,7 +7862,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -7862,14 +7901,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x6e7264d274fe7148362a3591a5f4ed0a58d77cc144624411736e6b7b322f9327",
+        "candidateDigest": "0xe0a61be74924c28e660a38b528cdf56df2b1f1a6dc1416b6a5b7d56d7237a582",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "MANDATE_ALREADY_CONSUMED"
         ],
-        "receiptDigest": "0x6373e130782c37c9926bb3178952940800e9892a413b941f245d8ccedf86f889",
-        "trustedStateDigest": "0xef82bc807b1270e98d07c0b325565f99072b3a29ba0386ea12ae0d4c1597b343"
+        "receiptDigest": "0x0ece051aab20da5ed748563629f844fe51ddf9c1d4fbb60f68455c5c88e26fd1",
+        "trustedStateDigest": "0xcb1b8b7645792fe119ecc59b7aa87776ffe70452b1fcc4b67ba375317e950028"
       }
     },
     {
@@ -7903,6 +7942,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0x6aeca0ff3d2d835b7f178e09750e3d9d5f069dd71235b6ccf1729c3578146c34",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -7925,12 +7966,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0x304ac0f902a1462ba7a957a0c05644ab943ff503ff72c490a399dcd5f01fe140",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -8025,7 +8065,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -8064,14 +8104,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0xe6cfabebec9ef40e7095513f7630b52e322d97a4c277413d7f0b50b068c319c6",
+        "candidateDigest": "0x49af40abe41c5efb65cb01f77ba694d7453c51634939bc7979396f28297753d9",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "MANDATE_RESERVED"
         ],
-        "receiptDigest": "0x1e42bab5b158a854d73643dea0db4dfc49c888a1acb9d93aff4a1d3ffc2e55a9",
-        "trustedStateDigest": "0x304ac0f902a1462ba7a957a0c05644ab943ff503ff72c490a399dcd5f01fe140"
+        "receiptDigest": "0xa8294ddeff3e7afe08010dc9c3cb58a538c9f9ec7e07188f350b1e4c05147876",
+        "trustedStateDigest": "0x6aeca0ff3d2d835b7f178e09750e3d9d5f069dd71235b6ccf1729c3578146c34"
       }
     },
     {
@@ -8105,6 +8145,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xec240fbf6580feaf5277a2eba712bde718c02a0f3b6bc415bf520f9407966b4a",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -8127,12 +8169,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0x83d9acd83e1a456f0968ffc7e5802834d4502229c3c458874a6ad6268add0c42",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -8227,7 +8268,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -8266,14 +8307,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0xbf426818f438550901173888c1cbe59c2fa74c64794310d4f94ca3fb8ca44fc9",
+        "candidateDigest": "0x34b8487ec5f55a2b00bc9179a00e621dbb7c103f9953f539d5ab8e3918165fc6",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "REPLAY_STATE_UNKNOWN"
         ],
-        "receiptDigest": "0x3f1a223127f356552c0c2061e1da8f1d23f220316e2af5934d16e1f4ac4c4009",
-        "trustedStateDigest": "0x83d9acd83e1a456f0968ffc7e5802834d4502229c3c458874a6ad6268add0c42"
+        "receiptDigest": "0xb0e0c9fa59c266c8829b679f37d7c874a670b745d8c65916f555ff1b470810d0",
+        "trustedStateDigest": "0xec240fbf6580feaf5277a2eba712bde718c02a0f3b6bc415bf520f9407966b4a"
       }
     },
     {
@@ -8307,6 +8348,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xc43938740c544dbfa0dac936c83c43be6324ae40fa06ecc8d2c7a0568c75653e",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -8329,12 +8372,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xd93b0740d655fe8ded5e2cc3e3d243efd824988266893a905533373fafee069a",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -8429,7 +8471,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -8468,14 +8510,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x2e01be154ec5be65c5a8f5f00266dc821e8c3977af895edcbd092584faf68778",
+        "candidateDigest": "0xcb2124f8306a54693112ffe53a4f84d62684be3d058d94e272ebc2b3daac3ab8",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "REPLAY_STATE_UNKNOWN"
         ],
-        "receiptDigest": "0x4ff4806b27382e553a308c12fd4063e4fa963cd1b9457a5c2780b61d41c36737",
-        "trustedStateDigest": "0xd93b0740d655fe8ded5e2cc3e3d243efd824988266893a905533373fafee069a"
+        "receiptDigest": "0xf639025c263cdbda1d5266d0406e428413c674e47bc6d09755df8642813931dd",
+        "trustedStateDigest": "0xc43938740c544dbfa0dac936c83c43be6324ae40fa06ecc8d2c7a0568c75653e"
       }
     },
     {
@@ -8509,6 +8551,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -8531,12 +8575,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -8631,7 +8674,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -8670,14 +8713,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x8ea09dccf5f0ac458695f2315d38fb8fcf126c8ca68a78f8ce0396c544406c23",
+        "candidateDigest": "0x5ff5b6bdfb8dd3547de0a1b2c2563e9dbfb2657714f617c1c64c076bb0af9847",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "UNIT_MISMATCH"
         ],
-        "receiptDigest": "0x7dc03bd43a190a5e5590512be290940df86fdd0f3a7d06ec8724d873c746b0b4",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0x48995ae7952127bf29a05ca8fae177a26798cda847412eed363c6049d1e73250",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
@@ -8711,6 +8754,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -8733,12 +8778,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -8833,7 +8877,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -8872,14 +8916,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x3c88d08d40339164ac8df675ccb185ff72702edf72015df64ce4d0ad85c200a9",
+        "candidateDigest": "0xcb2e6f3f944476fdbf3c8604953f1a135b61c8cce582a6f86d4d04a27b44f656",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "UNIT_MISMATCH"
         ],
-        "receiptDigest": "0xf411fd46549389d9815ba100214097005641b47912e4c7f495e67b1a40cc8e6f",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0x8475d8a0297c0c8590956cc9b3fb574e968497c8e5a5d98b7da21c47ab117190",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
@@ -8913,6 +8957,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -8935,12 +8981,11 @@
             "decimals": 6,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -9035,7 +9080,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -9074,12 +9119,12 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x90df4b119617f329dd9fe646e9cb0211d322714aa46923d0f133956821dca053",
+        "candidateDigest": "0x9f499205c21369b7dc1624b0c1c3a44e981be90c35b04d12d7ce1a9d12a715d6",
         "decision": "PASS",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [],
-        "receiptDigest": "0x1201e11400ec9e62f72ff7f4645e75a891cd42e1977e34c403389f7661f04810",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0x3455cb039d2395cd225183f500dcf200cb0835f877c0a686d9be760cd41a7bad",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
@@ -9113,6 +9158,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -9135,12 +9182,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -9235,7 +9281,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -9280,8 +9326,8 @@
         "reasonCodes": [
           "MALFORMED_IDENTIFIER"
         ],
-        "receiptDigest": "0x075a5e5c781ac0f2f876ca2966e75eabf925dc4f02960f6b7932d34df0350892",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0xa4b6e0c09727d2e51bb83315082962aa888662cc186ffd251971f1e16dc75e71",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
@@ -9315,6 +9361,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -9337,12 +9385,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -9437,7 +9484,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -9482,8 +9529,8 @@
         "reasonCodes": [
           "MALFORMED_IDENTIFIER"
         ],
-        "receiptDigest": "0x075a5e5c781ac0f2f876ca2966e75eabf925dc4f02960f6b7932d34df0350892",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0xa4b6e0c09727d2e51bb83315082962aa888662cc186ffd251971f1e16dc75e71",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
@@ -9517,6 +9564,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -9539,12 +9588,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -9639,7 +9687,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -9678,12 +9726,12 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x5c2d9f7e0f5b1a1fd71e22d399e6cf724694264c32ffa6278762a19dad971110",
+        "candidateDigest": "0x648494e1bfdde18490cbd87e648bd17e1b784aa4c6fefa89bdef4935090aa66d",
         "decision": "PASS",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [],
-        "receiptDigest": "0xc18c6500f05f1e20e78c5d7cef54136705cc6632fd3a6c87726a5d08788e53a7",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0x304da1b4e1a99ee6c8525f2f5a65752a07bcebb26376c7659e5514b50a3f9e4d",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
@@ -9717,6 +9765,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -9739,12 +9789,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -9839,7 +9888,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -9857,13 +9906,13 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x813b624c2648cfe3529c8bbfe9c3811ae867074fd7b3a13d2b87765370ee24f6",
+        "candidateDigest": "0x4f658b9723f0108ce025b5d1797156332bf62a9fbd1973c60f5860a8cb2ca217",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "MALFORMED_TRUSTED_STATE"
         ],
-        "receiptDigest": "0x632701e7cf2b6081f60d2e563e7604ac570fbc99ec57de3d1c34edebdb9715da",
+        "receiptDigest": "0xd2479567f793697052cdd1f775a8fb77933815aafc5132745cf7ca5f793f1ddc",
         "trustedStateDigest": null
       }
     },
@@ -9898,6 +9947,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -9920,12 +9971,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -10020,7 +10070,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -10065,8 +10115,8 @@
         "reasonCodes": [
           "VALUE_OUT_OF_RANGE"
         ],
-        "receiptDigest": "0xcc67988512de9f253b4fe5ab3896d555dde0bfaab98888875be5cead6710c9a8",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0xd82a923de58a37691696e51b2997b05d5c6108847b7d63aaa9d101a4e7731454",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
@@ -10100,6 +10150,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -10122,12 +10174,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -10222,7 +10273,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -10261,13 +10312,13 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x813b624c2648cfe3529c8bbfe9c3811ae867074fd7b3a13d2b87765370ee24f6",
+        "candidateDigest": "0x4f658b9723f0108ce025b5d1797156332bf62a9fbd1973c60f5860a8cb2ca217",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "UNTRUSTED_REQUIRED_STATE"
         ],
-        "receiptDigest": "0xb9d9facebae0ebabacfcd2097e113ea81145bb1846b4730c3c8d63d0c13cb42a",
+        "receiptDigest": "0x4ce19a6e18473efa2ee39f99b76db4f6aa4ca96abca7182d5799323147a74286",
         "trustedStateDigest": null
       }
     },
@@ -10302,6 +10353,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -10324,12 +10377,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -10424,7 +10476,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -10463,13 +10515,13 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x813b624c2648cfe3529c8bbfe9c3811ae867074fd7b3a13d2b87765370ee24f6",
+        "candidateDigest": "0x4f658b9723f0108ce025b5d1797156332bf62a9fbd1973c60f5860a8cb2ca217",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "UNTRUSTED_REQUIRED_STATE"
         ],
-        "receiptDigest": "0xb9d9facebae0ebabacfcd2097e113ea81145bb1846b4730c3c8d63d0c13cb42a",
+        "receiptDigest": "0x4ce19a6e18473efa2ee39f99b76db4f6aa4ca96abca7182d5799323147a74286",
         "trustedStateDigest": null
       }
     },
@@ -10504,6 +10556,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xd6bd2a58d6c0870fa135e1924b1040ccebd23af6fd4728db5f34138634a03715",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -10526,12 +10580,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0x170008fd95433ebdfc95b6de30e84a7eaa44a2ea2ce7a8602af4b512e9444fe4",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -10606,7 +10659,7 @@
             }
           },
           "market": null,
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -10645,14 +10698,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x83ad6baffbd369e027dedd97bd910e1ced9f09cf5f0b285b1d2f61673d307e60",
+        "candidateDigest": "0x17ef1f280aa1c8fbc09430cec0d53f98faf687c2640b59f70c77a9b293efb73a",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "TRUSTED_STATE_MISSING"
         ],
-        "receiptDigest": "0xc75cc67312000a836c5b9cdfaee1e50cbad2c7ecaa4cb3ea2ea13941b226068d",
-        "trustedStateDigest": "0x170008fd95433ebdfc95b6de30e84a7eaa44a2ea2ce7a8602af4b512e9444fe4"
+        "receiptDigest": "0x82e0d86de6856ca3b593a13a1e331a8b49d1b52194834bc106e98fa3fb9d381c",
+        "trustedStateDigest": "0xd6bd2a58d6c0870fa135e1924b1040ccebd23af6fd4728db5f34138634a03715"
       }
     },
     {
@@ -10686,6 +10739,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "18446744073709551615",
+          "evaluationStateDigest": "0x06f2c54d31125af8cf6a20a855755ca6446cda5a933781e7dd3437fd3eb772df",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -10708,12 +10763,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0x2a940260fcd70479259982bda5fab2246dcafa3b804f57f78ae2eb2ab8917808",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -10808,7 +10862,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -10847,12 +10901,12 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x243bacebed156d2ebb7e2101a581576c4844d29d9d5cca776a4df75df0cba60a",
+        "candidateDigest": "0x30723cbaa822756c6ddf0f8896c16dd784ecd33a235d378224dbf71f3f9a2dc9",
         "decision": "PASS",
         "mandateDigest": "0x0757e5afa890ac91417306291c21bd613b28b3fbc5288b700a65dc34564d994f",
         "reasonCodes": [],
-        "receiptDigest": "0xeb7ed16e3a46237b1eb94e66ef435f49cd12a7188d81533d0ec0a5573444b65a",
-        "trustedStateDigest": "0x2a940260fcd70479259982bda5fab2246dcafa3b804f57f78ae2eb2ab8917808"
+        "receiptDigest": "0xd5721186e8191bfc17ca479b906dce1b3a0b56599d0723cd04249b5732824154",
+        "trustedStateDigest": "0x06f2c54d31125af8cf6a20a855755ca6446cda5a933781e7dd3437fd3eb772df"
       }
     },
     {
@@ -10886,6 +10940,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xc40b7a67a8f12c8ca96929bba8d0cc3deff3b7d64d629709b5789b953be299e5",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -10908,12 +10964,11 @@
             "decimals": 38,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xb4089cfa97678710974d21063522e9cf34a76707e2dd145193dce6c1a7ab19a0",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -11008,7 +11063,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -11047,14 +11102,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x131b2f80d017a00c8761d2b2a704e54503eb370044f292d9cc6572207390e144",
+        "candidateDigest": "0xfcb846a82641c5483fc323f3fd388eca99d76e18506a0ee4cfa39f0911053b0c",
         "decision": "REJECT",
         "mandateDigest": "0x9642905f44aef38dcaad5b6da4703809cab48c4c1a3bb68da259c407ba3c563e",
         "reasonCodes": [
           "TOTAL_DEBIT_EXCEEDED"
         ],
-        "receiptDigest": "0x0c4599ac24e05a5e0fc100e7c3dd1d66e09ae76dc9b0012a54d26b16e8bd5d9a",
-        "trustedStateDigest": "0xb4089cfa97678710974d21063522e9cf34a76707e2dd145193dce6c1a7ab19a0"
+        "receiptDigest": "0xa77f94755e1e308f22039e57c220908cc6f41db6dfa3d9330ddeb02abe1ed945",
+        "trustedStateDigest": "0xc40b7a67a8f12c8ca96929bba8d0cc3deff3b7d64d629709b5789b953be299e5"
       }
     },
     {
@@ -11088,6 +11143,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -11110,12 +11167,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -11210,7 +11266,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -11255,8 +11311,8 @@
         "reasonCodes": [
           "VALUE_OUT_OF_RANGE"
         ],
-        "receiptDigest": "0xcc67988512de9f253b4fe5ab3896d555dde0bfaab98888875be5cead6710c9a8",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0xd82a923de58a37691696e51b2997b05d5c6108847b7d63aaa9d101a4e7731454",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
@@ -11290,6 +11346,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0x8bd133014aeedb32fd0618f1e0e9280fe4e719984d26319f9c57a5ebdea97f9f",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -11312,12 +11370,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xad227f048a8858f7c00dcc6b9ef0f538a57862601e41d051e5854ab86e4eff68",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.omega",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -11412,7 +11469,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -11451,7 +11508,7 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x1293ff8ce96ff6264e365f9865a63d9ee2de05c12720b69ede85459c8ffd7769",
+        "candidateDigest": "0x7f2a4f9fb5b91c0b972d42cf974d8e914d1ad7270161140076b9b4ba0dd3aa17",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
@@ -11461,8 +11518,8 @@
           "TOTAL_DEBIT_EXCEEDED",
           "VENUE_NOT_ALLOWED"
         ],
-        "receiptDigest": "0xee8afaf4b014abec3134f715dde57ccb9e5a66d6a20be2be5401914c05ac65fb",
-        "trustedStateDigest": "0xad227f048a8858f7c00dcc6b9ef0f538a57862601e41d051e5854ab86e4eff68"
+        "receiptDigest": "0x6b20079f4d5131a0d5f70caddf7a236691071a9668068c758232a90423febbb7",
+        "trustedStateDigest": "0x8bd133014aeedb32fd0618f1e0e9280fe4e719984d26319f9c57a5ebdea97f9f"
       }
     },
     {
@@ -11496,6 +11553,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -11518,12 +11577,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -11618,7 +11676,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -11657,12 +11715,12 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x5c2d9f7e0f5b1a1fd71e22d399e6cf724694264c32ffa6278762a19dad971110",
+        "candidateDigest": "0x648494e1bfdde18490cbd87e648bd17e1b784aa4c6fefa89bdef4935090aa66d",
         "decision": "PASS",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [],
-        "receiptDigest": "0xc18c6500f05f1e20e78c5d7cef54136705cc6632fd3a6c87726a5d08788e53a7",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0x304da1b4e1a99ee6c8525f2f5a65752a07bcebb26376c7659e5514b50a3f9e4d",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
@@ -11696,6 +11754,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -11718,12 +11778,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -11818,7 +11877,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -11857,14 +11916,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x97bccd464b9c61c8d162e91c3f7e1f74539c4f245c495d6cc90052985ed627d4",
+        "candidateDigest": "0x42d782195c3c20866fdfeb3fad44b6e431ae49f45991bbc903badd384c5c1eaf",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "TOTAL_DEBIT_EXCEEDED"
         ],
-        "receiptDigest": "0xc46562dd74678bc622790f4699f63a041efc10315e06a07c9618b33272ab7e37",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0x2cf2ddf9467304704d63a7ab27771ed8394017d8431a97176d4f89aa798d3f86",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
@@ -11898,6 +11957,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0x6843ab0c7ab1e641d04b4780b2b94f427bddc8b4bf1bdfcb059b5772ba2cb560",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -11920,12 +11981,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0x6df99eef0fd6358b4b95456cce4b282dbd586468554ce9d503b71755a119f281",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "SELL",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -12020,7 +12080,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -12059,12 +12119,12 @@
         }
       },
       "expected": {
-        "candidateDigest": "0xe4bd2732aa2843d9945b370e38a04e58a64231e786c569d2211e53b80016ee75",
+        "candidateDigest": "0xcc36b7b1d369cbdedba86ef826683c7f942a42ddf1a7c42bcc8642fe2590a4cd",
         "decision": "PASS",
         "mandateDigest": "0xbb966d3ea5333ee5f88bfab8dfa13ea9f28eda1b889a5bc11b1d7f2148aef51f",
         "reasonCodes": [],
-        "receiptDigest": "0xda67bf7a38df6d8caa3afe3139bf0b38399e4751adbcaabf2904d48eff561512",
-        "trustedStateDigest": "0x6df99eef0fd6358b4b95456cce4b282dbd586468554ce9d503b71755a119f281"
+        "receiptDigest": "0x9d2f4921df53d27524b782cfaca3d09381e6ed46b31438d67bb4fef0f5c77768",
+        "trustedStateDigest": "0x6843ab0c7ab1e641d04b4780b2b94f427bddc8b4bf1bdfcb059b5772ba2cb560"
       }
     },
     {
@@ -12098,6 +12158,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0x6843ab0c7ab1e641d04b4780b2b94f427bddc8b4bf1bdfcb059b5772ba2cb560",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -12120,12 +12182,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0x6df99eef0fd6358b4b95456cce4b282dbd586468554ce9d503b71755a119f281",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "SELL",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -12220,7 +12281,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -12259,14 +12320,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x67b318c9ecad617d9a584a2c5ac29bcfa0e5f510f24a1e8882ed0f3af7972a8d",
+        "candidateDigest": "0x1161f74999747c078242d5b2de060739cf715c1bb5e7b60a5091406d48a2890a",
         "decision": "REJECT",
         "mandateDigest": "0xbb966d3ea5333ee5f88bfab8dfa13ea9f28eda1b889a5bc11b1d7f2148aef51f",
         "reasonCodes": [
           "TOTAL_CREDIT_BELOW_MINIMUM"
         ],
-        "receiptDigest": "0xe7f05ae802c027518f327ec8dc6dc393ab33cd11a7aebbc6719b8ab79986be2b",
-        "trustedStateDigest": "0x6df99eef0fd6358b4b95456cce4b282dbd586468554ce9d503b71755a119f281"
+        "receiptDigest": "0x55f38fe1996c1ddf0decd1af603632b92bc8e6be3b42ff7bea8697f58668f40f",
+        "trustedStateDigest": "0x6843ab0c7ab1e641d04b4780b2b94f427bddc8b4bf1bdfcb059b5772ba2cb560"
       }
     },
     {
@@ -12300,6 +12361,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0x8f968bfc90313caf20790ccd6b90ece0108ff14e4e68fab4dd0368dbdc82bdca",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -12322,12 +12385,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xaa1a4353baae47403cf89765a0e27990b4ceddc89d1cb5b33e09f2ff95fd3b57",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "SELL",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -12422,7 +12484,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -12461,14 +12523,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x52a8f49074c6fe7c523351a085127e3ee277db577b7d571c55412c643845553a",
+        "candidateDigest": "0xfc4258cdb2a5c6b57aa172527cb1655b430132d519b674012eece8b84de0d4f7",
         "decision": "REJECT",
         "mandateDigest": "0xea1085e3f20392af692b34a5b5a8231850b96360a45bcc7bd70309fa91217e32",
         "reasonCodes": [
           "FEES_EXCEED_NOTIONAL"
         ],
-        "receiptDigest": "0xc7f85c9f3534e641a79ffb858e90ee15496c1313c4796efc3ba8905e4834c93a",
-        "trustedStateDigest": "0xaa1a4353baae47403cf89765a0e27990b4ceddc89d1cb5b33e09f2ff95fd3b57"
+        "receiptDigest": "0x824b69e7565e974e9a6ddf43fa41b0db19d4fcc80b6729f02fd19777dcb3a790",
+        "trustedStateDigest": "0x8f968bfc90313caf20790ccd6b90ece0108ff14e4e68fab4dd0368dbdc82bdca"
       }
     },
     {
@@ -12502,6 +12564,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -12524,12 +12588,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -12624,7 +12687,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -12663,14 +12726,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x24787446ab1ed95743e1d8e75041c4227e13b3a2ffc6ea7f070972c28dc692fd",
+        "candidateDigest": "0xf9a9ed3615c51f8f02e9f4c93e856746031a89d2b1a857f38d89127fbe4d3f22",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "UNIT_MISMATCH"
         ],
-        "receiptDigest": "0x267c49e99d96dab16c8dba2f75f60191eee7d03db2c7e79b9fb583541034908f",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0xa8f893a7a144cf4c346f5d8ce82772f56e6460f64ea32f9a3d2338d7b2a29cf2",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
@@ -12704,6 +12767,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0x65c5f39ebf4da4384628b7f0f4790521933911632aacf2ccfbf29e4f95aa3231",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -12726,12 +12791,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xaae1cdd1a9071b0dca700fbe9c564d7639ff9c9911c36c588eca5090be3894f9",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:1/erc20:0xdddddddddddddddddddddddddddddddddddddddd",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -12826,7 +12890,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -12865,14 +12929,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0xf8b7ee5b8969f1ca2c4a6e0f58c517b789f862dbba68ab5891b7add15f84f6cc",
+        "candidateDigest": "0xfed38e4ad8a630576383268ca605ac047337d0fd68a0a78caf8fb52720c86086",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "REPRESENTATION_CHAIN_INCONSISTENT"
         ],
-        "receiptDigest": "0x36f8390b36121451d24efdf61498233b17837978845a680c12f2bbfa5e8fb954",
-        "trustedStateDigest": "0xaae1cdd1a9071b0dca700fbe9c564d7639ff9c9911c36c588eca5090be3894f9"
+        "receiptDigest": "0x8a7f651714d67e6b9a5bfed5ab6339ddf4f26468915fa5fc343a3ac8481a2019",
+        "trustedStateDigest": "0x65c5f39ebf4da4384628b7f0f4790521933911632aacf2ccfbf29e4f95aa3231"
       }
     },
     {
@@ -12906,6 +12970,8 @@
           },
           "chain": "eip155:1",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -12928,12 +12994,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -13028,7 +13093,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -13067,7 +13132,7 @@
         }
       },
       "expected": {
-        "candidateDigest": "0xddb02df62f5fe2ee5f1f8f38cbc44f6b853ba537d021835fd7af89932313a922",
+        "candidateDigest": "0x2c8fdfd1695d011bd45fe67bdcec23df3810859e6264e1a238f2ca92b1af3972",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
@@ -13075,14 +13140,14 @@
           "REPRESENTATION_ATTRIBUTES_MISMATCH",
           "REPRESENTATION_CHAIN_INCONSISTENT"
         ],
-        "receiptDigest": "0xbe05998df83ef00d251453f8d84238480e261b6581e1a8c9c6580ede7875d97f",
-        "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+        "receiptDigest": "0x5ea8c273921bb023c2692548c8b6ea275dbf49d9a7b7cb18811299441852aa53",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
       }
     },
     {
       "id": "binding-001",
       "family": "state-binding",
-      "description": "A candidate committing to a trusted-state digest that is not the digest of the state supplied.",
+      "description": "A candidate committing to a registry snapshot that the trusted state does not declare. Structural authority is bound by equality (ADR 0017).",
       "input": {
         "authorization": {
           "domain": {
@@ -13110,6 +13175,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -13132,12 +13199,214 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0xabababababababababababababababababababababababababababababababab",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0x5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
+          "version": 3
+        },
+        "clock": {
+          "nowUnixSeconds": "1800000000"
+        },
+        "expectedDomain": {
+          "chainId": "42161",
+          "name": "Mandate",
+          "verifyingContract": "0x0000000000000000000000000000000000000001",
+          "version": "1"
+        },
+        "mandate": {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x2222222222222222222222222222222222222222"
+          },
+          "allowedChains": [
+            "eip155:42161"
+          ],
+          "allowedIssuers": [
+            "issuer.alpha"
+          ],
+          "allowedVenues": [
+            "venue.alpha"
+          ],
+          "canonicalAsset": {
+            "assetClass": "equity",
+            "idScheme": "figi",
+            "value": "BBG000BBJQV0"
+          },
+          "createdAtUnixSeconds": "1799999400",
+          "economicLimit": {
+            "atoms": "100650",
+            "decimals": 2,
+            "unit": "USD"
+          },
+          "expiresAtUnixSeconds": "1800000600",
+          "haltPolicy": "FORBID_WHEN_HALTED",
+          "mandateId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+          "maxCorporateActionAgeSeconds": "300",
+          "maxDeviationBps": "40",
+          "maxNotional": {
+            "atoms": "100000",
+            "decimals": 2,
+            "unit": "USD"
+          },
+          "maxPriceAgeSeconds": "60",
+          "nonce": "1",
+          "notBeforeUnixSeconds": "1799999400",
+          "principal": {
+            "kind": "eip155-address",
+            "value": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23"
+          },
+          "requiredCorporateActionEpoch": "7",
+          "side": "BUY",
+          "syntheticPolicy": "FORBIDDEN",
           "version": 2
+        },
+        "trustedState": {
+          "corporateAction": {
+            "provenance": {
+              "observedAtUnixSeconds": "1799999995",
+              "sourceId": "adapter.test",
+              "trustClass": "VERIFIED"
+            },
+            "value": {
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "figi",
+                "value": "BBG000BBJQV0"
+              },
+              "epoch": "7"
+            }
+          },
+          "market": {
+            "provenance": {
+              "observedAtUnixSeconds": "1799999995",
+              "sourceId": "adapter.test",
+              "trustClass": "VERIFIED"
+            },
+            "value": {
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "figi",
+                "value": "BBG000BBJQV0"
+              },
+              "haltStatus": "TRADING",
+              "referencePrice": {
+                "atoms": "10000",
+                "decimals": 2,
+                "denominatorUnit": "SHARE",
+                "numeratorUnit": "USD"
+              }
+            }
+          },
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+          "replay": {
+            "provenance": {
+              "observedAtUnixSeconds": "1799999995",
+              "sourceId": "adapter.test",
+              "trustClass": "VERIFIED"
+            },
+            "value": {
+              "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
+              "status": "UNUSED"
+            }
+          },
+          "representations": [
+            {
+              "provenance": {
+                "observedAtUnixSeconds": "1799999995",
+                "sourceId": "adapter.test",
+                "trustClass": "VERIFIED"
+              },
+              "value": {
+                "canonicalAsset": {
+                  "assetClass": "equity",
+                  "idScheme": "figi",
+                  "value": "BBG000BBJQV0"
+                },
+                "chain": "eip155:42161",
+                "instrumentType": "backed.note",
+                "issuer": "issuer.alpha",
+                "operationalState": "ACTIVE",
+                "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "synthetic": "NO"
+              }
+            }
+          ],
+          "stateId": "snapshot.0001",
+          "version": 2
+        }
+      },
+      "expected": {
+        "candidateDigest": "0x1482acea1c8fe828cf326d820bfabaa891bd7b2e32d1f7ad9c44719a513dce79",
+        "decision": "REJECT",
+        "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
+        "reasonCodes": [
+          "REGISTRY_SNAPSHOT_MISMATCH"
+        ],
+        "receiptDigest": "0x34d35566d24985dcac9d5a773c80550159aed10577e1a700f06981b955d63e04",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
+      }
+    },
+    {
+      "id": "binding-002",
+      "family": "state-binding",
+      "description": "A trusted state that declares no registry snapshot at all, so the structural binding cannot be established.",
+      "input": {
+        "authorization": {
+          "domain": {
+            "chainId": "42161",
+            "name": "Mandate",
+            "verifyingContract": "0x0000000000000000000000000000000000000001",
+            "version": "1"
+          },
+          "scheme": "eip712-secp256k1",
+          "signature": "0xdaccbbfeb2ba709ddd2eaf5f4d11deadc99fe660cef47169b2a498ec88ecffbd613ed2b2e8970c95dfb18ee2700fe2869aebf7d1a4e158bb95d6d7d5c764694d1c",
+          "signer": {
+            "kind": "eip155-address",
+            "value": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23"
+          }
+        },
+        "candidate": {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x2222222222222222222222222222222222222222"
+          },
+          "canonicalAsset": {
+            "assetClass": "equity",
+            "idScheme": "figi",
+            "value": "BBG000BBJQV0"
+          },
+          "chain": "eip155:42161",
+          "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50",
+          "evaluationStateId": "snapshot.0001",
+          "executionPrice": {
+            "atoms": "10000",
+            "decimals": 2,
+            "denominatorUnit": "SHARE",
+            "numeratorUnit": "USD"
+          },
+          "feeTotal": {
+            "atoms": "250",
+            "decimals": 2,
+            "unit": "USD"
+          },
+          "issuer": "issuer.alpha",
+          "notional": {
+            "atoms": "100000",
+            "decimals": 2,
+            "unit": "USD"
+          },
+          "quantity": {
+            "atoms": "1000",
+            "decimals": 2,
+            "unit": "SHARE"
+          },
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+          "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "side": "BUY",
+          "venue": "venue.alpha",
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -13271,14 +13540,416 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x23f3acf9532ea6a398b7f7ff079aee3534e1ee567f460e0417204a34b34684b6",
+        "candidateDigest": "0x01b85c7e1c5ce203f166fb6df0c46fb325f865818027a5c2bd6214314ef5e346",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
-          "CANDIDATE_STATE_MISMATCH"
+          "REGISTRY_SNAPSHOT_UNKNOWN"
         ],
-        "receiptDigest": "0x3821316cd9085adfae1858ee85d304ee95090b524df71700477b7e60b99db603",
+        "receiptDigest": "0x600b0c10437cb0962dbda22e215e64c6a10f20e41a8dcf92805179bb9e6a5a33",
         "trustedStateDigest": "0xe7ee0d12bdc0c4171bbc9ea8a63c545a79cb97d45e2514479dd57a18aa4a6a50"
+      }
+    },
+    {
+      "id": "binding-003",
+      "family": "state-binding",
+      "description": "Evaluation-state provenance naming a different world. Committed for audit, never compared against the state being verified, so this is permitted.",
+      "input": {
+        "authorization": {
+          "domain": {
+            "chainId": "42161",
+            "name": "Mandate",
+            "verifyingContract": "0x0000000000000000000000000000000000000001",
+            "version": "1"
+          },
+          "scheme": "eip712-secp256k1",
+          "signature": "0xdaccbbfeb2ba709ddd2eaf5f4d11deadc99fe660cef47169b2a498ec88ecffbd613ed2b2e8970c95dfb18ee2700fe2869aebf7d1a4e158bb95d6d7d5c764694d1c",
+          "signer": {
+            "kind": "eip155-address",
+            "value": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23"
+          }
+        },
+        "candidate": {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x2222222222222222222222222222222222222222"
+          },
+          "canonicalAsset": {
+            "assetClass": "equity",
+            "idScheme": "figi",
+            "value": "BBG000BBJQV0"
+          },
+          "chain": "eip155:42161",
+          "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xabababababababababababababababababababababababababababababababab",
+          "evaluationStateId": "snapshot.9999",
+          "executionPrice": {
+            "atoms": "10000",
+            "decimals": 2,
+            "denominatorUnit": "SHARE",
+            "numeratorUnit": "USD"
+          },
+          "feeTotal": {
+            "atoms": "250",
+            "decimals": 2,
+            "unit": "USD"
+          },
+          "issuer": "issuer.alpha",
+          "notional": {
+            "atoms": "100000",
+            "decimals": 2,
+            "unit": "USD"
+          },
+          "quantity": {
+            "atoms": "1000",
+            "decimals": 2,
+            "unit": "SHARE"
+          },
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+          "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "side": "BUY",
+          "venue": "venue.alpha",
+          "version": 3
+        },
+        "clock": {
+          "nowUnixSeconds": "1800000000"
+        },
+        "expectedDomain": {
+          "chainId": "42161",
+          "name": "Mandate",
+          "verifyingContract": "0x0000000000000000000000000000000000000001",
+          "version": "1"
+        },
+        "mandate": {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x2222222222222222222222222222222222222222"
+          },
+          "allowedChains": [
+            "eip155:42161"
+          ],
+          "allowedIssuers": [
+            "issuer.alpha"
+          ],
+          "allowedVenues": [
+            "venue.alpha"
+          ],
+          "canonicalAsset": {
+            "assetClass": "equity",
+            "idScheme": "figi",
+            "value": "BBG000BBJQV0"
+          },
+          "createdAtUnixSeconds": "1799999400",
+          "economicLimit": {
+            "atoms": "100650",
+            "decimals": 2,
+            "unit": "USD"
+          },
+          "expiresAtUnixSeconds": "1800000600",
+          "haltPolicy": "FORBID_WHEN_HALTED",
+          "mandateId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+          "maxCorporateActionAgeSeconds": "300",
+          "maxDeviationBps": "40",
+          "maxNotional": {
+            "atoms": "100000",
+            "decimals": 2,
+            "unit": "USD"
+          },
+          "maxPriceAgeSeconds": "60",
+          "nonce": "1",
+          "notBeforeUnixSeconds": "1799999400",
+          "principal": {
+            "kind": "eip155-address",
+            "value": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23"
+          },
+          "requiredCorporateActionEpoch": "7",
+          "side": "BUY",
+          "syntheticPolicy": "FORBIDDEN",
+          "version": 2
+        },
+        "trustedState": {
+          "corporateAction": {
+            "provenance": {
+              "observedAtUnixSeconds": "1799999995",
+              "sourceId": "adapter.test",
+              "trustClass": "VERIFIED"
+            },
+            "value": {
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "figi",
+                "value": "BBG000BBJQV0"
+              },
+              "epoch": "7"
+            }
+          },
+          "market": {
+            "provenance": {
+              "observedAtUnixSeconds": "1799999995",
+              "sourceId": "adapter.test",
+              "trustClass": "VERIFIED"
+            },
+            "value": {
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "figi",
+                "value": "BBG000BBJQV0"
+              },
+              "haltStatus": "TRADING",
+              "referencePrice": {
+                "atoms": "10000",
+                "decimals": 2,
+                "denominatorUnit": "SHARE",
+                "numeratorUnit": "USD"
+              }
+            }
+          },
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+          "replay": {
+            "provenance": {
+              "observedAtUnixSeconds": "1799999995",
+              "sourceId": "adapter.test",
+              "trustClass": "VERIFIED"
+            },
+            "value": {
+              "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
+              "status": "UNUSED"
+            }
+          },
+          "representations": [
+            {
+              "provenance": {
+                "observedAtUnixSeconds": "1799999995",
+                "sourceId": "adapter.test",
+                "trustClass": "VERIFIED"
+              },
+              "value": {
+                "canonicalAsset": {
+                  "assetClass": "equity",
+                  "idScheme": "figi",
+                  "value": "BBG000BBJQV0"
+                },
+                "chain": "eip155:42161",
+                "instrumentType": "backed.note",
+                "issuer": "issuer.alpha",
+                "operationalState": "ACTIVE",
+                "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "synthetic": "NO"
+              }
+            }
+          ],
+          "stateId": "snapshot.0001",
+          "version": 2
+        }
+      },
+      "expected": {
+        "candidateDigest": "0x0dfbcecba1cd0033c01194919acc8f440dbc512e59be70aa14916f9d1be16f70",
+        "decision": "PASS",
+        "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
+        "reasonCodes": [],
+        "receiptDigest": "0xf6ce2c2cb5e701f0066164c97ac8a544e87f695f34cd556c0e4fcb91b5e60488",
+        "trustedStateDigest": "0xa293a3fac575404007fc7ee6d56ad98f876aef9db35315b1aa437dffb1adf821"
+      }
+    },
+    {
+      "id": "binding-004",
+      "family": "state-binding",
+      "description": "State re-observed five seconds later with a reference price moved inside the mandate bound: a fresh, safe handoff world. Permitted, which whole-state digest equality made impossible.",
+      "input": {
+        "authorization": {
+          "domain": {
+            "chainId": "42161",
+            "name": "Mandate",
+            "verifyingContract": "0x0000000000000000000000000000000000000001",
+            "version": "1"
+          },
+          "scheme": "eip712-secp256k1",
+          "signature": "0xdaccbbfeb2ba709ddd2eaf5f4d11deadc99fe660cef47169b2a498ec88ecffbd613ed2b2e8970c95dfb18ee2700fe2869aebf7d1a4e158bb95d6d7d5c764694d1c",
+          "signer": {
+            "kind": "eip155-address",
+            "value": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23"
+          }
+        },
+        "candidate": {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x2222222222222222222222222222222222222222"
+          },
+          "canonicalAsset": {
+            "assetClass": "equity",
+            "idScheme": "figi",
+            "value": "BBG000BBJQV0"
+          },
+          "chain": "eip155:42161",
+          "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0x88380ec96d3622ef56ec522bfa535033e3c15854d383821de01a1351f456d26d",
+          "evaluationStateId": "snapshot.0001",
+          "executionPrice": {
+            "atoms": "10000",
+            "decimals": 2,
+            "denominatorUnit": "SHARE",
+            "numeratorUnit": "USD"
+          },
+          "feeTotal": {
+            "atoms": "250",
+            "decimals": 2,
+            "unit": "USD"
+          },
+          "issuer": "issuer.alpha",
+          "notional": {
+            "atoms": "100000",
+            "decimals": 2,
+            "unit": "USD"
+          },
+          "quantity": {
+            "atoms": "1000",
+            "decimals": 2,
+            "unit": "SHARE"
+          },
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+          "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "side": "BUY",
+          "venue": "venue.alpha",
+          "version": 3
+        },
+        "clock": {
+          "nowUnixSeconds": "1800000005"
+        },
+        "expectedDomain": {
+          "chainId": "42161",
+          "name": "Mandate",
+          "verifyingContract": "0x0000000000000000000000000000000000000001",
+          "version": "1"
+        },
+        "mandate": {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x2222222222222222222222222222222222222222"
+          },
+          "allowedChains": [
+            "eip155:42161"
+          ],
+          "allowedIssuers": [
+            "issuer.alpha"
+          ],
+          "allowedVenues": [
+            "venue.alpha"
+          ],
+          "canonicalAsset": {
+            "assetClass": "equity",
+            "idScheme": "figi",
+            "value": "BBG000BBJQV0"
+          },
+          "createdAtUnixSeconds": "1799999400",
+          "economicLimit": {
+            "atoms": "100650",
+            "decimals": 2,
+            "unit": "USD"
+          },
+          "expiresAtUnixSeconds": "1800000600",
+          "haltPolicy": "FORBID_WHEN_HALTED",
+          "mandateId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+          "maxCorporateActionAgeSeconds": "300",
+          "maxDeviationBps": "40",
+          "maxNotional": {
+            "atoms": "100000",
+            "decimals": 2,
+            "unit": "USD"
+          },
+          "maxPriceAgeSeconds": "60",
+          "nonce": "1",
+          "notBeforeUnixSeconds": "1799999400",
+          "principal": {
+            "kind": "eip155-address",
+            "value": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23"
+          },
+          "requiredCorporateActionEpoch": "7",
+          "side": "BUY",
+          "syntheticPolicy": "FORBIDDEN",
+          "version": 2
+        },
+        "trustedState": {
+          "corporateAction": {
+            "provenance": {
+              "observedAtUnixSeconds": "1800000005",
+              "sourceId": "adapter.test",
+              "trustClass": "VERIFIED"
+            },
+            "value": {
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "figi",
+                "value": "BBG000BBJQV0"
+              },
+              "epoch": "7"
+            }
+          },
+          "market": {
+            "provenance": {
+              "observedAtUnixSeconds": "1800000005",
+              "sourceId": "adapter.test",
+              "trustClass": "VERIFIED"
+            },
+            "value": {
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "figi",
+                "value": "BBG000BBJQV0"
+              },
+              "haltStatus": "TRADING",
+              "referencePrice": {
+                "atoms": "10020",
+                "decimals": 2,
+                "denominatorUnit": "SHARE",
+                "numeratorUnit": "USD"
+              }
+            }
+          },
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+          "replay": {
+            "provenance": {
+              "observedAtUnixSeconds": "1799999995",
+              "sourceId": "adapter.test",
+              "trustClass": "VERIFIED"
+            },
+            "value": {
+              "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
+              "status": "UNUSED"
+            }
+          },
+          "representations": [
+            {
+              "provenance": {
+                "observedAtUnixSeconds": "1799999995",
+                "sourceId": "adapter.test",
+                "trustClass": "VERIFIED"
+              },
+              "value": {
+                "canonicalAsset": {
+                  "assetClass": "equity",
+                  "idScheme": "figi",
+                  "value": "BBG000BBJQV0"
+                },
+                "chain": "eip155:42161",
+                "instrumentType": "backed.note",
+                "issuer": "issuer.alpha",
+                "operationalState": "ACTIVE",
+                "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "synthetic": "NO"
+              }
+            }
+          ],
+          "stateId": "snapshot.0002",
+          "version": 2
+        }
+      },
+      "expected": {
+        "candidateDigest": "0x395078681379a5b55979672a0b55911aef2cb7a87536f5328e044e45dc3822ff",
+        "decision": "PASS",
+        "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
+        "reasonCodes": [],
+        "receiptDigest": "0xfb7288ba0a7964431633a70cde7681a7d4c4ffedd3934d82ccd6bfcbf964d099",
+        "trustedStateDigest": "0x88380ec96d3622ef56ec522bfa535033e3c15854d383821de01a1351f456d26d"
       }
     },
     {
@@ -13312,6 +13983,8 @@
           },
           "chain": "eip155:42161",
           "corporateActionEpoch": "7",
+          "evaluationStateDigest": "0xcd323437a830ba9dfbf76466067ba8c62f0a45306c9bd1e9a522e6b72316b6ab",
+          "evaluationStateId": "snapshot.0001",
           "executionPrice": {
             "atoms": "10000",
             "decimals": 2,
@@ -13334,12 +14007,11 @@
             "decimals": 2,
             "unit": "SHARE"
           },
-          "referenceStateDigest": "0x74670c3379708787241e25c4ecedfdb1e7b9049462e072d39e7d90edbd23e8c4",
-          "referenceStateId": "snapshot.0001",
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "representationId": "eip155:42161/erc20:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "side": "BUY",
           "venue": "venue.alpha",
-          "version": 2
+          "version": 3
         },
         "clock": {
           "nowUnixSeconds": "1800000000"
@@ -13434,7 +14106,7 @@
               }
             }
           },
-          "registrySnapshotDigest": null,
+          "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
           "replay": {
             "provenance": {
               "observedAtUnixSeconds": "1799999995",
@@ -13473,14 +14145,14 @@
         }
       },
       "expected": {
-        "candidateDigest": "0x7fa5492a1bc575d8ddbc692b877a77f2d3a8790b6d28bb088bbba8530ae3b474",
+        "candidateDigest": "0x1e99319c12558e81594e879bb386f8c9c1a39772298f37162a89a11fb8331cb6",
         "decision": "REJECT",
         "mandateDigest": "0x1f594acbcea2c4c046a1a250ce7ddc11c5816b411ce09264998e18e0d7ee9df1",
         "reasonCodes": [
           "MANDATE_QUARANTINED"
         ],
-        "receiptDigest": "0x7c49bba8354266ae879f4477922c644358b70226698ccdc4f6c32d4bf6cb678c",
-        "trustedStateDigest": "0x74670c3379708787241e25c4ecedfdb1e7b9049462e072d39e7d90edbd23e8c4"
+        "receiptDigest": "0xab2d419a3d0eb1d0409573e6183f14da1b43c92e5e9e0319d753f563d9e1de90",
+        "trustedStateDigest": "0xcd323437a830ba9dfbf76466067ba8c62f0a45306c9bd1e9a522e6b72316b6ab"
       }
     }
   ]

@@ -44,7 +44,14 @@ export interface CheckContext {
   readonly clock: Clock;
   readonly expectedDomain: Eip712Domain;
   readonly mandateDigest: Bytes32;
-  /** Computed by `verify` over the state it was handed. The candidate must commit to it. */
+  /**
+   * Computed by `verify` over the state it was handed, and reported in the
+   * receipt so a verdict is reproducible from it.
+   *
+   * No check compares it against anything. Requiring the candidate to commit to
+   * it was schema v2's mistake: it made a re-verification against fresh state
+   * impossible (ADR 0017). It is context for diagnostics, not a predicate.
+   */
   readonly trustedStateDigest: Bytes32;
 }
 
@@ -452,36 +459,49 @@ const checkCorporateAction: Check = {
 // --- G. Intent fidelity -----------------------------------------------------
 
 /**
- * Bind the candidate to the *content* of the state it was built against.
+ * Bind the candidate to the registry snapshot its representation set came from.
  *
- * The label is checked too, because a mismatched label gives a clearer
- * diagnostic, but the digest is the binding. Two materially different states can
- * share one `stateId` — the caller chooses it freely — so matching the name
- * established nothing before schema v2 added `referenceStateDigest`.
+ * This is the *structural* half of the state binding, and it is the only part of
+ * state provenance compared for equality (ADR 0017).
+ *
+ * Schema v2 instead required the candidate's `referenceStateDigest` to equal the
+ * digest of whatever state `verify` was handed. That made a re-verification
+ * against fresh state impossible: a new observation timestamp changes the state
+ * digest, so every honest handoff failed `CANDIDATE_STATE_MISMATCH` and only
+ * replaying the evaluation state could pass — which is the tautology the handoff
+ * exists to avoid. The evaluation digest is still committed on the candidate, for
+ * audit; it is not a predicate about the world *now*.
+ *
+ * What does not refresh is the registry. A different snapshot can retire a
+ * representation, reassign an issuer or move a contract, and no fresh price
+ * observation is allowed to carry that with it. So the snapshot digest must be
+ * identical, and a state that declares none cannot establish the binding at all:
+ * absent provenance is UNKNOWN, and UNKNOWN rejects. The kernel still never
+ * interprets the digest — it has no registry types — it compares it.
+ *
+ * Every *dynamic* fact the old whole-state equality incidentally covered is
+ * re-evaluated by the check that owns it: `checkPriceDeviation`,
+ * `checkPriceFreshness`, `checkHalt`, `checkCorporateAction`, `checkReplay`,
+ * `checkRepresentation` and `checkTrustLevels`. Nothing moved out of scope; the
+ * enforcement moved from "these bytes must be identical" to "these predicates
+ * must still hold".
  */
-const checkStateBinding: Check = {
-  name: 'state-binding',
+const checkRegistrySnapshotBinding: Check = {
+  name: 'registry-snapshot-binding',
   run: (ctx) => {
-    const out: Violation[] = [];
-    if (ctx.candidate.referenceStateId !== ctx.state.stateId) {
-      out.push(
-        violation('CANDIDATE_STATE_MISMATCH', {
-          field: 'referenceStateId',
-          observed: ctx.state.stateId,
-          candidate: ctx.candidate.referenceStateId,
-        }),
-      );
+    const declared = ctx.state.registrySnapshotDigest;
+    if (declared === null) {
+      return [violation('REGISTRY_SNAPSHOT_UNKNOWN', { candidate: ctx.candidate.registrySnapshotDigest })];
     }
-    if (ctx.candidate.referenceStateDigest !== ctx.trustedStateDigest) {
-      out.push(
-        violation('CANDIDATE_STATE_MISMATCH', {
-          field: 'referenceStateDigest',
-          observed: ctx.trustedStateDigest,
-          candidate: ctx.candidate.referenceStateDigest,
+    if (declared !== ctx.candidate.registrySnapshotDigest) {
+      return [
+        violation('REGISTRY_SNAPSHOT_MISMATCH', {
+          observed: declared,
+          candidate: ctx.candidate.registrySnapshotDigest,
         }),
-      );
+      ];
     }
-    return out;
+    return none;
   },
 };
 
@@ -537,6 +557,6 @@ export const CHECKS: readonly Check[] = [
   checkPriceFreshness,
   checkHalt,
   checkCorporateAction,
-  checkStateBinding,
+  checkRegistrySnapshotBinding,
   checkTrustLevels,
 ];

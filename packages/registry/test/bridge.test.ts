@@ -26,6 +26,7 @@ import {
   deriveRequirements,
   evaluateRepresentation,
   openRegistry,
+  registrySnapshotDigest,
   toRepresentationState,
   type Registry,
   type RepresentationRequirements,
@@ -164,10 +165,14 @@ test('the weakest evidence sets the provenance the kernel checks', () => {
 function kernelReasonCodes(registry: Registry, m: CanonicalMandate, address: string, chain: string): readonly string[] {
   const state = toRepresentationState(recordOf(registry, address, chain), requirements(m));
   const representations = state.ok ? [state.value] : [];
+  // Schema v3 requires the state to declare which registry snapshot its
+  // representations came from, and the candidate to commit to the same one
+  // (ADR 0017). This harness declares the snapshot it actually derived from.
+  const snapshotDigest = registrySnapshotDigest(registry.snapshot);
   const trustedState = {
     version: 2,
     stateId: 'fixture.snapshot.0001',
-    registrySnapshotDigest: null,
+    registrySnapshotDigest: snapshotDigest,
     representations,
     market: {
       provenance: { trustClass: 'VERIFIED', sourceId: 'fixture.source.a', observedAtUnixSeconds: String(NOW) },
@@ -186,8 +191,6 @@ function kernelReasonCodes(registry: Registry, m: CanonicalMandate, address: str
       value: { mandateDigest: '0x' + '00'.repeat(32), status: 'UNUSED' },
     },
   };
-  // Schema v2 binds a candidate to the digest of the state it was built
-  // against, so this harness computes it rather than naming a snapshot.
   const parsedState = parseTrustedState(trustedState);
   const stateDigest = parsedState.ok ? trustedStateDigest(parsedState.value) : ('0x' + '00'.repeat(32));
   const receipt = verify({
@@ -199,7 +202,7 @@ function kernelReasonCodes(registry: Registry, m: CanonicalMandate, address: str
       domain: { name: 'Mandate', version: '1', chainId: '42161', verifyingContract: '0x' + '00'.repeat(19) + '01' },
     },
     candidate: {
-      version: 2,
+      version: 3,
       representationId: repId(address, chain),
       canonicalAsset: { assetClass: 'equity', idScheme: 'figi', value: 'BBG000BBJQV0' },
       issuer: state.ok ? state.value.value.issuer : ISSUER_ALPHA,
@@ -211,8 +214,9 @@ function kernelReasonCodes(registry: Registry, m: CanonicalMandate, address: str
       executionPrice: { numeratorUnit: 'USD', denominatorUnit: 'SHARE', decimals: 2, atoms: '10000' },
       notional: { unit: 'USD', decimals: 2, atoms: '100000' },
       feeTotal: { unit: 'USD', decimals: 2, atoms: '250' },
-      referenceStateId: 'fixture.snapshot.0001',
-      referenceStateDigest: stateDigest,
+      evaluationStateId: 'fixture.snapshot.0001',
+      evaluationStateDigest: stateDigest,
+      registrySnapshotDigest: snapshotDigest,
       corporateActionEpoch: '7',
     },
     trustedState,

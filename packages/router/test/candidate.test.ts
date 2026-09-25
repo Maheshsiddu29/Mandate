@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { UINT256_MAX, parseIdentifier } from '@mandate/kernel';
 import { buildRoutingCandidate } from '../src/index.ts';
-import { ROUTER_CLOCK, ROUTER_MANDATE, ROUTER_REQUESTED_QUANTITY, ROUTER_STATE, routeQuote, sellMandate, trustedCost, zeroFee } from './support/fixture.ts';
+import { ROUTER_CLOCK, ROUTER_MANDATE, ROUTER_REGISTRY_SNAPSHOT_DIGEST, ROUTER_REQUESTED_QUANTITY, ROUTER_STATE, routeQuote, sellMandate, trustedCost, zeroFee } from './support/fixture.ts';
 
 describe('execution candidate construction', () => {
   it('constructs a committed candidate only after independent cost and identity checks', () => {
@@ -114,7 +114,11 @@ describe('execution candidate construction', () => {
 });
 
 function build(mandate: typeof ROUTER_MANDATE, quote: ReturnType<typeof routeQuote>, cost: ReturnType<typeof trustedCost>) {
-  return buildRoutingCandidate({ mandate, quote, trustedState: ROUTER_STATE, trustedCost: cost, requestedQuantity: ROUTER_REQUESTED_QUANTITY, nowUnixSeconds: ROUTER_CLOCK });
+  return buildRoutingCandidate({
+    mandate, quote, trustedState: ROUTER_STATE, trustedCost: cost,
+    requestedQuantity: ROUTER_REQUESTED_QUANTITY, nowUnixSeconds: ROUTER_CLOCK,
+    registrySnapshotDigest: ROUTER_REGISTRY_SNAPSHOT_DIGEST,
+  });
 }
 
 function identifier(value: string) {

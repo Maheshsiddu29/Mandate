@@ -26,7 +26,7 @@ error handling, in the demo and in audit records
 [design §10.2](mandate-design.md#102-check-families) that produces the code,
 so this table doubles as a coverage map.
 
-**49 codes across 8 families.**
+**51 codes across 8 families.**
 
 ## INPUT — structural well-formedness
 
@@ -102,6 +102,8 @@ so this table doubles as a coverage map.
 | `MND-STATE-006` | `CANDIDATE_STATE_MISMATCH` | G_INTENT_FIDELITY | The corporate-action epoch the candidate was constructed against differs from the observed epoch. The candidate was built against a different world than the one being verified. |
 | `MND-STATE-007` | `CORPORATE_ACTION_STATE_UNKNOWN` | F_MARKET_AND_CORPORATE_ACTION_STATE | The corporate-action epoch for this asset could not be established. An unknown epoch fails closed; it is never assumed to match the authorization. |
 | `MND-STATE-008` | `CORPORATE_ACTION_STATE_STALE` | F_MARKET_AND_CORPORATE_ACTION_STATE | The corporate-action observation is older than the mandate corporate-action freshness bound at the evaluation time. A fresh epoch feed is itself state that can go stale. |
+| `MND-STATE-009` | `REGISTRY_SNAPSHOT_MISMATCH` | G_INTENT_FIDELITY | The registry snapshot the candidate was constructed against is not the snapshot the trusted state being verified declares. A registry snapshot is structural: a different snapshot can retire a representation, rename an issuer or move a contract, so it must be identical rather than merely re-observed. Rerouting against the current snapshot is the remedy. |
+| `MND-STATE-010` | `REGISTRY_SNAPSHOT_UNKNOWN` | G_INTENT_FIDELITY | The trusted state declares no registry snapshot digest, so the candidate’s structural binding to a registry snapshot cannot be established. Absent provenance fails closed; it is not treated as agreement. |
 
 ## NET — network and venue
 
@@ -151,6 +153,8 @@ verifier itself.
 | `NOTIONAL_INCONSISTENT` | The quantity, price and total of this trade did not agree. |
 | `PRICE_DEVIATION_EXCEEDED` | The price moved further from the reference than your authorization allows. |
 | `PRICE_STATE_STALE` | Price information was too old to trade against. |
+| `REGISTRY_SNAPSHOT_MISMATCH` | The list of tokenized assets changed while this trade was being prepared, so it was not executed. |
+| `REGISTRY_SNAPSHOT_UNKNOWN` | The source of the tokenized asset list could not be established, so this trade was not executed. |
 | `REPLAY_STATE_UNKNOWN` | This authorization could not be checked against previous use. |
 | `REPRESENTATION_ASSET_MISMATCH` | The selected token does not represent the asset you authorized. |
 | `REPRESENTATION_ATTRIBUTES_MISMATCH` | The details of the proposed trade did not match the token it names. |

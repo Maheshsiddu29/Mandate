@@ -1,4 +1,4 @@
-import { parseClock, parseEip712Domain, parseMandate, parseTrustedState, type Amount, type CanonicalMandate, type ExecutionCandidate, type TrustedState, type UnixSeconds } from '@mandate/kernel';
+import { parseBytes32, parseClock, parseEip712Domain, parseMandate, parseTrustedState, type Amount, type CanonicalMandate, type ExecutionCandidate, type TrustedState, type UnixSeconds } from '@mandate/kernel';
 import { buildReplayWorld } from '../../../adapter-robinhood/test/support/mainnet-replay.ts';
 import type { ProviderRouteQuote, TrustedRouteCost } from '../../src/index.ts';
 
@@ -24,7 +24,7 @@ const parsedCandidate = sourceCandidate as unknown as {
   representationId: ExecutionCandidate['representationId']; canonicalAsset: CanonicalMandate['canonicalAsset']; issuer: ExecutionCandidate['issuer'];
   chain: ExecutionCandidate['chain']; venue: ExecutionCandidate['venue']; side: 'BUY' | 'SELL'; agent: CanonicalMandate['agent'];
   quantity: Amount; executionPrice: ProviderRouteQuote['executionPrice']; notional: Amount;
-  referenceStateId: string; corporateActionEpoch: bigint;
+  evaluationStateId: string; registrySnapshotDigest: string; corporateActionEpoch: bigint;
 };
 
 export function zeroFee(): Amount {
@@ -54,7 +54,7 @@ export function routeQuote(patch: Partial<ProviderRouteQuote> = {}): ProviderRou
     fillPolicy: 'FILL_OR_KILL',
     costs: { venueFee: zero, executionFee: zero, settlementFee: zero, routeFee: zero },
     steps: [{ kind: 'TRADE', venue: parsedCandidate.venue, chain: parsedCandidate.chain, representationId: parsedCandidate.representationId }],
-    referenceStateId: parsedCandidate.referenceStateId,
+    referenceStateId: parsedCandidate.evaluationStateId,
     corporateActionEpoch: parsedCandidate.corporateActionEpoch,
     ...patch,
   };
@@ -126,6 +126,13 @@ export function routerHandoff(overrides: Partial<{ trustedMarketState: unknown; 
 export function handoffFor(request: { readonly trustedMarketState: unknown; readonly clock: unknown }) {
   return { trustedMarketState: request.trustedMarketState, clock: request.clock };
 }
+
+/** The registry snapshot digest the fixture's state and candidates are bound to. */
+export const ROUTER_REGISTRY_SNAPSHOT_DIGEST = (() => {
+  const parsed = parseBytes32(parsedCandidate.registrySnapshotDigest, 'MALFORMED_CANDIDATE');
+  if (!parsed.ok) throw new Error('router fixture has no registry snapshot digest');
+  return parsed.value;
+})();
 
 /** The recorded state with trading halted, for handoff-freshness tests. */
 export function haltedRouterState(): TrustedState {

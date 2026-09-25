@@ -53,15 +53,26 @@ export const OTHER_CHAIN = 'eip155:1';
 export const VENUE = 'venue.alpha';
 export const OTHER_VENUE = 'venue.omega';
 export const STATE_ID = 'snapshot.0001';
+/**
+ * The registry snapshot the fixture world's representations were derived from.
+ *
+ * Opaque to the kernel, which has no registry types: it only requires the
+ * candidate and the trusted state to name the same one. Phase 2's registry
+ * produces real digests; this is a fixed, plausible stand-in.
+ */
+export const REGISTRY_SNAPSHOT_DIGEST = '0x' + 'a5'.repeat(32);
+/** A second snapshot, for the structural-binding cases. */
+export const OTHER_REGISTRY_SNAPSHOT_DIGEST = '0x' + '5a'.repeat(32);
 
 export const MANDATE_ID = '0x' + '11'.repeat(32);
 
 /**
- * Stand-in for the trusted-state digest in a raw candidate.
+ * Stand-in for the evaluation-state digest in a raw candidate.
  *
- * `buildWorld` replaces it with the digest of the state it actually assembled,
- * so a test that does not care about the binding gets a correct one and a test
- * that does can override it. It is never a valid digest by accident.
+ * `buildWorld` replaces it with the digest of the state it actually assembled, so
+ * a world records honest provenance. Nothing *checks* it — schema v3 keeps it for
+ * audit, not as a predicate (ADR 0017) — so overriding it changes the candidate
+ * digest and nothing else, which is itself a property worth testing.
  */
 export const PLACEHOLDER_STATE_DIGEST = '0x' + '00'.repeat(32);
 
@@ -152,7 +163,7 @@ export function mandateInput(overrides: Json = {}): Json {
 export function candidateInput(overrides: Json = {}): Json {
   return deepMerge(
     {
-      version: 2,
+      version: 3,
       representationId: REPRESENTATION_ID,
       canonicalAsset: { ...NVDA },
       issuer: ISSUER,
@@ -164,8 +175,9 @@ export function candidateInput(overrides: Json = {}): Json {
       executionPrice: { ...REFERENCE_PRICE },
       notional: { ...NOTIONAL },
       feeTotal: { ...FEE_TOTAL },
-      referenceStateId: STATE_ID,
-      referenceStateDigest: PLACEHOLDER_STATE_DIGEST,
+      evaluationStateId: STATE_ID,
+      evaluationStateDigest: PLACEHOLDER_STATE_DIGEST,
+      registrySnapshotDigest: REGISTRY_SNAPSHOT_DIGEST,
       corporateActionEpoch: EPOCH,
     },
     overrides,
@@ -210,7 +222,7 @@ export function stateInput(overrides: Json = {}, representations?: Json[]): Json
     {
       version: 2,
       stateId: STATE_ID,
-      registrySnapshotDigest: null,
+      registrySnapshotDigest: REGISTRY_SNAPSHOT_DIGEST,
       representations: representations ?? [representationInput()],
       market: {
         provenance: { ...PROVENANCE },

@@ -31,6 +31,7 @@ import {
   NOW,
   OTHER_AGENT,
   OTHER_CHAIN,
+  OTHER_REGISTRY_SNAPSHOT_DIGEST,
   OTHER_VENUE,
   SYNTHETIC_REPRESENTATION_ID,
   UNAPPROVED_ISSUER,
@@ -140,7 +141,10 @@ const SPECS: readonly VectorSpec[] = [
   { id: 'economic-006', family: 'economic-limit', description: 'A fee denominated in a unit the notional does not use.', world: { candidate: { feeTotal: { unit: 'EUR', decimals: 2, atoms: 250n } } } },
   { id: 'repchain-001', family: 'representation-chain', description: 'A contract on a chain the mandate forbids, presented with an allowed chain in the field beside it.', world: { candidate: { representationId: FOREIGN_CHAIN_REPRESENTATION_ID }, representations: [representationInput({ value: { representationId: FOREIGN_CHAIN_REPRESENTATION_ID } })] } },
   { id: 'repchain-002', family: 'representation-chain', description: 'A candidate whose chain field disagrees with the chain inside its own representation identifier.', world: { candidate: { chain: 'eip155:1' } } },
-  { id: 'binding-001', family: 'state-binding', description: 'A candidate committing to a trusted-state digest that is not the digest of the state supplied.', world: { candidate: { referenceStateDigest: '0x' + 'ab'.repeat(32) }, unboundState: true } },
+  { id: 'binding-001', family: 'state-binding', description: 'A candidate committing to a registry snapshot that the trusted state does not declare. Structural authority is bound by equality (ADR 0017).', world: { candidate: { registrySnapshotDigest: OTHER_REGISTRY_SNAPSHOT_DIGEST } } },
+  { id: 'binding-002', family: 'state-binding', description: 'A trusted state that declares no registry snapshot at all, so the structural binding cannot be established.', world: { state: { registrySnapshotDigest: null } } },
+  { id: 'binding-003', family: 'state-binding', description: 'Evaluation-state provenance naming a different world. Committed for audit, never compared against the state being verified, so this is permitted.', world: { candidate: { evaluationStateId: 'snapshot.9999', evaluationStateDigest: '0x' + 'ab'.repeat(32) }, unboundState: true } },
+  { id: 'binding-004', family: 'state-binding', description: 'State re-observed five seconds later with a reference price moved inside the mandate bound: a fresh, safe handoff world. Permitted, which whole-state digest equality made impossible.', world: { now: NOW + 5n, state: { stateId: 'snapshot.0002', market: { provenance: { observedAtUnixSeconds: NOW + 5n }, value: { referencePrice: { numeratorUnit: 'USD', denominatorUnit: 'SHARE', decimals: 2, atoms: 10_020n } } }, corporateAction: { provenance: { observedAtUnixSeconds: NOW + 5n } } } } },
   { id: 'replay-005', family: 'replay', description: 'An authorization quarantined after a reservation lapsed with its outcome unestablished.', world: { state: { replay: { value: { status: 'QUARANTINED' } } } } },
 ];
 

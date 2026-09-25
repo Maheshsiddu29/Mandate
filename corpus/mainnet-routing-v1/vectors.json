@@ -229,7 +229,7 @@
       "maliciousRouteId": "route.aapl.malicious-cheapest",
       "receiptReproduced": true,
       "expected": {
-        "finalVerificationReceiptDigest": "0x4ef945f54ae466d94a48a951daba615078ee5dabd4c3b249d32b7401cff14b65",
+        "finalVerificationReceiptDigest": "0xb35b8da29b84b6d990d5c2c4efb6f10f11e0fb299459891044e8e27602c8dd1c",
         "outcomes": [
           {
             "reasons": [
@@ -249,8 +249,8 @@
             "status": "ADMISSIBLE"
           }
         ],
-        "routingReceiptDigest": "0xdfa0861c5e18ab0fe877f847e192efa8b851a997339526e67d87ab35cdac9889",
-        "selectedCandidateDigest": "0x05ee0853989cceee9e9cfcf30c70e5bf5505ccdf8fd68d8707d1c84b5c3b531f",
+        "routingReceiptDigest": "0xdf2f837f0e0dc1363108055fffd996892217a82b1035d026d6ae54b05fb93c41",
+        "selectedCandidateDigest": "0x2d0f03ce22e8161af725eb219cf30f1d41bdbacec661fc5ae1221013eee1807c",
         "selectedRouteId": "route.aapl.valid-cheap",
         "status": "SELECTED"
       }
@@ -479,7 +479,7 @@
       "maliciousRouteId": "route.nvda.malicious-cheapest",
       "receiptReproduced": true,
       "expected": {
-        "finalVerificationReceiptDigest": "0x0e5c4861bf5042bc656f851427ee30f017fc578672fde1c753b7665d604d0f5f",
+        "finalVerificationReceiptDigest": "0xdea9d483d16af2ab733517c333b0f5aedf7ee55da3816093b1a4cf0e07e52099",
         "outcomes": [
           {
             "reasons": [
@@ -499,8 +499,8 @@
             "status": "ADMISSIBLE"
           }
         ],
-        "routingReceiptDigest": "0xfe47a9977dfbc135dab544505ca06cf95dfa6965f25cd202bbe4b271d617427e",
-        "selectedCandidateDigest": "0xc7e062bc4ea429b56e01c57cd2dfcd10606b4e778716e8a2e205f9e46cce3ffc",
+        "routingReceiptDigest": "0xff8273825aa31cb333a7094360e72e67175846e0ab4257a81ba878c8865fca2b",
+        "selectedCandidateDigest": "0xeded1ae5efdbd13422ec0a05fe6678a121117946d2e87fdd68ff41ffe91b54e5",
         "selectedRouteId": "route.nvda.valid-cheap",
         "status": "SELECTED"
       }
@@ -729,7 +729,7 @@
       "maliciousRouteId": "route.tsla.malicious-cheapest",
       "receiptReproduced": true,
       "expected": {
-        "finalVerificationReceiptDigest": "0x4b78a03132ff674ffb628e6475bbd6097c1aa536b3c99f5c3b0c6cd2656dd99b",
+        "finalVerificationReceiptDigest": "0x6bdfbe58e0f72c58a78ee5a2a5e81eafe5c7485dfc4d1c4751461747abc0f975",
         "outcomes": [
           {
             "reasons": [
@@ -749,8 +749,8 @@
             "status": "ADMISSIBLE"
           }
         ],
-        "routingReceiptDigest": "0x3e1374f77cee5f973f3f08bb0acfb3ee18fff34709ff98c23d6ee124b073e04a",
-        "selectedCandidateDigest": "0x6aac3dde24b8e8bb6f3dc1567ee7ab3a4ada8ed4945b4985dbebb9cd6408bc10",
+        "routingReceiptDigest": "0x93cf53567fe380fabbbfb2f7fdbeb3a80e0954e95b9140ebc8108a108aabf35b",
+        "selectedCandidateDigest": "0xbf38df44fc228c5ecd0c4d85d94e8e861a442e96536e35a72e594dd6672e8b1e",
         "selectedRouteId": "route.tsla.valid-cheap",
         "status": "SELECTED"
       }
@@ -979,7 +979,7 @@
       "maliciousRouteId": "route.qqq.malicious-cheapest",
       "receiptReproduced": true,
       "expected": {
-        "finalVerificationReceiptDigest": "0x22e2c7f6427bd06454a16937cde58c91f850f8885d145bd78543dbb0d3be22bc",
+        "finalVerificationReceiptDigest": "0x4c2efc295db1363fd788319c84e4cce20ef726e44b009cb9a3b3c3235f7b5c28",
         "outcomes": [
           {
             "reasons": [
@@ -999,8 +999,8 @@
             "status": "ADMISSIBLE"
           }
         ],
-        "routingReceiptDigest": "0x304bdbcd7341661b79fb5e2e7bc9a19817c241a1a43099c783f690218eea724f",
-        "selectedCandidateDigest": "0xac365b8481eddca0dfa6f8ba98cbc416caa1d9175792a4abf6fc137897c51d1b",
+        "routingReceiptDigest": "0x1fe5004fd6d2bc7f182fedd1c25181fca3078df73d912d49d2a92fcff27fe26f",
+        "selectedCandidateDigest": "0x1d55cd68d826702af741b8875dc529d1d623998e89270487e327f6031673d10a",
         "selectedRouteId": "route.qqq.valid-cheap",
         "status": "SELECTED"
       }
@@ -1229,7 +1229,7 @@
       "maliciousRouteId": "route.crwd.malicious-cheapest",
       "receiptReproduced": true,
       "expected": {
-        "finalVerificationReceiptDigest": "0x8eb9aff0035ba44ddbf89a8f7e88b8ffad18b880f7432a0e6100283e8590c5dd",
+        "finalVerificationReceiptDigest": "0x28be9a9d4f1eb789e0ce30b186f2bda3edf8fc5f454cae74b0528eea844501cd",
         "outcomes": [
           {
             "reasons": [
@@ -1249,8 +1249,8 @@
             "status": "ADMISSIBLE"
           }
         ],
-        "routingReceiptDigest": "0x060d5cdd3c63758239843bb04fcb2d425fd461c7abf116693c9be465ccea87dd",
-        "selectedCandidateDigest": "0xdc98c4667ac6f6384afe1c4dd101cdecaa7be90995741bbd317eab841c7ee10b",
+        "routingReceiptDigest": "0x0b07e3992e303d7cd336bfb81f677c4f41400688cfdcc7065c4204612455647e",
+        "selectedCandidateDigest": "0x7995964d8da87284acc8301f7a6f2766d9dce6b1d2526d1f5c47c5ed8d0a958d",
         "selectedRouteId": "route.crwd.valid-cheap",
         "status": "SELECTED"
       }
@@ -1479,7 +1479,7 @@
       "maliciousRouteId": "route.msft.malicious-cheapest",
       "receiptReproduced": true,
       "expected": {
-        "finalVerificationReceiptDigest": "0x39e69816717aedc100d2b92ed7364e35490a8c9fd0553abe55c3ca57b7a5ced8",
+        "finalVerificationReceiptDigest": "0x09986afd50ce9fd5df2283b0347b3877c595b1d5c2f441a57d41b3bf4f1aa178",
         "outcomes": [
           {
             "reasons": [
@@ -1499,8 +1499,8 @@
             "status": "ADMISSIBLE"
           }
         ],
-        "routingReceiptDigest": "0x06b8b2fc5eee4c7fca03d6fda196511c036cc1191525f6e630cd1c4385894612",
-        "selectedCandidateDigest": "0xfa075a19a0abac4a6b6a71291076fe66ea7f28c2729699861258e216dd08f51b",
+        "routingReceiptDigest": "0xcb5054d487d5c309003a25e74e01641ee3bdb6d8929f2adf3bc60cf2caf4cb7b",
+        "selectedCandidateDigest": "0xc1055abeab161c6763d6dd3e3eae9da4d0fda36360c9bbb35efcfbb35e1e76b6",
         "selectedRouteId": "route.msft.valid-cheap",
         "status": "SELECTED"
       }

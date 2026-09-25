@@ -30,7 +30,15 @@ import {
   verify,
 } from '../src/index.ts';
 import { buildWorld } from './support/world.ts';
-import { CHAIN, FOREIGN_CHAIN_REPRESENTATION_ID, representationInput, stateInput } from './support/fixtures.ts';
+import {
+  CHAIN,
+  EPOCH,
+  FOREIGN_CHAIN_REPRESENTATION_ID,
+  NOW,
+  OTHER_REGISTRY_SNAPSHOT_DIGEST,
+  representationInput,
+  stateInput,
+} from './support/fixtures.ts';
 
 // --- F-3: totality no longer depends on collection size ---------------------
 
@@ -152,7 +160,6 @@ test('F-1 REGRESSION: there is no transition from a lapsed reservation to permis
   assert.equal(reconciled.value.resolution?.outcome, ReconciledOutcome.FAILED);
 });
 
-
 // --- F-6: the chain inside the identifier is reconciled ---------------------
 
 test('F-6 REGRESSION: a contract on a disallowed chain rejects even when the chain field says otherwise', () => {
@@ -178,28 +185,147 @@ test('F-6 REGRESSION: the identifier is the canonical chain, in the candidate an
   assert.ok(stateOnly.reasonCodes.includes('REPRESENTATION_CHAIN_INCONSISTENT'), stateOnly.reasonCodes.join(', '));
 });
 
-// --- F-8: the state binding is a commitment to content ---------------------
+// --- F-8 / N-1: the state binding, corrected ------------------------------
 
-test('F-8 REGRESSION: two different states sharing one stateId no longer both satisfy the binding', () => {
-  const first = verify(buildWorld({}));
-  assert.equal(first.decision, Decision.PASS);
+/**
+ * F-8's remediation was right about the disease and wrong about the cure.
+ *
+ * The finding was that `referenceStateId` is a caller-chosen label, so two
+ * materially different states could satisfy one candidate's binding. Phase 5R
+ * fixed that by requiring the candidate to commit to the digest of the *whole*
+ * trusted state and comparing it at every `verify` call.
+ *
+ * That over-corrected (finding N-1). A trusted-state digest covers observation
+ * timestamps, so *any* fresh observation changed it, and the execution-handoff
+ * re-verification — whose entire purpose is to read fresh state — could only ever
+ * pass by replaying the evaluation state. Whole-state equality made the
+ * re-verification a tautology.
+ *
+ * Phase 5R.1 splits the binding by what the fact actually is (ADR 0017), and
+ * these three tests are the corrected property in full.
+ */
 
-  // The same candidate, bound to the first state's digest, against a state that
-  // shares its stateId but carries a different reference price.
-  const movedState = stateInput({
-    market: { value: { referencePrice: { numeratorUnit: 'USD', denominatorUnit: 'SHARE', decimals: 2, atoms: 10_020n } } },
+test('N-1 REGRESSION: a fresh state that is otherwise safe verifies, rather than failing on a digest', () => {
+  const evaluation = buildWorld({});
+  const evaluationReceipt = verify(evaluation);
+  assert.equal(evaluationReceipt.decision, Decision.PASS);
+
+  // The same candidate, against state re-observed five seconds later: a new
+  // snapshot label, newer provenance, and a reference price that moved within
+  // the mandate's deviation bound. Every byte of the state digest differs.
+  const later = NOW + 5n;
+  const refreshed = stateInput({
+    stateId: 'snapshot.0002',
+    market: {
+      provenance: { observedAtUnixSeconds: later },
+      value: { referencePrice: { numeratorUnit: 'USD', denominatorUnit: 'SHARE', decimals: 2, atoms: 10_020n } },
+    },
+    corporateAction: { provenance: { observedAtUnixSeconds: later } },
+    replay: { provenance: { observedAtUnixSeconds: later } },
   });
-  const parsedMoved = parseTrustedState(movedState);
-  assert.ok(parsedMoved.ok);
-  const world = buildWorld({});
-  const substituted = verify({ ...world, trustedState: movedState });
+  const parsedRefreshed = parseTrustedState(refreshed);
+  assert.ok(parsedRefreshed.ok);
+  assert.notEqual(evaluationReceipt.trustedStateDigest, trustedStateDigest(parsedRefreshed.value));
 
-  assert.equal(substituted.decision, Decision.REJECT, 'the label matches; the content does not');
-  assert.ok(
-    substituted.violations.some((v) => v.code === 'CANDIDATE_STATE_MISMATCH' && v.detail['field'] === 'referenceStateDigest'),
-    substituted.reasonCodes.join(', '),
-  );
-  assert.notEqual(first.trustedStateDigest, trustedStateDigest(parsedMoved.value));
+  const handoff = verify({
+    ...evaluation,
+    trustedState: { ...refreshed, replay: (evaluation.trustedState as Record<string, unknown>)['replay'] as unknown },
+    clock: { nowUnixSeconds: later },
+  });
+  assert.equal(handoff.decision, Decision.PASS, `a safe refresh must pass: ${handoff.reasonCodes.join(', ')}`);
+  assert.notEqual(handoff.trustedStateDigest, evaluationReceipt.trustedStateDigest, 'and it really was different state');
+});
+
+test('N-1 REGRESSION: a fresh state with a material change rejects for that change, not for a digest', () => {
+  const evaluation = buildWorld({});
+  const later = NOW + 5n;
+  const replay = (evaluation.trustedState as Record<string, unknown>)['replay'] as unknown;
+
+  const cases: readonly {
+    readonly label: string;
+    readonly state: Record<string, unknown>;
+    readonly code: string;
+    /** The epoch case legitimately also reports the candidate's own epoch commitment. */
+    readonly alsoCandidateMismatch?: boolean;
+  }[] = [
+    {
+      label: 'halted',
+      state: { market: { provenance: { observedAtUnixSeconds: later }, value: { haltStatus: 'HALTED' } } },
+      code: 'TRADING_HALTED',
+    },
+    {
+      label: 'representation paused',
+      state: { market: { provenance: { observedAtUnixSeconds: later } } },
+      code: 'REPRESENTATION_INACTIVE',
+    },
+    {
+      label: 'price outside the mandate bound',
+      state: {
+        market: {
+          provenance: { observedAtUnixSeconds: later },
+          value: { referencePrice: { numeratorUnit: 'USD', denominatorUnit: 'SHARE', decimals: 2, atoms: 10_500n } },
+        },
+      },
+      code: 'PRICE_DEVIATION_EXCEEDED',
+    },
+    {
+      label: 'corporate action epoch advanced',
+      state: {
+        market: { provenance: { observedAtUnixSeconds: later } },
+        corporateAction: { provenance: { observedAtUnixSeconds: later }, value: { epoch: EPOCH + 1n } },
+      },
+      code: 'CORPORATE_ACTION_STATE_CHANGED',
+      // The candidate commits to the epoch it was built under, so this case also
+      // reports `CANDIDATE_STATE_MISMATCH` for that field. That is the one place
+      // the code survives, and it is what it was always documented to mean.
+      alsoCandidateMismatch: true,
+    },
+  ];
+
+  for (const item of cases) {
+    const representations = item.label === 'representation paused'
+      ? [representationInput({ value: { operationalState: 'PAUSED' } })]
+      : undefined;
+    const refreshed = stateInput({ stateId: 'snapshot.0002', ...item.state }, representations);
+    const receipt = verify({
+      ...evaluation,
+      trustedState: { ...refreshed, replay },
+      clock: { nowUnixSeconds: later },
+    });
+    assert.equal(receipt.decision, Decision.REJECT, item.label);
+    assert.ok(receipt.reasonCodes.includes(item.code as never), `${item.label} -> ${receipt.reasonCodes.join(', ')}`);
+    // The specific reason, not a generic state mismatch. This is the whole point:
+    // an operator reading the receipt learns what changed.
+    if (item.alsoCandidateMismatch !== true) {
+      assert.ok(!receipt.reasonCodes.includes('CANDIDATE_STATE_MISMATCH' as never), item.label);
+    }
+  }
+});
+
+test('N-8 REGRESSION: structural authority is still bound by equality, and absence fails closed', () => {
+  // A registry snapshot is not a dynamic observation, so it is not permitted to
+  // refresh under a candidate. This is the binding that replaces whole-state
+  // equality, and the only piece of state provenance compared for equality.
+  const swapped = verify(buildWorld({ candidate: { registrySnapshotDigest: OTHER_REGISTRY_SNAPSHOT_DIGEST } }));
+  assert.equal(swapped.decision, Decision.REJECT);
+  assert.ok(swapped.reasonCodes.includes('REGISTRY_SNAPSHOT_MISMATCH'), swapped.reasonCodes.join(', '));
+
+  // Before Phase 5R.1 a state declaring no snapshot was accepted, because the
+  // whole-state digest covered it incidentally. Removing that cover made an
+  // undeclared snapshot an unestablished binding, and unestablished rejects.
+  const undeclared = verify(buildWorld({ state: { registrySnapshotDigest: null } }));
+  assert.equal(undeclared.decision, Decision.REJECT);
+  assert.ok(undeclared.reasonCodes.includes('REGISTRY_SNAPSHOT_UNKNOWN'), undeclared.reasonCodes.join(', '));
+
+  // The label alone still establishes nothing, which was F-8's original point:
+  // two states sharing one stateId are told apart by their content, now by the
+  // predicates over that content rather than by a digest comparison.
+  const sameLabelDifferentWorld = verify({
+    ...buildWorld({}),
+    trustedState: stateInput({ market: { value: { haltStatus: 'HALTED' } } }),
+  });
+  assert.equal(sameLabelDifferentWorld.decision, Decision.REJECT);
+  assert.ok(sameLabelDifferentWorld.reasonCodes.includes('TRADING_HALTED'));
 });
 
 // --- F-2 / F-4: the kernel is the economic authority -----------------------

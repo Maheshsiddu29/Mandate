@@ -5,7 +5,8 @@ import { openRegistry } from '@mandate/registry';
 import { envelopeFor, TEST_PRIVATE_KEY } from '../../kernel/test/support/signing.ts';
 import { collectProviderRoutes, route, routingCandidateDigest, type ProviderRouteQuote } from '../src/index.ts';
 import {
-  ROUTER_CLOCK, ROUTER_DOMAIN, ROUTER_MANDATE, ROUTER_REGISTRY_INPUT, ROUTER_REQUESTED_QUANTITY, ROUTER_STATE,
+  ROUTER_CLOCK, ROUTER_DOMAIN, ROUTER_MANDATE, ROUTER_REGISTRY_INPUT, ROUTER_REGISTRY_SNAPSHOT_DIGEST,
+  ROUTER_REQUESTED_QUANTITY, ROUTER_STATE,
   routeQuote, trustedCost, zeroFee, sellMandate as sellMandateFixture, handoffFor,
   routerHandoff,
 } from './support/fixture.ts';
@@ -105,12 +106,13 @@ describe('adversarial route providers', () => {
       steps: quote.steps,
       feeTotal: zeroFee(),
       executionCandidate: {
-        version: 2, representationId: quote.representationId, canonicalAsset: quote.canonicalAsset,
+        version: 3, representationId: quote.representationId, canonicalAsset: quote.canonicalAsset,
         issuer: quote.issuer, chain: quote.chain, venue: quote.venue, side: quote.side, agent: quote.agent,
         quantity: quote.quantity, executionPrice: quote.executionPrice, notional: quote.notional,
         feeTotal: zeroFee(),
-        referenceStateId: quote.referenceStateId,
-        referenceStateDigest: trustedStateDigest(ROUTER_STATE),
+        evaluationStateId: quote.referenceStateId,
+        evaluationStateDigest: trustedStateDigest(ROUTER_STATE),
+        registrySnapshotDigest: ROUTER_REGISTRY_SNAPSHOT_DIGEST,
         corporateActionEpoch: quote.corporateActionEpoch,
       },
     };

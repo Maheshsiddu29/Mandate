@@ -109,7 +109,7 @@ describe('candidate projection', () => {
       evaluation.admissible[0]?.candidate.executionCandidate.issuer,
       evaluation.admissible[0]?.candidate.executionCandidate.chain,
       evaluation.admissible[0]?.candidate.executionCandidate.venue,
-      evaluation.admissible[0]?.candidate.executionCandidate.referenceStateId,
+      evaluation.admissible[0]?.candidate.executionCandidate.evaluationStateId,
       evaluation.admissible[0]?.candidate.candidateDigest,
       evaluation.admissible[0]?.candidate.kernelCandidateDigest,
       evaluation.admissible[0]?.candidate.trustedCostSourceId,
