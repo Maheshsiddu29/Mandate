@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import type { UnixSeconds } from '@mandate/kernel';
-import { AdapterErrorCode, RobinhoodClient, type FetchLike } from '../src/index.ts';
+import { AdapterErrorCode, MAX_RESPONSE_BYTES, RobinhoodClient, fetchJson, type FetchLike } from '../src/index.ts';
 import { MAINNET_FIXTURE_ROOT } from './support/mainnet-fixture.ts';
 
 function response(body: string, status = 200): Response {
@@ -59,5 +59,37 @@ describe('Robinhood live client failure behavior', () => {
       fetch: one(response('{"jsonrpc":"2.0","id":1,"result":"0x1"}')),
     }).assertMainnetChain();
     assert.equal(wrongChain.ok ? '' : wrongChain.error.code, AdapterErrorCode.CHAIN_MISMATCH);
+  });
+});
+
+describe('response size bounds', () => {
+  it('refuses a body past the limit and accepts one below it', async () => {
+    const oversized = (async () => new Response('x'.repeat(MAX_RESPONSE_BYTES + 1), {
+      status: 200, headers: { 'content-type': 'application/json' },
+    })) as unknown as FetchLike;
+    const over = await fetchJson(oversized, 'https://example.invalid/x', { method: 'GET' }, 1_000);
+    assert.equal(over.ok, false);
+    if (!over.ok) {
+      assert.equal(over.error.code, AdapterErrorCode.MALFORMED_RESPONSE);
+      // The body is never quoted back; only its size.
+      assert.match(over.error.message, /exceeded/);
+      assert.doesNotMatch(over.error.message, /xxxx/);
+    }
+
+    const payload = JSON.stringify({ ok: true });
+    const under = (async () => new Response(payload, {
+      status: 200, headers: { 'content-type': 'application/json' },
+    })) as unknown as FetchLike;
+    const fine = await fetchJson(under, 'https://example.invalid/x', { method: 'GET' }, 1_000);
+    assert.equal(fine.ok, true, 'a legitimate response must not be refused');
+  });
+
+  it('refuses on a declared content-length past the limit before reading the body', async () => {
+    const lying = (async () => new Response('{}', {
+      status: 200,
+      headers: { 'content-type': 'application/json', 'content-length': String(MAX_RESPONSE_BYTES + 1) },
+    })) as unknown as FetchLike;
+    const result = await fetchJson(lying, 'https://example.invalid/x', { method: 'GET' }, 1_000);
+    assert.equal(result.ok, false);
   });
 });

@@ -12,6 +12,7 @@ import {
   API_KEY_ENVIRONMENT_VARIABLE,
   DEFAULT_TIMEOUT_MS,
   JEV_QUESTION_NAME,
+  MAX_CHOICE_RESPONSE_BYTES,
   TypeSafeJevClient,
   hasUsableApiKey,
   type JevRequestPayload,
@@ -26,11 +27,30 @@ const PAYLOAD: JevRequestPayload = {
   questions: { [JEV_QUESTION_NAME]: { type: 'choice', instructions: 'pick one', criteria: { ABSTAIN: 'decline' } } },
 };
 
+/**
+ * A response with a real body stream.
+ *
+ * The client reads bodies under a byte bound (`body.ts`), so a stub that only
+ * implements `json()` would bypass the very path these tests are meant to
+ * cover. `Response` gives a genuine stream and genuine headers.
+ */
 function responding(status: number, body: unknown, ok = status >= 200 && status < 300): typeof fetch {
-  return (async () => ({
-    ok,
-    status,
-    json: async () => body,
+  return (async () => {
+    const response = new Response(typeof body === 'string' ? body : JSON.stringify(body), {
+      status: status === 204 ? 204 : status,
+      headers: { 'content-type': 'application/json' },
+    });
+    // `ok` is derived from the status on a real Response; tests that need an
+    // inconsistent pair override it explicitly.
+    return Object.defineProperty(response, 'ok', { value: ok, configurable: true });
+  }) as unknown as typeof fetch;
+}
+
+/** A response whose body is larger than the client's bound. */
+function respondingOversized(bytes: number): typeof fetch {
+  return (async () => new Response('x'.repeat(bytes), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
   })) as unknown as typeof fetch;
 }
 
@@ -74,7 +94,7 @@ describe('jev credential handling', () => {
     let headers: Record<string, string> | undefined;
     const fetchImpl = (async (_url: string, init: RequestInit) => {
       headers = init.headers as Record<string, string>;
-      return { ok: true, status: 200, json: async () => ({}) };
+      return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
     }) as unknown as typeof fetch;
     await client(fetchImpl).send(PAYLOAD, DEFAULT_TIMEOUT_MS);
     assert.equal(headers?.['authorization'], `Bearer ${KEY}`);
@@ -125,8 +145,7 @@ describe('jev transport failure mapping', () => {
   });
 
   it('maps an unparseable body to INVALID_JSON', async () => {
-    const fetchImpl = (async () => ({ ok: true, status: 200, json: async () => { throw new SyntaxError('Unexpected token'); } })) as unknown as typeof fetch;
-    const result = await client(fetchImpl).send(PAYLOAD, DEFAULT_TIMEOUT_MS);
+    const result = await client(responding(200, 'not json at all')).send(PAYLOAD, DEFAULT_TIMEOUT_MS);
     assert.equal(result.ok, false);
     if (result.ok) return;
     assert.equal(result.reason, 'INVALID_JSON');
@@ -145,5 +164,39 @@ describe('jev transport failure mapping', () => {
     assert.equal(listed.ok, true);
     if (!listed.ok) return;
     assert.deepEqual(listed.value.map((item) => item.name), ['jev-latest']);
+  });
+});
+
+describe('jev response size bounds', () => {
+  it('refuses a body past the declared limit without buffering it', async () => {
+    const result = await client(respondingOversized(MAX_CHOICE_RESPONSE_BYTES + 1)).send(PAYLOAD, DEFAULT_TIMEOUT_MS);
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    // An oversized body is a broken or hostile endpoint, not a schema problem.
+    assert.equal(result.reason, 'SERVICE_UNAVAILABLE');
+    assert.match(result.detail, /exceeded/);
+    // The body itself is never quoted back.
+    assert.doesNotMatch(result.detail, /xxx/);
+  });
+
+  it('accepts a body immediately below the limit', async () => {
+    // A JSON string of exactly the limit minus its two quote characters.
+    const payload = JSON.stringify('y'.repeat(MAX_CHOICE_RESPONSE_BYTES - 2));
+    assert.equal(payload.length, MAX_CHOICE_RESPONSE_BYTES);
+    const fetchImpl = (async () => new Response(payload, {
+      status: 200, headers: { 'content-type': 'application/json' },
+    })) as unknown as typeof fetch;
+    const result = await client(fetchImpl).send(PAYLOAD, DEFAULT_TIMEOUT_MS);
+    assert.equal(result.ok, true, 'the bound must not refuse a legitimate response');
+  });
+
+  it('refuses on a declared content-length past the limit before reading', async () => {
+    const fetchImpl = (async () => new Response('{}', {
+      status: 200,
+      headers: { 'content-type': 'application/json', 'content-length': String(MAX_CHOICE_RESPONSE_BYTES + 1) },
+    })) as unknown as typeof fetch;
+    const result = await client(fetchImpl).send(PAYLOAD, DEFAULT_TIMEOUT_MS);
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.reason, 'SERVICE_UNAVAILABLE');
   });
 });
