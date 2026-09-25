@@ -116,6 +116,14 @@ const DEFINITIONS = [
     humanMessage: 'An identifier in this request was not valid.',
   },
   {
+    id: 'MND-INPUT-011',
+    name: 'RESOURCE_LIMIT_EXCEEDED',
+    family: F.INPUT,
+    enforcementPoint: E.F_MARKET_AND_CORPORATE_ACTION_STATE,
+    developerMessage: 'An externally sized collection exceeds its declared bound. Every counted collection the kernel encodes has a parse-time limit, so an oversized input is a typed rejection rather than an encoder assertion.',
+    humanMessage: 'This request was larger than the system accepts and was not used.',
+  },
+  {
     id: 'MND-INPUT-007',
     name: 'UNIT_MISMATCH',
     family: F.INPUT,
@@ -180,6 +188,14 @@ const DEFINITIONS = [
     enforcementPoint: E.B_AUTHORIZATION_SCOPE,
     developerMessage: 'The signature recovered a valid signer, but that signer is not the mandate principal. A valid signature is not authorization unless it is the right party.',
     humanMessage: 'This authorization was approved by someone who does not own the account.',
+  },
+  {
+    id: 'MND-AUTH-011',
+    name: 'MANDATE_QUARANTINED',
+    family: F.AUTH,
+    enforcementPoint: E.B_AUTHORIZATION_SCOPE,
+    developerMessage: 'A previous attempt reserved this authorization and its outcome was never established, so the authorization is quarantined pending reconciliation. It may already have executed; permitting a second attempt would risk executing the same trade twice.',
+    humanMessage: 'A previous attempt on this authorization is still unresolved, so it cannot be used again yet.',
   },
   {
     id: 'MND-AUTH-005',
@@ -290,6 +306,14 @@ const DEFINITIONS = [
     humanMessage: 'Required information about this token was unavailable.',
   },
   {
+    id: 'MND-REPR-006',
+    name: 'REPRESENTATION_CHAIN_INCONSISTENT',
+    family: F.REPR,
+    enforcementPoint: E.C_ASSET_IDENTITY,
+    developerMessage: 'The chain segment of a representation identifier disagrees with the chain field carried beside it. The identifier is the canonical source of chain identity, so a disagreement means one of the two describes a different deployment and both fail closed.',
+    humanMessage: 'The network named for this token did not match the token itself.',
+  },
+  {
     id: 'MND-REPR-005',
     name: 'REPRESENTATION_ATTRIBUTES_MISMATCH',
     family: F.REPR,
@@ -322,6 +346,30 @@ const DEFINITIONS = [
     enforcementPoint: E.G_INTENT_FIDELITY,
     developerMessage: 'The candidate side is not the side the mandate authorizes.',
     humanMessage: 'This trade is in the opposite direction to your authorization.',
+  },
+  {
+    id: 'MND-ECON-004',
+    name: 'TOTAL_DEBIT_EXCEEDED',
+    family: F.ECON,
+    enforcementPoint: E.E_ECONOMIC_BOUNDS,
+    developerMessage: 'On a BUY, notional plus the candidate fee total exceeds the mandate economic limit, which a BUY mandate carries as a maximum total debit. Fees are part of what the principal spends, so they are inside the bound rather than beside it.',
+    humanMessage: 'The full cost of this trade, including fees, is more than you authorized.',
+  },
+  {
+    id: 'MND-ECON-005',
+    name: 'TOTAL_CREDIT_BELOW_MINIMUM',
+    family: F.ECON,
+    enforcementPoint: E.E_ECONOMIC_BOUNDS,
+    developerMessage: 'On a SELL, notional minus the candidate fee total is below the mandate economic limit, which a SELL mandate carries as a minimum total credit. A sale whose fees erode the proceeds past the principal floor is refused however good the execution price was.',
+    humanMessage: 'After fees, this sale would return less than you authorized.',
+  },
+  {
+    id: 'MND-ECON-006',
+    name: 'FEES_EXCEED_NOTIONAL',
+    family: F.ECON,
+    enforcementPoint: E.E_ECONOMIC_BOUNDS,
+    developerMessage: 'On a SELL, the candidate fee total is greater than or equal to the notional, so the trade is a net debit rather than a credit. There is no defensible minimum credit to compare against, so it fails closed before the comparison.',
+    humanMessage: 'The fees on this sale would consume the entire proceeds.',
   },
 
   // --- STATE: observed market and corporate-action state -------------------

@@ -89,6 +89,31 @@ export function formatCanonicalAssetId(a: CanonicalAssetId): string {
  * from anywhere but trusted representation state.
  */
 export type RepresentationId = Identifier;
+
+/**
+ * The chain segment of a CAIP-19-shaped representation identifier — everything
+ * before the first `/` — or `undefined` when the identifier has no such shape.
+ *
+ * This is deliberately the *only* structure the kernel reads out of a
+ * representation identifier, and it is not address parsing: the contract half is
+ * never touched, and an execution address still originates solely from trusted
+ * state (INV-7). The chain half is read because the identifier and the `chain`
+ * field beside it are two spellings of one security-critical value, and the
+ * verifier reconciles redundant spellings rather than trusting its caller to
+ * have kept them in step (`checkRepresentationChain`).
+ *
+ * Returns `undefined` rather than a repaired value for anything malformed. The
+ * caller treats that as an inconsistency, so a shape the registry would never
+ * emit fails closed here too.
+ */
+export function chainSegmentOf(representationId: RepresentationId): string | undefined {
+  const slash = representationId.indexOf('/');
+  if (slash <= 0) return undefined;
+  const chain = representationId.slice(0, slash);
+  // One `/` only. A second means this is not the shape the registry produces.
+  if (representationId.indexOf('/', slash + 1) !== -1) return undefined;
+  return chain;
+}
 export type IssuerId = Identifier;
 export type ChainId = Identifier;
 export type VenueId = Identifier;

@@ -14,13 +14,14 @@
 
 import { canonicalAssetIdEquals } from '../identifiers.ts';
 import type { ReasonCodeName } from '../reason-codes.ts';
-import { compareAmounts, deviationBps, notionalBounds } from '../units.ts';
-import { HaltPolicy, SyntheticPolicy, partyIdEquals, type CanonicalMandate } from '../mandate.ts';
+import { addAmounts, compareAmounts, deviationBps, notionalBounds, subtractAmounts } from '../units.ts';
+import { EconomicLimitKind, HaltPolicy, Side, SyntheticPolicy, economicLimitKind, partyIdEquals, type CanonicalMandate } from '../mandate.ts';
 import type { ExecutionCandidate } from '../candidate.ts';
 import { HaltStatus, OperationalState, ReplayStatus, TriState, findRepresentation, type TrustedState } from '../state.ts';
 import { isTrustedForAuthorization, type Observed } from '../trust.ts';
 import type { Clock } from '../time.ts';
 import type { Bytes32 } from '../bytes.ts';
+import { chainSegmentOf } from '../identifiers.ts';
 import type { AuthorizationEnvelope } from '../authorization/envelope.ts';
 import { verifyAuthorization } from '../authorization/envelope.ts';
 import type { Eip712Domain } from '../authorization/eip712.ts';
@@ -43,6 +44,8 @@ export interface CheckContext {
   readonly clock: Clock;
   readonly expectedDomain: Eip712Domain;
   readonly mandateDigest: Bytes32;
+  /** Computed by `verify` over the state it was handed. The candidate must commit to it. */
+  readonly trustedStateDigest: Bytes32;
 }
 
 export interface Check {
@@ -111,6 +114,11 @@ const checkReplay: Check = {
         // A concurrent attempt holds this authorization. Letting a second
         // attempt through would be the double-spend the reservation prevents.
         return [violation('MANDATE_RESERVED', { mandateDigest: ctx.mandateDigest })];
+      case ReplayStatus.QUARANTINED:
+        // An earlier attempt may already have executed this trade. Only
+        // reconciliation can say, and until it does the authorization is not
+        // available at any price.
+        return [violation('MANDATE_QUARANTINED', { mandateDigest: ctx.mandateDigest })];
       case ReplayStatus.UNKNOWN:
         return [violation('REPLAY_STATE_UNKNOWN', { reason: 'source-reported-unknown' })];
       case ReplayStatus.UNUSED:
@@ -210,6 +218,52 @@ const checkRepresentation: Check = {
   },
 };
 
+/**
+ * Reconcile the chain a representation identifier carries with the chain field
+ * carried beside it.
+ *
+ * A representation identifier is CAIP-19 shaped, so it already names the chain
+ * the contract lives on. Carrying the chain a second time as a field creates two
+ * sources for one security-critical value, and the pressure test found that only
+ * the second was ever checked against the mandate's allowlist — so a contract on
+ * one chain could be presented under a mandate that permits only another.
+ *
+ * The identifier is the canonical source, because it is what an execution will
+ * address. This check does not parse a contract address out of anything: it
+ * reads the segment before the first `/` and compares it, which is the minimum
+ * needed to close the redundancy.
+ */
+const checkRepresentationChain: Check = {
+  name: 'representation-chain',
+  run: (ctx) => {
+    const out: Violation[] = [];
+    const candidateChain = chainSegmentOf(ctx.candidate.representationId);
+    if (candidateChain === undefined || candidateChain !== ctx.candidate.chain) {
+      out.push(
+        violation('REPRESENTATION_CHAIN_INCONSISTENT', {
+          source: 'candidate',
+          representationId: ctx.candidate.representationId,
+          declared: ctx.candidate.chain,
+        }),
+      );
+    }
+    for (const observed of ctx.state.representations) {
+      const rep = observed.value;
+      const stateChain = chainSegmentOf(rep.representationId);
+      if (stateChain === undefined || stateChain !== rep.chain) {
+        out.push(
+          violation('REPRESENTATION_CHAIN_INCONSISTENT', {
+            source: 'trustedState',
+            representationId: rep.representationId,
+            declared: rep.chain,
+          }),
+        );
+      }
+    }
+    return out;
+  },
+};
+
 // --- E. Economic bounds -----------------------------------------------------
 
 const checkNotionalConsistency: Check = {
@@ -246,6 +300,53 @@ const checkMaxNotional: Check = {
             maximum: String(ctx.mandate.maxNotional.atoms),
           }),
         ]
+      : none;
+  },
+};
+
+/**
+ * The signed cash-flow bound, read according to the mandate's side (ADR 0014).
+ *
+ * This is the check that makes economic authority symmetric and authoritative.
+ * `maxNotional` bounds gross exposure and says nothing about fees; this one
+ * bounds what the principal is actually debited or credited, and it lives here
+ * rather than in the router because the router does not authorize anything.
+ *
+ * Arithmetic is exact and the rounding direction is not a question: both sides
+ * are integer atoms lifted to a common scale by a power of ten, so `addAmounts`
+ * and `subtractAmounts` are exact and the only failure modes are a unit
+ * mismatch and an overflow, both of which reject.
+ */
+const checkEconomicLimit: Check = {
+  name: 'economic-limit',
+  run: (ctx) => {
+    const c = ctx.candidate;
+    const limit = ctx.mandate.economicLimit;
+
+    if (economicLimitKind(ctx.mandate.side) === EconomicLimitKind.MAX_TOTAL_DEBIT) {
+      const debit = addAmounts(c.notional, c.feeTotal);
+      if (!debit.ok) return [violation(debit.error, { check: 'economic-limit', kind: EconomicLimitKind.MAX_TOTAL_DEBIT })];
+      const cmp = compareAmounts(debit.value, limit);
+      if (!cmp.ok) return [violation(cmp.error, { check: 'economic-limit' })];
+      return cmp.value > 0
+        ? [violation('TOTAL_DEBIT_EXCEEDED', { declared: String(debit.value.atoms), decimals: String(debit.value.decimals), maximum: String(limit.atoms), maximumDecimals: String(limit.decimals) })]
+        : none;
+    }
+
+    // SELL. Fees at or above the notional make this a net debit, and there is no
+    // defensible minimum credit to compare a debit against, so it fails closed
+    // before the comparison rather than producing a nonsensical one.
+    const feesVsNotional = compareAmounts(c.feeTotal, c.notional);
+    if (!feesVsNotional.ok) return [violation(feesVsNotional.error, { check: 'economic-limit' })];
+    if (feesVsNotional.value >= 0) {
+      return [violation('FEES_EXCEED_NOTIONAL', { fees: String(c.feeTotal.atoms), notional: String(c.notional.atoms) })];
+    }
+    const credit = subtractAmounts(c.notional, c.feeTotal);
+    if (!credit.ok) return [violation(credit.error, { check: 'economic-limit', kind: EconomicLimitKind.MIN_TOTAL_CREDIT })];
+    const cmp = compareAmounts(credit.value, limit);
+    if (!cmp.ok) return [violation(cmp.error, { check: 'economic-limit' })];
+    return cmp.value < 0
+      ? [violation('TOTAL_CREDIT_BELOW_MINIMUM', { declared: String(credit.value.atoms), decimals: String(credit.value.decimals), minimum: String(limit.atoms), minimumDecimals: String(limit.decimals) })]
       : none;
   },
 };
@@ -350,18 +451,38 @@ const checkCorporateAction: Check = {
 
 // --- G. Intent fidelity -----------------------------------------------------
 
+/**
+ * Bind the candidate to the *content* of the state it was built against.
+ *
+ * The label is checked too, because a mismatched label gives a clearer
+ * diagnostic, but the digest is the binding. Two materially different states can
+ * share one `stateId` — the caller chooses it freely — so matching the name
+ * established nothing before schema v2 added `referenceStateDigest`.
+ */
 const checkStateBinding: Check = {
   name: 'state-binding',
-  run: (ctx) =>
-    ctx.candidate.referenceStateId === ctx.state.stateId
-      ? none
-      : [
-          violation('CANDIDATE_STATE_MISMATCH', {
-            field: 'referenceStateId',
-            observed: ctx.state.stateId,
-            candidate: ctx.candidate.referenceStateId,
-          }),
-        ],
+  run: (ctx) => {
+    const out: Violation[] = [];
+    if (ctx.candidate.referenceStateId !== ctx.state.stateId) {
+      out.push(
+        violation('CANDIDATE_STATE_MISMATCH', {
+          field: 'referenceStateId',
+          observed: ctx.state.stateId,
+          candidate: ctx.candidate.referenceStateId,
+        }),
+      );
+    }
+    if (ctx.candidate.referenceStateDigest !== ctx.trustedStateDigest) {
+      out.push(
+        violation('CANDIDATE_STATE_MISMATCH', {
+          field: 'referenceStateDigest',
+          observed: ctx.trustedStateDigest,
+          candidate: ctx.candidate.referenceStateDigest,
+        }),
+      );
+    }
+    return out;
+  },
 };
 
 /**
@@ -408,8 +529,10 @@ export const CHECKS: readonly Check[] = [
   checkVenue,
   checkSide,
   checkRepresentation,
+  checkRepresentationChain,
   checkNotionalConsistency,
   checkMaxNotional,
+  checkEconomicLimit,
   checkPriceDeviation,
   checkPriceFreshness,
   checkHalt,

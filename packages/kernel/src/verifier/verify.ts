@@ -32,6 +32,7 @@ import { parseClock } from '../time.ts';
 import { parseAuthorizationEnvelope } from '../authorization/envelope.ts';
 import { parseEip712Domain, type Eip712Domain } from '../authorization/eip712.ts';
 import { candidateDigest, mandateDigest, trustedStateDigest } from '../encoding/digest.ts';
+import type { Bytes32 } from '../bytes.ts';
 import { Decision, VERIFIER_VERSION, receiptDigest, type VerificationReceipt } from '../receipt.ts';
 import { CHECKS, violation, type Check, type CheckContext, type Violation } from './checks.ts';
 
@@ -88,10 +89,28 @@ export function verify(request: VerifyRequest): VerificationReceipt {
   const clock = collect(parseClock(request.clock), parseViolations, { input: 'clock' });
   const expectedDomain = collect(parseEip712Domain(request.expectedDomain), parseViolations, { input: 'expectedDomain' });
 
+  // Digests are computed outside the check loop, so this is the one place a
+  // defect in the encoders could escape as a thrown error from a function
+  // documented as total. Every externally sized collection the encoders write is
+  // now bounded by its parser above, so reaching the catch means an internal
+  // invariant failed rather than that a caller sent something oversized — which
+  // is why it reports VERIFIER_INTERNAL_ERROR and names the input, instead of
+  // being reported as invalid input. It is visible in the receipt and alertable,
+  // and it rejects.
+  const digest = <T>(input: T | undefined, of: (value: T) => Bytes32, name: string): Bytes32 | null => {
+    if (input === undefined) return null;
+    try {
+      return of(input);
+    } catch {
+      parseViolations.push(violation('VERIFIER_INTERNAL_ERROR', { stage: 'digest', input: name }));
+      return null;
+    }
+  };
+
   const digests = {
-    mandateDigest: mandate === undefined ? null : mandateDigest(mandate),
-    candidateDigest: candidate === undefined ? null : candidateDigest(candidate),
-    trustedStateDigest: state === undefined ? null : trustedStateDigest(state),
+    mandateDigest: digest(mandate, mandateDigest, 'mandate'),
+    candidateDigest: digest(candidate, candidateDigest, 'candidate'),
+    trustedStateDigest: digest(state, trustedStateDigest, 'trustedState'),
     evaluatedAtUnixSeconds: clock === undefined ? null : clock.nowUnixSeconds,
   };
 
@@ -101,7 +120,7 @@ export function verify(request: VerifyRequest): VerificationReceipt {
   if (
     mandate === undefined || authorization === undefined || candidate === undefined ||
     state === undefined || clock === undefined || expectedDomain === undefined ||
-    digests.mandateDigest === null
+    digests.mandateDigest === null || digests.trustedStateDigest === null
   ) {
     return finish(digests, parseViolations);
   }
@@ -114,6 +133,7 @@ export function verify(request: VerifyRequest): VerificationReceipt {
     clock,
     expectedDomain: expectedDomain as Eip712Domain,
     mandateDigest: digests.mandateDigest,
+    trustedStateDigest: digests.trustedStateDigest,
   };
 
   const found: Violation[] = [...parseViolations];

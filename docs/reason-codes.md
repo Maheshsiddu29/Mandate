@@ -26,7 +26,7 @@ error handling, in the demo and in audit records
 [design §10.2](mandate-design.md#102-check-families) that produces the code,
 so this table doubles as a coverage map.
 
-**43 codes across 8 families.**
+**49 codes across 8 families.**
 
 ## INPUT — structural well-formedness
 
@@ -42,6 +42,7 @@ so this table doubles as a coverage map.
 | `MND-INPUT-008` | `VALUE_OUT_OF_RANGE` | E_ECONOMIC_BOUNDS | A numeric value is negative where unsigned, or exceeds the maximum this encoding supports. Arithmetic is never allowed to wrap. |
 | `MND-INPUT-009` | `NOTIONAL_INCONSISTENT` | E_ECONOMIC_BOUNDS | The candidate declared notional does not equal quantity multiplied by execution price, rounded either down or up. The declared value is never substituted with the recomputed one. |
 | `MND-INPUT-010` | `VERIFIER_INTERNAL_ERROR` | A_MANDATE_INTEGRITY | A check raised an unexpected error. This is a defect in the verifier, and it fails closed: an internal fault produces a rejection, never a pass. |
+| `MND-INPUT-011` | `RESOURCE_LIMIT_EXCEEDED` | F_MARKET_AND_CORPORATE_ACTION_STATE | An externally sized collection exceeds its declared bound. Every counted collection the kernel encodes has a parse-time limit, so an oversized input is a typed rejection rather than an encoder assertion. |
 
 ## AUTH — authorization scope
 
@@ -57,6 +58,7 @@ so this table doubles as a coverage map.
 | `MND-AUTH-008` | `AUTHORIZATION_SCHEME_UNSUPPORTED` | A_MANDATE_INTEGRITY | The authorization envelope declares a signature scheme this verifier does not implement. An unrecognized scheme rejects; it is never skipped. |
 | `MND-AUTH-009` | `AUTHORIZATION_DOMAIN_MISMATCH` | A_MANDATE_INTEGRITY | The authorization envelope domain does not match the domain the caller requires. The verifier never accepts whatever domain an envelope claims. |
 | `MND-AUTH-010` | `MANDATE_RESERVED` | B_AUTHORIZATION_SCOPE | Replay state reports this mandate digest as reserved by an in-flight execution attempt. A reserved mandate is not available to a second attempt. |
+| `MND-AUTH-011` | `MANDATE_QUARANTINED` | B_AUTHORIZATION_SCOPE | A previous attempt reserved this authorization and its outcome was never established, so the authorization is quarantined pending reconciliation. It may already have executed; permitting a second attempt would risk executing the same trade twice. |
 
 ## ASSET — financial identity
 
@@ -75,6 +77,7 @@ so this table doubles as a coverage map.
 | `MND-REPR-003` | `REPRESENTATION_INACTIVE` | D_REPRESENTATION_SEMANTICS | The representation operational state is not ACTIVE: it is paused, deprecated or in transition. |
 | `MND-REPR-004` | `REPRESENTATION_METADATA_UNKNOWN` | D_REPRESENTATION_SEMANTICS | A representation metadata field the mandate constrains is UNKNOWN. UNKNOWN on a constrained field rejects; it is never read as a default permit. |
 | `MND-REPR-005` | `REPRESENTATION_ATTRIBUTES_MISMATCH` | G_INTENT_FIDELITY | The issuer or chain the candidate declares differs from the trusted representation state for that representation. The candidate does not get to describe the representation. |
+| `MND-REPR-006` | `REPRESENTATION_CHAIN_INCONSISTENT` | C_ASSET_IDENTITY | The chain segment of a representation identifier disagrees with the chain field carried beside it. The identifier is the canonical source of chain identity, so a disagreement means one of the two describes a different deployment and both fail closed. |
 
 ## ECON — economic bounds
 
@@ -83,6 +86,9 @@ so this table doubles as a coverage map.
 | `MND-ECON-001` | `MAX_NOTIONAL_EXCEEDED` | E_ECONOMIC_BOUNDS | The candidate notional exceeds the mandate maximum notional. |
 | `MND-ECON-002` | `PRICE_DEVIATION_EXCEEDED` | E_ECONOMIC_BOUNDS | The execution price deviates from the trusted reference price by more than the mandate maximum, measured in basis points and rounded up. |
 | `MND-ECON-003` | `SIDE_MISMATCH` | G_INTENT_FIDELITY | The candidate side is not the side the mandate authorizes. |
+| `MND-ECON-004` | `TOTAL_DEBIT_EXCEEDED` | E_ECONOMIC_BOUNDS | On a BUY, notional plus the candidate fee total exceeds the mandate economic limit, which a BUY mandate carries as a maximum total debit. Fees are part of what the principal spends, so they are inside the bound rather than beside it. |
+| `MND-ECON-005` | `TOTAL_CREDIT_BELOW_MINIMUM` | E_ECONOMIC_BOUNDS | On a SELL, notional minus the candidate fee total is below the mandate economic limit, which a SELL mandate carries as a minimum total credit. A sale whose fees erode the proceeds past the principal floor is refused however good the execution price was. |
+| `MND-ECON-006` | `FEES_EXCEED_NOTIONAL` | E_ECONOMIC_BOUNDS | On a SELL, the candidate fee total is greater than or equal to the notional, so the trade is a net debit rather than a credit. There is no defensible minimum credit to compare against, so it fails closed before the comparison. |
 
 ## STATE — observed market and corporate-action state
 
@@ -128,6 +134,7 @@ verifier itself.
 | `CORPORATE_ACTION_STATE_INCONSISTENT` | Corporate action information for this asset was inconsistent. |
 | `CORPORATE_ACTION_STATE_STALE` | Corporate action information for this asset was too old to trade against. |
 | `CORPORATE_ACTION_STATE_UNKNOWN` | Corporate action information for this asset was unavailable. |
+| `FEES_EXCEED_NOTIONAL` | The fees on this sale would consume the entire proceeds. |
 | `ISSUER_NOT_ALLOWED` | This token comes from an issuer your authorization does not permit. |
 | `MALFORMED_AUTHORIZATION` | The approval attached to this authorization could not be read. |
 | `MALFORMED_CANDIDATE` | The proposed trade could not be read and was not executed. |
@@ -137,6 +144,7 @@ verifier itself.
 | `MANDATE_ALREADY_CONSUMED` | This authorization has already been used. |
 | `MANDATE_EXPIRED` | This authorization has expired. Approve the trade again to continue. |
 | `MANDATE_NOT_YET_ACTIVE` | This authorization is not active yet. |
+| `MANDATE_QUARANTINED` | A previous attempt on this authorization is still unresolved, so it cannot be used again yet. |
 | `MANDATE_RESERVED` | This authorization is already being used by another trade in progress. |
 | `MARKET_STATE_UNKNOWN` | Market information for this asset was unavailable. |
 | `MAX_NOTIONAL_EXCEEDED` | This trade is larger than the amount you authorized. |
@@ -146,13 +154,17 @@ verifier itself.
 | `REPLAY_STATE_UNKNOWN` | This authorization could not be checked against previous use. |
 | `REPRESENTATION_ASSET_MISMATCH` | The selected token does not represent the asset you authorized. |
 | `REPRESENTATION_ATTRIBUTES_MISMATCH` | The details of the proposed trade did not match the token it names. |
+| `REPRESENTATION_CHAIN_INCONSISTENT` | The network named for this token did not match the token itself. |
 | `REPRESENTATION_INACTIVE` | Trading in this token is currently suspended. |
 | `REPRESENTATION_METADATA_UNKNOWN` | Required information about this token was unavailable. |
 | `REPRESENTATION_UNKNOWN` | The selected token is not recognized and was not traded. |
+| `RESOURCE_LIMIT_EXCEEDED` | This request was larger than the system accepts and was not used. |
 | `SIDE_MISMATCH` | This trade is in the opposite direction to your authorization. |
 | `SIGNATURE_INVALID` | The approval for this authorization was not valid. |
 | `SIGNER_UNAUTHORIZED` | This authorization was approved by someone who does not own the account. |
 | `SYNTHETIC_NOT_ALLOWED` | This token is synthetic exposure, which your authorization does not allow. |
+| `TOTAL_CREDIT_BELOW_MINIMUM` | After fees, this sale would return less than you authorized. |
+| `TOTAL_DEBIT_EXCEEDED` | The full cost of this trade, including fees, is more than you authorized. |
 | `TRADING_HALTED` | Trading in this asset is halted. |
 | `TRUSTED_STATE_MISSING` | Information required to check this trade was not available. |
 | `UNIT_MISMATCH` | The amounts in this request were expressed in incompatible units. |
