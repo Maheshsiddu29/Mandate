@@ -16,6 +16,7 @@ export function encodeRoutingCandidate(candidate: Omit<RoutingCandidate, 'candid
   writer.str(candidate.routeId).str(candidate.providerId).str(candidate.providerClass).str(candidate.fillPolicy);
   writer.i64(candidate.quoteObservedAtUnixSeconds).i64(candidate.referenceObservedAtUnixSeconds);
   price(writer, candidate.referencePrice);
+  writer.str(candidate.trustedCostSourceId).i64(candidate.trustedCostObservedAtUnixSeconds);
   amount(writer, candidate.costs.venueFee); amount(writer, candidate.costs.executionFee);
   amount(writer, candidate.costs.settlementFee); amount(writer, candidate.costs.routeFee);
   writer.u8(candidate.steps.length);
@@ -70,4 +71,3 @@ export function encodeRoutingReceipt(receipt: Omit<RoutingReceipt, 'receiptDiges
 export function routingReceiptDigest(receipt: Omit<RoutingReceipt, 'receiptDigest'>): Bytes32 {
   return keccak256(encodeRoutingReceipt(receipt));
 }
-

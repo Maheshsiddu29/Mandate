@@ -4,7 +4,7 @@ import { Decision, parseIdentifier, verify } from '@mandate/kernel';
 import { openRegistry } from '@mandate/registry';
 import { route, type ProviderRouteQuote, type TrustedRouteCost } from '../src/index.ts';
 import {
-  ROUTER_AUTHORIZATION, ROUTER_CLOCK, ROUTER_DOMAIN, ROUTER_MANDATE, ROUTER_REGISTRY_INPUT,
+  ROUTER_AUTHORIZATION, ROUTER_CLOCK, ROUTER_DOMAIN, ROUTER_MANDATE, ROUTER_REGISTRY_INPUT, ROUTER_REQUESTED_QUANTITY,
   ROUTER_STATE, routeQuote, trustedCost, zeroFee,
 } from './support/fixture.ts';
 
@@ -18,6 +18,7 @@ function request(routes: readonly ProviderRouteQuote[], costs: readonly TrustedR
     authorization: ROUTER_AUTHORIZATION,
     registry: REGISTRY,
     trustedMarketState: ROUTER_STATE,
+    requestedQuantity: ROUTER_REQUESTED_QUANTITY,
     routes,
     trustedCosts: costs,
     clock: { nowUnixSeconds: ROUTER_CLOCK },

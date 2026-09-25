@@ -5,7 +5,7 @@ import { openRegistry } from '@mandate/registry';
 import { envelopeFor, TEST_PRIVATE_KEY } from '../../kernel/test/support/signing.ts';
 import { collectProviderRoutes, route, routingCandidateDigest, type ProviderRouteQuote } from '../src/index.ts';
 import {
-  ROUTER_CLOCK, ROUTER_DOMAIN, ROUTER_MANDATE, ROUTER_REGISTRY_INPUT, ROUTER_STATE,
+  ROUTER_CLOCK, ROUTER_DOMAIN, ROUTER_MANDATE, ROUTER_REGISTRY_INPUT, ROUTER_REQUESTED_QUANTITY, ROUTER_STATE,
   routeQuote, trustedCost, zeroFee,
 } from './support/fixture.ts';
 
@@ -24,6 +24,7 @@ function signedRequest(quote: ProviderRouteQuote, mandate = ROUTER_MANDATE) {
     authorization: envelopeFor(digest, TEST_PRIVATE_KEY, ROUTER_DOMAIN),
     registry: SECURITY_REGISTRY,
     trustedMarketState,
+    requestedQuantity: ROUTER_REQUESTED_QUANTITY,
     routes: [quote],
     trustedCosts: [trustedCost(quote)],
     clock: { nowUnixSeconds: ROUTER_CLOCK },
@@ -48,6 +49,10 @@ describe('adversarial route providers', () => {
     };
     const mutations: ProviderRouteQuote[] = [
       routeQuote({ notional: { ...routeQuote().notional, atoms: routeQuote().notional.atoms + 1n } }),
+      routeQuote({
+        quantity: { ...routeQuote().quantity, atoms: routeQuote().quantity.atoms / 2n },
+        notional: { ...routeQuote().notional, atoms: routeQuote().notional.atoms / 2n },
+      }),
       routeQuote({ canonicalAsset: { ...routeQuote().canonicalAsset, value: identifier('US0378331005') } }),
       routeQuote({ chain: identifier('eip155:1') }),
       routeQuote({ venue: identifier('venue.attacker') }),
@@ -93,6 +98,8 @@ describe('adversarial route providers', () => {
       quoteObservedAtUnixSeconds: quote.quoteObservedAtUnixSeconds,
       referenceObservedAtUnixSeconds: ROUTER_STATE.market?.provenance.observedAtUnixSeconds ?? ROUTER_CLOCK,
       referencePrice: ROUTER_STATE.market?.value.referencePrice ?? quote.executionPrice,
+      trustedCostSourceId: 'trusted.fixture.costs',
+      trustedCostObservedAtUnixSeconds: ROUTER_CLOCK,
       costs: { venueFee: zeroFee(), executionFee: zeroFee(), settlementFee: zeroFee(), routeFee: zeroFee() },
       steps: quote.steps,
       executionCandidate: {

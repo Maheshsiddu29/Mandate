@@ -1,7 +1,7 @@
 import { openRegistry } from '@mandate/registry';
 import type { SimulationConfig, SimulationTemplate } from '../../src/testing/index.ts';
 import {
-  ROUTER_AUTHORIZATION, ROUTER_CLOCK, ROUTER_DOMAIN, ROUTER_MANDATE, ROUTER_REGISTRY_INPUT,
+  ROUTER_AUTHORIZATION, ROUTER_CLOCK, ROUTER_DOMAIN, ROUTER_MANDATE, ROUTER_REGISTRY_INPUT, ROUTER_REQUESTED_QUANTITY,
   ROUTER_STATE, routeQuote, trustedCost,
 } from './fixture.ts';
 
@@ -28,6 +28,7 @@ export function simulationTemplate(): SimulationTemplate {
       authorization: ROUTER_AUTHORIZATION,
       registry: SIMULATION_REGISTRY,
       trustedMarketState: ROUTER_STATE,
+      requestedQuantity: ROUTER_REQUESTED_QUANTITY,
       clock: { nowUnixSeconds: ROUTER_CLOCK },
       expectedDomain: ROUTER_DOMAIN,
     },
@@ -35,4 +36,3 @@ export function simulationTemplate(): SimulationTemplate {
     trustedCost: trustedCost(quote),
   };
 }
-

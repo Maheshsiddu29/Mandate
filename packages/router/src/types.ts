@@ -86,6 +86,8 @@ export interface RoutingCandidate {
   readonly quoteObservedAtUnixSeconds: UnixSeconds;
   readonly referenceObservedAtUnixSeconds: UnixSeconds;
   readonly referencePrice: Price;
+  readonly trustedCostSourceId: string;
+  readonly trustedCostObservedAtUnixSeconds: UnixSeconds;
   readonly costs: {
     readonly venueFee: Amount;
     readonly executionFee: Amount;
@@ -114,11 +116,14 @@ export type RoutingReasonCode =
   | 'DUPLICATE_CANDIDATE'
   | 'REPRESENTATION_NOT_DISCOVERABLE'
   | 'PROVIDER_IDENTITY_MISMATCH'
+  | 'REQUESTED_QUANTITY_MISMATCH'
   | 'PARTIAL_FILL_UNSUPPORTED'
   | 'UNKNOWN_COST'
   | 'UNTRUSTED_COST_MISMATCH'
   | 'COST_UNIT_MISMATCH'
   | 'COST_OVERFLOW'
+  | 'COST_STATE_STALE'
+  | 'COST_STATE_FUTURE'
   | 'SELL_FEES_EXCEED_PROCEEDS'
   | 'QUOTE_STALE'
   | 'QUOTE_FROM_FUTURE'

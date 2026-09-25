@@ -31,6 +31,8 @@ export function zeroFee(): Amount {
   return { unit: parsedCandidate.notional.unit, decimals: parsedCandidate.notional.decimals, atoms: 0n };
 }
 
+export const ROUTER_REQUESTED_QUANTITY = parsedCandidate.quantity;
+
 export function routeQuote(patch: Partial<ProviderRouteQuote> = {}): ProviderRouteQuote {
   const zero = zeroFee();
   return {

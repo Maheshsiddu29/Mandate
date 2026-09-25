@@ -249,8 +249,8 @@
             "status": "ADMISSIBLE"
           }
         ],
-        "routingReceiptDigest": "0xb2838d4fff6fc3e42d355311ebcc493533eb1c0af5de437b76ca8d1d74ffc8a4",
-        "selectedCandidateDigest": "0xc20274b59a18dcf716a4dd6cc25ff3b2f8a10f9433f45d125293d23053b59260",
+        "routingReceiptDigest": "0xf8dbcee9c4874438120ccecbc0c194555a70ba90b6e4af54e60d9c021e2b02b0",
+        "selectedCandidateDigest": "0x45613ec7a202ee9b14dd6340accfd858a6538f65f716d523c82dcdea54c7c9b0",
         "selectedRouteId": "route.aapl.valid-cheap",
         "status": "SELECTED"
       }
@@ -499,8 +499,8 @@
             "status": "ADMISSIBLE"
           }
         ],
-        "routingReceiptDigest": "0x950591586a42589d97f2d06a3f50c256732543a2325c418614b920ea08e5a00f",
-        "selectedCandidateDigest": "0xf905654f8eee56de5693b2649adbb3b596f2eafef0f73fa74b5442594d8c6029",
+        "routingReceiptDigest": "0x7b0bde46c5ab8e15ead55b2c180562300c25b9c71aa6d947266f7d8e247336cf",
+        "selectedCandidateDigest": "0xdc0c15403a888d76d6770277b4e50ffd6cd19c106102e86bf7251cdd50fd2461",
         "selectedRouteId": "route.nvda.valid-cheap",
         "status": "SELECTED"
       }
@@ -749,8 +749,8 @@
             "status": "ADMISSIBLE"
           }
         ],
-        "routingReceiptDigest": "0x01fa4e4cf6b4d6abaeb5ec8277ab5407cd2ba66a26984b6c39615f66f6c4b354",
-        "selectedCandidateDigest": "0xfd229c72df32a58edad01f758c5c76ad1f30cb0c137a53b5565bee829c89f797",
+        "routingReceiptDigest": "0x90e4fcb6b38bf7e808667c6d6079bfdefbce4f52e1b4cb53d3fc248298498aef",
+        "selectedCandidateDigest": "0x46c914a59a411bc89bed20d86c79ef99744bf7f53113c6048cb7786129e746f3",
         "selectedRouteId": "route.tsla.valid-cheap",
         "status": "SELECTED"
       }
@@ -999,8 +999,8 @@
             "status": "ADMISSIBLE"
           }
         ],
-        "routingReceiptDigest": "0xb1d204157abe03cd85bbcb37ef425a494b0a69eb7c0a339e25b3de417d1b2f3c",
-        "selectedCandidateDigest": "0xa92884c50b04dd4b611118e8c2a5e678bc01329f4ff4c79defafc2320e572077",
+        "routingReceiptDigest": "0xbadb5ecc6a46891755c4e54dfe1b3a180826a2bcda6735a4c3c25100a17302b2",
+        "selectedCandidateDigest": "0x0f7f3ec55ba22f0d0016e3966c5abeda876f50ab4196a349211a519024c7364d",
         "selectedRouteId": "route.qqq.valid-cheap",
         "status": "SELECTED"
       }
@@ -1249,8 +1249,8 @@
             "status": "ADMISSIBLE"
           }
         ],
-        "routingReceiptDigest": "0x6d297f394ccea9223f071102be1149e46cc5be6bd6b7336af1af8df2e44b2cf1",
-        "selectedCandidateDigest": "0xe7bd29bd2670294b3aa2a699cc5da487def0c3da12abd36a5311f2483725550c",
+        "routingReceiptDigest": "0xf277527c4c9b545b9252f3114002b140646956661f523995b554cbbb261cc4fd",
+        "selectedCandidateDigest": "0x7a1d268d8e56fb080630e59d5f8e18748052f6bffc6e7609d08e29b5494901c4",
         "selectedRouteId": "route.crwd.valid-cheap",
         "status": "SELECTED"
       }
@@ -1499,8 +1499,8 @@
             "status": "ADMISSIBLE"
           }
         ],
-        "routingReceiptDigest": "0xed0bd4a0c847f9d0f664650ec1ac791fd8909f91036b6837796f93891d305e8e",
-        "selectedCandidateDigest": "0xa942820109d7ec5bacd53e94c1374efc11f305d1c5dfef470439a41b4f40f92f",
+        "routingReceiptDigest": "0xb07bed33763258216c9b257af0d18f8a699ef52a61614b5df6c1c7af3943f9a5",
+        "selectedCandidateDigest": "0xd59989557dcb20b17e991755df74804436d49ba82e24396dc191771c61d00627",
         "selectedRouteId": "route.msft.valid-cheap",
         "status": "SELECTED"
       }

@@ -2,6 +2,7 @@ import {
   Decision,
   compareAmounts,
   mandateDigest,
+  parseAmount,
   parseAuthorizationEnvelope,
   parseClock,
   parseEip712Domain,
@@ -44,6 +45,7 @@ export interface RouteRequest {
   readonly authorization: unknown;
   readonly registry: Registry;
   readonly trustedMarketState: unknown;
+  readonly requestedQuantity: unknown;
   readonly routes: unknown;
   readonly trustedCosts: unknown;
   readonly clock: unknown;
@@ -64,6 +66,7 @@ export function route(request: RouteRequest, verifier: Verifier = verify): Routi
   const trustedState = parseTrustedState(request.trustedMarketState);
   const clock = parseClock(request.clock);
   const domain = parseEip712Domain(request.expectedDomain);
+  const requestedQuantity = parseAmount(request.requestedQuantity);
   const quotes = parseProviderRouteSet(request.routes);
   const costs = parseTrustedRouteCosts(request.trustedCosts);
   const inputErrors: RouteExclusion[] = [];
@@ -72,9 +75,10 @@ export function route(request: RouteRequest, verifier: Verifier = verify): Routi
   if (!trustedState.ok) inputErrors.push(inputError('trustedMarketState', trustedState.error));
   if (!clock.ok) inputErrors.push(inputError('clock', clock.error));
   if (!domain.ok) inputErrors.push(inputError('expectedDomain', domain.error));
+  if (!requestedQuantity.ok) inputErrors.push(inputError('requestedQuantity', requestedQuantity.error));
   if (!quotes.ok) inputErrors.push(quotes.error);
   if (!costs.ok) inputErrors.push(costs.error);
-  if (inputErrors.length > 0 || !mandate.ok || !authorization.ok || !trustedState.ok || !clock.ok || !domain.ok || !quotes.ok || !costs.ok) {
+  if (inputErrors.length > 0 || !mandate.ok || !authorization.ok || !trustedState.ok || !clock.ok || !domain.ok || !requestedQuantity.ok || !quotes.ok || !costs.ok) {
     return { status: 'INVALID_INPUT', errors: inputErrors };
   }
 
@@ -104,6 +108,7 @@ export function route(request: RouteRequest, verifier: Verifier = verify): Routi
       quote,
       trustedState: trustedState.value,
       trustedCost: costs.value.get(quote.routeId),
+      requestedQuantity: requestedQuantity.value,
       nowUnixSeconds: clock.value.nowUnixSeconds,
     });
     if (!built.ok) {

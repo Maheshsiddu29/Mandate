@@ -92,6 +92,8 @@ describe('routing-candidate digest', () => {
       quoteObservedAtUnixSeconds: parsed.value.quoteObservedAtUnixSeconds,
       referenceObservedAtUnixSeconds: parsed.value.quoteObservedAtUnixSeconds,
       referencePrice: referencePrice.value,
+      trustedCostSourceId: 'trusted.fixture.costs',
+      trustedCostObservedAtUnixSeconds: parsed.value.quoteObservedAtUnixSeconds,
       costs: { venueFee: ZERO, executionFee: ZERO, settlementFee: ZERO, routeFee: ZERO },
       steps: parsed.value.steps, executionCandidate: executionCandidate.value,
     };

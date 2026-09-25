@@ -4,7 +4,7 @@ import { openRegistry } from '@mandate/registry';
 import { route, type ProviderRouteQuote, type TrustedRouteCost } from '../src/index.ts';
 import {
   ROUTER_AUTHORIZATION, ROUTER_CLOCK, ROUTER_DOMAIN, ROUTER_MANDATE, ROUTER_REGISTRY_INPUT,
-  ROUTER_STATE, routeQuote, trustedCost,
+  ROUTER_REQUESTED_QUANTITY, ROUTER_STATE, routeQuote, trustedCost,
 } from '../test/support/fixture.ts';
 
 const opened = openRegistry(ROUTER_REGISTRY_INPUT);
@@ -25,6 +25,7 @@ function input(count: number) {
   return {
     mandate: ROUTER_MANDATE, authorization: ROUTER_AUTHORIZATION, registry,
     trustedMarketState: ROUTER_STATE, routes, trustedCosts: costs,
+    requestedQuantity: ROUTER_REQUESTED_QUANTITY,
     clock: { nowUnixSeconds: ROUTER_CLOCK }, expectedDomain: ROUTER_DOMAIN,
   };
 }
@@ -58,4 +59,3 @@ const report = {
   results: [benchmark(10, 20), benchmark(100, 10), benchmark(256, 5)],
 };
 process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
-

@@ -9,6 +9,12 @@ The router consumes a parsed mandate, an opened registry snapshot, trusted
 market state, an explicit clock, and untrusted route-provider output. It makes
 no network, filesystem, environment, randomness or implicit-clock reads.
 
+The concrete order size is an explicit `requestedQuantity` input. The signed
+mandate bounds authority; it does not encode the agent's exact order size.
+Every Phase 4 quote is fill-or-kill and must match the requested unit, scale and
+atoms exactly. This makes cost comparisons like-for-like and prevents a route
+from appearing cheaper by delivering less.
+
 ```text
 mandate -> registry representations -> provider quotes -> strict parsing
         -> registry admissibility -> kernel verification -> ranking
@@ -27,6 +33,10 @@ identifier, provider identity/class, fill policy, quote time, known cost
 components and ordered route steps. Its canonical binary encoding is domain
 separated from kernel objects. Changing a security-relevant field changes its
 digest.
+
+The commitment also binds the trusted cost source and observation time. Cost
+state is subject to the mandate's price-age bound and future-dated observations
+fail closed.
 
 Phase 4 route steps are explicit but simple. The supported step kind is
 `TRADE`; `FUNDING`, `CONVERSION`, `BRIDGE` and `SETTLEMENT` are reserved for

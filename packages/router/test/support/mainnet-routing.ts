@@ -53,6 +53,7 @@ function makeWorld(symbol: typeof FIXTURE_SYMBOLS[number]) {
   const routes = [attacker, expensive, cheap];
   const request: RouteRequest = {
     mandate, authorization: replay.request.authorization, registry, trustedMarketState: state,
+    requestedQuantity: source.quantity,
     routes, trustedCosts: routes.map(trusted), clock, expectedDomain: domain,
   };
   return { symbol, request, routes, registry, mandate, state, clock };

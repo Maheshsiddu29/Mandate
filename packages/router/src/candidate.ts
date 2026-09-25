@@ -84,19 +84,26 @@ export function buildRoutingCandidate(input: {
   readonly quote: ProviderRouteQuote;
   readonly trustedState: TrustedState;
   readonly trustedCost: TrustedRouteCost | undefined;
+  readonly requestedQuantity: Amount;
   readonly nowUnixSeconds: UnixSeconds;
 }): CandidateBuildResult {
-  const { mandate, quote, trustedState, trustedCost, nowUnixSeconds } = input;
+  const { mandate, quote, trustedState, trustedCost, requestedQuantity, nowUnixSeconds } = input;
   const failures = validateIdentity(quote, mandate, trustedState);
+  if (!sameAmount(quote.quantity, requestedQuantity)) failures.push(exclusion('REQUESTED_QUANTITY_MISMATCH'));
   if (quote.fillPolicy !== 'FILL_OR_KILL') failures.push(exclusion('PARTIAL_FILL_UNSUPPORTED'));
   const age = nowUnixSeconds - quote.quoteObservedAtUnixSeconds;
   if (age < 0n) failures.push(exclusion('QUOTE_FROM_FUTURE', { ageSeconds: String(age) }));
   else if (age > mandate.maxPriceAgeSeconds) failures.push(exclusion('QUOTE_STALE', { ageSeconds: String(age), maximumSeconds: String(mandate.maxPriceAgeSeconds) }));
   const market = trustedState.market;
   if (market === null || market.value.referencePrice === null) failures.push(exclusion('MARKET_STATE_UNKNOWN'));
+  if (trustedCost !== undefined) {
+    const costAge = nowUnixSeconds - trustedCost.observedAtUnixSeconds;
+    if (costAge < 0n) failures.push(exclusion('COST_STATE_FUTURE', { ageSeconds: String(costAge) }));
+    else if (costAge > mandate.maxPriceAgeSeconds) failures.push(exclusion('COST_STATE_STALE', { ageSeconds: String(costAge), maximumSeconds: String(mandate.maxPriceAgeSeconds) }));
+  }
   const costs = validateCosts(quote.costs, trustedCost, quote.notional);
   if (!costs.ok) failures.push(...costs.exclusions);
-  if (failures.length > 0 || market === null || market.value.referencePrice === null || !costs.ok) {
+  if (failures.length > 0 || market === null || market.value.referencePrice === null || !costs.ok || trustedCost === undefined) {
     return { ok: false, exclusions: canonicalize(failures) };
   }
 
@@ -138,6 +145,8 @@ export function buildRoutingCandidate(input: {
     quoteObservedAtUnixSeconds: quote.quoteObservedAtUnixSeconds,
     referenceObservedAtUnixSeconds: market.provenance.observedAtUnixSeconds,
     referencePrice: market.value.referencePrice,
+    trustedCostSourceId: trustedCost.provenanceSourceId,
+    trustedCostObservedAtUnixSeconds: trustedCost.observedAtUnixSeconds,
     costs: costs.costs,
     steps: quote.steps,
     executionCandidate: parsed.value,
@@ -168,4 +177,3 @@ function canonicalize(values: readonly RouteExclusion[]): RouteExclusion[] {
   }
   return [...keyed.entries()].sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0).map(([, value]) => value);
 }
-

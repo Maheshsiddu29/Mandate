@@ -17,6 +17,11 @@ Phase 4 accepts only `FILL_OR_KILL` quotes. `ALLOW_PARTIAL` is represented but
 excluded before candidate construction. Partial settlement accounting remains
 future work.
 
+The caller supplies one explicit requested quantity. A full-fill quote must
+match its unit, decimal scale and atoms exactly. The mandate remains an
+authorization bound rather than being changed to carry an unsigned order-size
+interpretation.
+
 Every cost component used by the Phase 4 route must be present as an exact,
 unit-bearing amount:
 
@@ -30,6 +35,9 @@ conversion and bridge costs are not Phase 4 components because those route
 types are not implemented. Adding them later requires making them explicit,
 not defaulting them.
 
+Trusted cost values carry a source and observation time. Both are committed in
+the candidate digest; stale or future-dated cost observations are excluded.
+
 For `BUY`, total economic cost is quoted notional plus known fees. For `SELL`,
 net proceeds are quoted notional minus known fees; fees at or above proceeds
 exclude the route. All arithmetic is integer fixed-point arithmetic in the
@@ -42,4 +50,3 @@ notional unit and scale, and overflow or unit mismatch excludes the route.
   route.
 - The initial router deliberately does not support partial execution.
 - Stablecoin conversion and bridge economics remain Phase 7 work.
-
