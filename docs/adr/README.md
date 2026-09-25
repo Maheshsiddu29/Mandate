@@ -28,6 +28,8 @@ Status values: `Proposed`, `Accepted`, `Superseded by ADR NNNN`, `Rejected`.
 | [0014](0014-symmetric-signed-economic-authorization.md) | Symmetric signed economic authorization | Accepted |
 | [0015](0015-replay-quarantine-and-reconciliation.md) | Replay quarantine and reconciliation | Accepted |
 | [0016](0016-pipeline-time-and-handoff-freshness.md) | Pipeline time authority and handoff freshness | Accepted |
+| [0017](0017-layered-candidate-state-commitments.md) | Layered candidate state commitments | Accepted |
+| [0018](0018-observed-execution-outcomes.md) | Observed execution outcomes as the only replay resolution | Accepted |
 
 The canonical product specification remains
 [docs/mandate-design.md](../mandate-design.md). ADRs record *how* a specified

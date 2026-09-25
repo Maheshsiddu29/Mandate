@@ -2,7 +2,7 @@
 
 System structure, component boundaries, and where each concern is enforced.
 
-> **Status: Phase 5R complete.** The kernel, registry, read-only Robinhood
+> **Status: Phase 5R.1 complete.** The kernel, registry, read-only Robinhood
 > external-data adapter, deterministic router and the optional Jev advisory
 > layer are built, and the remediations the
 > [architecture pressure test](production-architecture-pressure-test.md)
@@ -10,8 +10,15 @@ System structure, component boundaries, and where each concern is enforced.
 > authorization ([ADR 0014](adr/0014-symmetric-signed-economic-authorization.md)),
 > replay quarantine ([ADR 0015](adr/0015-replay-quarantine-and-reconciliation.md)),
 > and mandatory fresh handoff state with monotonic pipeline time
-> ([ADR 0016](adr/0016-pipeline-time-and-handoff-freshness.md)). MCE is at
-> schema v2. Transaction construction and submission, execution
+> ([ADR 0016](adr/0016-pipeline-time-and-handoff-freshness.md)). The
+> post-remediation audit then found that the last of those was defeated by the
+> candidate's whole-state digest binding, so candidate commitments are layered by
+> the kind of fact each carries
+> ([ADR 0017](adr/0017-layered-candidate-state-commitments.md)) and every replay
+> resolution carries validated evidence
+> ([ADR 0018](adr/0018-observed-execution-outcomes.md)). MCE is at schema v2 for
+> the mandate and trusted state; the execution candidate is at schema v3.
+> Transaction construction and submission, execution
 > contracts, funding and web work remain planned. Jev has not been
 > characterized against a live account
 > ([jev-characterization.md](jev-characterization.md)).
@@ -177,8 +184,9 @@ constraints come from the signed mandate.
 | Is the agent authorized? | Verifier (authorization checks) | Authentication layer |
 | Is the submitted transaction the verified one? | Execution gate | Off-chain code |
 | Which admissible candidate is best? | Ranking, optionally Jev | Verifier — it does not rank |
-| Is the decision still valid at handoff? | Verifier, re-run on caller-supplied handoff state; the router requires it and refuses a handoff instant earlier than the evaluation instant | Evaluation-time state, which is never reused as handoff state (ADR 0016) |
-| Did the registry and the trusted state come from one snapshot? | Router, comparing the state's declared `registrySnapshotDigest` against the registry it evaluated | Kernel, which carries the digest opaquely and has no registry types |
+| Is the decision still valid at handoff? | Verifier, re-run on caller-supplied handoff state, re-evaluating every dynamic predicate rather than comparing digests; the router requires the state and refuses a handoff instant earlier than the evaluation instant | Evaluation-time state, which is never reused as handoff state (ADR 0016) |
+| Did the registry and the trusted state come from one snapshot? | Both. The kernel compares the state's declared `registrySnapshotDigest` against the candidate's own commitment; the router compares it against the registry it evaluated, at the evaluation *and* the handoff stage (ADR 0017) | Neither may skip it: an undeclared snapshot is `REGISTRY_SNAPSHOT_UNKNOWN`, not agreement |
+| Which world was a candidate built against? | Nobody enforces it; the candidate commits to it (`evaluationStateId`, `evaluationStateDigest`) so an auditor can reconstruct it | The verifier, which must not compare it — it sees one instant per call and cannot know which pipeline stage it is in (ADR 0017) |
 
 Read the table as a boundary specification: a component appearing in the
 right-hand column must not acquire the corresponding responsibility later.

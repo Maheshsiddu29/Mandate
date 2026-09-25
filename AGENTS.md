@@ -22,14 +22,21 @@ Read it before proposing architectural changes. If a change contradicts it,
 either the change is wrong or the document needs updating first — resolve which
 before writing code.
 
-The repository is currently at the end of **Phase 5R** — Phase 5 plus the
-production-architecture remediation recorded in
+The repository is currently at the end of **Phase 5R.1** — Phase 5, the
+production-architecture remediation, and the post-remediation audit fixes, all
+recorded in
 [docs/production-architecture-pressure-test.md](docs/production-architecture-pressure-test.md)
-§24. The canonical encoding is at **MCE v2**
-([ADR 0014](docs/adr/0014-symmetric-signed-economic-authorization.md)): a
-mandate carries a signed side-appropriate economic bound, a candidate carries
-its fee total and a digest of the state it was built against, and trusted state
-carries the registry snapshot digest it was derived from. Built as of Phase 5R: the mandate core kernel
+§24. The canonical encoding is at **MCE v2** for the mandate and trusted state
+([ADR 0014](docs/adr/0014-symmetric-signed-economic-authorization.md)) and the
+execution candidate is at **schema v3**
+([ADR 0017](docs/adr/0017-layered-candidate-state-commitments.md)): a mandate
+carries a signed side-appropriate economic bound; a candidate carries its fee
+total, provenance of the state it was built against, and the registry snapshot
+digest that state declared; trusted state must declare that snapshot digest. The
+candidate's state provenance is committed for audit and is deliberately *not*
+compared against the state being verified — only the registry snapshot is, because
+only it is structural. Replay resolutions require a validated observed outcome
+([ADR 0018](docs/adr/0018-observed-execution-outcomes.md)). Built as of Phase 5R.1: the mandate core kernel
 (`packages/kernel`), the canonical asset and representation registry
 (`packages/registry`), the read-only Robinhood external adapter
 (`packages/adapter-robinhood`), the deterministic candidate/router package

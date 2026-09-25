@@ -3,7 +3,7 @@
 **Intent-aware execution infrastructure for AI agents transacting in tokenized
 financial assets.**
 
-> **Status: Phase 5 complete — an advisory model layer that cannot authorize.** The deterministic
+> **Status: Phase 5R.1 complete — an advisory model layer that cannot authorize, hardened twice.** The deterministic
 > verifier, its domain types, canonical encoding, EIP-712 authorization, receipts
 > and replay semantics are built and tested in `packages/kernel`. The canonical
 > asset and representation registry — identifier schemes, reference resolution,
@@ -22,6 +22,16 @@ financial assets.**
 > [docs/jev-characterization.md](docs/jev-characterization.md); every Phase 5
 > result comes from recorded fixtures, deterministic stubs and adversarial
 > stubs.
+> Two rounds of adversarial review have been applied on top of Phase 5: the
+> [production architecture pressure test](docs/production-architecture-pressure-test.md)
+> (findings F-1…F-16) and an independent audit of that remediation (findings
+> N-1…N-10). The second round mattered: the first had bound an execution candidate
+> to the digest of the entire trusted state, which made the execution-handoff
+> re-verification impossible to pass against genuinely fresh state. Candidate
+> commitments are now layered by the kind of fact each one carries
+> ([ADR 0017](docs/adr/0017-layered-candidate-state-commitments.md)), and every
+> replay resolution requires a validated observed outcome
+> ([ADR 0018](docs/adr/0018-observed-execution-outcomes.md)).
 > Nothing below should be read as a claim beyond that boundary.
 
 ---
@@ -127,16 +137,20 @@ onchain code and metadata.
 **The router** limits discovery to registry representations, treats every
 provider quote as untrusted, requires exact full-fill quantity and independently
 established costs, verifies before ranking, and verifies the selected route a
-second time before returning a handoff candidate.
+second time — against **fresh** trusted state supplied for the handoff, never the
+state it evaluated — before returning a handoff candidate. That second
+verification re-evaluates every dynamic predicate rather than comparing state
+digests, so a safe refresh hands off and an unsafe one refuses with the reason
+code for what actually changed.
 
 | Piece | What it does |
 | --- | --- |
-| `packages/kernel` | Mandate types, MCE v1 canonical encoding and keccak-256 digests, EIP-712 authorization, the verifier's 17 independent checks, 43 stable reason codes, receipts, and the replay state machine |
-| `packages/registry` | Canonical asset identity with check-digit-validated identifier schemes, deterministic reference resolution, provenance-carrying representation metadata with trust floors and fail-closed conflict handling, mandate-constrained admissibility with 20 registry reason codes, reproducible snapshots and digests, and synthetic world builders |
+| `packages/kernel` | Mandate types, MCE v2 canonical encoding and keccak-256 digests, EIP-712 authorization, the verifier's 19 independent checks, 51 stable reason codes, receipts, and the evidence-carrying replay state machine |
+| `packages/registry` | Canonical asset identity with check-digit-validated identifier schemes, deterministic reference resolution, provenance-carrying representation metadata with trust floors and fail-closed conflict handling, mandate-constrained admissibility with 21 registry reason codes, reproducible snapshots and digests, and synthetic world builders |
 | `packages/adapter-robinhood` | Strict Robinhood assets, price, capability, corporate-action, ERC-20/ERC-8056 and Chainlink normalization; explicit live failure handling and capture tooling |
 | `packages/router` | Strict provider boundary, committed routing candidates, fail-closed cost model, lexicographic BUY/SELL ranking, re-verification, selection receipts and seeded simulation |
 | `packages/jev` | TypeSafe client and strict response parser, closed-set choice projection, explicit abstention, deterministic fallback across eighteen failure reasons, advisory receipts, handoff re-verification, adversarial stubs and the trader-facing summary |
-| `corpus/v2` | 67 verifier decision vectors across 27 families (MCE v2) |
+| `corpus/v2` | 70 verifier decision vectors across 27 families (MCE v2, candidate schema v3) |
 | `corpus/registry-v1` | 27 registry decision vectors covering resolution and admissibility |
 | `corpus/mainnet-v1` | 11 recorded-mainnet registry-plus-kernel replay vectors and a machine-readable report |
 | `corpus/mainnet-routing-v1` | Six hybrid recorded-mainnet candidate-set routing worlds with deterministic receipts |
@@ -168,8 +182,8 @@ npm run check      # 567 offline tests plus fixtures, replays, boundaries and re
 | [docs/statelatch-reuse.md](docs/statelatch-reuse.md) | Assessment of the prior StateLatch / EquityGuard codebase: what is reusable, what must be rebuilt, and what must not be carried over. |
 | [docs/verifier-invariants.md](docs/verifier-invariants.md) | What the kernel guarantees today, how each guarantee is established, and what it explicitly does not guarantee. |
 | [docs/registry-semantics.md](docs/registry-semantics.md) | Canonical asset identity, the representation model, registry trust and provenance, resolution and ambiguity, admissibility, snapshots — and what the registry explicitly does not guarantee. |
-| [docs/reason-codes.md](docs/reason-codes.md) | The 43 stable verifier reason codes. Generated from the registry, so it cannot drift. |
-| [docs/registry-reason-codes.md](docs/registry-reason-codes.md) | The 20 registry reason codes, and the kernel codes registry decisions reuse. Generated. |
+| [docs/reason-codes.md](docs/reason-codes.md) | The 51 stable verifier reason codes. Generated from the registry, so it cannot drift. |
+| [docs/registry-reason-codes.md](docs/registry-reason-codes.md) | The 21 registry reason codes, and the kernel codes registry decisions reuse. Generated. |
 | [docs/replay-semantics.md](docs/replay-semantics.md) | How a mandate is consumed, and the one obligation the kernel cannot enforce for an integrator. |
 | [docs/robinhood-integration.md](docs/robinhood-integration.md) | Verified endpoints, schemas, issuer semantics, price/multiplier rules, timestamps and real-data limitations. |
 | [docs/mainnet-replay.md](docs/mainnet-replay.md) | Recorded-mainnet replay methodology, synthetic labelling and validation report. |

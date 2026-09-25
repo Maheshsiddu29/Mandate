@@ -244,10 +244,26 @@ local array. There is no deserialization of model output into a domain object.
   exactly what the set was built from and `FINAL_REVERIFICATION_FAILED` was
   unreachable through `route()`. The mechanism worked when supplied; nothing
   required supplying it (pressure-test finding F-5).
-- **Evidence:** the state-change tests in `adversarial.test.ts`, the
+- **Correction (Phase 5R.1).** The Phase 5R fix was undone by another Phase 5R
+  change in the same release. Candidate schema v2 required the candidate to commit
+  to the digest of the whole trusted state, and a state digest covers observation
+  timestamps — so a re-verification against genuinely fresh state *always* failed,
+  safe or not, and the only handoff that could pass was one replaying the
+  evaluation state. The control was therefore not "a halt rejects"; it was
+  "everything rejects", which is not a control, and the regression tests asserting
+  `NO_VALID_ROUTE` were satisfied by the wrong cause (audit findings N-1, N-2).
+  Candidate commitments are now layered by the kind of fact each carries, so a
+  handoff re-evaluates every dynamic predicate rather than comparing digests
+  ([ADR 0017](adr/0017-layered-candidate-state-commitments.md)).
+- **Evidence:** `router/test/handoff.test.ts`, which asserts the specific reason
+  code for each change — `TRADING_HALTED`, `REPRESENTATION_INACTIVE`,
+  `PRICE_DEVIATION_EXCEEDED`, `CORPORATE_ACTION_STATE_CHANGED`,
+  `PRICE_STATE_STALE`, `MANDATE_EXPIRED`, `MANDATE_ALREADY_CONSUMED`,
+  `REGISTRY_SNAPSHOT_MISMATCH`, `HANDOFF_TIME_REGRESSED` — and, in the other
+  direction, that a world differing only in observation timestamp **succeeds**.
+  Plus the state-change tests in `adversarial.test.ts`, the
   `market-change-during-decision` corpus scenario, and the handoff regression
-  tests in `pressure-test-findings.test.ts`, which cover a halt, a pause, an
-  expiry, a stale price and a rewound clock.
+  tests in `pressure-test-findings.test.ts`.
 - **Residual risk:** the handoff state is still supplied by the caller, and a
   caller that rewinds both the evaluation and the handoff instant consistently
   defeats every age bound. No off-chain component can detect that. Binding to

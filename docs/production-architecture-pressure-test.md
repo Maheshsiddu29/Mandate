@@ -1050,7 +1050,7 @@ the analysis above is unchanged.
 | **F-2** | All-in cost enforced outside the authority and outside the commitment | **REMEDIATED** | `economicLimit` added to the signed mandate, `feeTotal` to the candidate; `checkEconomicLimit` is the sole enforcement point; the router's `TOTAL_COST_EXCEEDS_MANDATE` is gone; `candidateDigest` commits to the fee ([ADR 0014](adr/0014-symmetric-signed-economic-authorization.md)) |
 | **F-3** | `verify()` and `route()` throw instead of returning a verdict | **REMEDIATED** | Bounds on trusted-state representations, registry claim sets, source versions, listings and aliases, each equal to its encoder's `u16`; digest step guarded so an internal failure rejects with a receipt |
 | **F-4** | A SELL mandate cannot bound its own proceeds | **REMEDIATED** | Same field as F-2, read as `MIN_TOTAL_CREDIT` on a SELL; `FEES_EXCEED_NOTIONAL` for a net debit |
-| **F-5** | Handoff re-verification reads evaluation-time state | **REMEDIATED** | `HandoffInputs` required by `route()`, `selectEvaluated()` and `selectWithJev()`; no default; `FINAL_REVERIFICATION_FAILED` now reachable and tested against five kinds of state change ([ADR 0016](adr/0016-pipeline-time-and-handoff-freshness.md)) |
+| **F-5** | Handoff re-verification reads evaluation-time state | **REMEDIATED**, then **CORRECTED in 5R.1** | `HandoffInputs` required by `route()`, `selectEvaluated()` and `selectWithJev()`; no default ([ADR 0016](adr/0016-pipeline-time-and-handoff-freshness.md)). The 5R remediation was sound and the *candidate binding* added for F-8 then made every fresh handoff fail regardless of safety, so `FINAL_REVERIFICATION_FAILED` was reachable only for the wrong reason — see N-1 |
 | **F-44/45** | No atomic replay store, no reorg handling | **PHASE 6** — unchanged, and correctly scoped there |
 
 ### MEDIUM
@@ -1058,8 +1058,8 @@ the analysis above is unchanged.
 | # | Finding | Status | Where |
 | --- | --- | --- | --- |
 | **F-6** | Chain inside `representationId` never reconciled | **REMEDIATED** | `checkRepresentationChain` on the candidate and every state entry; `chainSegmentOf` reads only the chain half, so INV-7 is unchanged |
-| **F-7** | Registry snapshot not bound to trusted state | **REMEDIATED** | `TrustedState.registrySnapshotDigest`, carried opaquely by the kernel and compared by the router against the snapshot it evaluated |
-| **F-8** | `referenceStateId` binds a name, not content | **REMEDIATED** | `referenceStateDigest` added to the candidate and compared against the digest `verify` computes; the label check remains for its diagnostic |
+| **F-7** | Registry snapshot not bound to trusted state | **REMEDIATED**, **STRENGTHENED in 5R.1** | `TrustedState.registrySnapshotDigest`, carried opaquely by the kernel and compared by the router against the snapshot it evaluated. 5R left it opt-in — a state declaring none was accepted — which N-8 closed: the candidate now commits to the snapshot, the kernel compares it, and the router enforces it at the handoff stage too |
+| **F-8** | `referenceStateId` binds a name, not content | **REMEDIATED**, **SUPERSEDED in 5R.1** | The diagnosis was right and the cure over-corrected. `referenceStateDigest` bound the *whole* state and was compared at every call, which made a re-verification against fresh state impossible — the defect N-1 found. The candidate now carries layered commitments: evaluation provenance (committed, not compared) and the registry snapshot (compared), with dynamic facts re-evaluated ([ADR 0017](adr/0017-layered-candidate-state-commitments.md)). F-8's own property survives: two states sharing one label are still told apart, by the predicates over their content |
 | **F-9** | Clock is an unconstrained caller input | **PARTIALLY REMEDIATED** | The router enforces that the handoff instant is not earlier than the evaluation instant (`HANDOFF_TIME_REGRESSED`), and the time-authority model is now stated rather than assumed. A caller that rewinds both instants consistently still defeats every age bound; no off-chain component can detect that, and `block.timestamp` at the Phase 6 gate closes it (INV-10) |
 | **F-10** | Adversarial coverage is one mutation class over single-representation worlds | **REMEDIATED** | `packages/router/test/adversarial-worlds.test.ts`: six registered representations of one asset across two chains, with combined economic-plus-identity attacks, conflicting and mixed-age claims, a corporate action across the set, a halt between evaluation and handoff, and a 256-candidate boundary set |
 | **F-11** | No response-size bound on either network client | **REMEDIATED** | Incremental size-bounded body reading in both clients, tested below and above each limit |
@@ -1074,7 +1074,7 @@ the analysis above is unchanged.
 | **F-14** | Deviation is symmetric | **ACCEPTED.** A favourable fill outside the bound still rejects. Making the bound one-sided is a product decision about what a principal is authorizing, not a defect, and it was not in Phase 5R's scope |
 | **F-15** | A zero-quantity candidate is authorized | **ACCEPTED, NARROWED.** Still passes the kernel; the router requires the quote to match the caller's `requestedQuantity` exactly, so reaching it means the caller asked for zero. A minimum-size field would be another mandate schema change and no requirement for one has appeared |
 | **F-16** | No persistence anywhere | **PHASE 6** — unchanged |
-| INFO | `validateCosts` dead branch | **OPEN.** Harmless |
+| INFO | `validateCosts` dead branch | **CLOSED in 5R.1** (N-10). The branch is gone and cost validation is three ordered passes: commensurability, then agreement with independent cost state, then summation |
 | INFO | Two detail-sorting conventions | **OPEN.** Both deterministic |
 | INFO | Two reason codes for an unregistered contract | **OPEN, now pinned.** `REPRESENTATION_NOT_DISCOVERABLE` through the router and `REPRESENTATION_UNKNOWN` through the registry filter. A test asserts which path produces which, so the divergence is visible rather than latent |
 | INFO | A Jev choice is not bound to the set digest it answered | **OPEN.** Harmless: a choice is only an index into that set's own members |
@@ -1107,3 +1107,59 @@ All four recommended items are also done: F-7, F-10, F-11 and F-13.
 owned by Phase 6 and named there: atomic on-chain consumption, chain-sourced
 time, transaction binding, reorg reconciliation, and a reconciliation path for
 quarantined authorizations.
+
+## Phase 5R.1 — post-remediation audit findings
+
+An independent audit of the Phase 5R remediation found ten further items, N-1
+through N-10. They are not new areas of the architecture: seven of them are places
+where a Phase 5R fix was incomplete, over-applied, or described a property the code
+did not enforce. The architecture itself was not re-litigated and did not change.
+
+### The one that mattered
+
+| # | Finding | Status | Where |
+| --- | --- | --- | --- |
+| **N-1** | The candidate's whole-state digest binding made every fresh handoff fail | **REMEDIATED** | Candidate schema v3 layers the commitments by kind of fact: evaluation provenance is committed and never compared, the registry snapshot is committed and compared, dynamic facts are re-evaluated by the check that owns each one ([ADR 0017](adr/0017-layered-candidate-state-commitments.md)). A safe refresh now succeeds; an unsafe one rejects for its own reason code |
+
+This is the finding the rest hang off. Phase 5R made the handoff read fresh state
+(F-5) and, in the same phase, made a candidate require the state it is verified
+against to be byte-identical to the state it was built against (F-8). The two are
+mutually exclusive, and their intersection was a handoff that could only ever pass
+by replaying the evaluation state — the tautology F-5 existed to remove.
+
+### The rest
+
+| # | Finding | Status | Where |
+| --- | --- | --- | --- |
+| **N-2** | Handoff tests asserted only `NO_VALID_ROUTE`, which the N-1 defect satisfied | **REMEDIATED** | `router/test/handoff.test.ts`: ten cases, each asserting the reason code its predicate produces, plus the case nothing tested before — a safe refresh that must *succeed*. The F-5 and F-7 pinning tests are strengthened the same way |
+| **N-3** | `RECONCILE` treated every unrecognized outcome as FAILED | **REMEDIATED** | `parseReconciledOutcome` matches `SETTLED` and `FAILED` exactly; seventeen hostile values tested, each leaving the authorization unavailable. No branch defaults ([ADR 0018](adr/0018-observed-execution-outcomes.md)) |
+| **N-4** | `applyTransition` returned `undefined` for an unrecognized transition | **REMEDIATED** | Every caller-controlled field parsed before any branch; exhaustive switch with a `never` guard; `RETIRED_REPLAY_TRANSITIONS` exported so refusing `RECLAIM`, `COMMIT` and `RELEASE` is a tested behaviour |
+| **N-5** | `RELEASE` restored an authorization on a bare command | **REMEDIATED** | `COMMIT` and `RELEASE` removed; one `RECONCILE` carrying a validated `ExecutionObservation` — outcome, time, source, reference — recorded on the resulting record. A validated assertion, not a proof: verification against a chain is Phase 6 |
+| **N-6** | The totality claim was stated unscoped | **REMEDIATED** | V-2 and new V-9: total over parsed, plain values — the scope of every external input — and one-directional outside it, where a hostile host object may make `verify` throw and must never make it PASS. Proxy-trap defence is deliberately not attempted |
+| **N-7** | `ReplayError.KEY_MISMATCH` was unreachable | **REMEDIATED** | Removed. Key reconciliation belongs to the Phase 6 persistence layer that performs the lookup, and `replay-semantics.md` §8 names it as the store's obligation. A test now asserts every remaining replay error is reachable |
+| **N-8** | Removing digest equality removed the incidental registry binding | **REMEDIATED** | The binding is explicit and no longer opt-in: `REGISTRY_SNAPSHOT_MISMATCH` and `REGISTRY_SNAPSHOT_UNKNOWN` in the kernel, enforced by the router at both stages. A changed snapshot fails closed and the caller reroutes |
+| **N-9** | `trustedCosts` was unbounded | **REMEDIATED** | `MAX_TRUSTED_ROUTE_COSTS`, defined as `MAX_ROUTE_CANDIDATES` so the two cannot drift: one cost entry per route quote, duplicates refused, the route set bounded at that number. Tested below, at and above, with a typed `RESOURCE_LIMIT_EXCEEDED` refusal applied before any entry is parsed |
+| **N-10** | `validateCosts` unit check sat behind a dead branch | **REMEDIATED** | Three ordered passes; commensurability returns before any summation; a regression case proves costs differing from the notional only in unit or scale cannot be numerically added |
+
+### What Phase 5R.1 did not change
+
+The architecture, again. No component boundary, dependency direction, trust level
+or decision ownership moved. Two wire formats changed, both deliberately and both
+versioned: the execution candidate is schema v3 under the `MANDATE.CANDIDATE.V3`
+domain tag, and the replay transition vocabulary lost `COMMIT` and `RELEASE`. A v2
+candidate does not parse and a retired transition is a typed refusal, so neither
+change is silent.
+
+One property was deliberately tightened beyond the finding: a trusted state must
+now declare the registry snapshot its representations came from. Accepting an
+undeclared snapshot would mean the structural binding silently does not exist, and
+the kernel's own rule is that unestablished provenance is UNKNOWN and UNKNOWN
+rejects.
+
+### Still owned by Phase 6
+
+Unchanged by this phase, and named so nothing assumes otherwise: atomic on-chain
+consumption, chain-sourced time, transaction binding, reorg reconciliation, a
+reconciliation path that verifies an observation rather than validating it (V-59),
+key reconciliation in the replay store (N-7), and a cross-snapshot compatibility
+proof if one is ever wanted instead of failing closed (V-60).

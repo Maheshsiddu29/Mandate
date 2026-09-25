@@ -53,9 +53,9 @@ per property in [verifier-invariants.md](verifier-invariants.md).
 | Delivered | Where |
 | --- | --- |
 | Mandate types, MVP field set | `packages/kernel/src/mandate.ts` |
-| Canonical encoding and digests (MCE v1, keccak-256) | `src/encoding/`, [ADR 0002](adr/0002-canonical-mandate-encoding.md) |
+| Canonical encoding and digests (MCE v1, keccak-256; reissued as v2 in Phase 5R, candidate v3 in 5R.1) | `src/encoding/`, [ADR 0002](adr/0002-canonical-mandate-encoding.md), [ADR 0017](adr/0017-layered-candidate-state-commitments.md) |
 | EIP-712 authorization, one scheme behind a registry | `src/authorization/`, [ADR 0001](adr/0001-mandate-authorization-architecture.md) |
-| Deterministic verifier, 17 independent checks | `src/verifier/` |
+| Deterministic verifier, 19 independent checks as of Phase 5R.1 | `src/verifier/` |
 | Reason-code registry, 43 codes | [reason-codes.md](reason-codes.md) |
 | Receipts for PASS and REJECT | `src/receipt.ts` |
 | Human-readable layer, kept separate | `src/explain.ts` |
@@ -298,6 +298,41 @@ INV-3 expressed as a scheduling property.
 
 ---
 
+## Phase 5R and 5R.1 — adversarial review and remediation ✅
+
+Not a feature phase. Two rounds of adversarial review of everything Phases 1–5
+built, applied before the Solidity execution structure freezes the protocol.
+
+**5R** remediated the
+[production architecture pressure test](production-architecture-pressure-test.md)
+(findings F-1…F-16): symmetric signed economic authorization
+([ADR 0014](adr/0014-symmetric-signed-economic-authorization.md)), replay
+quarantine ([ADR 0015](adr/0015-replay-quarantine-and-reconciliation.md)),
+mandatory fresh handoff state with monotonic pipeline time
+([ADR 0016](adr/0016-pipeline-time-and-handoff-freshness.md)), bounds on every
+counted collection, response-size limits on both network clients, and
+multi-representation adversarial worlds.
+
+**5R.1** remediated an independent audit *of that remediation* (findings
+N-1…N-10). Seven of the ten were places where a 5R fix was incomplete,
+over-applied, or described a property the code did not enforce. The one that
+mattered: 5R had bound a candidate to the digest of the entire trusted state,
+which made the fresh handoff re-verification 5R had just introduced impossible to
+pass. Candidate commitments are now layered by the kind of fact each carries
+([ADR 0017](adr/0017-layered-candidate-state-commitments.md)), and every replay
+resolution requires a validated observed outcome
+([ADR 0018](adr/0018-observed-execution-outcomes.md)).
+
+**Exit criterion:** every finding either closed or explicitly assigned to a later
+phase, with each closure pinned by a test that fails if the defect returns. The
+full ledger is [§24 of the pressure test](production-architecture-pressure-test.md).
+
+**Depends on:** Phase 5. **Blocks Phase 6** — deliberately, because an on-chain
+gate re-asserts commitments, and freezing the wrong commitment structure in
+Solidity is the expensive mistake.
+
+---
+
 ## Phase 6 — On-chain execution gate and settlement
 
 **Delivers**
@@ -385,7 +420,9 @@ the design document before it belongs in code.
 | 3 | Read-only Robinhood market-state and chain adapters | 2 | ✅ complete |
 | 4 | Execution-candidate and route engine | 3 | ✅ complete |
 | 5 | Jev-assisted decision layer | 4 | ✅ complete (live characterization performed 2026-09-25) |
-| 6 | On-chain execution gate and settlement | 4 | planned |
+| 5R | Pressure-test remediation (F-1…F-16) | 5 | ✅ complete |
+| 5R.1 | Post-remediation audit remediation (N-1…N-10) | 5R | ✅ complete |
+| 6 | On-chain execution gate and settlement | 5R.1 | planned |
 | 7 | Stablecoin funding adapters | 6 | planned, flexible |
 | 8 | Demo product and web experience | 6 | planned |
 | 9+ | Cross-chain network, broader asset classes | 8 | future |

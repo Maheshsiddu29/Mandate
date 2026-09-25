@@ -384,6 +384,16 @@ genuinely has only one snapshot now passes it twice, which is a visible decision
 a caller that cannot obtain fresh state has nothing to pass and the decision
 fails. **No fresh state, no handoff.**
 
+**And fresh state must be able to pass** ([ADR 0017](adr/0017-layered-candidate-state-commitments.md)).
+Phase 5R also bound a candidate to the digest of the whole trusted state, which
+covers observation timestamps — so requiring fresh state and requiring an
+identical state digest cancelled out, and every honest handoff failed with
+`CANDIDATE_STATE_MISMATCH`. Since Phase 5R.1 the handoff re-evaluates each dynamic
+predicate — price, deviation, halt, freshness, epoch, expiry, replay status — and
+compares for equality only the registry snapshot, which is structural rather than
+observed. A world differing only in its observation timestamps hands off; one
+carrying a material change refuses with that change's own reason code.
+
 The router performs the re-verification, inside `selectEvaluated`, and refuses a
 handoff instant earlier than the evaluation instant with `HANDOFF_TIME_REGRESSED`.
 This layer reports that verdict rather than running a second check of its own:

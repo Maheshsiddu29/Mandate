@@ -3,7 +3,7 @@
 How a mandate is consumed, what "consumed" means, and what Phase 1 deliberately
 does not decide.
 
-> **Status: Phase 5R, implemented.** The state machine is in
+> **Status: Phase 5R.1, implemented.** The state machine is in
 > `packages/kernel/src/replay.ts`; the verifier's read of replay state is in
 > `packages/kernel/src/verifier/checks.ts`. Invariant:
 > [INV-12](mandate-design.md#16-major-invariants).
@@ -15,6 +15,18 @@ does not decide.
 > `RECONCILE` ([ADR 0015](adr/0015-replay-quarantine-and-reconciliation.md)).
 > The original finding is F-1 in
 > [the architecture pressure test](production-architecture-pressure-test.md).
+>
+> **Corrected again in Phase 5R.1**, for the same class of gap one level down.
+> Phase 5R hardened the *quarantine* path and left the *reservation* path as it
+> was: `RELEASE` restored an authorization on a bare command, with no observation
+> required, carried or recorded, while this document said it happens "only when
+> failure is observed". `RECONCILE` meanwhile compared its outcome against
+> `SETTLED` and treated everything else as FAILED, so any unrecognized runtime
+> value — `'settled'`, `'UNKNOWN'`, `0`, `''`, `{}`, `undefined` — restored a
+> quarantined authorization. `COMMIT` and `RELEASE` are removed and every
+> resolution now carries validated evidence
+> ([ADR 0018](adr/0018-observed-execution-outcomes.md)). The findings are N-3,
+> N-4, N-5 and N-7 of the independent post-remediation audit.
 
 ## 1. Pure verification and stateful consumption are separate
 
@@ -77,20 +89,35 @@ out of scope, and this is the same boundary.
 ## 4. The state machine
 
 ```
-                RESERVE                     COMMIT (settlement observed)
-     UNUSED ──────────────▶ RESERVED ──────────────────────▶ CONSUMED
-       ▲                      │  │                              ▲
-       │  RELEASE             │  │  QUARANTINE                  │
-       │  (failure observed)  │  │  (reservation expired,       │
-       └──────────────────────┘  │   outcome unestablished)     │
-       ▲                         ▼                              │
-       │                    QUARANTINED ────────────────────────┘
-       │                         │        RECONCILE(SETTLED)
+                RESERVE                    RECONCILE(SETTLED, evidence)
+     UNUSED ──────────────▶ RESERVED ──────────────────────────▶ CONSUMED
+       ▲                      │  │                                  ▲
+       │  RECONCILE(FAILED,   │  │  QUARANTINE                      │
+       │   evidence)          │  │  (reservation expired,           │
+       └──────────────────────┘  │   outcome unestablished)         │
+       ▲                         ▼                                  │
+       │                    QUARANTINED ────────────────────────────┘
+       │                         │      RECONCILE(SETTLED, evidence)
        └─────────────────────────┘
-            RECONCILE(FAILED)
+          RECONCILE(FAILED, evidence)
 
      UNKNOWN ── not a state to transition from; it must be established first
 ```
+
+The vocabulary is **three transitions**: `RESERVE`, `QUARANTINE`, `RECONCILE`.
+`COMMIT` and `RELEASE` were removed in Phase 5R.1 because each was the assertion
+`RECONCILE` now makes, minus the evidence — and maintaining two paths to one state
+with different evidentiary standards is what let the weaker one go unnoticed.
+
+| Transition | From | To | Requires |
+| --- | --- | --- | --- |
+| `RESERVE` | `UNUSED` | `RESERVED` | A positive reservation length, clamped to the mandate's expiry |
+| `QUARANTINE` | `RESERVED` | `QUARANTINED` | The reservation to have passed its own expiry |
+| `RECONCILE` | `RESERVED`, `QUARANTINED` | `CONSUMED` if `SETTLED`, `UNUSED` if `FAILED` | A validated `ExecutionObservation` |
+
+`RECLAIM`, `COMMIT` and `RELEASE` are exported as `RETIRED_REPLAY_TRANSITIONS` and
+refused with `UNKNOWN_TRANSITION`, so an integrator upgrading across either change
+gets a typed error from a total function rather than `undefined` out of a switch.
 
 | Status | Verifier verdict | Meaning |
 | --- | --- | --- |
@@ -114,12 +141,13 @@ mandate establishes nothing about this one.
 **Reserve before signing; commit after settlement is observed.**
 
 ```
-verify ──▶ PASS ──▶ RESERVE ──▶ sign ──▶ submit ──▶ observe ──▶ COMMIT
-                        │                              │
-                        │                              └── failure ──▶ RELEASE
-                        └── never resolves ──▶ reservation expires ──▶ QUARANTINE
-                                                                          │
-                                                        reconciliation ──▶ RECONCILE
+verify ─▶ PASS ─▶ RESERVE ─▶ sign ─▶ submit ─▶ observe ─▶ RECONCILE(SETTLED, evidence)
+                     │                            │
+                     │                            └── observed failure
+                     │                                   └─▶ RECONCILE(FAILED, evidence)
+                     └── never resolves ──▶ reservation expires ──▶ QUARANTINE
+                                                                       │
+                                                     reconciliation ──▶ RECONCILE(…, evidence)
 ```
 
 Reserving *before* signing is the conservative order. Two concurrent attempts
@@ -137,18 +165,21 @@ safety one.
 | What happened | Correct transition | Result |
 | --- | --- | --- |
 | Verification rejected | none — nothing was reserved | Mandate stays `UNUSED`; fix and retry |
-| Reserved, then the transaction was **observed to fail** | `RELEASE` | Back to `UNUSED`; retry permitted |
-| Reserved, then settlement **observed to succeed** | `COMMIT` | `CONSUMED`; no retry |
+| Reserved, then the transaction was **observed to fail** | `RECONCILE(FAILED, evidence)` | Back to `UNUSED`; retry permitted |
+| Reserved, then settlement **observed to succeed** | `RECONCILE(SETTLED, evidence)` | `CONSUMED`; no retry |
 | Reserved, outcome **never established** | `QUARANTINE` once the reservation lapses | `QUARANTINED`; unavailable until reconciliation establishes the outcome |
-| Quarantined, reconciliation **observed settlement** | `RECONCILE(SETTLED)` | `CONSUMED`; no retry |
-| Quarantined, reconciliation **observed failure** | `RECONCILE(FAILED)` | Back to `UNUSED`; retry permitted |
+| Quarantined, reconciliation **observed settlement** | `RECONCILE(SETTLED, evidence)` | `CONSUMED`; no retry |
+| Quarantined, reconciliation **observed failure** | `RECONCILE(FAILED, evidence)` | Back to `UNUSED`; retry permitted |
 | Quarantined, reconciliation **could not establish the outcome** | none | Stays `QUARANTINED` |
+| A transition asserted with **no evidence**, or evidence that is incomplete or carries an unrecognized outcome | refused | `OBSERVATION_REQUIRED` or `OBSERVATION_INVALID`; the record does not move |
 
 The fourth row is the important one, and it is where this document was wrong
-before Phase 5R. `RELEASE` requires *observing* failure: an attempt that cannot
-tell whether its transaction landed must not release, because releasing a
-mandate whose transaction later settles authorizes a second execution of an
-already-executed trade.
+before Phase 5R. Returning an authorization to `UNUSED` requires *observing*
+failure: an attempt that cannot tell whether its transaction landed must not
+release it, because releasing a mandate whose transaction later settles
+authorizes a second execution of an already-executed trade. Since Phase 5R.1 the
+API enforces that rather than merely describing it — the transition will not apply
+without an observation to apply (§6a).
 
 The old text then claimed that waiting for the reservation to expire was the
 fail-closed alternative, on the grounds that the reservation was clamped to the
@@ -172,7 +203,37 @@ order already makes, and it is the correct direction for a safety control.
 
 **Reconciliation itself is not built.** It needs chain observation, which is
 Phase 6. What Phase 5R guarantees is that its absence fails closed: with no
-reconciliation, a quarantined authorization simply stays unavailable.
+reconciliation, a quarantined authorization simply stays unavailable. What Phase
+5R.1 adds is that its *presence* must be substantiated.
+
+## 6a. What an observation is, and what it is not
+
+Every transition out of `RESERVED` or `QUARANTINED` carries one:
+
+```ts
+interface ExecutionObservation {
+  outcome: 'SETTLED' | 'FAILED';
+  observedAtUnixSeconds: UnixSeconds;   // when
+  sourceId: Identifier;                  // who observed it
+  reference: Bytes32;                    // what was observed
+}
+```
+
+It is parsed whole. Every field is required, nothing is defaulted, unknown fields
+are refused, and the outcome is matched exactly against the two recognized values
+— through `hasOwnProperty`, so inherited names like `'toString'` do not resolve.
+The accepted observation is then stored on the record as `resolution`, which is
+what makes the guarantee auditable rather than procedural: a `CONSUMED` or `UNUSED`
+record whose `resolution` is null was not resolved by an observation.
+
+**It is a validated assertion, not a proof.** Nothing here confirms that
+`reference` really settled or really failed — that needs chain observation, which
+is Phase 6 (V-59). Whatever performs a `RECONCILE` is as trusted as the replay
+store itself and belongs in the trusted computing base alongside it.
+
+What it closes is narrower and real: an unsubstantiated caller command can no
+longer restore permission. Before Phase 5R.1, `RELEASE` did exactly that, and the
+resulting record was indistinguishable from one restored on genuine evidence.
 
 ## 7. Partial execution
 
@@ -192,8 +253,9 @@ reusable at all. That belongs with settlement abstraction
 
 What the kernel does guarantee is that the guess is not made implicitly: there is
 no code path that treats a partial outcome as either success or failure, because
-`COMMIT` and `RELEASE` both require an observation the caller does not yet have
-a way to make wrongly.
+`RECONCILE` accepts only `SETTLED` and `FAILED` and refuses every other value
+(§6a). A partial fill is not representable as an outcome, so it cannot be
+laundered into one.
 
 ## 8. What the kernel does not do
 
@@ -207,6 +269,14 @@ a way to make wrongly.
 - It does not resolve concurrency. Two callers racing to `RESERVE` must be
   serialized by the store; the kernel makes the second transition invalid, but
   only an atomic store makes that observable.
+- **It does not reconcile the record's key with the record it was fetched for.**
+  `applyTransition` is handed a record and validates that record's shape; it has
+  no way to know whether the store returned the row for the key that was asked
+  for. A `ReplayError.KEY_MISMATCH` existed and could never fire, which asserted
+  an invariant nobody enforced (finding N-7), so it is removed. The obligation is
+  the store's, and it belongs with the Phase 6 persistence layer that performs the
+  lookup.
+- It does not verify an observation against the world. See §6a.
 
 That last point is the one an integrator most needs to read: **the replay store
 must apply transitions atomically.** A read-then-write store with no
@@ -226,4 +296,7 @@ cleared them silently — and unsafely.
   which is the honest description.
 - **A `RECONCILE` is an assertion about the world.** Whatever performs it is as
   trusted as the replay store itself, and belongs in the trusted computing base
-  alongside it.
+  alongside it. Since Phase 5R.1 the assertion must be complete, attributed to a
+  source and attached to a reference, and it is recorded on the record — so
+  "who restored this authorization, on what evidence" is answerable from the store
+  rather than from a log nobody kept.

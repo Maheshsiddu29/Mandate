@@ -1200,9 +1200,27 @@ supplies one exact requested quantity; every comparable route must fill it.
 | State snapshot | Observed market state, corporate-action state, operational state — each with source, provenance and observation time |
 | Binding | Domain-separated candidate digest; transaction binding remains Phase 6 |
 
-The candidate references one explicit trusted-state identifier, and the routing
-receipt commits to the full trusted-state digest. No mutable or implicit state
-is read during the decision.
+The candidate's binding to observed state is **layered by the kind of fact**
+([ADR 0017](adr/0017-layered-candidate-state-commitments.md)):
+
+- which observed world it was built against is committed as *provenance* — a
+  snapshot label and a state digest — so the construction is auditable, and is
+  never compared against the state being verified, because the verifier sees one
+  instant per call and cannot know whether it is the evaluation or the handoff;
+- which *registry snapshot* established the representation set is committed **and**
+  required to be identical, because a registry snapshot is structural: a different
+  one can retire a representation, reassign an issuer or move a contract, and no
+  fresh price observation may carry that with it;
+- every dynamic fact — price, halt, freshness, corporate-action epoch, replay
+  status — is not committed as a value to be matched. It is re-evaluated against
+  whatever state the verifier is handed.
+
+That layering is what makes the execution-handoff re-verification meaningful
+rather than either tautological or impossible: a world differing only in
+observation timestamps still hands off, and a world carrying a material change
+refuses for that change. The routing receipt commits to both the evaluation-time
+and the handoff-time trusted-state digests, separately. No mutable or implicit
+state is read during the decision.
 
 ### 12.3 Ranking
 
@@ -1453,6 +1471,22 @@ dependence on mutable external references.
 
 These are the properties that define Mandate. A change that breaks one is a
 change to the product, not an implementation detail.
+
+**Phase 5R.1 status.** Two rounds of adversarial review have been applied on top
+of Phase 5 and nothing in this section changed as a result — no invariant was
+weakened, retired or reinterpreted. What changed is where three of them are
+enforced. **INV-1 and INV-13's off-chain half**: an execution candidate's binding
+to observed state is layered by the kind of fact (§12.2,
+[ADR 0017](adr/0017-layered-candidate-state-commitments.md)), because binding it
+to the whole observed world made the handoff re-verification impossible to pass
+and therefore enforced nothing. **INV-12**: every transition that consumes or
+restores an authorization now carries a validated observed outcome
+([ADR 0018](adr/0018-observed-execution-outcomes.md)); previously the rule was
+documented and not enforced, so an unsubstantiated command could restore
+permission. **INV-5**: a trusted state that declares no registry snapshot is now
+`UNKNOWN` rather than accepted, which is the fail-closed reading this invariant
+already required. The ledger is
+[§24 of the pressure test](production-architecture-pressure-test.md).
 
 **Phase 5 status.** **INV-3 is now established.** Its structural half was
 already in place (no inference client is reachable from the verifier, registry
