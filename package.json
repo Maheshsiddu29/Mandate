@@ -9,7 +9,8 @@
     "packages/kernel",
     "packages/registry",
     "packages/adapter-robinhood",
-    "packages/router"
+    "packages/router",
+    "packages/jev"
   ],
   "scripts": {
     "typecheck": "tsc --project tsconfig.json",
