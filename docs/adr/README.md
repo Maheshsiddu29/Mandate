@@ -21,6 +21,8 @@ Status values: `Proposed`, `Accepted`, `Superseded by ADR NNNN`, `Rejected`.
 | [0007](0007-registry-snapshot-encoding-and-digest.md) | Registry snapshot encoding, digest and versioning | Accepted |
 | [0008](0008-robinhood-data-source-authority.md) | Robinhood external-data authority and normalization boundary | Accepted |
 | [0009](0009-corporate-action-epoch-authority.md) | Corporate-action epoch authority | Accepted |
+| [0010](0010-deterministic-route-ranking.md) | Deterministic route ranking | Accepted |
+| [0011](0011-route-cost-and-fill-policy.md) | Route cost and fill policy | Accepted |
 
 The canonical product specification remains
 [docs/mandate-design.md](../mandate-design.md). ADRs record *how* a specified
