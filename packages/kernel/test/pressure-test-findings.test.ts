@@ -22,6 +22,7 @@ import {
   ReplayError,
   ReplayStatus,
   ReplayTransition,
+  RETIRED_REPLAY_TRANSITIONS,
   applyTransition,
   isAvailable,
   parseTrustedState,
@@ -73,7 +74,7 @@ test('F-1 REGRESSION: a lapsed reservation quarantines instead of returning to U
   const key = `0x${'11'.repeat(32)}` as never;
 
   const reserved = applyTransition({
-    current: { key, status: ReplayStatus.UNUSED, updatedAtUnixSeconds: now, reservationExpiresAtUnixSeconds: null },
+    current: { key, status: ReplayStatus.UNUSED, updatedAtUnixSeconds: now, reservationExpiresAtUnixSeconds: null, resolution: null },
     transition: ReplayTransition.RESERVE,
     nowUnixSeconds: now,
     // The short hold that used to open the window: 300 seconds against an hour
@@ -103,7 +104,7 @@ test('F-1 REGRESSION: there is no transition from a lapsed reservation to permis
   const now = 1_800_000_000n;
   const key = `0x${'11'.repeat(32)}` as never;
   const reserved = applyTransition({
-    current: { key, status: ReplayStatus.UNUSED, updatedAtUnixSeconds: now, reservationExpiresAtUnixSeconds: null },
+    current: { key, status: ReplayStatus.UNUSED, updatedAtUnixSeconds: now, reservationExpiresAtUnixSeconds: null, resolution: null },
     transition: ReplayTransition.RESERVE,
     nowUnixSeconds: now,
     reservationSeconds: 60n,
@@ -113,37 +114,44 @@ test('F-1 REGRESSION: there is no transition from a lapsed reservation to permis
   const quarantined = applyTransition({ current: reserved.value, transition: ReplayTransition.QUARANTINE, nowUnixSeconds: now + 61n });
   assert.ok(quarantined.ok);
 
-  // Exhaustive over the transition vocabulary: only RECONCILE applies, and only
-  // with an outcome. Nothing that a timer or a retry loop could reach on its own
-  // produces an available authorization.
-  for (const transition of Object.values(ReplayTransition)) {
+  // Exhaustive over the transition vocabulary, plus the retired names: nothing
+  // that a timer or a retry loop could reach on its own produces an available
+  // authorization, and no transition applies without an observation.
+  for (const transition of [...Object.values(ReplayTransition), ...RETIRED_REPLAY_TRANSITIONS]) {
     const result = applyTransition({
       current: quarantined.value,
       transition,
       nowUnixSeconds: now + 10_000n,
       reservationSeconds: 60n,
       mandateExpiresAtUnixSeconds: now + 3_600n,
-      // Deliberately omitted: no outcome is asserted.
+      // Deliberately omitted: no observation is asserted.
     });
-    if (transition === ReplayTransition.RECONCILE) {
-      assert.equal(result.ok, false, 'RECONCILE without an outcome is refused');
-      assert.equal(result.ok ? '' : result.error, ReplayError.OUTCOME_REQUIRED);
-      continue;
-    }
-    assert.equal(result.ok, false, `${transition} must not act on a quarantine`);
-    assert.equal(result.ok ? '' : result.error, ReplayError.NOT_QUARANTINED, transition);
+    assert.equal(result.ok, false, `${transition} must not restore permission`);
+    if (result.ok) continue;
+    assert.ok(
+      [ReplayError.OBSERVATION_REQUIRED, ReplayError.NOT_RESERVABLE, ReplayError.NOT_RESERVED, ReplayError.UNKNOWN_TRANSITION]
+        .includes(result.error as never),
+      `${transition} -> ${result.error}`,
+    );
   }
 
-  // Only an authoritative observation of failure restores it.
+  // Only a validated observation of failure restores it, and the record keeps it.
   const reconciled = applyTransition({
     current: quarantined.value,
     transition: ReplayTransition.RECONCILE,
     nowUnixSeconds: now + 10_000n,
-    reconciledOutcome: ReconciledOutcome.FAILED,
+    observation: {
+      outcome: ReconciledOutcome.FAILED,
+      observedAtUnixSeconds: now + 10_000n,
+      sourceId: 'observer.chain.test',
+      reference: `0x${'cd'.repeat(32)}`,
+    },
   });
   assert.ok(reconciled.ok);
   assert.equal(reconciled.value.status, ReplayStatus.UNUSED);
+  assert.equal(reconciled.value.resolution?.outcome, ReconciledOutcome.FAILED);
 });
+
 
 // --- F-6: the chain inside the identifier is reconciled ---------------------
 

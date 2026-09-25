@@ -1,10 +1,11 @@
 /**
  * Replay state machine tests.
  *
- * The rules under test are in `docs/replay-semantics.md`. The two that carry
- * the most weight: reserve happens before signing, so a second attempt cannot
- * reserve; and release requires *observing* failure, so an attempt that cannot
- * establish its outcome leaves the mandate reserved rather than freeing it.
+ * The rules under test are in `docs/replay-semantics.md`. The two that carry the
+ * most weight since Phase 5R.1: an authorization is restored only by a validated
+ * *observation* of failure, never by a bare command; and `applyTransition` is
+ * total over plain values, so no caller-controlled string can slip past the
+ * vocabulary and land on a favourable branch.
  */
 
 import { test } from 'node:test';
@@ -16,9 +17,13 @@ import {
   ReplayError,
   ReplayStatus,
   ReplayTransition,
+  RETIRED_REPLAY_TRANSITIONS,
   applyTransition,
   isAvailable,
   mandateDigest,
+  parseExecutionObservation,
+  parseReconciledOutcome,
+  parseReplayTransition,
   replayKey,
   unusedRecord,
   verify,
@@ -29,6 +34,7 @@ import { buildWorld } from './support/world.ts';
 import { validMandate } from './support/fixtures.ts';
 
 const KEY = ('0x' + 'ab'.repeat(32)) as never;
+const TX = ('0x' + 'cd'.repeat(32)) as never;
 
 function expectOk<T>(r: { ok: true; value: T } | { ok: false; error: string }): T {
   assert.equal(r.ok, true, r.ok ? '' : `unexpected error: ${r.error}`);
@@ -40,8 +46,16 @@ function errorOf(r: { ok: true } | { ok: false; error: string }): string {
   return (r as { ok: false; error: string }).error;
 }
 
+/** A well-formed observation of what an attempt did. */
+function observation(outcome: string, at = NOW + 5n) {
+  return { outcome, observedAtUnixSeconds: at, sourceId: 'observer.chain.test', reference: TX };
+}
+
 const reserve = (current: ReplayRecord, now = NOW, hold = 120n) =>
   applyTransition({ current, transition: ReplayTransition.RESERVE, nowUnixSeconds: now, reservationSeconds: hold });
+
+const reconcile = (current: ReplayRecord, outcome: string, now = NOW + 5n) =>
+  applyTransition({ current, transition: ReplayTransition.RECONCILE, nowUnixSeconds: now, observation: observation(outcome, now) });
 
 test('the replay key is the mandate digest', () => {
   const m = validMandate();
@@ -53,17 +67,20 @@ test('the replay key is the mandate digest', () => {
   assert.notEqual(replayKey(validMandate()), replayKey(validMandate({ maxDeviationBps: 41n })));
 });
 
-test('the happy path is reserve then commit', () => {
+test('the happy path is reserve then reconcile with observed settlement', () => {
   const start = unusedRecord(KEY, NOW);
   const reserved = expectOk(reserve(start));
   assert.equal(reserved.status, ReplayStatus.RESERVED);
   assert.equal(reserved.reservationExpiresAtUnixSeconds, NOW + 120n);
+  assert.equal(reserved.resolution, null, 'a reservation asserts nothing about an outcome');
 
-  const consumed = expectOk(
-    applyTransition({ current: reserved, transition: ReplayTransition.COMMIT, nowUnixSeconds: NOW + 5n }),
-  );
+  const consumed = expectOk(reconcile(reserved, ReconciledOutcome.SETTLED));
   assert.equal(consumed.status, ReplayStatus.CONSUMED);
   assert.equal(consumed.reservationExpiresAtUnixSeconds, null);
+  // The record carries what justified the resolution, not merely that it happened.
+  assert.equal(consumed.resolution?.outcome, ReconciledOutcome.SETTLED);
+  assert.equal(consumed.resolution?.sourceId, 'observer.chain.test');
+  assert.equal(consumed.resolution?.reference, TX);
 });
 
 test('a second attempt cannot reserve an already-reserved mandate', () => {
@@ -71,43 +88,222 @@ test('a second attempt cannot reserve an already-reserved mandate', () => {
   assert.equal(errorOf(reserve(reserved)), ReplayError.NOT_RESERVABLE);
 });
 
-test('consumption is terminal', () => {
-  const consumed = expectOk(
-    applyTransition({
-      current: expectOk(reserve(unusedRecord(KEY, NOW))),
-      transition: ReplayTransition.COMMIT,
-      nowUnixSeconds: NOW,
-    }),
-  );
-  for (const transition of [ReplayTransition.RESERVE, ReplayTransition.COMMIT, ReplayTransition.RELEASE] as const) {
+test('consumption is terminal under every transition in the vocabulary', () => {
+  const consumed = expectOk(reconcile(expectOk(reserve(unusedRecord(KEY, NOW))), ReconciledOutcome.SETTLED));
+  for (const transition of Object.values(ReplayTransition)) {
     assert.equal(
-      errorOf(applyTransition({ current: consumed, transition, nowUnixSeconds: NOW, reservationSeconds: 60n })),
+      errorOf(applyTransition({
+        current: consumed,
+        transition,
+        nowUnixSeconds: NOW + 10n,
+        reservationSeconds: 60n,
+        observation: observation(ReconciledOutcome.FAILED, NOW + 10n),
+      })),
       ReplayError.ALREADY_CONSUMED,
       transition,
     );
   }
 });
 
-test('commit and release are only valid from a reservation', () => {
+test('reconciliation is only valid from an attempt that exists', () => {
   const unused = unusedRecord(KEY, NOW);
-  for (const transition of [ReplayTransition.COMMIT, ReplayTransition.RELEASE, ReplayTransition.QUARANTINE] as const) {
+  assert.equal(errorOf(reconcile(unused, ReconciledOutcome.FAILED)), ReplayError.NOT_RESOLVABLE);
+  assert.equal(errorOf(reconcile(unused, ReconciledOutcome.SETTLED)), ReplayError.NOT_RESOLVABLE);
+  // And quarantine needs a live reservation to lapse.
+  assert.equal(
+    errorOf(applyTransition({ current: unused, transition: ReplayTransition.QUARANTINE, nowUnixSeconds: NOW })),
+    ReplayError.NOT_RESERVED,
+  );
+});
+
+test('observed failure returns a reserved mandate to unused, so a failed attempt can retry', () => {
+  const reserved = expectOk(reserve(unusedRecord(KEY, NOW)));
+  const released = expectOk(reconcile(reserved, ReconciledOutcome.FAILED, NOW + 3n));
+  assert.equal(released.status, ReplayStatus.UNUSED);
+  assert.equal(released.reservationExpiresAtUnixSeconds, null);
+  assert.equal(released.resolution?.outcome, ReconciledOutcome.FAILED, 'the restore records its evidence');
+  // And it is reservable again.
+  assert.equal(expectOk(reserve(released, NOW + 4n)).status, ReplayStatus.RESERVED);
+});
+
+// --- N-5: an unsubstantiated command cannot restore an authorization --------
+
+test('N-5 REGRESSION: the retired bare-command transitions are refused, not reinterpreted', () => {
+  const reserved = expectOk(reserve(unusedRecord(KEY, NOW)));
+  for (const retired of RETIRED_REPLAY_TRANSITIONS) {
+    const result = applyTransition({
+      current: reserved,
+      transition: retired,
+      nowUnixSeconds: NOW + 5n,
+      reservationSeconds: 60n,
+    });
+    assert.equal(result.ok, false, `${retired} must not apply`);
+    assert.equal(result.ok ? '' : result.error, ReplayError.UNKNOWN_TRANSITION, retired);
+  }
+  // RELEASE in particular: the transition that used to restore permission on a
+  // bare assertion is gone, and the record is untouched.
+  assert.ok(RETIRED_REPLAY_TRANSITIONS.includes('RELEASE'));
+  assert.equal(reserved.status, ReplayStatus.RESERVED);
+});
+
+test('N-5 REGRESSION: restoring an authorization requires a complete, well-formed observation', () => {
+  const reserved = expectOk(reserve(unusedRecord(KEY, NOW)));
+
+  // No observation at all.
+  assert.equal(
+    errorOf(applyTransition({ current: reserved, transition: ReplayTransition.RECONCILE, nowUnixSeconds: NOW + 5n })),
+    ReplayError.OBSERVATION_REQUIRED,
+  );
+  assert.equal(
+    errorOf(applyTransition({ current: reserved, transition: ReplayTransition.RECONCILE, nowUnixSeconds: NOW + 5n, observation: null })),
+    ReplayError.OBSERVATION_REQUIRED,
+  );
+
+  // Present but incomplete: each field is load-bearing and none is defaulted.
+  const complete = observation(ReconciledOutcome.FAILED);
+  for (const field of ['outcome', 'observedAtUnixSeconds', 'sourceId', 'reference'] as const) {
+    const partial: Record<string, unknown> = { ...complete };
+    delete partial[field];
     assert.equal(
-      errorOf(applyTransition({ current: unused, transition, nowUnixSeconds: NOW })),
-      ReplayError.NOT_RESERVED,
-      transition,
+      errorOf(applyTransition({ current: reserved, transition: ReplayTransition.RECONCILE, nowUnixSeconds: NOW + 5n, observation: partial })),
+      ReplayError.OBSERVATION_INVALID,
+      `missing ${field}`,
     );
+  }
+
+  // An unknown extra field is refused too: a caller sending a shape this kernel
+  // does not understand has not established what it thinks it has.
+  assert.equal(
+    errorOf(applyTransition({
+      current: reserved,
+      transition: ReplayTransition.RECONCILE,
+      nowUnixSeconds: NOW + 5n,
+      observation: { ...complete, confidence: 'high' },
+    })),
+    ReplayError.OBSERVATION_INVALID,
+  );
+
+  // And the authorization stayed unavailable through every one of those.
+  assert.equal(isAvailable(reserved), false);
+});
+
+// --- N-3: RECONCILE accepts only recognized runtime outcome values ----------
+
+test('N-3 REGRESSION: an unrecognized reconciliation outcome is refused and never defaults to FAILED', () => {
+  const quarantined = expectOk(applyTransition({
+    current: expectOk(reserve(unusedRecord(KEY, NOW), NOW, 120n)),
+    transition: ReplayTransition.QUARANTINE,
+    nowUnixSeconds: NOW + 120n,
+  }));
+
+  const hostile: readonly { readonly label: string; readonly outcome: unknown }[] = [
+    { label: 'UNKNOWN', outcome: 'UNKNOWN' },
+    { label: 'lowercase settled', outcome: 'settled' },
+    { label: 'lowercase failed', outcome: 'failed' },
+    { label: 'mixed case', outcome: 'Failed' },
+    { label: 'trailing space', outcome: 'FAILED ' },
+    { label: 'null', outcome: null },
+    { label: 'undefined', outcome: undefined },
+    { label: 'zero', outcome: 0 },
+    { label: 'one', outcome: 1 },
+    { label: 'empty string', outcome: '' },
+    { label: 'object', outcome: { outcome: 'FAILED' } },
+    { label: 'array', outcome: ['FAILED'] },
+    { label: 'arbitrary string', outcome: 'definitely-not-an-outcome' },
+    { label: 'true', outcome: true },
+    { label: 'false', outcome: false },
+    { label: 'prototype property', outcome: 'toString' },
+    { label: 'constructor', outcome: 'constructor' },
+  ];
+
+  for (const item of hostile) {
+    const result = applyTransition({
+      current: quarantined,
+      transition: ReplayTransition.RECONCILE,
+      nowUnixSeconds: NOW + 200n,
+      observation: { ...observation(ReconciledOutcome.FAILED, NOW + 200n), outcome: item.outcome },
+    });
+    assert.equal(result.ok, false, `${item.label} must not resolve a quarantine`);
+    assert.equal(result.ok ? '' : result.error, ReplayError.OBSERVATION_INVALID, item.label);
+    // The property that matters: the authorization is still unavailable.
+    assert.equal(isAvailable(quarantined), false, item.label);
+  }
+
+  // The two recognized values, and only those two, apply.
+  assert.equal(expectOk(reconcile(quarantined, 'SETTLED', NOW + 200n)).status, ReplayStatus.CONSUMED);
+  assert.equal(expectOk(reconcile(quarantined, 'FAILED', NOW + 200n)).status, ReplayStatus.UNUSED);
+});
+
+test('N-3 REGRESSION: the outcome parser is exact', () => {
+  assert.equal(expectOk(parseReconciledOutcome('SETTLED')), ReconciledOutcome.SETTLED);
+  assert.equal(expectOk(parseReconciledOutcome('FAILED')), ReconciledOutcome.FAILED);
+  for (const raw of ['UNKNOWN', 'settled', '', ' FAILED', 'hasOwnProperty', 0, -1, null, undefined, {}, [], true]) {
+    assert.equal(errorOf(parseReconciledOutcome(raw)), ReplayError.OBSERVATION_INVALID, String(raw));
+  }
+  // The observation parser refuses the same set, whole.
+  assert.equal(errorOf(parseExecutionObservation({ ...observation('UNKNOWN') })), ReplayError.OBSERVATION_INVALID);
+  assert.equal(errorOf(parseExecutionObservation('SETTLED')), ReplayError.OBSERVATION_INVALID);
+  assert.equal(errorOf(parseExecutionObservation([observation('FAILED')])), ReplayError.OBSERVATION_INVALID);
+  assert.equal(expectOk(parseExecutionObservation(observation('SETTLED'))).outcome, ReconciledOutcome.SETTLED);
+});
+
+// --- N-4: the transition boundary is total ----------------------------------
+
+test('N-4 REGRESSION: an unrecognized transition is a typed error, never undefined', () => {
+  const reserved = expectOk(reserve(unusedRecord(KEY, NOW)));
+  const hostile: readonly unknown[] = [
+    'RECLAIM', 'COMMIT', 'RELEASE', 'reserve', 'Reserve', 'RESERVE ', '', 'UNKNOWN',
+    'toString', 'constructor', '__proto__', 'hasOwnProperty',
+    null, undefined, 0, 1, -1, true, false, {}, [], ['RESERVE'], { transition: 'RESERVE' },
+  ];
+  for (const transition of hostile) {
+    const result = applyTransition({
+      current: reserved,
+      transition,
+      nowUnixSeconds: NOW + 5n,
+      reservationSeconds: 60n,
+      observation: observation(ReconciledOutcome.FAILED),
+    });
+    // Totality: a result object, every time. Never `undefined`.
+    assert.notEqual(result, undefined, String(transition));
+    assert.equal(typeof result, 'object', String(transition));
+    assert.equal(result.ok, false, String(transition));
+    assert.equal(result.ok ? '' : result.error, ReplayError.UNKNOWN_TRANSITION, String(transition));
   }
 });
 
-test('release returns a reserved mandate to unused, so a failed attempt can retry', () => {
-  const reserved = expectOk(reserve(unusedRecord(KEY, NOW)));
-  const released = expectOk(
-    applyTransition({ current: reserved, transition: ReplayTransition.RELEASE, nowUnixSeconds: NOW + 3n }),
+test('N-4 REGRESSION: every member of the vocabulary is recognized and nothing else is', () => {
+  for (const name of Object.values(ReplayTransition)) {
+    assert.equal(expectOk(parseReplayTransition(name)), name);
+  }
+  for (const name of RETIRED_REPLAY_TRANSITIONS) {
+    assert.equal(errorOf(parseReplayTransition(name)), ReplayError.UNKNOWN_TRANSITION, name);
+  }
+  assert.equal(Object.values(ReplayTransition).length, 3, 'RESERVE, QUARANTINE, RECONCILE');
+});
+
+test('N-4 REGRESSION: a malformed record is refused rather than transitioned', () => {
+  const base = unusedRecord(KEY, NOW);
+  const malformed: readonly { readonly label: string; readonly record: ReplayRecord }[] = [
+    { label: 'unrecognized status', record: { ...base, status: 'AVAILABLE' as never } },
+    { label: 'empty status', record: { ...base, status: '' as never } },
+    { label: 'status is an object', record: { ...base, status: {} as never } },
+    { label: 'key is not bytes32', record: { ...base, key: '0xnope' as never } },
+    { label: 'updatedAt is a number', record: { ...base, updatedAtUnixSeconds: 1 as never } },
+    { label: 'expiry is a string', record: { ...base, reservationExpiresAtUnixSeconds: '10' as never } },
+  ];
+  for (const item of malformed) {
+    assert.equal(
+      errorOf(applyTransition({ current: item.record, transition: ReplayTransition.RESERVE, nowUnixSeconds: NOW, reservationSeconds: 60n })),
+      ReplayError.MALFORMED_RECORD,
+      item.label,
+    );
+  }
+  // And a non-bigint instant, which would otherwise reach string concatenation.
+  assert.equal(
+    errorOf(applyTransition({ current: base, transition: ReplayTransition.RESERVE, nowUnixSeconds: 1 as never, reservationSeconds: 60n })),
+    ReplayError.MALFORMED_RECORD,
   );
-  assert.equal(released.status, ReplayStatus.UNUSED);
-  assert.equal(released.reservationExpiresAtUnixSeconds, null);
-  // And it is reservable again.
-  assert.equal(expectOk(reserve(released, NOW + 4n)).status, ReplayStatus.RESERVED);
 });
 
 test('a reservation can only be quarantined after it expires', () => {
@@ -121,6 +317,7 @@ test('a reservation can only be quarantined after it expires', () => {
   assert.equal(expectOk(quarantine(NOW + 120n)).status, ReplayStatus.QUARANTINED, 'at the boundary');
   assert.equal(expectOk(quarantine(NOW + 121n)).status, ReplayStatus.QUARANTINED);
   assert.equal(expectOk(quarantine(NOW + 120n)).reservationExpiresAtUnixSeconds, null);
+  assert.equal(expectOk(quarantine(NOW + 120n)).resolution, null, 'a quarantine establishes no outcome');
 });
 
 test('a lapsed reservation never restores permission, however long it has been', () => {
@@ -140,50 +337,36 @@ test('only reconciliation leaves a quarantine, and it must state what it found',
     applyTransition({ current: reserved, transition: ReplayTransition.QUARANTINE, nowUnixSeconds: NOW + 120n }),
   );
 
-  // Nothing else may act on it. RELEASE in particular claims an observation the
-  // quarantine exists to record that nobody has.
-  for (const transition of [ReplayTransition.RESERVE, ReplayTransition.COMMIT, ReplayTransition.RELEASE, ReplayTransition.QUARANTINE] as const) {
-    assert.equal(
-      errorOf(applyTransition({ current: quarantined, transition, nowUnixSeconds: NOW + 200n, reservationSeconds: 60n })),
-      ReplayError.NOT_QUARANTINED,
-      transition,
-    );
-  }
-
-  // RECONCILE without an outcome is refused rather than defaulting either way.
+  // Nothing else may act on it: a quarantine is not reservable, and it cannot be
+  // quarantined again.
   assert.equal(
-    errorOf(applyTransition({ current: quarantined, transition: ReplayTransition.RECONCILE, nowUnixSeconds: NOW + 200n })),
-    ReplayError.OUTCOME_REQUIRED,
+    errorOf(applyTransition({ current: quarantined, transition: ReplayTransition.RESERVE, nowUnixSeconds: NOW + 200n, reservationSeconds: 60n })),
+    ReplayError.NOT_RESERVABLE,
+  );
+  assert.equal(
+    errorOf(applyTransition({ current: quarantined, transition: ReplayTransition.QUARANTINE, nowUnixSeconds: NOW + 200n })),
+    ReplayError.NOT_RESERVED,
   );
 
-  const settled = expectOk(applyTransition({
-    current: quarantined, transition: ReplayTransition.RECONCILE,
-    nowUnixSeconds: NOW + 200n, reconciledOutcome: ReconciledOutcome.SETTLED,
-  }));
+  // RECONCILE without an observation is refused rather than defaulting either way.
+  assert.equal(
+    errorOf(applyTransition({ current: quarantined, transition: ReplayTransition.RECONCILE, nowUnixSeconds: NOW + 200n })),
+    ReplayError.OBSERVATION_REQUIRED,
+  );
+
+  const settled = expectOk(reconcile(quarantined, ReconciledOutcome.SETTLED, NOW + 200n));
   assert.equal(settled.status, ReplayStatus.CONSUMED);
   assert.equal(isAvailable(settled), false);
 
-  const failed = expectOk(applyTransition({
-    current: quarantined, transition: ReplayTransition.RECONCILE,
-    nowUnixSeconds: NOW + 200n, reconciledOutcome: ReconciledOutcome.FAILED,
-  }));
+  const failed = expectOk(reconcile(quarantined, ReconciledOutcome.FAILED, NOW + 200n));
   assert.equal(failed.status, ReplayStatus.UNUSED);
   assert.equal(isAvailable(failed), true);
+  assert.equal(failed.resolution?.outcome, ReconciledOutcome.FAILED);
 });
 
 test('a consumed authorization is terminal even against reconciliation', () => {
-  const consumed = expectOk(applyTransition({
-    current: expectOk(reserve(unusedRecord(KEY, NOW))),
-    transition: ReplayTransition.COMMIT,
-    nowUnixSeconds: NOW + 5n,
-  }));
-  assert.equal(
-    errorOf(applyTransition({
-      current: consumed, transition: ReplayTransition.RECONCILE,
-      nowUnixSeconds: NOW + 9n, reconciledOutcome: ReconciledOutcome.FAILED,
-    })),
-    ReplayError.ALREADY_CONSUMED,
-  );
+  const consumed = expectOk(reconcile(expectOk(reserve(unusedRecord(KEY, NOW))), ReconciledOutcome.SETTLED));
+  assert.equal(errorOf(reconcile(consumed, ReconciledOutcome.FAILED, NOW + 9n)), ReplayError.ALREADY_CONSUMED);
 });
 
 test('a reservation never outlives the mandate it holds', () => {
@@ -203,6 +386,11 @@ test('a zero or negative reservation is refused', () => {
   for (const hold of [0n, -1n]) {
     assert.equal(errorOf(reserve(unusedRecord(KEY, NOW), NOW, hold)), ReplayError.NOT_RESERVABLE, String(hold));
   }
+  // And a missing or non-bigint hold, which is the same unestablished input.
+  assert.equal(
+    errorOf(applyTransition({ current: unusedRecord(KEY, NOW), transition: ReplayTransition.RESERVE, nowUnixSeconds: NOW })),
+    ReplayError.NOT_RESERVABLE,
+  );
 });
 
 test('an unknown record cannot be transitioned into a known one', () => {
@@ -211,14 +399,41 @@ test('an unknown record cannot be transitioned into a known one', () => {
     status: ReplayStatus.UNKNOWN,
     updatedAtUnixSeconds: NOW,
     reservationExpiresAtUnixSeconds: null,
+    resolution: null,
   };
   for (const transition of Object.values(ReplayTransition)) {
     assert.equal(
-      errorOf(applyTransition({ current: unknown, transition, nowUnixSeconds: NOW, reservationSeconds: 60n })),
+      errorOf(applyTransition({
+        current: unknown,
+        transition,
+        nowUnixSeconds: NOW,
+        reservationSeconds: 60n,
+        observation: observation(ReconciledOutcome.FAILED),
+      })),
       ReplayError.UNKNOWN_STATE,
       transition,
     );
   }
+});
+
+test('every replay error is reachable, so none is dead security-looking surface', () => {
+  const reserved = expectOk(reserve(unusedRecord(KEY, NOW), NOW, 60n));
+  const quarantined = expectOk(applyTransition({ current: reserved, transition: ReplayTransition.QUARANTINE, nowUnixSeconds: NOW + 60n }));
+  const consumed = expectOk(reconcile(reserved, ReconciledOutcome.SETTLED));
+
+  const reached = new Set<string>([
+    errorOf(applyTransition({ current: { ...reserved, status: 'NOPE' as never }, transition: ReplayTransition.RESERVE, nowUnixSeconds: NOW })),
+    errorOf(applyTransition({ current: reserved, transition: 'RELEASE', nowUnixSeconds: NOW })),
+    errorOf(applyTransition({ current: { ...reserved, status: ReplayStatus.UNKNOWN }, transition: ReplayTransition.RESERVE, nowUnixSeconds: NOW })),
+    errorOf(reserve(reserved)),
+    errorOf(applyTransition({ current: unusedRecord(KEY, NOW), transition: ReplayTransition.QUARANTINE, nowUnixSeconds: NOW })),
+    errorOf(reconcile(unusedRecord(KEY, NOW), ReconciledOutcome.FAILED)),
+    errorOf(reconcile(consumed, ReconciledOutcome.FAILED)),
+    errorOf(applyTransition({ current: reserved, transition: ReplayTransition.QUARANTINE, nowUnixSeconds: NOW + 1n })),
+    errorOf(applyTransition({ current: quarantined, transition: ReplayTransition.RECONCILE, nowUnixSeconds: NOW + 61n })),
+    errorOf(applyTransition({ current: quarantined, transition: ReplayTransition.RECONCILE, nowUnixSeconds: NOW + 61n, observation: observation('UNKNOWN') })),
+  ]);
+  assert.deepEqual([...Object.values(ReplayError)].filter((e) => !reached.has(e)), [], 'unreachable replay error');
 });
 
 test('the verifier refuses every non-available replay status', () => {
