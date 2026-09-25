@@ -13,5 +13,9 @@
  */
 
 export * from './types.ts';
+export * from './view.ts';
+export * from './choices.ts';
+export * from './question.ts';
+export * from './encoding.ts';
 export * from './parse.ts';
 export * from './client.ts';
