@@ -19,6 +19,7 @@
     "credentials:scan": "node scripts/scan-credentials.ts",
     "docs:generate": "node packages/kernel/test/support/generate-reason-codes-doc.ts && node packages/registry/test/support/generate-reason-codes-doc.ts",
     "generated:check": "npm run corpus:generate && npm run registry-corpus:generate && npm run docs:generate && npm run mainnet-replay:generate && npm run mainnet-routing:generate && npm run routing-simulation:generate && npm run jev:evaluate && git diff --exit-code -- corpus docs/reason-codes.md docs/registry-reason-codes.md",
+    "jev:benchmark": "node packages/jev/scripts/benchmark.ts",
     "jev:characterize": "node packages/jev/scripts/characterize.ts",
     "jev:evaluate": "node packages/jev/scripts/evaluate.ts",
     "jev:fixtures:validate": "node packages/jev/scripts/validate-fixtures.ts",
