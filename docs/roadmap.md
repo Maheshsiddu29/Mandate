@@ -277,12 +277,14 @@ methodology in [jev-evaluation.md](jev-evaluation.md).
   **met**: every failure path selects the deterministic candidate, and a test
   asserts a single identical selection across all of them.
 
-**Outstanding, and reported as blocked rather than done:** no live
-characterization run has been performed, because no account credential was
-available. The harness exists and is wired to CI as a manual job; the
-repository holds four schema-derived fixtures and zero live ones, states so in
-its own validator output, and publishes no latency, availability or usage
-figure for the service.
+**Previously outstanding, now done:** the live characterization run was
+performed on 2026-09-25 once an account credential became available. Six of six
+choice requests succeeded against `jev-1.13.0` at p50 94 ms and p95 250 ms,
+mean usage 1592 input and 75 output tokens; the repository now holds four
+schema-derived fixtures and one live one. The numbers and their sample size are
+in [jev-characterization.md §3](jev-characterization.md#3-observed-behaviour).
+A sample of six from one machine is a characterization, not an SLA, and neither
+`timeoutMs` nor `minimumConfidence` was retuned on the strength of it.
 
 **The honest finding on value.** Phase 4's route data is almost entirely exact
 integers with a total order, and a model has nothing to add to a comparison of
@@ -382,7 +384,7 @@ the design document before it belongs in code.
 | 2 | Canonical asset and representation registry | 1 | ✅ complete |
 | 3 | Read-only Robinhood market-state and chain adapters | 2 | ✅ complete |
 | 4 | Execution-candidate and route engine | 3 | ✅ complete |
-| 5 | Jev-assisted decision layer | 4 | ✅ complete (live characterization blocked on credentials) |
+| 5 | Jev-assisted decision layer | 4 | ✅ complete (live characterization performed 2026-09-25) |
 | 6 | On-chain execution gate and settlement | 4 | planned |
 | 7 | Stablecoin funding adapters | 6 | planned, flexible |
 | 8 | Demo product and web experience | 6 | planned |

@@ -40,6 +40,13 @@ this repository *measured* rather than read is in
 | Documented errors | `401` unauthorized, `422` unprocessable, `429` rate limited, `529` overloaded |
 | Model aliases | `jev-latest`, `jev-preview`; versioned IDs such as `jev-1.13.0` |
 
+The error row is the documented set and is now known to be incomplete: the
+2026-09-25 live run observed an undocumented `400` for an unusable model name
+([jev-characterization.md §3](jev-characterization.md#3-observed-behaviour)).
+The client already treats unenumerated statuses as fallback, so nothing here
+depends on the list being exhaustive — and nothing written later should assume
+it is.
+
 Two documented properties shape the integration more than the rest.
 
 **`confidence` is a statistic, not a claim.** TypeSafe derives it from the shape
@@ -247,7 +254,8 @@ NOT_FOUND                   404
 REQUEST_REJECTED            422
 RATE_LIMITED                429
 SERVICE_UNAVAILABLE         5xx, including 529
-UNEXPECTED_STATUS           any other HTTP status
+UNEXPECTED_STATUS           any other HTTP status, including the undocumented
+                            400 the service returns for an unusable model name
 INVALID_JSON                body was not JSON
 SCHEMA_MISMATCH             body did not match the documented answer schema
 MODEL_UNAVAILABLE           requested model is not available to the account
@@ -287,9 +295,9 @@ TYPESAFE_API_KEY=… npm run jev:characterize
 ```
 
 Findings, sample sizes and measured latency are recorded in
-[jev-characterization.md](jev-characterization.md). Until that document reports
-a completed run, no latency or availability figure in this repository is a
-measurement.
+[jev-characterization.md](jev-characterization.md), which reports a completed
+run of 2026-09-25. Every latency and availability figure in this repository
+traces to that run and carries its sample size; none of them is an SLA.
 
 ## 8. Receipts
 

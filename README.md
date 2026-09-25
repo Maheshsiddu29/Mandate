@@ -175,7 +175,7 @@ npm run check      # 567 offline tests plus fixtures, replays, boundaries and re
 | [docs/mainnet-replay.md](docs/mainnet-replay.md) | Recorded-mainnet replay methodology, synthetic labelling and validation report. |
 | [docs/routing.md](docs/routing.md) | Candidate model, provider boundary, ranking, costs, limits and selection receipts. |
 | [docs/jev-integration.md](docs/jev-integration.md) | The advisory decision layer: authority boundary, closed-set projection, abstention, fallback, confidence policy, receipts and trader-facing output. |
-| [docs/jev-characterization.md](docs/jev-characterization.md) | The documented TypeSafe API surface, the characterization method, and an explicit record that no live run has been performed. |
+| [docs/jev-characterization.md](docs/jev-characterization.md) | The documented TypeSafe API surface, the characterization method, and the measured results of the live run performed on 2026-09-25. |
 | [docs/jev-evaluation.md](docs/jev-evaluation.md) | Advisory evaluation methodology, the safety/quality distinction, results, and the honest finding about decision quality. |
 | [docs/jev-performance.md](docs/jev-performance.md) | Local latency cost of the advisory layer, and what is deliberately not measured. |
 | [docs/router-performance.md](docs/router-performance.md) | Deterministic router latency baseline and methodology. |

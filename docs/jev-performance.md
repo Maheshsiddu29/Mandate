@@ -1,8 +1,9 @@
 # Jev-assisted latency
 
 > **Observed 2026-09-25.** Environment-specific, not a product throughput
-> claim. The network and inference component is **not measured here** — see
-> [§3](#3-what-is-missing).
+> claim. This benchmark measures the *local* cost only; the network and
+> inference component is measured separately by the live characterization run
+> and carried into [§3](#3-the-remote-half).
 
 Node v22.21.0 on macOS arm64, Apple M3 Pro. Run it with
 `npm run jev:benchmark`. Raw output is deliberately not committed.
@@ -41,7 +42,7 @@ relative to the deterministic work it wraps, and that the one structurally new
 cost — a second kernel verification at handoff — is a single verification
 against a set of up to 254, so it does not scale with the set.
 
-## 3. What is missing
+## 3. The remote half
 
 **The Jev call itself.** The benchmark's transport is a stub, so network and
 inference time is zero here by construction. End-to-end latency is:
@@ -49,13 +50,20 @@ inference time is zero here by construction. End-to-end latency is:
 ```text
 end-to-end  =  deterministic routing
             +  local advisory overhead   (measured above, ~1–2 ms)
-            +  Jev round trip            (NOT MEASURED)
+            +  Jev round trip            (measured 2026-09-25: p50 94 ms, p95 250 ms)
 ```
 
-The third term has to come from `npm run jev:characterize`, and
-[jev-characterization.md](jev-characterization.md) records that no live run
-has been performed. Until it has, this repository has no end-to-end
-Jev-assisted latency figure and does not state one.
+The third term now comes from a completed run of `npm run jev:characterize`;
+[jev-characterization.md §3](jev-characterization.md#3-observed-behaviour)
+carries the numbers and their sample size. The round trip dominates the local
+overhead by roughly two orders of magnitude, which is the expected shape: the
+advisory path is the deterministic path plus a network call.
+
+**The sample is six requests from one machine on one network.** It is not a
+tail bound and not an SLA. It is enough to say the advisory layer costs
+something on the order of a tenth of a second when it works, and nothing when
+it does not — the deadline bounds the loss, and the deterministic result was
+computed before the call.
 
 ## 4. The framing that would be wrong
 
@@ -66,8 +74,11 @@ showing the advisory path winning would mean the measurement was broken.
 
 The question worth answering is the budget one: how much latency does optional
 advisory intelligence add to a trading path, and is that acceptable? The local
-half is answered above. The remote half is bounded rather than measured: the
+half is answered above. The remote half is now both bounded and measured: the
 configured `timeoutMs` is the hard ceiling, defaulting to 2000 ms, and
-exceeding it produces the deterministic result rather than a wait. That default
-is a policy choice about acceptable UX and is expected to be revised against a
-measured p95 once one exists.
+exceeding it produces the deterministic result rather than a wait. Against a
+measured p95 of 250 ms that ceiling is about 8× the slowest response observed.
+The default has deliberately **not** been changed on the strength of six
+requests — it is a policy choice about acceptable UX, and revising it is the
+repository owner's call, recorded as an open question rather than silently
+tuned.

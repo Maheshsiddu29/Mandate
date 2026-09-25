@@ -1127,9 +1127,14 @@ Constraints on the interface (**IMPLEMENTED**):
 
 - Jev's concrete API surface is now characterized from published documentation
   and the integration is built against it. **Its latency profile and cost per
-  call remain unmeasured**, because no account credential was available:
-  `npm run jev:characterize` exists and has not been run.
-  **Partially resolved — no latency or cost figure may be quoted.**
+  call are measured** as of 2026-09-25: p50 94 ms, p95 250 ms, maximum 250 ms,
+  mean 1592 input and 75 output tokens per call, six of six requests successful
+  against `jev-1.13.0`. The run also found an undocumented `400` for an
+  unusable model name, and a confidence distribution that is non-degenerate:
+  `1.00` where one route dominates, `~0.97` where cost and quality disagree,
+  `~0.6` with abstention where candidates are indistinguishable.
+  **Resolved, with the sample size attached: six requests from one machine on
+  one network is a characterization and not a service-level guarantee.**
 - Whether Jev is worth using was to be decided by measurement. Phase 5's
   measurement says: **not yet, on this data.** Route selection in Phase 4 is a
   comparison of exact integers with a total order, and a signal-following model
