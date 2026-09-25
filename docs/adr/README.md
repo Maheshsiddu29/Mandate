@@ -23,6 +23,8 @@ Status values: `Proposed`, `Accepted`, `Superseded by ADR NNNN`, `Rejected`.
 | [0009](0009-corporate-action-epoch-authority.md) | Corporate-action epoch authority | Accepted |
 | [0010](0010-deterministic-route-ranking.md) | Deterministic route ranking | Accepted |
 | [0011](0011-route-cost-and-fill-policy.md) | Route cost and fill policy | Accepted |
+| [0012](0012-jev-closed-set-authority-boundary.md) | Jev closed-set authority boundary | Accepted |
+| [0013](0013-jev-fallback-and-confidence-policy.md) | Jev fallback and confidence policy | Accepted |
 
 The canonical product specification remains
 [docs/mandate-design.md](../mandate-design.md). ADRs record *how* a specified
