@@ -52,6 +52,25 @@ quality penalties. Only kernel-PASS candidates enter the ranking described in
 Unknown fees and partial fills follow the fail-closed policy in
 [ADR 0011](adr/0011-route-cost-and-fill-policy.md).
 
+## Evaluation and selection are separate stages
+
+`evaluateRoutes` parses, filters and ranks; `selectEvaluated` re-verifies one
+member of the result and builds the receipt. `route` is defined as
+evaluate-then-select-index-0 and its receipts are byte-identical to the Phase 4
+baseline — a test asserts the equality, and the committed mainnet-routing and
+simulation artifacts are unchanged.
+
+The split exists so that an optional advisory selector
+([jev-integration.md](jev-integration.md)) can address the already-closed
+admissible set without a second ranking implementation. `evaluateRoutes`
+returns `admissible` in the ADR 0010 order, so index 0 is the deterministic
+preferred candidate and is the single fallback target. An index outside the
+closed set is refused rather than resolved to something else.
+
+The ranking itself is unchanged. Nothing in the router is aware that an
+advisory layer exists, and a structural test still fails if the router's source
+acquires a model import.
+
 ## Receipts
 
 Every routing result is `SELECTED`, `NO_VALID_ROUTE`, or `INVALID_INPUT` and
