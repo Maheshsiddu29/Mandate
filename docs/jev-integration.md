@@ -290,17 +290,84 @@ measurement.
 
 ## 8. Receipts
 
-> **Status: specified, not yet implemented.** This section states the intent
-> the adapter is built against; it is replaced by the implemented shape in the
-> commit that adds the receipt.
+Every Jev decision produces a `JevDecisionReceipt`, including the decisions
+where no call was made. It is an **advisory** record: not an authorization, no
+verifier reads it, and its absence changes no decision. It exists so a bad
+advisory selection can be attributed afterwards, which needs the model
+identity, the exact closed set the advice was given over, the answer and the
+time.
 
-Every Jev decision produces a `JevDecisionReceipt`. It is an **advisory**
-record: it is not an authorization, no verifier reads it, and its absence
-changes no decision. It exists so a bad advisory selection can be attributed
-afterwards, which requires the model identity, the exact closed set the advice
-was given over, the answer, and the time.
+```text
+JevDecisionReceipt {
+    version, integrationVersion, questionSchemaVersion
 
-It holds no credentials and no external data beyond the answer itself.
+    closedCandidateSetDigest       commits ids to candidate digests
+    candidateIds[]                 route_000 …
+    candidateDigests[]             the routing candidates they resolve to
+    stateDigest                    what was actually sent
+
+    modelRequested                 what we asked for, e.g. jev-latest
+    modelReturned                  what answered, e.g. jev-1.13.0, or null
+
+    selectedChoice                 the returned name, or null
+    confidence                     0…1, or null
+    probabilities[]                sorted by option name
+
+    inputTokens, outputTokens      observed, never a request-time budget
+    latencyMs                      observed
+
+    outcome                        SELECTED | ABSTAIN | FALLBACK
+    fallbackReason                 one of the codes in §6, or null
+    selectionMode                  the mode in §6
+
+    evaluatedAtUnixSeconds
+    receiptDigest
+}
+```
+
+The receipt holds no credential and no free text from the response. Model
+output that this integration does not read — an explanation, a candidate
+object, an address — never reaches it, because the parser never extracted it.
+
+`probabilities` are committed at fixed precision rather than as floats. The
+digest is an audit commitment and a float has no place in a reproducible one,
+even where no safety decision depends on it.
+
+### Binding
+
+The Phase 4 `RoutingReceipt` is unchanged: its encoding is a committed
+compatibility surface and a Jev-shaped field in it would mean every Phase 4
+receipt digest moved. The binding is a separate Phase 5 record:
+
+```text
+JevAssistedSelectionReceipt {
+    selectionMode
+    routingReceiptDigest             the deterministic receipt
+    jevReceiptDigest                 the advisory receipt
+    deterministicCandidateDigest     index 0 of the closed set
+    selectedCandidateDigest          what was actually selected
+    handoffVerificationReceiptDigest
+    handoffDecision                  PASS | REJECT | NONE
+    evaluatedAtUnixSeconds
+    receiptDigest
+}
+```
+
+Holding both candidate digests is what makes the model's influence legible:
+when they differ, a model changed the answer, and both are members of the same
+closed set.
+
+### Handoff re-verification
+
+The selected candidate is verified by the kernel again before handoff, against
+the trusted state and clock that are current **then** — not the ones the set
+was built from. If the price moved past the mandate's bound, trading halted,
+the corporate-action epoch changed, the mandate expired or the state snapshot
+was replaced while the model was thinking, the handoff verification rejects.
+
+An earlier choice does not grandfather a route. `handoffRejected` distinguishes
+this from an empty admissible set: the routing stage passed at t0 and the
+handoff check refused at t1.
 
 ## 9. What Jev is actually for
 
