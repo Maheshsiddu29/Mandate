@@ -792,8 +792,8 @@ S-7 (3) and S-8 (1). Removing the S-11 suppression makes the normal run fail
 (exit 255), so the gate still fails closed on a new finding.
 
 **Phase 6R.1a run.** The constructor now creates each market's venue and adapter
-and reads nothing from them. The normal run analyzed **21 contracts with 101
-detectors and reported 0 results**; `--show-ignored-findings` reports **12
+and reads nothing from them, and `IFixtureSettlement` is removed. The normal run
+analyzed **20 contracts with 101 detectors and reported 0 results**; `--show-ignored-findings` reports **12
 reviewed results**, S-7 dropping to 2. The two `new` expressions per market are
 not flagged. Every suppression is an inline `slither-disable-next-line` beside a
 comment giving the reason, so the reasoning travels with the code. forge-lint

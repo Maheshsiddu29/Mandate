@@ -6,12 +6,13 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 
 import {SIDE_BUY, SIDE_SELL} from "../MandateTypes.sol";
 import {ExecutionOrder, IMandateExecutionAdapter} from "../interfaces/IMandateExecutionAdapter.sol";
-import {IFixtureSettlement} from "../interfaces/IFixtureSettlement.sol";
 import {FixtureVenue} from "./FixtureVenue.sol";
 
 /// @title FixtureVenueAdapter — adapter for the SETTLEMENT FIXTURE
 /// @notice The supported Phase 6 adapter. Its venue is `FixtureVenue`, which is a
-/// labelled test counterparty, not a market (see that contract).
+/// labelled test counterparty, not a market (see that contract). Since Phase
+/// 6R.1a the gate's constructor creates both, wired to each other and to the gate;
+/// nothing asks this contract what it or its venue will do.
 ///
 /// The adapter is written the way a real venue adapter must be, because that is
 /// the part a later phase reuses:
@@ -25,7 +26,7 @@ import {FixtureVenue} from "./FixtureVenue.sol";
 ///
 /// None of this is what makes execution safe — the gate's settlement check is.
 /// It is what keeps an adapter defect from becoming anyone's standing authority.
-contract FixtureVenueAdapter is IMandateExecutionAdapter, IFixtureSettlement {
+contract FixtureVenueAdapter is IMandateExecutionAdapter {
     using SafeERC20 for IERC20;
 
     address public immutable GATE;
@@ -40,18 +41,6 @@ contract FixtureVenueAdapter is IMandateExecutionAdapter, IFixtureSettlement {
         if (gate == address(0) || address(venue) == address(0)) revert InvalidConfig();
         GATE = gate;
         VENUE = venue;
-    }
-
-    /// @inheritdoc IFixtureSettlement
-    /// @dev Read straight from the venue's immutables, so what the gate's
-    /// constructor checks is the price every later trade actually settles at.
-    function fixtureSettlement(address representation)
-        external
-        view
-        returns (address fundingToken, uint256 fundingAtomsPerWholeToken)
-    {
-        if (representation != address(VENUE.REPRESENTATION())) revert UnsupportedOrder();
-        return (address(VENUE.FUNDING()), VENUE.PRICE());
     }
 
     /// @inheritdoc IMandateExecutionAdapter

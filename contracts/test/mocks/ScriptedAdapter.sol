@@ -4,7 +4,6 @@ pragma solidity 0.8.37;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {ExecutionOrder, IMandateExecutionAdapter} from "../../src/interfaces/IMandateExecutionAdapter.sol";
-import {IFixtureSettlement} from "../../src/interfaces/IFixtureSettlement.sol";
 
 /// @notice An adapter that does exactly what its script says, whatever the order
 /// asks. It models every adapter or venue the gate must not trust: one that
@@ -14,11 +13,10 @@ import {IFixtureSettlement} from "../../src/interfaces/IFixtureSettlement.sol";
 /// It holds its own inventory of both tokens, so a script can deliver more or
 /// less than a real venue would.
 ///
-/// Because it is deployed as a fixture market's adapter, it also declares the
-/// fixture settlement price the gate's constructor checks. That declaration is
-/// all it is: this adapter settles whatever its script says, which is exactly
-/// the untrusted-adapter case the gate's measured settlement exists for.
-contract ScriptedAdapter is IMandateExecutionAdapter, IFixtureSettlement {
+/// Tests etch it over a gate-created fixture adapter (`GateTestBase._scriptAdapter`):
+/// a test cheat modelling the code at that address misbehaving, which is the
+/// untrusted-adapter case the gate's measured settlement exists for.
+contract ScriptedAdapter is IMandateExecutionAdapter {
     enum Mode {
         SCRIPTED,
         REVERT,
@@ -56,26 +54,8 @@ contract ScriptedAdapter is IMandateExecutionAdapter, IFixtureSettlement {
     uint256 public calls;
     ExecutionOrder private _lastOrder;
 
-    struct Settlement {
-        address fundingToken;
-        uint256 fundingAtomsPerWholeToken;
-    }
-
-    mapping(address representation => Settlement) private _settlements;
-
     function setScript(Script calldata script) external {
         _script = script;
-    }
-
-    function setFixtureSettlement(address representation, address fundingToken, uint256 fundingAtomsPerWholeToken)
-        external
-    {
-        _settlements[representation] = Settlement(fundingToken, fundingAtomsPerWholeToken);
-    }
-
-    function fixtureSettlement(address representation) external view returns (address, uint256) {
-        Settlement memory s = _settlements[representation];
-        return (s.fundingToken, s.fundingAtomsPerWholeToken);
     }
 
     function lastOrder() external view returns (ExecutionOrder memory) {

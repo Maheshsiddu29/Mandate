@@ -15,7 +15,6 @@ import {
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {ExecutionOrder, IMandateExecutionAdapter} from "../src/interfaces/IMandateExecutionAdapter.sol";
-import {IFixtureSettlement} from "../src/interfaces/IFixtureSettlement.sol";
 import {GateTestBase} from "./utils/GateTestBase.sol";
 
 /// @notice An honest BUY adapter that does nothing but fill: it delivers
@@ -23,21 +22,11 @@ import {GateTestBase} from "./utils/GateTestBase.sol";
 /// test double it records nothing, so the measured gas is the gate's plus the
 /// least an adapter must spend, not the double's bookkeeping of 4 KiB of route
 /// data.
-contract LeanAdapter is IMandateExecutionAdapter, IFixtureSettlement {
-    address internal immutable REPRESENTATION;
-    address internal immutable FUNDING;
-    uint256 internal immutable PRICE;
+contract LeanAdapter is IMandateExecutionAdapter {
     uint256 internal immutable REFUND;
 
-    constructor(address representation, address funding, uint256 price, uint256 refund) {
-        REPRESENTATION = representation;
-        FUNDING = funding;
-        PRICE = price;
+    constructor(uint256 refund) {
         REFUND = refund;
-    }
-
-    function fixtureSettlement(address) external view returns (address, uint256) {
-        return (FUNDING, PRICE);
     }
 
     function execute(ExecutionOrder calldata order) external {
@@ -111,7 +100,7 @@ contract ProfileTest is GateTestBase {
         // 4,096-byte route is measured through a lean adapter etched at the gate's
         // adapter address: the gate's cost for the largest calldata it accepts.
         address adapter = address(_adapterOf(g, address(scriptedToken)));
-        vm.etch(adapter, address(new LeanAdapter(address(scriptedToken), address(funding), AAPL_PRICE, 4e6)).code);
+        vm.etch(adapter, address(new LeanAdapter(4e6)).code);
         scriptedToken.mint(adapter, 10e18);
         vm.prank(principal);
         funding.approve(address(g), type(uint256).max);
