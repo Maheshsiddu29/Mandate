@@ -117,10 +117,11 @@ export interface ReplayState {
 export interface TrustedState {
   readonly version: number;
   /**
-   * Snapshot label. A candidate names the snapshot it was built against.
+   * Opaque label for the observed state snapshot.
    *
-   * Not a security binding on its own: a candidate commits to
-   * `trustedStateDigest`, which covers this field and everything beside it.
+   * It is provenance, not an equality binding. Candidate V3 commits to the
+   * label for audit, while verification re-evaluates dynamic facts and compares
+   * the separately declared registry snapshot digest for structural identity.
    */
   readonly stateId: Identifier;
   /**

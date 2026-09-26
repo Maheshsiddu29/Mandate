@@ -22,11 +22,14 @@ Read it before proposing architectural changes. If a change contradicts it,
 either the change is wrong or the document needs updating first — resolve which
 before writing code.
 
-The repository is currently at the end of **Phase 5R.1** — Phase 5, the
+The repository is currently at the end of **Phase 5R.2** — Phase 5, the
 production-architecture remediation, and the post-remediation audit fixes, all
 recorded in
 [docs/production-architecture-pressure-test.md](docs/production-architecture-pressure-test.md)
-§24. The canonical encoding is at **MCE v2** for the mandate and trusted state
+§24. Phase 5R.2 completes stored replay-record validation, local temporal
+consistency for reconciliation evidence, and total public decision boundaries
+for ordinary parsed/plain values. The canonical encoding is at **MCE v2** for
+the mandate and trusted state
 ([ADR 0014](docs/adr/0014-symmetric-signed-economic-authorization.md)) and the
 execution candidate is at **schema v3**
 ([ADR 0017](docs/adr/0017-layered-candidate-state-commitments.md)): a mandate

@@ -2,7 +2,7 @@
 
 What the Phase 1 kernel guarantees, and how each guarantee is established.
 
-> **Status: Phase 5R.1, implemented.** Everything below is enforced by
+> **Status: Phase 5R.2, implemented.** Everything below is enforced by
 > `packages/kernel` and covered by its test suite. Product-level invariants
 > INV-1…INV-18 are in
 > [mandate-design.md §16](mandate-design.md#16-major-invariants); this document

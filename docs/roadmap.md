@@ -3,7 +3,7 @@
 Phased engineering plan: what each phase delivers, how it is known to be done,
 and what it depends on.
 
-> **Status: Phase 5 complete.** Phase 6 and beyond are planned, not started.
+> **Status: Phase 5R.2 complete.** Phase 6 and beyond are planned, not started.
 > Rationale for the phase ordering is in
 > [mandate-design.md §25](mandate-design.md#25-phased-engineering-roadmap);
 > scope boundaries are in

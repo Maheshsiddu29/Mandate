@@ -148,7 +148,7 @@ export type RoutingReasonCode =
   | 'COST_STATE_STALE'
   | 'COST_STATE_FUTURE'
   // REGISTRY_SNAPSHOT_MISMATCH and REGISTRY_SNAPSHOT_UNKNOWN are kernel reason
-  // codes (MND-STATE-007/008), reached through `RegistryReasonCode`. They used to
+  // codes (MND-STATE-009/010), reached through `RegistryReasonCode`. They used to
   // be router-local literals with no definition behind them, which meant a
   // routing refusal carried a code an integrator could not look up.
   | 'HANDOFF_TIME_REGRESSED'

@@ -1,6 +1,6 @@
 # Deterministic routing
 
-> **Status:** Phase 4 design. The router is deterministic, offline and
+> **Status:** Phase 5R.2 implementation. The router is deterministic, offline and
 > model-free. It constructs no transaction and submits nothing.
 
 ## Boundary

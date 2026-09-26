@@ -1163,3 +1163,25 @@ consumption, chain-sourced time, transaction binding, reorg reconciliation, a
 reconciliation path that verifies an observation rather than validating it (V-59),
 key reconciliation in the replay store (N-7), and a cross-snapshot compatibility
 proof if one is ever wanted instead of failing closed (V-60).
+
+## Phase 5R.2 — final pre-Phase-6 remediation
+
+The final independent pre-Phase-6 audit reported zero CRITICAL findings and
+three HIGH findings. Phase 5R.2 closes exactly those findings and the associated
+documentation drift; it does not open or implement Phase 6.
+
+| Finding | Status | Remediation |
+| --- | --- | --- |
+| Temporally impossible replay evidence could restore authorization | **REMEDIATED** | `RECONCILE` accepts an observation only at or after the preserved reservation start and at or before the supplied reconciliation instant. Out-of-range or impossible timestamps are `OBSERVATION_INVALID`; the existing record stays unavailable |
+| Malformed stored replay records could enter transition logic | **REMEDIATED** | `parseReplayRecord` strictly validates keys, enums, signed-64-bit timestamps, resolution structure, unknown fields and the complete state-specific field invariants before dispatch. Invalid records are `MALFORMED_RECORD` and `isAvailable` fails closed |
+| Public decision APIs threw for ordinary malformed plain values | **REMEDIATED** | `verify`, `applyTransition`, `evaluateRoutes` and `route` normalize their outer request boundary before field access. Routing re-opens the supplied registry snapshot rather than trusting indexes. Malformed values produce rejecting receipts, replay errors or `INVALID_INPUT` results |
+
+Replay evidence in Phase 5R.2 is structurally and temporally validated only.
+That proves neither that the reference exists nor that its stated outcome is
+true. Phase 6 still owns authoritative chain verification, atomic consumption,
+transaction binding, chain-sourced time, reorg handling and replay-store key
+reconciliation.
+
+**Pre-Phase-6 readiness after remediation:** zero unresolved CRITICAL findings
+and zero unresolved HIGH pre-Phase-6 findings, subject to independent
+verification of this phase.
