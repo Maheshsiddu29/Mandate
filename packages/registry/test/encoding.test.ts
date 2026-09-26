@@ -90,7 +90,7 @@ test('every parsed snapshot creation time is encodable as signed i64', () => {
     assert.doesNotThrow(() => registrySnapshotDigest(parsed.value));
   }
 
-  for (const value of [INT64_MIN - 1n, INT64_MAX + 1n, 2n ** 63n, 10n ** 1_000n]) {
+  for (const value of [INT64_MIN - 1n, INT64_MAX + 1n, 2n ** 63n, 10n ** 1_000n, `1${'0'.repeat(1_000)}`]) {
     const parsed = parseRegistrySnapshot(snapshotInput({ createdAtUnixSeconds: value }));
     assert.equal(parsed.ok, false, `${value} must reject before encoding`);
     assert.equal(parsed.ok ? '' : parsed.error, 'SNAPSHOT_MALFORMED');
