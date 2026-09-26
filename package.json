@@ -10,7 +10,8 @@
     "packages/registry",
     "packages/adapter-robinhood",
     "packages/router",
-    "packages/jev"
+    "packages/jev",
+    "packages/execution-gate"
   ],
   "scripts": {
     "audit:security": "npm audit --audit-level=high",
