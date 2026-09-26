@@ -9,7 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { DomainTag } from '@mandate/kernel';
+import { DomainTag, INT64_MAX, INT64_MIN } from '@mandate/kernel';
 import {
   canonicalAssetIdentityDigest,
   canonicalAssetRecordDigest,
@@ -81,6 +81,26 @@ test('the snapshot digest is stable across repeated computation', () => {
   const s = snapshot();
   assert.equal(registrySnapshotDigest(s), registrySnapshotDigest(s));
   assert.match(registrySnapshotDigest(s), /^0x[0-9a-f]{64}$/);
+});
+
+test('every parsed snapshot creation time is encodable as signed i64', () => {
+  for (const value of [INT64_MIN, INT64_MAX]) {
+    const parsed = parseRegistrySnapshot(snapshotInput({ createdAtUnixSeconds: value }));
+    assert.ok(parsed.ok);
+    assert.doesNotThrow(() => registrySnapshotDigest(parsed.value));
+  }
+
+  for (const value of [INT64_MIN - 1n, INT64_MAX + 1n, 2n ** 63n, 10n ** 1_000n]) {
+    const parsed = parseRegistrySnapshot(snapshotInput({ createdAtUnixSeconds: value }));
+    assert.equal(parsed.ok, false, `${value} must reject before encoding`);
+    assert.equal(parsed.ok ? '' : parsed.error, 'SNAPSHOT_MALFORMED');
+  }
+
+  for (const value of [0, 1.5, true, null, {}, []]) {
+    const parsed = parseRegistrySnapshot(snapshotInput({ createdAtUnixSeconds: value }));
+    assert.equal(parsed.ok, false, `${String(value)} must reject before encoding`);
+    assert.equal(parsed.ok ? '' : parsed.error, 'SNAPSHOT_MALFORMED');
+  }
 });
 
 test('asset and representation order cannot reach the snapshot digest', () => {

@@ -279,4 +279,18 @@ test('every counted registry collection is bounded at its encoder width', async 
   const overVersions = parseRegistrySnapshot(snapshot([], versions(MAX_SNAPSHOT_ENTRIES + 1)));
   assert.equal(overVersions.ok, false);
   assert.equal(overVersions.ok ? '' : overVersions.error, 'SNAPSHOT_RESOURCE_LIMIT_EXCEEDED');
+
+  // Eligibility sub-lists have their own u16 counts inside a claim. This bound
+  // must be checked before duplicate or jurisdiction validation can obscure the
+  // parser/encoder contract.
+  const overJurisdictions = Array.from({ length: MAX_SNAPSHOT_ENTRIES + 1 }, () => 'US');
+  const overEligibility = parseRegistrySnapshot(snapshot([{
+    ...record([]),
+    eligibility: [{
+      value: { permitted: overJurisdictions, prohibited: [] },
+      provenance: provenance(0),
+    }],
+  }]));
+  assert.equal(overEligibility.ok, false);
+  assert.equal(overEligibility.ok ? '' : overEligibility.error, 'SNAPSHOT_RESOURCE_LIMIT_EXCEEDED');
 });

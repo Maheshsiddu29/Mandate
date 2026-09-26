@@ -13,7 +13,16 @@
  * switch.
  */
 
-import { err, ok, parseIdentifier, type Identifier, type Result, type UnixSeconds } from '@mandate/kernel';
+import {
+  INT64_MAX,
+  INT64_MIN,
+  err,
+  ok,
+  parseIdentifier,
+  type Identifier,
+  type Result,
+  type UnixSeconds,
+} from '@mandate/kernel';
 import type { RegistryReasonCodeName } from './reason-codes.ts';
 import { MAX_SNAPSHOT_ENTRIES } from './limits.ts';
 import { parseCanonicalAssetRecord, type CanonicalAssetRecord } from './asset.ts';
@@ -72,11 +81,14 @@ const SNAPSHOT_FIELDS = [
 export { MAX_SNAPSHOT_ENTRIES };
 
 function parseUnix(raw: unknown): Result<UnixSeconds, RegistryReasonCodeName> {
-  if (typeof raw === 'bigint') return ok(raw);
-  if (typeof raw === 'string' && /^-?(0|[1-9][0-9]*)$/.test(raw)) return ok(BigInt(raw));
+  let value: bigint;
+  if (typeof raw === 'bigint') value = raw;
+  else if (typeof raw === 'string' && /^-?(0|[1-9][0-9]*)$/.test(raw)) value = BigInt(raw);
+  else return err('SNAPSHOT_MALFORMED');
   // A `number` is refused even when integral, matching the kernel: accepting one
   // would make the safe/unsafe boundary depend on magnitude.
-  return err('SNAPSHOT_MALFORMED');
+  if (value < INT64_MIN || value > INT64_MAX) return err('SNAPSHOT_MALFORMED');
+  return ok(value);
 }
 
 function parseSourceVersions(raw: unknown): Result<readonly SourceVersion[], RegistryReasonCodeName> {

@@ -24,6 +24,7 @@ import {
   type Result,
 } from '@mandate/kernel';
 import type { RegistryReasonCodeName } from './reason-codes.ts';
+import { MAX_SNAPSHOT_ENTRIES } from './limits.ts';
 import { canonicalAssetKey, validateCanonicalAssetId, type ValidatedCanonicalAssetId } from './asset-id.ts';
 import { parseClaimSet, type ClaimSet } from './claims.ts';
 import { parseDisplayText, parseTicker, type DisplayText, type Ticker } from './asset.ts';
@@ -133,6 +134,10 @@ function parseEligibilityProfile(raw: unknown): Result<EligibilityProfile, Regis
   for (const field of ['permitted', 'prohibited'] as const) {
     const value = r[field];
     if (!Array.isArray(value)) return err('SNAPSHOT_MALFORMED');
+    // Each list is encoded with a u16 count. Refuse an unencodable collection
+    // before iterating it, even though the two-letter jurisdiction vocabulary
+    // makes a unique list this large impossible in ordinary valid data.
+    if (value.length > MAX_SNAPSHOT_ENTRIES) return err('SNAPSHOT_RESOURCE_LIMIT_EXCEEDED');
     const out: Jurisdiction[] = [];
     const seen = new Set<string>();
     for (const entry of value) {
