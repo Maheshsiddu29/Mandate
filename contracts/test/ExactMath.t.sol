@@ -51,6 +51,26 @@ contract ExactMathTest is Test {
         assertEq(c, 2);
     }
 
+    /// @notice The largest floor with a remainder (6R.1b): 52 q = 10 (2^256 - 1) + 6,
+    /// so q at 38 decimals times 52 at 0 decimals is max + 0.6 at 37 decimals. The
+    /// ceiling is 2^256, and the oracle must call it unrepresentable, not max.
+    function test_floorAtMaxWithARemainderIsUnrepresentable() public pure {
+        uint256 q =
+            22_267_709_468_714_652_966_071_343_270_901_520_741_013_458_589_546_262_315_280_304_616_906_371_084_603;
+        uint256 max = type(uint256).max;
+        assertEq(ExactMath.compareProduct(q, 38, 52, 0, max, 37), 1, "above max");
+        assertEq(ExactMath.compareProduct(q - 1, 38, 52, 0, max, 37), -1, "one atom less is below max");
+        (bool representable, uint256 f, uint256 c) = ExactMath.productAt(q, 38, 52, 0, 37);
+        assertFalse(representable);
+        assertEq(f, 0);
+        assertEq(c, 0);
+        // A remainder-free product exactly at max is representable, with floor = ceil = max.
+        (representable, f, c) = ExactMath.productAt(max, 0, 1, 0, 0);
+        assertTrue(representable);
+        assertEq(f, max);
+        assertEq(c, max);
+    }
+
     /// @notice floor <= product < floor + 1 and ceil is floor or floor + 1,
     /// exactly as the definition requires, at full width.
     function testFuzz_productAtIsTheExactFloorAndCeiling(uint256 q, uint256 p, uint8 qd, uint8 pd, uint8 td)

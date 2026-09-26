@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.37;
 
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+
 import {MandateExecutionGate} from "../src/MandateExecutionGate.sol";
 import {Amount, Candidate, ExecutionTerms, Mandate, MarketConfig, SIDE_BUY, SIDE_SELL} from "../src/MandateTypes.sol";
 import {FixtureVenue} from "../src/fixture/FixtureVenue.sol";
 import {GateArithmetic} from "../src/libraries/GateArithmetic.sol";
+import {MockERC20} from "./mocks/MockTokens.sol";
 import {ExactMath} from "./utils/ExactMath.sol";
 import {GateTestBase} from "./utils/GateTestBase.sol";
 
@@ -524,6 +527,133 @@ contract MaxNotionalTest is GateTestBase {
             assertFalse(ExactMath.productExceeds(control, 1, 1, 0, type(uint256).max, 38));
             (ok,,) = _wide(side, control, bound_);
             assertTrue(ok, "the representable control must settle");
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // A ceiling one past uint256 max is refused, not saturated (6R.1b)
+    // ------------------------------------------------------------------
+
+    /// @dev The one quantity of a 38-decimal token whose value at 52 USD, at the
+    /// principal's 37 decimals, has floor uint256 max and a non-zero remainder:
+    /// 52 q = 10 (2^256 - 1) + 6, so the value is max + 0.6 atoms and its
+    /// ceiling is 2^256. Found by the independent 6R.1a review, where a gate that
+    /// saturated that ceiling to max settled it under a max bound.
+    uint256 internal constant M4_QUANTITY =
+        22_267_709_468_714_652_966_071_343_270_901_520_741_013_458_589_546_262_315_280_304_616_906_371_084_603;
+    uint256 internal constant M4_PRICE = 52;
+    /// @dev floor(52 q / 100): the value at 36 decimals, the same for q and q - 1.
+    uint256 internal constant M4_DECLARED =
+        11_579_208_923_731_619_542_357_098_500_868_790_785_326_998_466_564_056_403_945_758_400_791_312_963_993;
+
+    MockERC20 internal deep;
+    FixtureVenue internal deepVenue;
+
+    /// @dev A gate with one market, a 38-decimal token against the 0-decimal
+    /// funding token at 52 USD, no fee, stocked to fill M4_QUANTITY either way.
+    /// It replaces `gate` for the calling test, so the shared world is unchanged.
+    function _deepGate() internal {
+        deep = new MockERC20("Fixture Deep Apple", "dAAPL", 38);
+        MarketConfig[] memory markets = new MarketConfig[](1);
+        markets[0] = _market(address(deep), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
+        markets[0].fundingToken = address(funding0);
+        markets[0].fixturePrice.decimals = 0;
+        markets[0].fixturePrice.atoms = M4_PRICE;
+        markets[0].fixtureFeeBps = 0;
+        gate = new MandateExecutionGate(markets);
+        deepVenue = _venueOf(gate, address(deep));
+        deep.mint(address(deepVenue), M4_QUANTITY);
+        deep.mint(principal, M4_QUANTITY);
+        funding0.mint(address(deepVenue), deepVenue.quoteSell(M4_QUANTITY));
+        funding0.mint(principal, deepVenue.quoteBuy(M4_QUANTITY));
+        vm.startPrank(principal);
+        deep.approve(address(gate), type(uint256).max);
+        funding0.approve(address(gate), type(uint256).max);
+        vm.stopPrank();
+    }
+
+    /// @dev `quantity` dAAPL on `side` under a maxNotional of uint256 max at 37
+    /// decimals, the notional declared as M4_DECLARED at 36 decimals. Nothing
+    /// but the quantity and its exact venue quote depends on the argument.
+    function _deep(uint8 side, uint256 quantity) internal returns (bool ok, bytes memory reason) {
+        Mandate memory m = side == SIDE_BUY ? _mandate() : _sellMandate();
+        m.nonce = uint64(++nonce);
+        m.maxNotional = _usdAt(type(uint256).max, 37);
+        m.economicLimit = side == SIDE_BUY ? _usdAt(type(uint256).max, 0) : _usdAt(0, 0);
+        Candidate memory c = _candidateFor(address(deep), side);
+        c.quantity = Amount({unit: "TOKEN", decimals: 38, atoms: quantity});
+        c.executionPrice.decimals = 0;
+        c.executionPrice.atoms = M4_PRICE;
+        c.notional = _usdAt(M4_DECLARED, 36);
+        c.feeTotal = _usdAt(0, 0);
+        ExecutionTerms memory t = _terms();
+        t.fundingLimit = side == SIDE_BUY ? deepVenue.quoteBuy(quantity) : deepVenue.quoteSell(quantity);
+        (ok, reason) = _try(m, c, t);
+    }
+
+    /// @notice The arithmetic of the boundary, independently of the gate path:
+    /// the floor at 37 decimals is uint256 max, the remainder is non-zero, and the
+    /// gate's bounds and the exact oracle both call the ceiling unrepresentable.
+    function test_m4_theBoundaryIsFloorMaxWithARemainder() public pure {
+        uint256 max = type(uint256).max;
+        // 52 q = 10 max + 6 in 512 bits. 10 max = 9 * 2^256 + (2^256 - 10), so the low limb gains 6 without carry.
+        (uint256 high, uint256 low) = Math.mul512(M4_QUANTITY, M4_PRICE);
+        (uint256 tenHigh, uint256 tenLow) = Math.mul512(max, 10);
+        assertEq(high, tenHigh);
+        assertEq(low, tenLow + 6);
+        // So the value at 37 decimals is max + 0.6 atoms: floor max, remainder 6, ceiling max + 1.
+        assertEq(ExactMath.compareProduct(M4_QUANTITY, 38, M4_PRICE, 0, max, 37), 1);
+        (bool representable, uint256 floorAtoms, uint256 ceilAtoms) =
+            GateArithmetic.notionalBounds(M4_QUANTITY, 38, M4_PRICE, 0, 37);
+        assertFalse(representable, "the gate must refuse the ceiling, not saturate it");
+        (representable,,) = ExactMath.productAt(M4_QUANTITY, 38, M4_PRICE, 0, 37);
+        assertFalse(representable, "the oracle must not saturate either");
+        assertTrue(_gateRuleRefuses(M4_QUANTITY, 38, M4_PRICE, 0, max, 37));
+        assertEq(
+            _gateRuleRefuses(M4_QUANTITY, 38, M4_PRICE, 0, max, 37),
+            ExactMath.productExceeds(M4_QUANTITY, 38, M4_PRICE, 0, max, 37)
+        );
+
+        // One atom less is max - 4.6 atoms: representable, within the bound.
+        (representable, floorAtoms, ceilAtoms) = GateArithmetic.notionalBounds(M4_QUANTITY - 1, 38, M4_PRICE, 0, 37);
+        assertTrue(representable);
+        assertEq(floorAtoms, max - 5);
+        assertEq(ceilAtoms, max - 4);
+        (bool oracleRepresentable, uint256 oracleFloor, uint256 oracleCeil) =
+            ExactMath.productAt(M4_QUANTITY - 1, 38, M4_PRICE, 0, 37);
+        assertTrue(oracleRepresentable);
+        assertEq(oracleFloor, floorAtoms);
+        assertEq(oracleCeil, ceilAtoms);
+        assertFalse(_gateRuleRefuses(M4_QUANTITY - 1, 38, M4_PRICE, 0, max, 37));
+
+        // The declared notional is the exact floor at 36 decimals of both quantities, and within the bound.
+        (representable, floorAtoms, ceilAtoms) = GateArithmetic.notionalBounds(M4_QUANTITY, 38, M4_PRICE, 0, 36);
+        assertTrue(representable);
+        assertEq(floorAtoms, M4_DECLARED);
+        assertEq(ceilAtoms, M4_DECLARED + 1);
+        (, floorAtoms,) = GateArithmetic.notionalBounds(M4_QUANTITY - 1, 38, M4_PRICE, 0, 36);
+        assertEq(floorAtoms, M4_DECLARED);
+        assertFalse(ExactMath.gtScaled(M4_DECLARED, 36, max, 37));
+    }
+
+    /// @notice Signed by the right principal and agent, fillable by the real
+    /// venue, the declared notional consistent and within the bound, the price
+    /// the fixture's, every limit open: the only condition the boundary quantity
+    /// fails is that its ceiling at the principal's 37 decimals is 2^256. It is
+    /// refused `MaxNotionalExceeded` on both sides. The control, one atom less,
+    /// with the same declared notional and every other field identical, settles.
+    function test_m4_ceilingPastUint256IsTheOnlyRefusal() public {
+        _deepGate();
+        assertEq(deepVenue.PRICE(), M4_PRICE, "52 funding atoms per token");
+        assertEq(deepVenue.quoteBuy(M4_QUANTITY), deepVenue.quoteSell(M4_QUANTITY) + 1, "no fee; ceil vs floor");
+        for (uint8 side = SIDE_BUY; side <= SIDE_SELL; ++side) {
+            assertGe(deep.balanceOf(side == SIDE_BUY ? address(deepVenue) : principal), M4_QUANTITY, "fillable");
+            (bool ok, bytes memory reason) = _deep(side, M4_QUANTITY);
+            assertFalse(ok, "settled 0.6 of an atom past a uint256 max bound");
+            assertEq(reason, _err(MandateExecutionGate.MaxNotionalExceeded.selector));
+
+            (ok, reason) = _deep(side, M4_QUANTITY - 1);
+            assertTrue(ok, "the control one atom lower must settle");
         }
     }
 }
