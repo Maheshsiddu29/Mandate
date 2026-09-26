@@ -49,9 +49,11 @@ the chain can observe, atomically with the action:
 - this authorization has not settled before;
 - the candidate, the mandate and the gate's pinned market facts agree on who,
   what, where, which side and which units;
-- the candidate notional is the exact quantity × immutable fixture price result,
-  does not exceed signed `maxNotional`, and declared fees stay inside the signed
-  side-appropriate economic limit;
+- the candidate notional is the exact quantity × immutable fixture price result
+  at the precision the candidate declares; the *true* quantity × fixture price,
+  rendered at the principal's signed precision, does not exceed signed
+  `maxNotional` whatever precision the agent chose (Phase 6R.1, M-1); and
+  declared fees stay inside the signed side-appropriate economic limit;
 - exact candidate quantity settles, and the principal's measured cash flow is
   inside the signed economic bound.
 
@@ -177,7 +179,7 @@ invariant action.
 | target / adapter | the market's adapter; never caller-supplied |
 | recipient | agent-signed and required to be the principal |
 | side | `candidate.side == mandate.side` |
-| quantity, notional, spend/proceeds | exact candidate quantity; exact quantity × immutable fixture price; candidate notional ≤ signed `maxNotional`; agent's `fundingLimit` inside the signed side-specific bound |
+| quantity, notional, spend/proceeds | exact candidate quantity; exact quantity × immutable fixture price; that true product, at the principal's precision, and the declared notional both ≤ signed `maxNotional`; agent's `fundingLimit` inside the signed side-specific bound |
 | funding asset | the market's funding token; its settlement unit must be the mandate's economic-limit unit |
 
 Signature acceptance is the kernel's: exactly 65 bytes, `v ∈ {27, 28}`, low `s`
@@ -229,8 +231,8 @@ side (ADR 0014).
 
 | Side | Signed bound | Onchain rule |
 | --- | --- | --- |
-| BUY | gross `maxNotional`; `MAX_TOTAL_DEBIT` | declared notional ≤ `maxNotional`; declared notional + fee ≤ debit limit; `fundingLimit ≤ floor(limit → funding atoms)`; measured debit ≤ `fundingLimit`; measured representation credit **equals** quantity |
-| SELL | gross `maxNotional`; `MIN_TOTAL_CREDIT` | declared notional ≤ `maxNotional`; declared notional − fee ≥ credit floor; `fundingLimit ≥ ceil(limit → funding atoms)`; measured funding credit ≥ `fundingLimit`; measured representation debit **equals** quantity |
+| BUY | gross `maxNotional`; `MAX_TOTAL_DEBIT` | true quantity × fixture price ≤ `maxNotional` at its signed precision, and declared notional ≤ `maxNotional`; declared notional + fee ≤ debit limit; `fundingLimit ≤ floor(limit → funding atoms)`; measured debit ≤ `fundingLimit`; measured representation credit **equals** quantity |
+| SELL | gross `maxNotional`; `MIN_TOTAL_CREDIT` | true quantity × fixture price ≤ `maxNotional` at its signed precision, and declared notional ≤ `maxNotional`; declared notional − fee ≥ credit floor; `fundingLimit ≥ ceil(limit → funding atoms)`; measured funding credit ≥ `fundingLimit`; measured representation debit **equals** quantity |
 
 - **Units.** The candidate's quantity must be in the market's quantity unit
   (`TOKEN`) at the token's decimals — a `SHARE` is not a `TOKEN` under an
@@ -251,6 +253,18 @@ side (ADR 0014).
   floor/ceil band for `quantity × executionPrice`, compares decimal scales with
   512-bit intermediates, and refuses overflow. It never trusts the declared
   notional merely because the agent signed it.
+- **`maxNotional` bounds the true product (Phase 6R.1, M-1).** The declared
+  notional's precision is the agent's choice and the band above admits either
+  adjacent value at it, so at `decimals: 0` a 1.99 USD trade may declare 1 and a
+  0.40 USD trade 0. Before 6R.1 the gate compared only that declared value with
+  `maxNotional`, so a correctly signing agent could exceed the principal's
+  bound by almost one whole unit. The gate now renders `quantity ×` the pinned
+  fixture price at `maxNotional.decimals`, rounded up, and refuses
+  `MaxNotionalExceeded` when that exceeds the signed atoms — which holds exactly
+  when the true product exceeds the bound, because the bound is an integer at
+  its own scale. A product beyond `uint256` at that scale is the same refusal.
+  The declared comparison still runs first, and the kernel applies the identical
+  rule (`checkMaxNotional`, verifier invariant V-16a).
 - **Fixture price.** Every `FIXTURE` market pins a typed, non-zero price at
   construction. Candidate prices may use another decimal scale only when the
   rational value is exactly equal. This closes the zero-price/max-notional
@@ -406,6 +420,7 @@ Run: `npm run contracts:test` (regenerates the corpus ABI, then `forge test`).
 | `Fuzz.t.sol` | 15 × 1,024 runs | Principal/agent economics, exact rational arithmetic, quantities, prices, decimal scales, exact fill, time, replay, post-signature mutations, signatures, recipient, representation and chain |
 | `invariant/GateInvariants.t.sol` | 12 invariants × 256 runs × depth 64, plus a deterministic non-vacuity test | Below |
 | `Differential.t.sol` | 4 | §11 |
+| `MaxNotional.t.sol` | 9 + 1 fuzz × 1,024 runs | Phase 6R.1 M-1 on the real fixture path: the audit PoCs, declared precision 0–38 with every signature valid, one atom either side at the principal's precision, decimal-conversion boundaries, huge-quantity/tiny-price and tiny-quantity/huge-price, 512-bit intermediates, randomized precision combinations on both sides |
 | `DeployScript.t.sol` | 6 | §13, including exact typed-price conversion and the constructor's refusal of a mismatched venue |
 
 Invariants, each checked after every call of every run:
@@ -448,8 +463,9 @@ generate-gate-corpus.ts` from the kernel and the reference model; nothing is
 typed twice. `Differential.t.sol` deploys the same world at the same addresses and
 replays every entry.
 
-- **240 execution attempts in 233 vectors** — every hand-written refusal family,
-  boundary and multi-attempt sequence, plus 120 seeded mutations. For each, the
+- **308 execution attempts in 301 vectors** — every hand-written refusal family,
+  boundary and multi-attempt sequence, 120 seeded mutations, and 64 seeded
+  `maxNotional` precision combinations (below). For each, the
   two implementations agree on settlement, execution commitment, mandate and
   candidate digests (checked through storage and the event), debit and credit —
   or on the exact revert data, including OpenZeppelin token errors surfacing
@@ -462,10 +478,20 @@ replays every entry.
   `verifyAuthorization` itself, so agreement is with the kernel's rule, not a copy.
 - A TypeScript test asserts every runtime refusal the gate can make appears in the
   corpus, and that the committed corpus equals what the generator produces.
-- A separate authority layer sends **16 actual-kernel REJECT** cases with valid
+- A separate authority layer sends **20 actual-kernel REJECT** cases with valid
   principal and authorized-agent signatures to Solidity; none settles. These
   cover economics, arithmetic, immutable fixture price, identity, side, asset,
-  issuer, chain, venue, synthetic policy, representation mapping and quantity unit.
+  issuer, chain, venue, synthetic policy, representation mapping and quantity
+  unit, and — `authority-017`…`020` — the three M-1 audit PoCs and a 6-decimal
+  declaration that rounds an 18-decimal excess away.
+- **Seeded precision agreement.** 64 vectors vary the execution-price,
+  declared-notional and `maxNotional` precisions on both markets and sides; two
+  thirds place the bound exactly at the agent's coarse declared value. The
+  generator asks the actual kernel about every one and refuses to write the
+  corpus if the kernel's `MAX_NOTIONAL_EXCEEDED` and the gate's
+  `MaxNotionalExceeded` ever disagree; the corpus records the tally
+  (`precisionAgreement`), including how many were the declared-within,
+  true-above shape.
 
 The readable corpus is committed; its ABI form is written by the same generator
 run to `contracts/generated/` (not committed — it is megabytes of ABI padding) and
@@ -485,7 +511,7 @@ read by the harness.
 | Synthetic policy | ✅ registry tri-state | ✅ pinned market flag |
 | Token address | ✅ via registry | ✅ derived from `representationId` |
 | Economic limit (all-in) | ✅ declared notional + fees | ✅ declared economics and **measured** balance deltas |
-| `maxNotional` | ✅ | ✅ exact scaled comparison |
+| `maxNotional` | ✅ true quantity × price at the signed precision, and declared notional | ✅ the same rule against the pinned fixture price |
 | Notional consistency (qty × price) | ✅ | ✅ kernel-equivalent floor/ceil arithmetic |
 | Fixture price | trusted fixture state | ✅ immutable exact scaled value |
 | Real-market price deviation, price freshness | ✅ at handoff | ❌ not re-asserted; real markets prohibited |

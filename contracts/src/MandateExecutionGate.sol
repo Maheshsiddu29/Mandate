@@ -425,6 +425,20 @@ contract MandateExecutionGate is ReentrancyGuard {
                     mandate.maxNotional.decimals
                 ) > 0
         ) revert MaxNotionalExceeded();
+        // The declared notional's precision is the agent's choice, and at a
+        // coarse one it can sit almost a whole unit below the true product
+        // (M-1). The principal's bound is on the true product: render quantity
+        // x the immutable fixture price at the principal's own precision,
+        // rounded up. The ceiling exceeds the integer bound exactly when the
+        // product does; a product beyond uint256 at that scale exceeds any bound.
+        (bool productRepresentable,, uint256 productCeil) = GateArithmetic.notionalBounds(
+            candidate.quantity.atoms,
+            candidate.quantity.decimals,
+            market.fixturePriceAtoms,
+            market.fixturePriceDecimals,
+            mandate.maxNotional.decimals
+        );
+        if (!productRepresentable || productCeil > mandate.maxNotional.atoms) revert MaxNotionalExceeded();
 
         if (mandate.side == SIDE_BUY) {
             (bool sumRepresentable, bool within) = GateArithmetic.sumWithinLimit(

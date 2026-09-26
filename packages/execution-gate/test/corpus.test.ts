@@ -5,7 +5,7 @@ import { describe, it } from 'node:test';
 import { GATE_ERRORS, errorSignature, selectorOf } from '../src/index.ts';
 import { MAX_EXECUTION_DATA_BYTES, MAX_PROFILE_SET_SIZE } from '../src/model.ts';
 import { abiEncodeArguments, bytes, CANDIDATE, MANDATE, TERMS, tuple } from './support/abi.ts';
-import { READABLE_PATH, generateGateCorpus, serialize } from './support/generate-gate-corpus.ts';
+import { READABLE_PATH, SEEDED_PRECISION_COUNT, generateGateCorpus, serialize } from './support/generate-gate-corpus.ts';
 import { baseBuy, sign } from './support/world.ts';
 
 const REPO_ROOT = new URL('../../../', import.meta.url);
@@ -65,6 +65,22 @@ describe('gate differential corpus', () => {
       assert.equal(vector.responsibility, 'ONCHAIN_ENFORCED');
       assert.ok(vector.kernelReasonCodes.length > 0);
       assert.equal(vector.gateSettled, false);
+    }
+  });
+
+  it('agrees with the actual kernel on every seeded maxNotional precision combination, including the M-1 shape', () => {
+    // The generator throws before writing if the kernel's MAX_NOTIONAL_EXCEEDED
+    // and the gate's MaxNotionalExceeded disagree on any vector; this pins that
+    // the sweep is not vacuous on either side of the rule.
+    const tally = generated.readable['precisionAgreement'] as Record<string, number>;
+    assert.equal(tally['vectors'], SEEDED_PRECISION_COUNT);
+    assert.ok((tally['declaredWithinButTrueAbove'] ?? 0) >= 16, 'too few coarse-precision bypass shapes');
+    assert.ok((tally['admittedByBoth'] ?? 0) >= 16, 'too few admitted precision combinations');
+    const authority = generated.readable['authorityVectors'] as { id: string; kernelReasonCodes: string[] }[];
+    for (const id of ['authority-017', 'authority-018', 'authority-019', 'authority-020']) {
+      const v = authority.find((a) => a.id === id);
+      assert.ok(v !== undefined, id);
+      assert.deepEqual(v.kernelReasonCodes, ['MAX_NOTIONAL_EXCEEDED'], id);
     }
   });
 

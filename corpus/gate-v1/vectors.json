@@ -28,11 +28,12 @@
     }
   },
   "counts": {
-    "vectors": 233,
-    "attempts": 240,
-    "settledAttempts": 65,
-    "revertedAttempts": 175,
-    "maliciousAgentKernelRejectAttempts": 16,
+    "vectors": 301,
+    "attempts": 308,
+    "settledAttempts": 91,
+    "revertedAttempts": 217,
+    "maliciousAgentKernelRejectAttempts": 20,
+    "precisionVectors": 64,
     "mandateEncodings": 139,
     "candidateEncodings": 188
   },
@@ -9951,6 +9952,478 @@
       ]
     },
     {
+      "id": "authority-017",
+      "family": "malicious-agent",
+      "description": "Audit PoC (BUY): true gross 1.99 USD under a 1 USD maxNotional, notional declared at 0 decimals as 1.",
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          },
+          "script": {
+            "mode": 0,
+            "deliver": "9950000000000000",
+            "refund": "0",
+            "deliverElsewhere": false,
+            "extraPull": "0"
+          },
+          "input": {
+            "mandate": {
+              "version": "2",
+              "mandateId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+              "nonce": "1",
+              "principal": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "side": "1",
+              "maxNotional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "1000000000000000000"
+              },
+              "economicLimit": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2010000000000000000000"
+              },
+              "maxDeviationBps": "40",
+              "syntheticPolicy": "1",
+              "allowedIssuers": [
+                "issuer.alpha"
+              ],
+              "allowedChains": [
+                "eip155:46630"
+              ],
+              "allowedVenues": [
+                "venue.other",
+                "venue.fixture"
+              ],
+              "requiredCorporateActionEpoch": "1",
+              "maxPriceAgeSeconds": "60",
+              "maxCorporateActionAgeSeconds": "3600",
+              "haltPolicy": "1",
+              "createdAtUnixSeconds": "1799999900",
+              "notBeforeUnixSeconds": "1799999940",
+              "expiresAtUnixSeconds": "1800003600"
+            },
+            "candidate": {
+              "version": "3",
+              "representationId": "eip155:46630/erc20:0x000000000000000000000000000000000000aa01",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "issuer": "issuer.alpha",
+              "chain": "eip155:46630",
+              "venue": "venue.fixture",
+              "side": "1",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "quantity": {
+                "unit": "TOKEN",
+                "decimals": 18,
+                "atoms": "9950000000000000"
+              },
+              "executionPrice": {
+                "numeratorUnit": "USD",
+                "denominatorUnit": "TOKEN",
+                "decimals": 18,
+                "atoms": "200000000000000000000"
+              },
+              "notional": {
+                "unit": "USD",
+                "decimals": 0,
+                "atoms": "1"
+              },
+              "feeTotal": {
+                "unit": "USD",
+                "decimals": 0,
+                "atoms": "0"
+              },
+              "evaluationStateId": "state.fixture.0001",
+              "evaluationStateDigest": "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+              "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+              "corporateActionEpoch": "1"
+            },
+            "terms": {
+              "recipient": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "fundingLimit": "2010000000",
+              "deadline": "1800000300",
+              "executionData": "0x"
+            },
+            "principalSignature": "0x81c178e0219e48f82e27579d0cb97633875b7e377118348bfcd32ff1722ceb0f3771c837277aa7376d6de44bf85a1f61838866d7682609b0178c17908e686be31c",
+            "agentSignature": "0x69b7c9d3b73530ceaf294edff33c74f1a971e267ae9f79c7584c660b5e108d3b102339fcf5b1b35f00d20d8a9249221477b1f1a99e67c01d55e8bf2f7b9ddf8f1b"
+          }
+        }
+      ]
+    },
+    {
+      "id": "authority-018",
+      "family": "malicious-agent",
+      "description": "Audit PoC (SELL): true gross 100.99 USD under a 100 USD maxNotional, notional declared at 0 decimals as 100.",
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          },
+          "script": {
+            "mode": 0,
+            "deliver": "100990000",
+            "refund": "0",
+            "deliverElsewhere": false,
+            "extraPull": "0"
+          },
+          "input": {
+            "mandate": {
+              "version": "2",
+              "mandateId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+              "nonce": "1",
+              "principal": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "side": "2",
+              "maxNotional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "100000000000000000000"
+              },
+              "economicLimit": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "100000000000000000000"
+              },
+              "maxDeviationBps": "40",
+              "syntheticPolicy": "1",
+              "allowedIssuers": [
+                "issuer.alpha"
+              ],
+              "allowedChains": [
+                "eip155:46630"
+              ],
+              "allowedVenues": [
+                "venue.other",
+                "venue.fixture"
+              ],
+              "requiredCorporateActionEpoch": "1",
+              "maxPriceAgeSeconds": "60",
+              "maxCorporateActionAgeSeconds": "3600",
+              "haltPolicy": "1",
+              "createdAtUnixSeconds": "1799999900",
+              "notBeforeUnixSeconds": "1799999940",
+              "expiresAtUnixSeconds": "1800003600"
+            },
+            "candidate": {
+              "version": "3",
+              "representationId": "eip155:46630/erc20:0x000000000000000000000000000000000000aa01",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "issuer": "issuer.alpha",
+              "chain": "eip155:46630",
+              "venue": "venue.fixture",
+              "side": "2",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "quantity": {
+                "unit": "TOKEN",
+                "decimals": 18,
+                "atoms": "504950000000000000"
+              },
+              "executionPrice": {
+                "numeratorUnit": "USD",
+                "denominatorUnit": "TOKEN",
+                "decimals": 18,
+                "atoms": "200000000000000000000"
+              },
+              "notional": {
+                "unit": "USD",
+                "decimals": 0,
+                "atoms": "100"
+              },
+              "feeTotal": {
+                "unit": "USD",
+                "decimals": 0,
+                "atoms": "0"
+              },
+              "evaluationStateId": "state.fixture.0001",
+              "evaluationStateDigest": "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+              "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+              "corporateActionEpoch": "1"
+            },
+            "terms": {
+              "recipient": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "fundingLimit": "100000000",
+              "deadline": "1800000300",
+              "executionData": "0x"
+            },
+            "principalSignature": "0xce8677e863f8d7df5cc78fd2e579e9f1f471998ae995f1cc7019194f963723f04d70d37fb013ddf75b0c6c487ad9b93295495fee0ce53129293f66dd285f012e1b",
+            "agentSignature": "0x696aeb51eceaa7dee44e7d30e8479761f649ec3355f68d78e1a1b44f5ea96dd779c6c128671274199e76167e7c2084057f211f78b933f80e0538941a07724aab1c"
+          }
+        }
+      ]
+    },
+    {
+      "id": "authority-019",
+      "family": "malicious-agent",
+      "description": "Audit PoC (BUY): a positive 0.40 USD trade under maxNotional = 0, notional declared at 0 decimals as 0.",
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          },
+          "script": {
+            "mode": 0,
+            "deliver": "2000000000000000",
+            "refund": "0",
+            "deliverElsewhere": false,
+            "extraPull": "0"
+          },
+          "input": {
+            "mandate": {
+              "version": "2",
+              "mandateId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+              "nonce": "1",
+              "principal": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "side": "1",
+              "maxNotional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "0"
+              },
+              "economicLimit": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2010000000000000000000"
+              },
+              "maxDeviationBps": "40",
+              "syntheticPolicy": "1",
+              "allowedIssuers": [
+                "issuer.alpha"
+              ],
+              "allowedChains": [
+                "eip155:46630"
+              ],
+              "allowedVenues": [
+                "venue.other",
+                "venue.fixture"
+              ],
+              "requiredCorporateActionEpoch": "1",
+              "maxPriceAgeSeconds": "60",
+              "maxCorporateActionAgeSeconds": "3600",
+              "haltPolicy": "1",
+              "createdAtUnixSeconds": "1799999900",
+              "notBeforeUnixSeconds": "1799999940",
+              "expiresAtUnixSeconds": "1800003600"
+            },
+            "candidate": {
+              "version": "3",
+              "representationId": "eip155:46630/erc20:0x000000000000000000000000000000000000aa01",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "issuer": "issuer.alpha",
+              "chain": "eip155:46630",
+              "venue": "venue.fixture",
+              "side": "1",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "quantity": {
+                "unit": "TOKEN",
+                "decimals": 18,
+                "atoms": "2000000000000000"
+              },
+              "executionPrice": {
+                "numeratorUnit": "USD",
+                "denominatorUnit": "TOKEN",
+                "decimals": 18,
+                "atoms": "200000000000000000000"
+              },
+              "notional": {
+                "unit": "USD",
+                "decimals": 0,
+                "atoms": "0"
+              },
+              "feeTotal": {
+                "unit": "USD",
+                "decimals": 0,
+                "atoms": "0"
+              },
+              "evaluationStateId": "state.fixture.0001",
+              "evaluationStateDigest": "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+              "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+              "corporateActionEpoch": "1"
+            },
+            "terms": {
+              "recipient": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "fundingLimit": "2010000000",
+              "deadline": "1800000300",
+              "executionData": "0x"
+            },
+            "principalSignature": "0xeb42140660f36d26b9dba325145eff0132e39488fbf487f31565c926b64842d865a525df7708c8e60fe211c29162d5428ad4dc441bc7b51ed021dbed3aa752de1b",
+            "agentSignature": "0x42991614645a79b7d430f9cd26182855892dc47b6efed4ddd6780d60b7c2dcf762d7c4bf4a4fe5a1436f62f08e01d9757aac780a7888a3bbd1d7bec5a75c4be81b"
+          }
+        }
+      ]
+    },
+    {
+      "id": "authority-020",
+      "family": "malicious-agent",
+      "description": "Notional declared at 6 decimals rounds a 200-atom excess over an 18-decimal maxNotional away.",
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          },
+          "script": {
+            "mode": 0,
+            "deliver": "10000000000000000001",
+            "refund": "4000000",
+            "deliverElsewhere": false,
+            "extraPull": "0"
+          },
+          "input": {
+            "mandate": {
+              "version": "2",
+              "mandateId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+              "nonce": "1",
+              "principal": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "side": "1",
+              "maxNotional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "economicLimit": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2010000000000000000000"
+              },
+              "maxDeviationBps": "40",
+              "syntheticPolicy": "1",
+              "allowedIssuers": [
+                "issuer.alpha"
+              ],
+              "allowedChains": [
+                "eip155:46630"
+              ],
+              "allowedVenues": [
+                "venue.other",
+                "venue.fixture"
+              ],
+              "requiredCorporateActionEpoch": "1",
+              "maxPriceAgeSeconds": "60",
+              "maxCorporateActionAgeSeconds": "3600",
+              "haltPolicy": "1",
+              "createdAtUnixSeconds": "1799999900",
+              "notBeforeUnixSeconds": "1799999940",
+              "expiresAtUnixSeconds": "1800003600"
+            },
+            "candidate": {
+              "version": "3",
+              "representationId": "eip155:46630/erc20:0x000000000000000000000000000000000000aa01",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "issuer": "issuer.alpha",
+              "chain": "eip155:46630",
+              "venue": "venue.fixture",
+              "side": "1",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "quantity": {
+                "unit": "TOKEN",
+                "decimals": 18,
+                "atoms": "10000000000000000001"
+              },
+              "executionPrice": {
+                "numeratorUnit": "USD",
+                "denominatorUnit": "TOKEN",
+                "decimals": 18,
+                "atoms": "200000000000000000000"
+              },
+              "notional": {
+                "unit": "USD",
+                "decimals": 6,
+                "atoms": "2000000000"
+              },
+              "feeTotal": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "6000000000000000000"
+              },
+              "evaluationStateId": "state.fixture.0001",
+              "evaluationStateDigest": "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+              "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+              "corporateActionEpoch": "1"
+            },
+            "terms": {
+              "recipient": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "fundingLimit": "2010000000",
+              "deadline": "1800000300",
+              "executionData": "0x"
+            },
+            "principalSignature": "0xf4fad2a8c870cce1cf9ca5a473b635e029224bd0a898b67ef88994a38f84086a2fabde0f64e822cf5f21d518dd4480270adf828fc12195615fb16654d2f45a811b",
+            "agentSignature": "0xa30edf9f84721372c96fb276d6a42347a8c93716d680d6f5eb73b84af10435893b78f4bc5528afd67c6f18569ab111b51c1cf7628f4257564c66dca6388877a11c"
+          }
+        }
+      ]
+    },
+    {
       "id": "profile-001",
       "family": "execution-profile",
       "description": "Route data one byte above the Phase 6 executable profile.",
@@ -17090,6 +17563,1478 @@
           }
         }
       ]
+    },
+    {
+      "id": "precision-001",
+      "family": "seeded-precision",
+      "description": "SELL q=769432107@8 price@7 notional=1538864214000000000000000000@24 max=153886421399999999999999999999999@29",
+      "mutations": [
+        "SELL q=769432107@8 price@7 notional=1538864214000000000000000000@24 max=153886421399999999999999999999999@29"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-002",
+      "family": "seeded-precision",
+      "description": "SELL q=819674105549687920@18 price@10 notional=16393482110993758400000000@23 max=163934821109937585@15",
+      "mutations": [
+        "SELL q=819674105549687920@18 price@10 notional=16393482110993758400000000@23 max=163934821109937585@15"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": true,
+            "revertData": "0x",
+            "mandateDigest": "0x0006e32b5210f4ecc01d2062aa4114850de6ab820f5072c78f4139f12db7ebba",
+            "candidateDigest": "0x8075ebbb52070dc2927532a23345b40d388456b74a309e42dd4399d0de8dff62",
+            "executionCommitment": "0xfd1096d39ac27b17fda4dcfd919b8cafbbc25b5aeca252e0df08d7491b320821",
+            "debit": "819674105549687920",
+            "credit": "1"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-003",
+      "family": "seeded-precision",
+      "description": "SELL q=8102243584444901565@18 price@13 notional=16204487@4 max=16204487000000000000000000000000000@31",
+      "mutations": [
+        "SELL q=8102243584444901565@18 price@13 notional=16204487@4 max=16204487000000000000000000000000000@31"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-004",
+      "family": "seeded-precision",
+      "description": "SELL q=9579836809711203274@18 price@10 notional=19159673619@7 max=1915967361900000000000000000000000000@33",
+      "mutations": [
+        "SELL q=9579836809711203274@18 price@10 notional=19159673619@7 max=1915967361900000000000000000000000000@33"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-005",
+      "family": "seeded-precision",
+      "description": "SELL q=393185228@8 price@30 notional=78637045600000000000000000000000000000@35 max=78639@2",
+      "mutations": [
+        "SELL q=393185228@8 price@30 notional=78637045600000000000000000000000000000@35 max=78639@2"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": true,
+            "revertData": "0x",
+            "mandateDigest": "0xf5fa639a7092ddff0179aacb0dfc70fe92095fa2b1b8244d4d7c9ab8c20101c9",
+            "candidateDigest": "0xf3be1640c4fe10609bc06ff7e3937ed83e4689328d5fe38716b9df4c597ab24b",
+            "executionCommitment": "0x143cf74de7c63c5107c195f5b68a5b11aeec3acb831e591ac6620b184c22d3c3",
+            "debit": "393185228",
+            "credit": "1"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-006",
+      "family": "seeded-precision",
+      "description": "SELL q=9562311321782553397@18 price@11 notional=191246226435651067940000000000000000000@35 max=191246226435651067940000000000000000000@35",
+      "mutations": [
+        "SELL q=9562311321782553397@18 price@11 notional=191246226435651067940000000000000000000@35 max=191246226435651067940000000000000000000@35"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": true,
+            "revertData": "0x",
+            "mandateDigest": "0x8ca7a9d4b7d305d7bbf0ef016b6b88a664ef8d0c56195109ed6c29a40dfb7951",
+            "candidateDigest": "0x88fd6c99f51a8e3b4a352b9d7380cdefa3a42cb4eec3dcf60537aa1d3ba0ce05",
+            "executionCommitment": "0xa99d4706d16c870113b3e8f83d21bc5e1928d099ff47705d3221b2c292c3e834",
+            "debit": "9562311321782553397",
+            "credit": "1"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-007",
+      "family": "seeded-precision",
+      "description": "BUY q=9034150401498908537@18 price@8 notional=1806@0 max=180600000000@8",
+      "mutations": [
+        "BUY q=9034150401498908537@18 price@8 notional=1806@0 max=180600000000@8"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-008",
+      "family": "seeded-precision",
+      "description": "SELL q=3450838921161559499@18 price@28 notional=690167784@6 max=690167784234@9",
+      "mutations": [
+        "SELL q=3450838921161559499@18 price@28 notional=690167784@6 max=690167784234@9"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": true,
+            "revertData": "0x",
+            "mandateDigest": "0x398050a176d98b2704dc09225756857c0869133b9242cdfe922222863da6cbe8",
+            "candidateDigest": "0x7021f14b3afe0aefb545827fad71d43e372d4286115a1c66a257e7b2532d8f5d",
+            "executionCommitment": "0xeb6183ea35e41fc8d21c439fe3a187aec1010e9319c09697aa163c5348fb41c0",
+            "debit": "3450838921161559499",
+            "credit": "1"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-009",
+      "family": "seeded-precision",
+      "description": "SELL q=1977344466339278934@18 price@0 notional=3954688932678558@13 max=39546889326785577@14",
+      "mutations": [
+        "SELL q=1977344466339278934@18 price@0 notional=3954688932678558@13 max=39546889326785577@14"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-010",
+      "family": "seeded-precision",
+      "description": "SELL q=9649601642940069643@18 price@37 notional=19300@1 max=1929920328588013928600000001@24",
+      "mutations": [
+        "SELL q=9649601642940069643@18 price@37 notional=19300@1 max=1929920328588013928600000001@24"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-011",
+      "family": "seeded-precision",
+      "description": "BUY q=750548064996690945@18 price@16 notional=1501096129993381@13 max=150109612999338100000000000000000000@33",
+      "mutations": [
+        "BUY q=750548064996690945@18 price@16 notional=1501096129993381@13 max=150109612999338100000000000000000000@33"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-012",
+      "family": "seeded-precision",
+      "description": "SELL q=591709338@8 price@19 notional=118341867600000000000000000000000@29 max=1183417@3",
+      "mutations": [
+        "SELL q=591709338@8 price@19 notional=118341867600000000000000000000000@29 max=1183417@3"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-013",
+      "family": "seeded-precision",
+      "description": "BUY q=6566313964816319242@18 price@17 notional=13132627929632638484000@19 max=131326279296326384840@17",
+      "mutations": [
+        "BUY q=6566313964816319242@18 price@17 notional=13132627929632638484000@19 max=131326279296326384840@17"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": true,
+            "revertData": "0x",
+            "mandateDigest": "0x743c41a34bac94517f4dbab2e261fcda24b66ffa171167feb33e7ef62195abb2",
+            "candidateDigest": "0x1261a020f7afdc1392901fb245c70e062321d40bc1800a526633d916fab3e261",
+            "executionCommitment": "0xeae72f204a08c2c868d620dd12c4eea7c3ded94250793d78536680182b2e239d",
+            "debit": "2010000000",
+            "credit": "6566313964816319242"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-014",
+      "family": "seeded-precision",
+      "description": "SELL q=978793795683165114@18 price@1 notional=1957@1 max=1957000000000@10",
+      "mutations": [
+        "SELL q=978793795683165114@18 price@1 notional=1957@1 max=1957000000000@10"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-015",
+      "family": "seeded-precision",
+      "description": "BUY q=1616319202149242386@18 price@38 notional=323263840429848477200000@21 max=32326384042984847720000000000000000000000@38",
+      "mutations": [
+        "BUY q=1616319202149242386@18 price@38 notional=323263840429848477200000@21 max=32326384042984847720000000000000000000000@38"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": true,
+            "revertData": "0x",
+            "mandateDigest": "0xfd0a091a4f74179171db548c3a35f017c09c5c8e7c090272c0ae2ed8e327ff62",
+            "candidateDigest": "0x3629ee7039cc2054225f3355bf03df4115cb8101ab444e90d0135f316bc77f8a",
+            "executionCommitment": "0x6084fd0414849678a1e7e0ea442addd9065b4ce8208f98874929f02378e20b8b",
+            "debit": "2010000000",
+            "credit": "1616319202149242386"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-016",
+      "family": "seeded-precision",
+      "description": "SELL q=9890713403207732463@18 price@33 notional=19781426806415464926000000000@25 max=19781426806415464926000000000000000000000@37",
+      "mutations": [
+        "SELL q=9890713403207732463@18 price@33 notional=19781426806415464926000000000@25 max=19781426806415464926000000000000000000000@37"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": true,
+            "revertData": "0x",
+            "mandateDigest": "0x3795bdc54e896ddc6b645f108cf9707de6a254cd0203b9bcbfa2e294e8078d33",
+            "candidateDigest": "0x53eedeea7a77fd21820d233e5c6996cbea065f59762cecf1a2998f4ffc341bf0",
+            "executionCommitment": "0x3455d99eb9948404cfc4e4e4dd8b3e48c7185ca2068222b9fb2dc4823b92fcc5",
+            "debit": "9890713403207732463",
+            "credit": "1"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-017",
+      "family": "seeded-precision",
+      "description": "BUY q=696094971@8 price@32 notional=139218994200000000000000000@23 max=139218994200000000000000000000000@29",
+      "mutations": [
+        "BUY q=696094971@8 price@32 notional=139218994200000000000000000@23 max=139218994200000000000000000000000@29"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": true,
+            "revertData": "0x",
+            "mandateDigest": "0x87981826bc4790fda7368c86648f632b3c2bfa17912d71c39fe9e33dd30f1845",
+            "candidateDigest": "0xf5dec06f019e22a8d02efd3f4ac8ef0604a95cee44b7ba8584b500cc115f8c64",
+            "executionCommitment": "0x3877a396bf2a5cc3ef8b2eb5e1753e11806c097c678ff69d7ccd094b946bae51",
+            "debit": "2010000000000000000000",
+            "credit": "696094971"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-018",
+      "family": "seeded-precision",
+      "description": "BUY q=124727929@8 price@30 notional=249455858000000000@15 max=2494558580000000000000000@22",
+      "mutations": [
+        "BUY q=124727929@8 price@30 notional=249455858000000000@15 max=2494558580000000000000000@22"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": true,
+            "revertData": "0x",
+            "mandateDigest": "0xb7a699b129509ca59798e2f5851ddbe31dac860281e62b486cfe62f370b83436",
+            "candidateDigest": "0xca34e5384147311407523071462e3076a9b7bd92326238ed7bfb4c0dd73318bd",
+            "executionCommitment": "0x5563c5a81f7e25301f0e466a08f245649c07dda29a1fa4c18a8a470b159463cf",
+            "debit": "2010000000000000000000",
+            "credit": "124727929"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-019",
+      "family": "seeded-precision",
+      "description": "SELL q=1938438055212187172@18 price@30 notional=3876876110424374344000000@22 max=38768761104243743@14",
+      "mutations": [
+        "SELL q=1938438055212187172@18 price@30 notional=3876876110424374344000000@22 max=38768761104243743@14"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-020",
+      "family": "seeded-precision",
+      "description": "BUY q=526068877@8 price@22 notional=1052@0 max=105213775399999@11",
+      "mutations": [
+        "BUY q=526068877@8 price@22 notional=1052@0 max=105213775399999@11"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-021",
+      "family": "seeded-precision",
+      "description": "BUY q=605402543@8 price@6 notional=121080508600000000000000000@23 max=1210805086000000000000000000000000@30",
+      "mutations": [
+        "BUY q=605402543@8 price@6 notional=121080508600000000000000000@23 max=1210805086000000000000000000000000@30"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": true,
+            "revertData": "0x",
+            "mandateDigest": "0x8253b728f8b533090a77a03220f8d8acf594ca4922d02557f4cd7b13d85031bc",
+            "candidateDigest": "0x725af9fa87f066e1a833de07233a575a5c874aba9dbcb3ae8a8b14aa5ff1cc8a",
+            "executionCommitment": "0x7d248d76063676bd134d61de528cce68535e816921186d3b92e6ff4c232ea0ec",
+            "debit": "2010000000000000000000",
+            "credit": "605402543"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-022",
+      "family": "seeded-precision",
+      "description": "BUY q=821773658@8 price@21 notional=1643547@3 max=1643547000@6",
+      "mutations": [
+        "BUY q=821773658@8 price@21 notional=1643547@3 max=1643547000@6"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-023",
+      "family": "seeded-precision",
+      "description": "BUY q=1565169934757784357@18 price@11 notional=3130339869515568714000@19 max=3130339869515567@13",
+      "mutations": [
+        "BUY q=1565169934757784357@18 price@11 notional=3130339869515568714000@19 max=3130339869515567@13"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-024",
+      "family": "seeded-precision",
+      "description": "SELL q=222824301@8 price@26 notional=4456486020000000000000000000000000000000@37 max=4456486020000000000000@19",
+      "mutations": [
+        "SELL q=222824301@8 price@26 notional=4456486020000000000000000000000000000000@37 max=4456486020000000000000@19"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": true,
+            "revertData": "0x",
+            "mandateDigest": "0x0436b86102957b757376847dfa9a2a5554f2223d04618232e7345c86120a39f7",
+            "candidateDigest": "0x1bc53d686c7d5c6b35db3c11e9da8157008dcde525d6620d672083bef261b94b",
+            "executionCommitment": "0x310bb4da24a0ee2eed2fd88c97201ec686f90cabc0c5b2838b6fe77050e9523b",
+            "debit": "222824301",
+            "credit": "1"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-025",
+      "family": "seeded-precision",
+      "description": "BUY q=849647531@8 price@23 notional=16992@1 max=1699295061999999999999999999999@27",
+      "mutations": [
+        "BUY q=849647531@8 price@23 notional=16992@1 max=1699295061999999999999999999999@27"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-026",
+      "family": "seeded-precision",
+      "description": "SELL q=500052894030523933@18 price@29 notional=10001057880610478660000@20 max=10001057880610478660000000000000000@32",
+      "mutations": [
+        "SELL q=500052894030523933@18 price@29 notional=10001057880610478660000@20 max=10001057880610478660000000000000000@32"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": true,
+            "revertData": "0x",
+            "mandateDigest": "0xb7da13b05f5d136a2a0a28d29b30b51a73a38a59502097a9d7068a93862948e5",
+            "candidateDigest": "0x6af78ee301cde9e2f08eacdf04a5d40d7ae6413078d7ddf1cef1dbd436e64211",
+            "executionCommitment": "0x66287e5205f04521ef850020a5c14d412a8ab520f8d4e039defda93190dc24e1",
+            "debit": "500052894030523933",
+            "credit": "1"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-027",
+      "family": "seeded-precision",
+      "description": "SELL q=1051193008695738115@18 price@32 notional=21023860173914762300@17 max=21023860173914762300000000000000000000@35",
+      "mutations": [
+        "SELL q=1051193008695738115@18 price@32 notional=21023860173914762300@17 max=21023860173914762300000000000000000000@35"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": true,
+            "revertData": "0x",
+            "mandateDigest": "0x5941076f64da4f7ee89f66b28e4343d05ffb7559fa5f162c160271882a7702f2",
+            "candidateDigest": "0x813193572b573be0bfed3c4790048e5370c1973e95c997b597b6205e7913a3db",
+            "executionCommitment": "0x5f668774dc4f6bbcbba8624c661c2d2140dfe27914de61fec95f0dfaeebac304",
+            "debit": "1051193008695738115",
+            "credit": "1"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-028",
+      "family": "seeded-precision",
+      "description": "SELL q=514379060@8 price@37 notional=102875812000000000000@17 max=1028758120000000000000000000@24",
+      "mutations": [
+        "SELL q=514379060@8 price@37 notional=102875812000000000000@17 max=1028758120000000000000000000@24"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": true,
+            "revertData": "0x",
+            "mandateDigest": "0x09de3b7b484bf914100505c7dc5c5ed60238700ad4eeeca54e2e26fd0bcab826",
+            "candidateDigest": "0x904d337e7429b5a437e80eaa37c231633b4277326d1b1b5617ef098305cdb735",
+            "executionCommitment": "0x35cb8b80cc587536995b7aeb32b597bc07713b44c96310a30ee2e74597b285dd",
+            "debit": "514379060",
+            "credit": "1"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-029",
+      "family": "seeded-precision",
+      "description": "SELL q=5475179757336491579@18 price@20 notional=109503595146729831@14 max=1095035951467298310000@18",
+      "mutations": [
+        "SELL q=5475179757336491579@18 price@20 notional=109503595146729831@14 max=1095035951467298310000@18"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-030",
+      "family": "seeded-precision",
+      "description": "SELL q=12583812@8 price@2 notional=25167@3 max=25167@3",
+      "mutations": [
+        "SELL q=12583812@8 price@2 notional=25167@3 max=25167@3"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-031",
+      "family": "seeded-precision",
+      "description": "SELL q=6638402573091696061@18 price@1 notional=132768@2 max=132768@2",
+      "mutations": [
+        "SELL q=6638402573091696061@18 price@1 notional=132768@2 max=132768@2"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-032",
+      "family": "seeded-precision",
+      "description": "SELL q=6091728452312267565@18 price@23 notional=121834569046245351300000000@23 max=121834569048@8",
+      "mutations": [
+        "SELL q=6091728452312267565@18 price@23 notional=121834569046245351300000000@23 max=121834569048@8"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": true,
+            "revertData": "0x",
+            "mandateDigest": "0xae06c282b888ca28b26069920e7a53b6a61d887aa92d495022acf390c6f1e87e",
+            "candidateDigest": "0x8295e0a06667138c0ed9daa16adbedbb0b47feb8061d747356047922ef1d079a",
+            "executionCommitment": "0xfc9c5f4a1e4688a84edf779d7db1154600c730a45245022da1a425b7966075d4",
+            "debit": "6091728452312267565",
+            "credit": "1"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-033",
+      "family": "seeded-precision",
+      "description": "BUY q=9135916208026235266@18 price@3 notional=182718325@5 max=1827183241605247053200000000000000000001@36",
+      "mutations": [
+        "BUY q=9135916208026235266@18 price@3 notional=182718325@5 max=1827183241605247053200000000000000000001@36"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-034",
+      "family": "seeded-precision",
+      "description": "SELL q=494868602@8 price@35 notional=989@0 max=98900000@5",
+      "mutations": [
+        "SELL q=494868602@8 price@35 notional=989@0 max=98900000@5"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-035",
+      "family": "seeded-precision",
+      "description": "BUY q=214371204@8 price@37 notional=4287424080000000000000000000000000000@34 max=42875@2",
+      "mutations": [
+        "BUY q=214371204@8 price@37 notional=4287424080000000000000000000000000000@34 max=42875@2"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": true,
+            "revertData": "0x",
+            "mandateDigest": "0x29e2a403114eda53d46bc49de07cacd588fa31fa7ac4a904c49fa9c017ca46ca",
+            "candidateDigest": "0x315f0069274cfe6d2e9bda013eca715b9caa74131369ad8f66d35849f6fc1bfc",
+            "executionCommitment": "0x2dc227956cf36fbf2be0b1808c708a92aac68ea3e7112c67ba389b745c2b3b4f",
+            "debit": "2010000000000000000000",
+            "credit": "214371204"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-036",
+      "family": "seeded-precision",
+      "description": "SELL q=4720258676804825750@18 price@22 notional=9440517353609651@13 max=9440517353609651000000@19",
+      "mutations": [
+        "SELL q=4720258676804825750@18 price@22 notional=9440517353609651@13 max=9440517353609651000000@19"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-037",
+      "family": "seeded-precision",
+      "description": "BUY q=6545571961573492157@18 price@15 notional=13091143924@7 max=1309114392314698431400000@21",
+      "mutations": [
+        "BUY q=6545571961573492157@18 price@15 notional=13091143924@7 max=1309114392314698431400000@21"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-038",
+      "family": "seeded-precision",
+      "description": "SELL q=8910399699897920067@18 price@35 notional=1782079@3 max=17820790000000@10",
+      "mutations": [
+        "SELL q=8910399699897920067@18 price@35 notional=1782079@3 max=17820790000000@10"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-039",
+      "family": "seeded-precision",
+      "description": "BUY q=2460335623149079118@18 price@24 notional=49206712462981582360000@20 max=492067124629815823600000000000000000000@36",
+      "mutations": [
+        "BUY q=2460335623149079118@18 price@24 notional=49206712462981582360000@20 max=492067124629815823600000000000000000000@36"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": true,
+            "revertData": "0x",
+            "mandateDigest": "0x14b1699b29514af83771ff280bc6fbe60563cba831323cc46ba33a0897b967bd",
+            "candidateDigest": "0x67d3e7c05bdd1ca800469e37c4fadface3420710213bd5a811bec46dda05f4c1",
+            "executionCommitment": "0xd5cf62a24c0dcd7274a82e37a01696fc2d8f0308e28d8768cf5d151102e5139e",
+            "debit": "2010000000",
+            "credit": "2460335623149079118"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-040",
+      "family": "seeded-precision",
+      "description": "BUY q=2431644291524228348@18 price@25 notional=4863288583@7 max=4863288583000000000000000000000@28",
+      "mutations": [
+        "BUY q=2431644291524228348@18 price@25 notional=4863288583@7 max=4863288583000000000000000000000@28"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-041",
+      "family": "seeded-precision",
+      "description": "SELL q=975611207@8 price@37 notional=1951222414000000000000000000@24 max=19512224139999999999@16",
+      "mutations": [
+        "SELL q=975611207@8 price@37 notional=1951222414000000000000000000@24 max=19512224139999999999@16"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-042",
+      "family": "seeded-precision",
+      "description": "SELL q=1896062852224894998@18 price@14 notional=379213@3 max=379212570444978999600@18",
+      "mutations": [
+        "SELL q=1896062852224894998@18 price@14 notional=379213@3 max=379212570444978999600@18"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-043",
+      "family": "seeded-precision",
+      "description": "SELL q=397727553@8 price@12 notional=79545510600000000000@17 max=79545510600000000000000@20",
+      "mutations": [
+        "SELL q=397727553@8 price@12 notional=79545510600000000000@17 max=79545510600000000000000@20"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": true,
+            "revertData": "0x",
+            "mandateDigest": "0x6f3068e2d88978f8105efab836f855704e03ab919b76d3d7b4c5624de80c17ac",
+            "candidateDigest": "0x4ab8364e3a4ae1890c05f6d08f61c10c89568b92a250fe8ea35cebcf306f0829",
+            "executionCommitment": "0x5fc36c0f7e10038e2c25a4120e2f72f86cd9112033688ea626e03868c0d5e0b4",
+            "debit": "397727553",
+            "credit": "1"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-044",
+      "family": "seeded-precision",
+      "description": "SELL q=5299947923130174374@18 price@37 notional=10599895846260348748000000000000000000000@37 max=10599894@4",
+      "mutations": [
+        "SELL q=5299947923130174374@18 price@37 notional=10599895846260348748000000000000000000000@37 max=10599894@4"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-045",
+      "family": "seeded-precision",
+      "description": "SELL q=1155738976597141340@18 price@22 notional=2311477953194282680000@19 max=23114779531942826800000000@23",
+      "mutations": [
+        "SELL q=1155738976597141340@18 price@22 notional=2311477953194282680000@19 max=23114779531942826800000000@23"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": true,
+            "revertData": "0x",
+            "mandateDigest": "0x824c10abf12ff96376810d8e6544d9eaa1872c9eb15593b788b7f8179719aa4b",
+            "candidateDigest": "0x7b2daa364f4649e64f3dd1fb6bc7dc76c0c61e919f2acd539ba3f532e82fccb7",
+            "executionCommitment": "0x29fdbe490aee887e4f895d1db6eed4f99ffeed1e73538cee078660b3736365cb",
+            "debit": "1155738976597141340",
+            "credit": "1"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-046",
+      "family": "seeded-precision",
+      "description": "SELL q=9661810685621104360@18 price@15 notional=1932362137124@9 max=1932362137124000000000000000000@27",
+      "mutations": [
+        "SELL q=9661810685621104360@18 price@15 notional=1932362137124@9 max=1932362137124000000000000000000@27"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-047",
+      "family": "seeded-precision",
+      "description": "BUY q=2848940031153534731@18 price@36 notional=56978800623@8 max=56978800623000000000000000000000@29",
+      "mutations": [
+        "BUY q=2848940031153534731@18 price@36 notional=56978800623@8 max=56978800623000000000000000000000@29"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-048",
+      "family": "seeded-precision",
+      "description": "BUY q=914514886@8 price@23 notional=1829029772000000000000@18 max=1829029772000000000000000000000@27",
+      "mutations": [
+        "BUY q=914514886@8 price@23 notional=1829029772000000000000@18 max=1829029772000000000000000000000@27"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": true,
+            "revertData": "0x",
+            "mandateDigest": "0x39ef78455df2cf4bbdc92d461b162ffef8f8d0ecf5c28676d7c0270d4dd07955",
+            "candidateDigest": "0x98f18c9e3be9682194527053d5cb4cd27d275565b440a810c357c035fcb54294",
+            "executionCommitment": "0xa5756682fb7ad796e57ff26d026ead164bef1f479c949c8cb91c8cbde64d49d3",
+            "debit": "2010000000000000000000",
+            "credit": "914514886"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-049",
+      "family": "seeded-precision",
+      "description": "SELL q=4561866402825425867@18 price@21 notional=912373280565@9 max=91237328056500000000000000000000000@32",
+      "mutations": [
+        "SELL q=4561866402825425867@18 price@21 notional=912373280565@9 max=91237328056500000000000000000000000@32"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-050",
+      "family": "seeded-precision",
+      "description": "SELL q=857664054@8 price@24 notional=171532810800000000000000@20 max=171532810800000000000000@20",
+      "mutations": [
+        "SELL q=857664054@8 price@24 notional=171532810800000000000000@20 max=171532810800000000000000@20"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": true,
+            "revertData": "0x",
+            "mandateDigest": "0xeea95513a8d6ebed62cbcbab69be7541e45510466fba76604497af5d644b42c3",
+            "candidateDigest": "0xad94aeeb4ce1ec6442bffafb2e3e05ffe0c93509d8c6563fed6e98b70a619a03",
+            "executionCommitment": "0x7f9ab5300daea7b9c715c30b28f5eae224c81f139a9f1046d5356cf47db8d83c",
+            "debit": "857664054",
+            "credit": "1"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-051",
+      "family": "seeded-precision",
+      "description": "BUY q=8571646793716225744@18 price@34 notional=171432935874@8 max=171432935874324514880000000000000000000@35",
+      "mutations": [
+        "BUY q=8571646793716225744@18 price@34 notional=171432935874@8 max=171432935874324514880000000000000000000@35"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": true,
+            "revertData": "0x",
+            "mandateDigest": "0x203453c09e2ecc75b4b3e68c47a29841d907b8b926791ed002c02276e5ac883b",
+            "candidateDigest": "0x7e2505e23970e9e3b1b6cff3f68f4e2ab4207663dc1154e479712daa56b49a96",
+            "executionCommitment": "0x744c76f494a18a499da6662b7efa94f0efdcb748976abdf87c33470f9ee32b5e",
+            "debit": "2010000000",
+            "credit": "8571646793716225744"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-052",
+      "family": "seeded-precision",
+      "description": "BUY q=4948120300692944294@18 price@36 notional=989624060@6 max=98962406000000@11",
+      "mutations": [
+        "BUY q=4948120300692944294@18 price@36 notional=989624060@6 max=98962406000000@11"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-053",
+      "family": "seeded-precision",
+      "description": "BUY q=132055168@8 price@35 notional=2641@1 max=264100000000000000000000000000@27",
+      "mutations": [
+        "BUY q=132055168@8 price@35 notional=2641@1 max=264100000000000000000000000000@27"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-054",
+      "family": "seeded-precision",
+      "description": "BUY q=5071945942881509615@18 price@32 notional=101438@2 max=10143800000000@10",
+      "mutations": [
+        "BUY q=5071945942881509615@18 price@32 notional=101438@2 max=10143800000000@10"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-055",
+      "family": "seeded-precision",
+      "description": "BUY q=2603040771180382867@18 price@4 notional=520608@3 max=52060815423607657340000000000000@29",
+      "mutations": [
+        "BUY q=2603040771180382867@18 price@4 notional=520608@3 max=52060815423607657340000000000000@29"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": true,
+            "revertData": "0x",
+            "mandateDigest": "0x2953def9d71dca8ddcb86daf62e5fdfc6e6867e0d3bb652c2ac115510e74ccb4",
+            "candidateDigest": "0x57d0db54d4340d1e54f74abcbac765e602c7801477511059b9f4df6e7ecdc841",
+            "executionCommitment": "0xca84ba5a5d45604e6f07489aaee11ca59961c2df84712be8e871a94fb5c9a042",
+            "debit": "2010000000",
+            "credit": "2603040771180382867"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-056",
+      "family": "seeded-precision",
+      "description": "BUY q=4642157412683066899@18 price@18 notional=928431482@6 max=9284314820000@10",
+      "mutations": [
+        "BUY q=4642157412683066899@18 price@18 notional=928431482@6 max=9284314820000@10"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-057",
+      "family": "seeded-precision",
+      "description": "SELL q=185722021@8 price@20 notional=37144404200000000@14 max=3714440420000000000@16",
+      "mutations": [
+        "SELL q=185722021@8 price@20 notional=37144404200000000@14 max=3714440420000000000@16"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": true,
+            "revertData": "0x",
+            "mandateDigest": "0xe6cdd65c310a3b01e14128b029234e03fbbd7d3e4a20d10c9be5f01f285908ee",
+            "candidateDigest": "0x783973fcefe1b3290489b1125b5e1105d57731aa3513db838a8246682d800fe5",
+            "executionCommitment": "0x71089df0addf0e4c10262a080ae56e2dbc012f8045edd4a06db2dbf14f99ca15",
+            "debit": "185722021",
+            "credit": "1"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-058",
+      "family": "seeded-precision",
+      "description": "SELL q=218985228606032800@18 price@14 notional=43@0 max=43@0",
+      "mutations": [
+        "SELL q=218985228606032800@18 price@14 notional=43@0 max=43@0"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-059",
+      "family": "seeded-precision",
+      "description": "BUY q=8045271729035282160@18 price@31 notional=160905434580@8 max=1609054345800000000000@18",
+      "mutations": [
+        "BUY q=8045271729035282160@18 price@31 notional=160905434580@8 max=1609054345800000000000@18"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-060",
+      "family": "seeded-precision",
+      "description": "BUY q=6739370216981519172@18 price@12 notional=1347874@3 max=1347874042@6",
+      "mutations": [
+        "BUY q=6739370216981519172@18 price@12 notional=1347874@3 max=1347874042@6"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-061",
+      "family": "seeded-precision",
+      "description": "SELL q=7304310382086824390@18 price@19 notional=14608620764173648780000000000@25 max=14608620764173648780000000000000@28",
+      "mutations": [
+        "SELL q=7304310382086824390@18 price@19 notional=14608620764173648780000000000@25 max=14608620764173648780000000000000@28"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": true,
+            "revertData": "0x",
+            "mandateDigest": "0x5ed7403de746d93a404be93bb3aa057564da1c34c17766223d6198e451ed44b1",
+            "candidateDigest": "0xdf728571b95dfab7966e9590e34b45af936d11dbb51c09c4c4887b95db05fd68",
+            "executionCommitment": "0xbbdd52796818c9dc8188e159a49ed1f931e60dfcabc7dba017835b74b46613ad",
+            "debit": "7304310382086824390",
+            "credit": "1"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-062",
+      "family": "seeded-precision",
+      "description": "SELL q=344472355418474963@18 price@1 notional=688944710836949926@16 max=688944710836949926000000001@25",
+      "mutations": [
+        "SELL q=344472355418474963@18 price@1 notional=688944710836949926@16 max=688944710836949926000000001@25"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": true,
+            "revertData": "0x",
+            "mandateDigest": "0x25017f6129db7025cb991cedd47ec7cb2359608a4e7fbccbc8a9a92d7b08bd44",
+            "candidateDigest": "0x3e37ac06603bd563d25baaaa88b24d815ecbfc674e034e9f91943275591f0d08",
+            "executionCommitment": "0xf4a72dce8a61222e93965fd3c200104f9850b0a33cab48ea27d8f051c353ee3b",
+            "debit": "344472355418474963",
+            "credit": "1"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-063",
+      "family": "seeded-precision",
+      "description": "SELL q=4330862849326588748@18 price@19 notional=866172569865@9 max=86617256986500000000@17",
+      "mutations": [
+        "SELL q=4330862849326588748@18 price@19 notional=866172569865@9 max=86617256986500000000@17"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "precision-064",
+      "family": "seeded-precision",
+      "description": "SELL q=763649473326110617@18 price@28 notional=1527298946@7 max=1527298946652221@13",
+      "mutations": [
+        "SELL q=763649473326110617@18 price@28 notional=1527298946@7 max=1527298946652221@13"
+      ],
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          }
+        }
+      ]
     }
   ],
   "authorityVectors": [
@@ -17290,8 +19235,62 @@
       "expectedGateErrors": [
         "0x18279b24"
       ]
+    },
+    {
+      "id": "authority-017",
+      "responsibility": "ONCHAIN_ENFORCED",
+      "kernelDecision": "REJECT",
+      "kernelReasonCodes": [
+        "MAX_NOTIONAL_EXCEEDED"
+      ],
+      "gateSettled": false,
+      "expectedGateErrors": [
+        "0x2b4aafbf"
+      ]
+    },
+    {
+      "id": "authority-018",
+      "responsibility": "ONCHAIN_ENFORCED",
+      "kernelDecision": "REJECT",
+      "kernelReasonCodes": [
+        "MAX_NOTIONAL_EXCEEDED"
+      ],
+      "gateSettled": false,
+      "expectedGateErrors": [
+        "0x2b4aafbf"
+      ]
+    },
+    {
+      "id": "authority-019",
+      "responsibility": "ONCHAIN_ENFORCED",
+      "kernelDecision": "REJECT",
+      "kernelReasonCodes": [
+        "MAX_NOTIONAL_EXCEEDED"
+      ],
+      "gateSettled": false,
+      "expectedGateErrors": [
+        "0x2b4aafbf"
+      ]
+    },
+    {
+      "id": "authority-020",
+      "responsibility": "ONCHAIN_ENFORCED",
+      "kernelDecision": "REJECT",
+      "kernelReasonCodes": [
+        "MAX_NOTIONAL_EXCEEDED"
+      ],
+      "gateSettled": false,
+      "expectedGateErrors": [
+        "0x2b4aafbf"
+      ]
     }
   ],
+  "precisionAgreement": {
+    "vectors": 64,
+    "rejectedByBoth": 38,
+    "admittedByBoth": 26,
+    "declaredWithinButTrueAbove": 27
+  },
   "mandateEncodings": [
     {
       "id": "mandate-1",

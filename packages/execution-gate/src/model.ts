@@ -42,6 +42,7 @@ import {
   type Bytes32,
   type CanonicalMandate,
   type ExecutionCandidate,
+  type Price,
 } from '@mandate/kernel';
 import { caip2, eip712Hash, executionCommitment, gateDomain, representationIdFor } from './commitment.ts';
 import { reject, type GateRejection } from './errors.ts';
@@ -349,6 +350,12 @@ function checkEconomics(
   const max = compareAmounts(candidate.notional, mandate.maxNotional);
   if (!max.ok) return fail('EconomicUnitMismatch');
   if (max.value > 0) return fail('MaxNotionalExceeded');
+  // The kernel's own rule (checkMaxNotional): the true quantity x price at the
+  // principal's precision, rounded up, never the agent's chosen rendering. The
+  // gate's price is the pinned fixture price, which the check above proved equal.
+  const product = notionalBounds(candidate.quantity, market.fixturePrice as Price, mandate.maxNotional.unit, mandate.maxNotional.decimals);
+  if (!product.ok && product.error !== 'VALUE_OUT_OF_RANGE') return fail('EconomicUnitMismatch');
+  if (!product.ok || product.value.ceilAtoms > mandate.maxNotional.atoms) return fail('MaxNotionalExceeded');
 
   if (mandate.side === 'BUY') {
     const debit = addAmounts(candidate.notional, candidate.feeTotal);

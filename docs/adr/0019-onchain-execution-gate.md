@@ -20,6 +20,10 @@ closes that gap without changing MCE v2, Candidate V3, or Phases 1–5:
   signed `maxNotional`, and declared BUY/SELL fee-inclusive economics;
 - the only supported `FIXTURE` market pins its engineered price immutably, so an
   agent cannot choose a zero or distorted price to evade `maxNotional`;
+- *(Phase 6R.1)* `maxNotional` bounds the true quantity × fixture price at the
+  principal's signed precision, so the agent's choice of declared-notional
+  precision cannot widen it (audit M-1), and the constructor proves each
+  fixture venue settles at exactly the pinned price;
 - representation quantity is strict FILL_OR_KILL on both sides;
 - real-market configurations are rejected until they have an authenticated,
   inclusion-time state source;
@@ -103,7 +107,8 @@ that has no registry.
 
 Before transferring anything, the gate establishes that the candidate price is
 the immutable fixture price, quantity × price brackets the declared notional by
-the kernel's exact integer rule, declared notional is within signed
+the kernel's exact integer rule, the true quantity × fixture price rendered at
+the principal's signed precision (and the declared notional) is within signed
 `maxNotional`, and fees preserve the side-specific signed economic limit. It
 then transfers the bound input, calls the adapter, and settles on measured
 balance deltas: BUY representation credit and SELL representation debit equal

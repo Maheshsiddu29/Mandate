@@ -186,7 +186,8 @@ agent's bound execution cannot settle through the fixture path.** It re-derives 
 principal's existing signature and the agent's signed execution commitment under
 one EIP-712 domain, uses chain time, consumes the mandate digest atomically, binds
 the candidate to immutable market facts, and settles on the principal's
-candidate notional arithmetic, signed `maxNotional`, immutable fixture price and
+candidate notional arithmetic, signed `maxNotional` against the true quantity ×
+price at the principal's precision, immutable fixture price and
 declared economics, then settles exact quantity and *measured* balance deltas
 against the signed economic bound. Every trader and
 every agent uses the same gate; there are no modes.

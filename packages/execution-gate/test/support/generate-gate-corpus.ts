@@ -42,6 +42,7 @@ import {
   decodeGateCandidate,
   decodeGateMandate,
   gateDomain,
+  gateRevertData,
   representationIdFor,
   toGateCandidate,
   toGateMandate,
@@ -80,6 +81,7 @@ import {
 export const GATE_CORPUS_VERSION = 1;
 export const SEEDED_VECTOR_COUNT = 120;
 export const SEEDED_VALIDATION_COUNT = 120;
+export const SEEDED_PRECISION_COUNT = 64;
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
 
@@ -109,6 +111,9 @@ const QTY = 10n * E18;
 const BUY_COST = 2_006n * E6;
 const SELL_PROCEEDS = 1_994n * E6;
 const BUY_REFUND = 2_010n * E6 - BUY_COST;
+
+const usdAt = (atoms: bigint, decimals = 18) => ({ unit: 'USD', decimals, atoms });
+const tokens = (atoms: bigint, decimals = 18) => ({ unit: 'TOKEN', decimals, atoms });
 
 const buyOk = (): Script => honest(QTY, BUY_REFUND);
 const sellOk = (): Script => honest(SELL_PROCEEDS);
@@ -282,6 +287,31 @@ function handWritten(): VectorSpec[] {
     one('authority-016', 'malicious-agent', 'Correct agent signs a quantity unit inconsistent with the pinned representation.', e(withCandidate(buy, {
       quantity: { unit: 'SHARE', decimals: 18, atoms: QTY },
     }))),
+
+    // --- M-1: the candidate's notional precision cannot widen maxNotional ------
+    // Each is what the pre-6R.1 gate settled: the declared notional, rounded at
+    // a precision the agent chose, is at or below the bound; the true product
+    // of quantity and the fixture price is not. The scripts are honest, so the
+    // only thing standing between these and settlement is the maxNotional check.
+    one('authority-017', 'malicious-agent', 'Audit PoC (BUY): true gross 1.99 USD under a 1 USD maxNotional, notional declared at 0 decimals as 1.', {
+      unsigned: withCandidate(withMandate(buy, { maxNotional: usdAt(E18) }), { quantity: tokens(9_950n * 10n ** 12n), notional: usdAt(1n, 0), feeTotal: usdAt(0n, 0) }),
+      script: honest(9_950n * 10n ** 12n, 0n),
+    }),
+    one('authority-018', 'malicious-agent', 'Audit PoC (SELL): true gross 100.99 USD under a 100 USD maxNotional, notional declared at 0 decimals as 100.', {
+      unsigned: withTerms(
+        withCandidate(withMandate(sell, { maxNotional: usdAt(100n * E18), economicLimit: usdAt(100n * E18) }), { quantity: tokens(504_950n * 10n ** 12n), notional: usdAt(100n, 0), feeTotal: usdAt(0n, 0) }),
+        { fundingLimit: 100n * E6 },
+      ),
+      script: honest(100_990_000n),
+    }),
+    one('authority-019', 'malicious-agent', 'Audit PoC (BUY): a positive 0.40 USD trade under maxNotional = 0, notional declared at 0 decimals as 0.', {
+      unsigned: withCandidate(withMandate(buy, { maxNotional: usdAt(0n) }), { quantity: tokens(2n * 10n ** 15n), notional: usdAt(0n, 0), feeTotal: usdAt(0n, 0) }),
+      script: honest(2n * 10n ** 15n, 0n),
+    }),
+    one('authority-020', 'malicious-agent', 'Notional declared at 6 decimals rounds a 200-atom excess over an 18-decimal maxNotional away.', {
+      unsigned: withCandidate(buy, { quantity: tokens(QTY + 1n), notional: usdAt(2_000n * E6, 6) }),
+      script: honest(QTY + 1n, BUY_REFUND),
+    }),
     one('profile-001', 'execution-profile', 'Route data one byte above the Phase 6 executable profile.', e(withTerms(buy, { executionData: '0x' + '00'.repeat(4_097) }))),
 
     // --- settlement deltas -------------------------------------------------------
@@ -318,6 +348,85 @@ function handWritten(): VectorSpec[] {
     one('struct-009', 'candidate-structure', 'Candidate identifier with a trailing separator.', e(withCandidate(buy, { evaluationStateId: 'state.fixture.' }))),
     one('struct-010', 'candidate-structure', 'Candidate price at 39 decimals.', e(withCandidate(buy, { executionPrice: { numeratorUnit: 'USD', denominatorUnit: 'TOKEN', decimals: 39, atoms: 1n } }))),
   ];
+}
+
+// --- Seeded precision ---------------------------------------------------------
+
+/**
+ * Randomized precision combinations for the maxNotional authority rule (M-1).
+ *
+ * Honest adapters, honest price, quantity on both markets and sides; only the
+ * precisions move: execution price, declared notional (floor or ceil of the true
+ * product) and the principal's maxNotional, whose atoms sit one either side of
+ * the true product at its own precision. The generator asks the actual kernel
+ * about every one and refuses to write a corpus in which the kernel's
+ * MAX_NOTIONAL_EXCEEDED and the gate's MaxNotionalExceeded ever disagree.
+ */
+function seededPrecision(count: number): { spec: VectorSpec; params: string }[] {
+  const r = rng(0x70726563);
+  const int = (n: number): number => Math.floor(r() * n);
+  const big = (max: bigint): bigint => {
+    let v = 0n;
+    for (let i = 0; i < 8; i += 1) v = (v << 32n) | BigInt(Math.floor(r() * 2 ** 32));
+    return v % (max + 1n);
+  };
+  const productAt = (q: bigint, qd: number, p: bigint, pd: number, d: number) => {
+    const num = q * p * 10n ** BigInt(d);
+    const den = 10n ** BigInt(qd + pd);
+    const floor = num / den;
+    return { floor, ceil: num % den === 0n ? floor : floor + 1n };
+  };
+
+  const out: { spec: VectorSpec; params: string }[] = [];
+  for (let i = 0; i < count; i += 1) {
+    const isSell = int(2) === 1;
+    const eight = int(4) === 0;
+    const qd = eight ? 8 : 18;
+    const unit = 10n ** BigInt(qd);
+    const q = 1n + big(10n * unit);
+    const pd = int(39);
+    const p = 200n * 10n ** BigInt(pd);
+    const md = int(39);
+    // Two thirds of the vectors are the M-1 shape: the bound is exactly the
+    // agent's coarse declared value, so only the true product can exceed it.
+    const bypass = int(3) !== 0;
+    const nd = bypass ? int(md + 1) : int(39);
+    const declared = productAt(q, qd, p, pd, nd);
+    const exact = productAt(q, qd, p, pd, md);
+    const notionalAtoms = bypass || int(2) === 0 ? declared.floor : declared.ceil;
+    const near = [exact.floor - 1n, exact.floor, exact.ceil, exact.ceil + 1n].filter((x) => x >= 0n);
+    const maxAtoms = bypass ? notionalAtoms * 10n ** BigInt(md - nd) : (near[int(near.length)] as bigint);
+
+    const base = isSell ? baseSell() : baseBuy();
+    const fundingUnit = eight ? E18 : E6;
+    const u = withTerms(
+      withCandidate(
+        withMandate(base, {
+          maxNotional: usdAt(maxAtoms, md),
+          economicLimit: isSell ? usdAt(0n, 0) : usdAt(2_010n * E18),
+        }),
+        {
+          ...(eight ? { representationId: representationIdFor(CHAIN_ID, ADDR.eightDecimal), venue: 'venue.other' } : {}),
+          quantity: tokens(q, qd),
+          executionPrice: { numeratorUnit: 'USD', denominatorUnit: 'TOKEN', decimals: pd, atoms: p },
+          notional: usdAt(notionalAtoms, nd),
+          feeTotal: usdAt(0n, 0),
+        },
+      ),
+      { fundingLimit: isSell ? 0n : 2_010n * fundingUnit },
+    );
+    const params = `${isSell ? 'SELL' : 'BUY'} q=${q}@${qd} price@${pd} notional=${notionalAtoms}@${nd} max=${maxAtoms}@${md}`;
+    out.push({
+      params,
+      spec: {
+        id: `precision-${String(i + 1).padStart(3, '0')}`,
+        family: 'seeded-precision',
+        description: params,
+        attempts: [{ unsigned: u, script: isSell ? honest(1n) : honest(q, 0n) }],
+      },
+    });
+  }
+  return out;
 }
 
 // --- Seeded mutations ----------------------------------------------------------
@@ -528,6 +637,13 @@ interface BuiltVector {
 }
 
 function kernelReasons(vector: BuiltVector): readonly string[] {
+  const receipt = kernelReceipt(vector);
+  if (receipt.decision !== Decision.REJECT) throw new Error(`${vector.id}: actual kernel unexpectedly passed`);
+  return receipt.reasonCodes;
+}
+
+/** The actual kernel's verdict on a vector's first attempt, in trusted state that matches the fixture market. */
+function kernelReceipt(vector: BuiltVector): ReturnType<typeof verify> {
   const first = vector.attempts[0];
   if (first === undefined) throw new Error(`${vector.id}: authority vector has no attempt`);
   const attempt = first.sim.attempt;
@@ -584,8 +700,33 @@ function kernelReasons(vector: BuiltVector): readonly string[] {
     clock: { nowUnixSeconds: T0 },
     expectedDomain: DOMAIN,
   });
-  if (receipt.decision !== Decision.REJECT) throw new Error(`${vector.id}: actual kernel unexpectedly passed`);
-  return receipt.reasonCodes;
+  return receipt;
+}
+
+const MAX_NOTIONAL_REVERT = gateRevertData({ error: 'MaxNotionalExceeded', args: [] });
+
+/**
+ * Kernel and gate agree on every seeded-precision vector's maxNotional verdict,
+ * or the corpus is not written. Returns the tally the corpus records.
+ */
+function precisionAgreement(vectors: readonly BuiltVector[]) {
+  let rejectedByBoth = 0;
+  let admittedByBoth = 0;
+  let declaredWithinButTrueAbove = 0;
+  for (const v of vectors) {
+    const attempt = v.attempts[0];
+    if (attempt === undefined) throw new Error(`${v.id}: no attempt`);
+    const kernel = kernelReceipt(v).reasonCodes.includes('MAX_NOTIONAL_EXCEEDED');
+    const gate = attempt.expected.revertData === MAX_NOTIONAL_REVERT;
+    if (kernel !== gate) throw new Error(`${v.id}: kernel maxNotional ${kernel} but gate ${gate} (${v.description})`);
+    if (kernel) rejectedByBoth += 1;
+    else admittedByBoth += 1;
+    const c = attempt.sim.attempt.candidate;
+    const m = attempt.sim.attempt.mandate;
+    const declaredWithin = c.notional.atoms * 10n ** BigInt(m.maxNotional.decimals) <= m.maxNotional.atoms * 10n ** BigInt(c.notional.decimals);
+    if (kernel && declaredWithin) declaredWithinButTrueAbove += 1;
+  }
+  return { vectors: vectors.length, rejectedByBoth, admittedByBoth, declaredWithinButTrueAbove };
 }
 
 function build(spec: VectorSpec): BuiltVector {
@@ -629,7 +770,9 @@ export function generateGateCorpus(): GateCorpus {
     ...build({ id: `seeded-${String(i + 1).padStart(3, '0')}`, family: 'seeded-mutation', description: s.mutations.join(', '), attempts: [s.spec] }),
     mutations: s.mutations,
   }));
-  const vectors = [...hand, ...seeded];
+  const precision = seededPrecision(SEEDED_PRECISION_COUNT).map((p) => ({ ...build(p.spec), mutations: [p.params] }));
+  const precisionTally = precisionAgreement(precision);
+  const vectors = [...hand, ...seeded, ...precision];
   const authorityVectors = hand.filter((v) => v.family === 'malicious-agent');
   const authorityEvidence = authorityVectors.map((v) => ({ vector: v, kernelReasonCodes: kernelReasons(v) }));
   const fromCorpora = corpusInputs();
@@ -653,6 +796,7 @@ export function generateGateCorpus(): GateCorpus {
       settledAttempts: settled,
       revertedAttempts: attempts - settled,
       maliciousAgentKernelRejectAttempts: authorityVectors.length,
+      precisionVectors: precision.length,
       mandateEncodings: mandateEncodings.length,
       candidateEncodings: candidateEncodings.length,
     },
@@ -666,7 +810,7 @@ export function generateGateCorpus(): GateCorpus {
         timestamp: a.sim.moment.timestamp,
         expected: a.expected,
         // Full inputs only for the hand-written families; seeded inputs are in `abi`.
-        ...(v.family === 'seeded-mutation' ? {} : { script: a.sim.script, input: a.sim.attempt }),
+        ...(v.family.startsWith('seeded-') ? {} : { script: a.sim.script, input: a.sim.attempt }),
       })),
     })),
     authorityVectors: authorityEvidence.map(({ vector, kernelReasonCodes }) => ({
@@ -677,6 +821,7 @@ export function generateGateCorpus(): GateCorpus {
       gateSettled: vector.attempts.some((a) => a.expected.settled),
       expectedGateErrors: vector.attempts.map((a) => a.expected.revertData.slice(0, 10)),
     })),
+    precisionAgreement: precisionTally,
     mandateEncodings: mandateEncodings.map((m) => ({ id: m.id, source: m.source, validity: m.validity, digest: m.digest })),
     candidateEncodings: candidateEncodings.map((c) => ({ id: c.id, source: c.source, valid: c.valid, digest: c.digest })),
   };
