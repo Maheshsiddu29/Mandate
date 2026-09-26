@@ -83,7 +83,7 @@ so this table doubles as a coverage map.
 
 | ID | Name | Enforcement point | Condition |
 | --- | --- | --- | --- |
-| `MND-ECON-001` | `MAX_NOTIONAL_EXCEEDED` | E_ECONOMIC_BOUNDS | The candidate notional exceeds the mandate maximum notional. |
+| `MND-ECON-001` | `MAX_NOTIONAL_EXCEEDED` | E_ECONOMIC_BOUNDS | The candidate gross notional exceeds the mandate maximum notional: either the exact quantity times execution price, at the mandate precision, or the declared notional. |
 | `MND-ECON-002` | `PRICE_DEVIATION_EXCEEDED` | E_ECONOMIC_BOUNDS | The execution price deviates from the trusted reference price by more than the mandate maximum, measured in basis points and rounded up. |
 | `MND-ECON-003` | `SIDE_MISMATCH` | G_INTENT_FIDELITY | The candidate side is not the side the mandate authorizes. |
 | `MND-ECON-004` | `TOTAL_DEBIT_EXCEEDED` | E_ECONOMIC_BOUNDS | On a BUY, notional plus the candidate fee total exceeds the mandate economic limit, which a BUY mandate carries as a maximum total debit. Fees are part of what the principal spends, so they are inside the bound rather than beside it. |

@@ -295,16 +295,49 @@ const checkNotionalConsistency: Check = {
   },
 };
 
+/**
+ * Principal `maxNotional` bounds the *true* gross notional, not the candidate's
+ * rendering of it.
+ *
+ * The candidate chooses the precision its notional is declared at, and
+ * `checkNotionalConsistency` accepts either adjacent value at that precision. A
+ * coarse precision therefore lets a declared notional sit almost a whole unit
+ * below `quantity * executionPrice` — at `decimals: 0`, a 1.99 USD trade
+ * declares 1 and a 0.40 USD trade declares 0. Comparing only the declared value
+ * let an agent widen the principal's bound by choosing its own rounding
+ * (Phase 6R.1, M-1).
+ *
+ * So the exact product is rendered at the *principal's* signed precision and
+ * rounded up: `ceil(q * p at maxNotional.decimals) > maxNotional.atoms` holds
+ * exactly when `q * p > maxNotional`, because the bound is an integer at that
+ * scale. A product too large to render in uint256 at that scale certainly
+ * exceeds a uint256 bound, so it is the same violation, not an arithmetic
+ * error. The declared notional is still compared, first, so every receipt that
+ * rejected before this check existed is unchanged; the product comparison can
+ * only add rejections.
+ */
 const checkMaxNotional: Check = {
   name: 'max-notional',
   run: (ctx) => {
-    const cmp = compareAmounts(ctx.candidate.notional, ctx.mandate.maxNotional);
+    const c = ctx.candidate;
+    const max = ctx.mandate.maxNotional;
+    const cmp = compareAmounts(c.notional, max);
     if (!cmp.ok) return [violation(cmp.error, { check: 'max-notional' })];
-    return cmp.value > 0
+    if (cmp.value > 0) {
+      return [violation('MAX_NOTIONAL_EXCEEDED', { declared: String(c.notional.atoms), maximum: String(max.atoms) })];
+    }
+
+    const product = notionalBounds(c.quantity, c.executionPrice, max.unit, max.decimals);
+    if (!product.ok && product.error !== 'VALUE_OUT_OF_RANGE') {
+      return [violation(product.error, { check: 'max-notional' })];
+    }
+    return !product.ok || product.value.ceilAtoms > max.atoms
       ? [
           violation('MAX_NOTIONAL_EXCEEDED', {
-            declared: String(ctx.candidate.notional.atoms),
-            maximum: String(ctx.mandate.maxNotional.atoms),
+            basis: 'quantity-times-execution-price',
+            productCeil: product.ok ? String(product.value.ceilAtoms) : 'beyond-uint256',
+            maximum: String(max.atoms),
+            maximumDecimals: String(max.decimals),
           }),
         ]
       : none;

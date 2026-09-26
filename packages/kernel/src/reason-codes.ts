@@ -328,7 +328,7 @@ const DEFINITIONS = [
     name: 'MAX_NOTIONAL_EXCEEDED',
     family: F.ECON,
     enforcementPoint: E.E_ECONOMIC_BOUNDS,
-    developerMessage: 'The candidate notional exceeds the mandate maximum notional.',
+    developerMessage: 'The candidate gross notional exceeds the mandate maximum notional: either the exact quantity times execution price, at the mandate precision, or the declared notional.',
     humanMessage: 'This trade is larger than the amount you authorized.',
   },
   {

@@ -947,7 +947,9 @@ because they can run before any market data is fetched.
 
 **E. Economic bounds** — candidate quote and mandate limits.
 
-- notional within maximum notional;
+- notional within maximum notional — the exact quantity × execution price at
+  the principal's signed precision, not only the candidate's declared rendering
+  of it, whose precision the candidate chooses;
 - execution price within the price limit;
 - expected deviation within the maximum execution deviation;
 - amounts and decimals internally consistent; units explicit.
