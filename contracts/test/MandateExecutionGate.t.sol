@@ -350,8 +350,9 @@ contract MandateExecutionGateTest is GateTestBase {
         bytes memory oldAuthorization = _signExecution(oldMandate, c, t);
         Mandate memory newMandate = _mandate();
         newMandate.nonce = 2;
+        bytes memory newPrincipalAuthorization = _signMandate(newMandate);
         vm.expectRevert(MandateExecutionGate.AgentSignatureInvalid.selector);
-        gate.execute(newMandate, _signMandate(newMandate), c, t, oldAuthorization);
+        gate.execute(newMandate, newPrincipalAuthorization, c, t, oldAuthorization);
     }
 
     // ------------------------------------------------------------------

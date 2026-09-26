@@ -15,8 +15,8 @@ library GateArithmetic {
 
     function compare(uint256 a, uint8 aDecimals, uint256 b, uint8 bDecimals) internal pure returns (int8) {
         if (aDecimals == bDecimals) return a < b ? int8(-1) : a > b ? int8(1) : int8(0);
-        Wide memory left;
-        Wide memory right;
+        Wide memory left = Wide({high: 0, low: 0});
+        Wide memory right = Wide({high: 0, low: 0});
         if (aDecimals < bDecimals) {
             left = _scale(a, bDecimals - aDecimals);
             right.low = b;
@@ -46,6 +46,9 @@ library GateArithmetic {
         }
 
         uint256 denominator = _pow10(sourceDecimals - uint16(targetDecimals));
+        // Only the high limb determines whether the quotient can fit uint256;
+        // `mulDiv` and `mulmod` below independently consume the full product.
+        // slither-disable-next-line unused-return
         (uint256 high,) = Math.mul512(quantity, price);
         if (high >= denominator) return (false, 0, 0);
         floorAtoms = Math.mulDiv(quantity, price, denominator);

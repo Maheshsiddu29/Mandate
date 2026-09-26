@@ -105,5 +105,6 @@ test('exports are classified: one class-A boundary, everything else a typed inte
     'settleExecution', // B
     'toGateCandidate',
     'toGateMandate',
+    'validateExecutionProfile', // B: typed pre-signing configuration validator
   ]);
 });
