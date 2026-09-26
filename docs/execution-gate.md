@@ -436,7 +436,7 @@ Invariants, each checked after every call of every run:
 | INV-ONCHAIN-7 | Unsupported token, adapter or venue combinations never settle |
 | INV-ONCHAIN-8 *(added)* | The principal's balances move by exactly the reported measured amounts, and nothing else |
 | INV-ONCHAIN-9 *(added)* | The gate never holds funds or grants an allowance |
-| INV-ONCHAIN-AUTH-1 | Every settlement satisfies signed `maxNotional` |
+| INV-ONCHAIN-AUTH-1 | Every settlement's *true* gross — quantity × the venue's settlement price, compared with the signed bound at its signed precision by the handler's own cross-multiplication — satisfies signed `maxNotional`, whatever precision the agent declared |
 | INV-ONCHAIN-AUTH-2 | Every settlement satisfies exact quantity |
 | INV-ONCHAIN-AUTH-3/4 | Every BUY/SELL satisfies its measured signed economic bound |
 | INV-ONCHAIN-AUTH-5 | A correctly signing malicious agent cannot settle a generated static principal-policy violation |
@@ -445,7 +445,13 @@ INV-ONCHAIN-6 holds without qualification here: every external action on the
 supported path is inside the reverting transaction. The handler exercises honest,
 under-delivering, over-refunding, redirecting, reverting, garbage-returning and
 over-pulling adapter behaviour, tampered payloads, unsupported markets, exact
-replays and random chain time.
+replays and random chain time on the scripted adapter, and — since 6R.1 — the
+real `FixtureVenue` / `FixtureVenueAdapter` market on both sides, with the agent
+choosing quantity, declared notional precision and rounding while the
+principal's bound is placed at the agent's coarse declared value (the M-1 shape)
+or one side of the true product. The deterministic non-vacuity test asserts the
+three audit PoC shapes are attempted and refused on the real path and that BUY
+and SELL settle there.
 
 **The suites are discriminating, not only green.** During development each was
 run against deliberately broken gates: inclusive expiry, reordered checks,
@@ -455,6 +461,14 @@ corpus; dropped consumption, dropped debit checks and dropped credit checks were
 each caught by the invariants. The first invariant campaign also exposed a
 vacuous handler (the runner resets the chain ID between calls), fixed in the
 handler; a deterministic test now asserts the handler reaches settlement.
+
+Phase 6R.1 repeated this for M-1: with only the gate's true-product comparison
+removed, `INV-ONCHAIN-AUTH-1` failed on its own (the fuzzer shrank the sequence
+to a single `executeFixturePrecision` call), the non-vacuity test failed, both
+differential tests failed at `authority-017`, and nine of the ten
+`MaxNotional.t.sol` tests failed (the tenth is a positive control). The
+Phase 6R handler could not have caught it: it compared only declared notional
+atoms, which is exactly the value the agent controls.
 
 ## 11. Differential testing and the onchain/offchain split
 

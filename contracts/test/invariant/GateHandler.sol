@@ -2,7 +2,9 @@
 pragma solidity 0.8.37;
 
 import {MandateExecutionGate} from "../../src/MandateExecutionGate.sol";
-import {Candidate, ExecutionTerms, Mandate, SIDE_BUY, SIDE_SELL} from "../../src/MandateTypes.sol";
+import {Amount, Candidate, ExecutionTerms, Mandate, SIDE_BUY, SIDE_SELL} from "../../src/MandateTypes.sol";
+import {FixtureVenue} from "../../src/fixture/FixtureVenue.sol";
+import {FixtureVenueAdapter} from "../../src/fixture/FixtureVenueAdapter.sol";
 import {MockERC20} from "../mocks/MockTokens.sol";
 import {ScriptedAdapter} from "../mocks/ScriptedAdapter.sol";
 import {CodecHarness} from "../utils/CodecHarness.sol";
@@ -13,6 +15,14 @@ import {GateTestBase} from "../utils/GateTestBase.sol";
 ///
 /// Inherits the world builders from `GateTestBase` and is pointed at the test's
 /// deployment; only the functions named in `selectors()` are fuzzed.
+///
+/// Two execution paths: the scripted adapter, which can misbehave in every way
+/// an adapter can, and the real `FixtureVenue` / `FixtureVenueAdapter` market,
+/// where the agent varies only the precisions and the principal's bound.
+/// `maxNotionalViolations` is defined on the *true* gross — quantity times the
+/// venue's own settlement price, compared with the signed bound at its signed
+/// precision by plain cross-multiplication — never on the candidate's declared
+/// notional, whose precision is the agent's choice (Phase 6R.1, M-1).
 contract GateHandler is GateTestBase {
     uint256 public constant POOL = 24;
     uint256 public constant BUY_BOUND = 2_010e6; // floor of the signed 2010 USD MAX_TOTAL_DEBIT
@@ -34,6 +44,14 @@ contract GateHandler is GateTestBase {
     uint256 public replaySuccesses;
     uint256 public maliciousAgentSuccesses;
     uint256 public maxNotionalViolations;
+    uint256 public fixtureBuySettled;
+    uint256 public fixtureSellSettled;
+    uint256 public fixtureTokenCredits;
+    uint256 public fixtureTokenDebits;
+    /// @dev Attempts whose declared notional is within the bound while the true gross is not.
+    uint256 public coarsePrecisionAttempts;
+    uint256 public coarsePrecisionRefusals;
+    uint256 internal fixtureNonce;
     uint256 public exactFillViolations;
     uint256 public calls;
     uint256 public settled;
@@ -46,9 +64,15 @@ contract GateHandler is GateTestBase {
         ScriptedAdapter scripted_,
         MockERC20 funding_,
         MockERC20 token_,
+        MockERC20 fixtureToken_,
+        FixtureVenue fixtureVenue_,
+        FixtureVenueAdapter fixtureAdapter_,
         address principal_,
         address agent_
     ) {
+        aapl = fixtureToken_;
+        aaplVenue = fixtureVenue_;
+        aaplAdapter = fixtureAdapter_;
         gate = gate_;
         harness = harness_;
         scripted = scripted_;
@@ -62,12 +86,13 @@ contract GateHandler is GateTestBase {
     }
 
     function selectors() external pure returns (bytes4[] memory s) {
-        s = new bytes4[](5);
+        s = new bytes4[](6);
         s[0] = this.execute.selector;
         s[1] = this.executeTampered.selector;
         s[2] = this.executeUnsupported.selector;
         s[3] = this.replayLast.selector;
         s[4] = this.executeMalicious.selector;
+        s[5] = this.executeFixturePrecision.selector;
     }
 
     function digestCount() external view returns (uint256) {
@@ -165,7 +190,94 @@ contract GateHandler is GateTestBase {
             if (debit > c.quantity.atoms) sellDebitViolations += 1;
             if (debit != c.quantity.atoms) exactFillViolations += 1;
         }
-        if (c.notional.atoms > m.maxNotional.atoms) maxNotionalViolations += 1;
+        if (_trueGrossExceeds(c.quantity.atoms, AAPL_PRICE, m.maxNotional)) maxNotionalViolations += 1;
+    }
+
+    /// @dev True gross notional against the signed bound, independently of the
+    /// gate's arithmetic: `quantity * price` in 10^-(18+6) USD against
+    /// `maxNotional` lifted to the same scale. Operands are bounded so the plain
+    /// products cannot overflow (quantity <= 1e21, price <= 1e9, decimals <= 38,
+    /// atoms <= 1e43).
+    function _trueGrossExceeds(uint256 quantity, uint256 fundingAtomsPerToken, Amount memory maxNotional)
+        internal
+        pure
+        returns (bool)
+    {
+        return quantity * fundingAtomsPerToken * 10 ** uint256(maxNotional.decimals) > maxNotional.atoms * 1e24;
+    }
+
+    /// @dev `quantity * price` at `decimals`, floor and ceil, by the same plain arithmetic.
+    function _product(uint256 quantity, uint256 price, uint8 decimals) internal pure returns (uint256 f, uint256 c) {
+        uint256 numerator = quantity * price * 10 ** uint256(decimals);
+        f = numerator / 1e24;
+        c = numerator % 1e24 == 0 ? f : f + 1;
+    }
+
+    /// Real fixture market. Correctly signed by principal and agent; the agent
+    /// picks the quantity, the precision it declares the notional at and which
+    /// way it rounds; the principal's bound is placed around the true product —
+    /// half the time exactly at the agent's coarse declared value (the M-1 shape).
+    function executeFixturePrecision(
+        uint256 quantitySeed,
+        uint8 notionalDecimals,
+        uint8 maxDecimals,
+        uint8 shape,
+        bool roundUp,
+        bool sell
+    ) external {
+        vm.warp(T0);
+        uint256 quantity = bound(quantitySeed, 1e12, 100e18);
+        uint8 nd = uint8(bound(notionalDecimals, 0, 38));
+        uint8 md = uint8(bound(maxDecimals, 0, 38));
+        uint256 price = aaplVenue.PRICE();
+        (uint256 declaredFloor, uint256 declaredCeil) = _product(quantity, price, nd);
+        uint256 declared = roundUp ? declaredCeil : declaredFloor;
+        (uint256 exactFloor, uint256 exactCeil) = _product(quantity, price, md);
+        uint256 s = shape % 4;
+        uint256 maxAtoms = s < 2 && nd <= md ? declared * 10 ** uint256(md - nd) : s == 2 ? exactCeil : exactFloor;
+
+        uint8 side = sell ? SIDE_SELL : SIDE_BUY;
+        Mandate memory m = sell ? _sellMandate() : _mandate();
+        m.nonce = uint64(1_000_000 + ++fixtureNonce);
+        m.maxNotional = Amount({unit: "USD", decimals: md, atoms: maxAtoms});
+        m.economicLimit = Amount({unit: "USD", decimals: 0, atoms: sell ? 0 : 1e12});
+        Candidate memory c = _candidateFor(address(aapl), side);
+        c.quantity.atoms = quantity;
+        c.notional = Amount({unit: "USD", decimals: nd, atoms: declared});
+        c.feeTotal = Amount({unit: "USD", decimals: 0, atoms: 0});
+        ExecutionTerms memory t = _terms();
+        t.fundingLimit = sell ? aaplVenue.quoteSell(quantity) : aaplVenue.quoteBuy(quantity);
+
+        // Declared within the bound, compared at the finer of the two scales.
+        bool declaredWithin =
+            nd <= md ? declared * 10 ** uint256(md - nd) <= maxAtoms : declared <= maxAtoms * 10 ** uint256(nd - md);
+        bool coarse = declaredWithin && _trueGrossExceeds(quantity, price, m.maxNotional);
+        if (coarse) coarsePrecisionAttempts += 1;
+
+        bytes32 digest = harness.mandateDigest(m);
+        digests.push(digest);
+        (bool ok, uint256 debit, uint256 credit) = _submit(m, _signMandate(m), c, t, _signExecution(m, c, t));
+        if (!ok) {
+            if (coarse) coarsePrecisionRefusals += 1;
+            return;
+        }
+        successes[digest] += 1;
+        signedCommitmentOf[digest] = _commitment(m, c, t);
+        settled += 1;
+        if (sell) {
+            fixtureSellSettled += 1;
+            sellCredits += credit;
+            fixtureTokenDebits += debit;
+            if (credit < t.fundingLimit) sellFloorViolations += 1;
+            if (debit != quantity) exactFillViolations += 1;
+        } else {
+            fixtureBuySettled += 1;
+            buyDebits += debit;
+            fixtureTokenCredits += credit;
+            if (debit > t.fundingLimit) buyBoundViolations += 1;
+            if (credit != quantity) exactFillViolations += 1;
+        }
+        if (_trueGrossExceeds(quantity, price, m.maxNotional)) maxNotionalViolations += 1;
     }
 
     /// Signs honestly, then changes one committed field. Must never settle.
@@ -213,7 +325,7 @@ contract GateHandler is GateTestBase {
         Mandate memory m = _poolMandate(i);
         Candidate memory c = _scriptedCandidate(i % 2 == 0 ? SIDE_BUY : SIDE_SELL);
         ExecutionTerms memory t = _poolTerms(i, i % 2 == 0 ? 0 : type(uint256).max);
-        uint256 kind = attack % 8;
+        uint256 kind = attack % 9;
         if (kind == 0) {
             c.quantity.atoms *= 2;
             c.notional.atoms *= 2;
@@ -229,10 +341,15 @@ contract GateHandler is GateTestBase {
             c.venue = "venue.fixture";
         } else if (kind == 6) {
             t.recipient = address(0xdead);
-        } else {
+        } else if (kind == 7) {
             c.executionPrice.atoms = 100e18;
             c.notional.atoms = 1_000e18;
             c.feeTotal.atoms = 3e18;
+        } else {
+            // M-1: 10.001 tokens is 2000.2 USD, over the 2000 USD bound; declared
+            // at 0 decimals it rounds down to exactly the bound.
+            c.quantity.atoms = 10.001e18;
+            c.notional = Amount({unit: "USD", decimals: 0, atoms: 2_000});
         }
         _script(0, i, t, c.quantity.atoms);
         (bool ok,,) = _submit(m, _signMandate(m), c, t, _signExecution(m, c, t));

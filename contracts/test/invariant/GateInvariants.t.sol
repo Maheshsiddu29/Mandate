@@ -11,10 +11,13 @@ contract GateInvariantsTest is StdInvariant, GateTestBase {
     GateHandler internal handler;
     uint256 internal fundingAtStart;
     uint256 internal tokensAtStart;
+    uint256 internal fixtureTokensAtStart;
 
     function setUp() public override {
         super.setUp();
-        handler = new GateHandler(gate, harness, scripted, funding, scriptedToken, principal, agent);
+        handler = new GateHandler(
+            gate, harness, scripted, funding, scriptedToken, aapl, aaplVenue, aaplAdapter, principal, agent
+        );
         // The principal's mistake the over-pull behaviour exploits: a direct,
         // standing allowance to an adapter. The gate's debit bound must still hold.
         vm.startPrank(principal);
@@ -23,6 +26,7 @@ contract GateInvariantsTest is StdInvariant, GateTestBase {
         vm.stopPrank();
         fundingAtStart = funding.balanceOf(principal);
         tokensAtStart = scriptedToken.balanceOf(principal);
+        fixtureTokensAtStart = aapl.balanceOf(principal);
         targetContract(address(handler));
         targetSelector(FuzzSelector({addr: address(handler), selectors: handler.selectors()}));
     }
@@ -79,6 +83,10 @@ contract GateInvariantsTest is StdInvariant, GateTestBase {
     function invariant_onchain8_principalLedgerConserved() public view {
         assertEq(funding.balanceOf(principal), fundingAtStart - handler.buyDebits() + handler.sellCredits());
         assertEq(scriptedToken.balanceOf(principal), tokensAtStart + handler.buyCredits() - handler.sellDebits());
+        assertEq(
+            aapl.balanceOf(principal),
+            fixtureTokensAtStart + handler.fixtureTokenCredits() - handler.fixtureTokenDebits()
+        );
     }
 
     /// INV-ONCHAIN-9 (added): the gate never holds funds or grants an allowance.
@@ -87,10 +95,18 @@ contract GateInvariantsTest is StdInvariant, GateTestBase {
         assertEq(scriptedToken.balanceOf(address(gate)), 0);
         assertEq(funding.allowance(address(gate), address(scripted)), 0);
         assertEq(scriptedToken.allowance(address(gate), address(scripted)), 0);
+        // The real fixture path leaves nothing behind either: no gate or adapter
+        // balance, and the adapter's venue allowance is reset to zero.
+        assertEq(aapl.balanceOf(address(gate)), 0);
+        assertEq(funding.balanceOf(address(aaplAdapter)), 0);
+        assertEq(aapl.balanceOf(address(aaplAdapter)), 0);
+        assertEq(funding.allowance(address(aaplAdapter), address(aaplVenue)), 0);
+        assertEq(aapl.allowance(address(aaplAdapter), address(aaplVenue)), 0);
     }
 
-    /// INV-ONCHAIN-AUTH-1: every successful execution stayed at or below
-    /// principal-signed maxNotional.
+    /// INV-ONCHAIN-AUTH-1: every successful execution's *true* gross — quantity
+    /// times the venue's settlement price — stayed at or below the principal-signed
+    /// maxNotional at its signed precision, whatever precision the agent declared.
     function invariant_onchainAuth1_maxNotionalAlwaysHolds() public view {
         assertEq(handler.maxNotionalViolations(), 0);
     }
@@ -129,14 +145,25 @@ contract GateInvariantsTest is StdInvariant, GateTestBase {
         }
         handler.executeUnsupported(0, address(0xbad), false);
         handler.executeUnsupported(1, address(0), true);
-        for (uint256 attack = 0; attack < 8; ++attack) {
+        for (uint256 attack = 0; attack < 9; ++attack) {
             handler.executeMalicious(attack, attack);
         }
+        // The real fixture market: the audit PoC shapes and honest trades on both
+        // sides. 0.00995 fAAPL is 1.99 USD; the bound is its 0-decimal floor, 1.
+        handler.executeFixturePrecision(9_950e12, 0, 0, 0, false, false);
+        handler.executeFixturePrecision(504_950e12, 0, 0, 0, false, true);
+        handler.executeFixturePrecision(2e15, 0, 18, 0, false, false);
+        assertEq(handler.coarsePrecisionAttempts(), 3);
+        assertEq(handler.coarsePrecisionRefusals(), 3);
+        handler.executeFixturePrecision(9_950e12, 0, 2, 2, false, false);
+        handler.executeFixturePrecision(504_950e12, 0, 2, 2, false, true);
+        assertEq(handler.fixtureBuySettled(), 1);
+        assertEq(handler.fixtureSellSettled(), 1);
         // A second round finds every authorization consumed.
         for (uint256 i = 0; i < handler.POOL(); ++i) {
             handler.execute(i, 0, 0, T0);
         }
-        assertEq(handler.settled(), handler.POOL());
+        assertEq(handler.settled(), handler.POOL() + 2);
 
         invariant_onchain1_2_atMostOneSettlementPerAuthorization();
         invariant_onchain3_settlementsCarryTheirSignedCommitment();
