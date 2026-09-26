@@ -387,15 +387,26 @@ data that is not already public in the transaction's calldata.
 | Which execution? | The stored commitment, and the `MandateExecuted` log that carries it |
 | Actual delivered amounts | `actualDebit`, `actualCredit` in the log |
 | Transaction identity | The log's transaction hash |
-| Did it revert? | Not consumed at a final block **past the attempt's deadline** |
+| Did it fail? | Not consumed at a final block whose timestamp has **reached the mandate's expiry** — not merely one attempt's deadline |
 
 `observationFromGateEvidence` (`packages/execution-gate/src/reconciliation.ts`)
 turns a reading into the kernel's `ExecutionObservation`, or refuses:
 `NOT_FINAL` below the required level; `EVIDENCE_MISMATCH` for another chain,
 gate or mandate; `EVIDENCE_INCONSISTENT` for a consumption without its log or
-vice versa; `OUTCOME_UNESTABLISHED` for an unconsumed mandate while the deadline
-has not passed, because a reverted receipt does not exclude a byte-identical copy
-being included; `EVIDENCE_MALFORMED` for any malformed input. A `SETTLED` from a
+vice versa; `OUTCOME_UNESTABLISHED` for an unconsumed mandate while final chain
+time is still before the mandate's `expiresAt`; `EVIDENCE_MALFORMED` for any
+malformed input. The attempt record therefore carries the signed mandate expiry,
+not the attempt deadline. The replay key is the mandate digest, so until expiry
+the agent may sign another execution of the same mandate with a later deadline
+and the gate will settle it; one attempt's deadline passing establishes nothing
+about the authorization (Phase 6R.1 — before it, this module reported `FAILED`
+there, and the kernel's `RECONCILE` would have returned an authorization that
+could still be consumed to `UNUSED`). At `expiresAt` the gate refuses every
+attempt and chain timestamps never decrease, so a final unconsumed reading there
+is the first point at which no execution opportunity remains. The cost is
+liveness only: a mandate whose attempts all reverted stays unresolved until it
+expires, while a retry inside the window remains a further attempt under the
+same reservation. A `SETTLED` from a
 different signed attempt is still `SETTLED` — the authorization is consumed — and
 the settling commitment is returned so the discrepancy is surfaced. A test drives
 the result through the kernel's own `applyTransition(RECONCILE)`.

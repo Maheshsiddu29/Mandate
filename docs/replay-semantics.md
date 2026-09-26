@@ -357,8 +357,8 @@ gate into the `ExecutionObservation` that `RECONCILE` requires:
 | Reading (at the required confirmation level) | Observation |
 | --- | --- |
 | Consumed, with the matching `MandateExecuted` log | `SETTLED`, referenced by transaction hash — even if a different signed attempt consumed it |
-| Not consumed, at a block **past the attempt's deadline** | `FAILED`, referenced by the attempt's commitment |
-| Not consumed, deadline not yet passed | no observation: a copy of the signed attempt may still land |
+| Not consumed, at a block whose timestamp has **reached the mandate's expiry** | `FAILED`, referenced by the attempt's commitment |
+| Not consumed, mandate not yet expired — even if this attempt's deadline has passed | no observation: any attempt the agent signs under this mandate may still land (Phase 6R.1) |
 | Below the required confirmation level, contradictory or malformed | no observation |
 
 Two consequences for this state machine. First, a double reserve that an

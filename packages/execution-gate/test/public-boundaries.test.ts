@@ -34,7 +34,7 @@ const HOSTILE_PLAIN_VALUES: readonly unknown[] = [
 
 const D = (b: string) => `0x${b.repeat(32)}`;
 const valid = {
-  attempt: { chainId: 46630n, gate: '0x000000000000000000000000000000000000a7e0', mandateDigest: D('11'), executionCommitment: D('22'), deadline: 1_800_000_300n },
+  attempt: { chainId: 46630n, gate: '0x000000000000000000000000000000000000a7e0', mandateDigest: D('11'), executionCommitment: D('22'), mandateExpiresAtUnixSeconds: 1_800_003_600n },
   evidence: {
     level: ConfirmationLevel.FINALIZED,
     chainId: 46630n,

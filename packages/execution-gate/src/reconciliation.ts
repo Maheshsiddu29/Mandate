@@ -20,18 +20,28 @@
  *   `MandateExecuted` log is SETTLED — the authorization is consumed, whichever
  *   signed attempt consumed it;
  * - `executionCommitmentOf(mandateDigest) == 0` is FAILED **only** once the
- *   state read is at a block past the attempt's deadline, because before then
- *   the signed attempt can still land. A reverted receipt is not enough on its
- *   own: a byte-identical copy of the same attempt may have been included by
- *   someone else;
+ *   state read is at a block whose timestamp has reached the *mandate's*
+ *   expiry. The replay key is the mandate digest, not the attempt: until the
+ *   mandate expires, the agent can sign another execution of it with a later
+ *   deadline, and the gate will settle that one. One attempt's deadline passing
+ *   therefore says nothing about whether the authorization will be consumed
+ *   (Phase 6R.1). At expiry the gate refuses every attempt (`MandateExpired`,
+ *   exclusive, like the kernel), and chain timestamps never decrease, so a
+ *   final reading there is the first point at which no execution opportunity
+ *   remains. A reverted receipt is never enough on its own;
  * - anything contradictory is refused, never repaired.
  *
  * It is a public plain-value boundary (docs/public-trust-boundaries.md, class A):
  * evidence arrives from an RPC reader, so every argument is parsed strictly
  * first and a malformed one is `EVIDENCE_MALFORMED`, never an exception.
  *
- * The onchain gate already makes double settlement impossible, so a FAILED here
- * is an availability decision for the offchain record, not a safety one.
+ * The onchain gate already makes double settlement impossible. What a premature
+ * FAILED would break is the offchain record: the kernel's `RECONCILE` with
+ * FAILED returns the authorization to UNUSED, which must never happen while an
+ * attempt that would consume it can still land. The price is that a mandate
+ * whose attempts all reverted stays unresolved until it expires; a retry inside
+ * the window is a further attempt under the same reservation, not a
+ * reconciliation.
  */
 
 import {
@@ -81,7 +91,11 @@ export interface GateAttemptRecord {
   readonly gate: Address;
   readonly mandateDigest: Bytes32;
   readonly executionCommitment: Bytes32;
-  readonly deadline: bigint;
+  /**
+   * The signed mandate's `expiresAtUnixSeconds`. Not this attempt's deadline:
+   * any attempt under the mandate can settle until the mandate expires.
+   */
+  readonly mandateExpiresAtUnixSeconds: bigint;
 }
 
 /** One reading of the gate, taken at one block. */
@@ -156,11 +170,14 @@ function parseAttempt(raw: unknown): GateAttemptRecord | undefined {
   const gate = address(r['gate']);
   const mandateDigest = bytes32(r['mandateDigest']);
   const executionCommitment = bytes32(r['executionCommitment']);
-  const deadline = unsigned(r['deadline']);
-  if (chainId === undefined || gate === undefined || mandateDigest === undefined || executionCommitment === undefined || deadline === undefined) {
+  const mandateExpiresAtUnixSeconds = unixSeconds(r['mandateExpiresAtUnixSeconds']);
+  if (
+    chainId === undefined || gate === undefined || mandateDigest === undefined || executionCommitment === undefined ||
+    mandateExpiresAtUnixSeconds === undefined
+  ) {
     return undefined;
   }
-  return { chainId, gate, mandateDigest, executionCommitment, deadline };
+  return { chainId, gate, mandateDigest, executionCommitment, mandateExpiresAtUnixSeconds };
 }
 
 function parseEvidence(raw: unknown): GateChainEvidence | undefined {
@@ -222,8 +239,8 @@ export function observationFromGateEvidence(rawAttempt: unknown, rawEvidence: un
     settledCommitment = evidence.consumedCommitment;
   } else {
     if (evidence.settlement !== null) return refuse('EVIDENCE_INCONSISTENT');
-    // Until chain time passes the deadline, the signed attempt can still land.
-    if (evidence.blockTimestamp <= attempt.deadline) return refuse('OUTCOME_UNESTABLISHED');
+    // Until chain time reaches the mandate's expiry, some attempt can still land.
+    if (evidence.blockTimestamp < attempt.mandateExpiresAtUnixSeconds) return refuse('OUTCOME_UNESTABLISHED');
     outcome = ReconciledOutcome.FAILED;
     reference = attempt.executionCommitment;
   }
