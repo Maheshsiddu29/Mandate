@@ -3,12 +3,17 @@ import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
 import { GATE_ERRORS, errorSignature, selectorOf } from '../src/index.ts';
-import { MAX_EXECUTION_DATA_BYTES, MAX_PROFILE_SET_SIZE } from '../src/model.ts';
+import { MAX_EXECUTION_DATA_BYTES, MAX_PROFILE_SET_SIZE, decodeGateCandidate, decodeGateMandate } from '../src/model.ts';
 import { abiEncodeArguments, bytes, CANDIDATE, MANDATE, TERMS, tuple } from './support/abi.ts';
 import { READABLE_PATH, SEEDED_PRECISION_COUNT, generateGateCorpus, serialize } from './support/generate-gate-corpus.ts';
 import { baseBuy, sign } from './support/world.ts';
 
 const REPO_ROOT = new URL('../../../', import.meta.url);
+
+/** Kernel IDENTIFIER_MAX_LENGTH. */
+const IDENTIFIER_MAX = 128;
+/** Pinned by contracts/test/Profile.t.sol as well; the two must agree. */
+const WORST_CASE_CALLDATA_BYTES = 18_596;
 
 describe('gate differential corpus', () => {
   const generated = generateGateCorpus();
@@ -84,21 +89,53 @@ describe('gate differential corpus', () => {
     }
   });
 
-  it('measures the worst-case Phase 6 profile calldata with headroom below the target default', () => {
-    const identifiers = Array.from({ length: MAX_PROFILE_SET_SIZE }, (_, i) =>
-      `id${i.toString().padStart(2, '0')}${'x'.repeat(124)}`,
-    );
-    const unsigned = baseBuy();
+  it('reproduces the worst-case executable calldata Profile.t.sol settles, byte for byte in size', () => {
+    // Every string a deployment or mandate can choose is a maximal identifier;
+    // every set is at the profile maximum with the one entry the market needs;
+    // route data is 4,096 non-zero bytes. Same shape as contracts/test/Profile.t.sol.
+    const id = (head: string, index: number): string =>
+      head + 'x'.repeat(IDENTIFIER_MAX - head.length - 2) + String(index).padStart(2, '0');
+    const set = (head: string, required: string): string[] => {
+      const maximal = required.length === IDENTIFIER_MAX;
+      return [required, ...Array.from({ length: MAX_PROFILE_SET_SIZE - 1 }, (_, i) => id(head, maximal ? i + 1 : i))];
+    };
+    const asset = { assetClass: id('class.', 0), idScheme: id('scheme.', 0), value: id('value.', 0) };
+    const [issuer, venue, qunit, sunit] = [id('issuer.', 0), id('venue.', 0), id('qunit.', 0), id('sunit.', 0)];
+    const base = baseBuy();
     const attempt = sign({
       mandate: {
-        ...unsigned.mandate,
-        allowedIssuers: identifiers,
-        allowedChains: identifiers,
-        allowedVenues: identifiers,
+        ...base.mandate,
+        mandateId: '0x' + 'ff'.repeat(32),
+        nonce: 2n ** 64n - 1n,
+        canonicalAsset: asset,
+        maxNotional: { unit: sunit, decimals: 0, atoms: 2n ** 256n - 1n },
+        economicLimit: { unit: sunit, decimals: 0, atoms: 2n ** 256n - 1n },
+        allowedIssuers: set('issuer.', issuer),
+        allowedChains: set('chain.', base.candidate.chain),
+        allowedVenues: set('venue.', venue),
+        requiredCorporateActionEpoch: 2n ** 64n - 1n,
+        maxPriceAgeSeconds: 2n ** 32n - 1n,
+        maxCorporateActionAgeSeconds: 2n ** 32n - 1n,
       },
-      candidate: unsigned.candidate,
-      terms: { ...unsigned.terms, executionData: '0x' + '00'.repeat(MAX_EXECUTION_DATA_BYTES) },
+      candidate: {
+        ...base.candidate,
+        canonicalAsset: asset,
+        issuer,
+        venue,
+        quantity: { ...base.candidate.quantity, unit: qunit },
+        executionPrice: { ...base.candidate.executionPrice, numeratorUnit: sunit, denominatorUnit: qunit },
+        notional: { ...base.candidate.notional, unit: sunit },
+        feeTotal: { ...base.candidate.feeTotal, unit: sunit },
+        evaluationStateId: id('state.', 0),
+        evaluationStateDigest: '0x' + 'ff'.repeat(32),
+        registrySnapshotDigest: '0x' + 'ff'.repeat(32),
+        corporateActionEpoch: 2n ** 64n - 1n,
+      },
+      terms: { ...base.terms, deadline: 2n ** 64n - 1n, executionData: '0x' + 'ff'.repeat(MAX_EXECUTION_DATA_BYTES) },
     });
+    // The kernel accepts both halves: this is an executable shape, not merely an encodable one.
+    assert.ok(decodeGateMandate(attempt.mandate).ok);
+    assert.ok(decodeGateCandidate(attempt.candidate).ok);
     const args = tuple(
       ['mandate', MANDATE],
       ['principalSignature', bytes],
@@ -106,12 +143,13 @@ describe('gate differential corpus', () => {
       ['terms', TERMS],
       ['agentSignature', bytes],
     );
-    const encoded = abiEncodeArguments(args, attempt).slice(2);
-    const calldata = `ffffffff${encoded}`;
-    const bytesTotal = calldata.length / 2;
-    let calldataGas = 0;
-    for (let i = 0; i < calldata.length; i += 2) calldataGas += calldata.slice(i, i + 2) === '00' ? 4 : 16;
-    assert.ok(bytesTotal < 47_500, `worst-case calldata ${bytesTotal} lacks 50% headroom below 95,000 bytes`);
-    assert.ok(calldataGas + 21_000 < 1_000_000, `intrinsic calldata gas unexpectedly high: ${calldataGas + 21_000}`);
+    const calldata = `ffffffff${abiEncodeArguments(args, attempt).slice(2)}`;
+    const size = calldata.length / 2;
+    assert.equal(size, WORST_CASE_CALLDATA_BYTES, 'must equal Profile.t.sol WORST_CASE_CALLDATA_BYTES');
+    // 95,000 bytes is Nitro's default max-tx-data-size: keep at least 50% headroom.
+    assert.ok(size < 47_500);
+    let nonZero = 0;
+    for (let k = 0; k < calldata.length; k += 2) if (calldata.slice(k, k + 2) !== '00') nonZero += 1;
+    assert.ok(21_000 + 16 * nonZero + 4 * (size - nonZero) < 21_000 + 16 * size);
   });
 });

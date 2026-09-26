@@ -438,6 +438,7 @@ Run: `npm run contracts:test` (regenerates the corpus ABI, then `forge test`).
 | `invariant/GateInvariants.t.sol` | 12 invariants × 256 runs × depth 64, plus a deterministic non-vacuity test | Below |
 | `Differential.t.sol` | 4 | §11 |
 | `MaxNotional.t.sol` | 9 + 1 fuzz × 1,024 runs | Phase 6R.1 M-1 on the real fixture path: the audit PoCs, declared precision 0–38 with every signature valid, one atom either side at the principal's precision, decimal-conversion boundaries, huge-quantity/tiny-price and tiny-quantity/huge-price, 512-bit intermediates, randomized precision combinations on both sides |
+| `Profile.t.sol` | 1 | The worst-case executable attempt — maximal identifiers, full sets, 4,096 non-zero route bytes — settles; calldata size pinned jointly with `corpus.test.ts`; intrinsic and execution gas logged (§13) |
 | `DeployScript.t.sol` | 6 | §13, including exact typed-price conversion and the constructor's refusal of a mismatched venue |
 
 Invariants, each checked after every call of every run:
@@ -601,10 +602,25 @@ policy and never lives in the gate.
   `REAL_MARKET` construction reverts `RealMarketStateSourceRequired` until an
   authenticated inclusion-time state source exists.
 - The executable profile is at most 16 issuers, 16 chains, 16 venues, 4,096
-  route bytes and 32 constructor markets. Worst-case measured calldata is 17,156
-  bytes with 172,784 intrinsic calldata gas; a local maximum-profile execution
-  used 1,673,113 gas. The Nitro node default is 95,000 transaction-data bytes,
-  so calldata retains more than 80% headroom.
+  route bytes and 32 constructor markets. The worst case is measured, settled and
+  reproduced independently (Phase 6R.1): every string a deployment or mandate
+  can choose is a maximal 128-byte identifier (canonical asset, issuer, venue,
+  both units, all 15 optional entries of each set, the evaluation-state
+  identifier), route data is 4,096 **non-zero** bytes, and every free numeric
+  field is at its maximum. `Profile.t.sol` settles that attempt and
+  `corpus.test.ts` rebuilds it with the TypeScript ABI encoder; both pin
+  **18,596 calldata bytes** (5,669 zero, 12,927 non-zero). Intrinsic calldata gas
+  is **250,508** under EIP-2028 pricing, at most 318,536 if every byte were
+  non-zero, and at most 764,840 under an EIP-7623-style 40-gas floor; Arbitrum
+  additionally charges for L1 data, which is not modelled here. The settled
+  `execute` call used **6,646,656 gas** through an adapter that only fills, so
+  the figure is the gate's. Gas grows linearly with identifier length
+  (≈1.13M at 16-byte identifiers, ≈3.49M at 64) because the gate validates and
+  re-encodes every identifier byte to re-derive the digests. The Nitro node
+  default is 95,000 transaction-data bytes, so calldata keeps more than 80%
+  headroom. The Phase 6R figures (17,156 bytes, 172,784 intrinsic gas,
+  1,673,113 execution gas) were understated: they used ~14-byte identifiers,
+  all-zero route data, and a gas window that included test-side signing.
 - Fixture deployments require non-upgradeable representation tokens, funding
   tokens, adapters and venue targets. A deployment review must record address,
   chain, runtime codehash, proxy status and implementation/codehash. The

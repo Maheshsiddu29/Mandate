@@ -110,6 +110,12 @@ constructor markets. Solidity checks it independently and the TypeScript package
 exports a pre-signing `validateExecutionProfile` check. Below/exact/above
 boundaries are tested.
 
+> **Superseded in Phase 6R.1.** The figures below were understated (short
+> identifiers, all-zero route data, signing inside the gas window). The
+> reproduced worst case is 18,596 bytes, 250,508 intrinsic calldata gas and
+> 6,646,656 execution gas; see [execution-gate.md §13](execution-gate.md#13-deployment-policy)
+>.
+
 Worst-case encoded `execute` calldata is **17,156 bytes** and its intrinsic
 calldata gas is **172,784**. A local exact-profile settlement measured
 **1,673,113 execution gas**. Offchain Labs' Nitro configuration documents a

@@ -846,7 +846,10 @@ contract MandateExecutionGateTest is GateTestBase {
         _expectRevert(m, _candidate(), _terms(), _err(MandateExecutionGate.ExecutionProfileExceeded.selector));
     }
 
-    function test_profile_maximumExecutableInputSettlesAndMeasuresGas() public {
+    /// @notice Full sets and full route data settle. The worst-case *size and
+    /// gas* measurement, with maximal identifiers and non-zero route data, is
+    /// `Profile.t.sol`.
+    function test_profile_maximumSetsAndRouteDataSettle() public {
         Mandate memory m = _mandate();
         string[] memory values = new string[](gate.MAX_PROFILE_SET_SIZE());
         values[0] = "issuer.alpha";
@@ -874,9 +877,7 @@ contract MandateExecutionGateTest is GateTestBase {
         t.executionData = new bytes(gate.MAX_EXECUTION_DATA_BYTES());
         Candidate memory c = _scriptedCandidate(SIDE_BUY);
         _scriptHonest(c.quantity.atoms, 4e6);
-        uint256 beforeGas = gasleft();
         _execute(m, c, t);
-        emit log_named_uint("max-profile execute gas", beforeGas - gasleft());
     }
 
     function test_refuses_recipientOtherThanThePrincipal() public {
