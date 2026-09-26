@@ -61,9 +61,23 @@
  * its fields, so its deadline is the one the chain would enforce; and the
  * reservation is the kernel's own replay record for that digest.
  *
+ * ## An observation resolves only the reservation it was derived from (Phase 6R.1b)
+ *
+ * The verdicts above hold for the reservation in the record they were derived
+ * from, and for no other. A mandate whose attempts failed is reserved again, and
+ * the new reservation admits new attempts; a FAILED observation derived from the
+ * earlier record — delivered late, or derived afresh from an out-of-date copy of
+ * it — says nothing about them. So the observation carries that record's
+ * `reservationGeneration`, taken from the record and from nowhere else, and the
+ * kernel's `RECONCILE` refuses it against a record of any other generation
+ * (`STALE_RESERVATION_OBSERVATION`). The mandate digest cannot make this
+ * distinction: every reservation of one mandate shares it.
+ *
  * The one assumption is signing discipline: the agent signs attempts only
- * through `admitAttemptUnderReservation`. An attempt signed outside it is not
- * bounded by the reservation. It still cannot settle twice — the gate consumes
+ * through `admitAttemptUnderReservation`. Mandate-supported agents must create
+ * execution authorizations through it for these guarantees to hold; the gate
+ * cannot enforce it, because the signed authorization deliberately carries no
+ * reservation. An attempt signed outside it is not bounded by the reservation. It still cannot settle twice — the gate consumes
  * the digest at most once — and if it settles, reconciliation reports `SETTLED`
  * with `settledByRecordedAttempt: false`. A record that itself carries an attempt
  * past its reservation proves the discipline was broken, so it is refused until
@@ -458,6 +472,8 @@ export function observationFromGateEvidence(rawRecord: unknown, rawEvidence: unk
     observedAtUnixSeconds: evidence.observedAtUnixSeconds,
     sourceId: policy.sourceId,
     reference,
+    // The reservation this reading was judged against, and so the only one it can resolve.
+    reservationGeneration: value.reservation.reservationGeneration,
   });
   if (!observation.ok) return refuse('OBSERVATION_INVALID');
   return { ok: true, observation: observation.value, settledCommitment, settledByRecordedAttempt, failureBasis };

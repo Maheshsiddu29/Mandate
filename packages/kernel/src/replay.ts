@@ -19,6 +19,10 @@
  *   (ADR 0018). An attempt that neither settles nor is observed to fail leaves
  *   the mandate reserved until its reservation lapses, and a lapsed reservation
  *   quarantines rather than freeing the authorization.
+ * - Every reservation of a key has its own generation, and an observation
+ *   applies only to the generation it was derived from (Phase 6R.1b). A mandate
+ *   can be reserved, fail, and be reserved again, so the key alone does not say
+ *   which reservation an observation is about.
  *
  * ## Totality at this boundary
  *
@@ -97,7 +101,23 @@ export interface ExecutionObservation {
   readonly sourceId: Identifier;
   /** What was observed: the transaction or settlement reference the outcome is about. */
   readonly reference: Bytes32;
+  /**
+   * The `reservationGeneration` of the record the observation was derived from.
+   *
+   * Copied from that record by whatever derives the observation, never chosen
+   * on its own: `RECONCILE` applies the observation only to a record of the same
+   * generation, so an observation about an earlier reservation of the same
+   * mandate cannot resolve a later one (`STALE_RESERVATION_OBSERVATION`).
+   */
+  readonly reservationGeneration: bigint;
 }
+
+/**
+ * The largest reservation generation, the uint64 range. `RESERVE` refuses to
+ * go past it rather than wrap, because a wrapped generation would repeat one an
+ * earlier observation may carry.
+ */
+export const MAX_RESERVATION_GENERATION = 2n ** 64n - 1n;
 
 export const ReplayTransition = {
   /** Taken after a PASS and before anything is signed. */
@@ -155,6 +175,12 @@ export const ReplayError = {
   OBSERVATION_REQUIRED: 'OBSERVATION_REQUIRED',
   /** The observation is present but not well-formed, including an unrecognized outcome. */
   OBSERVATION_INVALID: 'OBSERVATION_INVALID',
+  /**
+   * The observation was derived from a different reservation of this key than
+   * the one the record now holds. It is well-formed and may be true, but it is
+   * about another attempt, so it resolves nothing here.
+   */
+  STALE_RESERVATION_OBSERVATION: 'STALE_RESERVATION_OBSERVATION',
 } as const;
 export type ReplayError = (typeof ReplayError)[keyof typeof ReplayError];
 
@@ -181,6 +207,17 @@ export interface ReplayRecord {
    * from an asserted one.
    */
   readonly resolution: ExecutionObservation | null;
+  /**
+   * Which reservation of this key the record is on: 0 before the first, and
+   * one more on every `RESERVE`. `QUARANTINE` and `RECONCILE` keep it, so a
+   * record returned to `UNUSED` still names the reservation that just ended and
+   * the next `RESERVE` takes a number no earlier reservation had.
+   *
+   * A counter rather than the reservation's start time: a reservation can begin
+   * in the same second the previous one was reconciled, so two reservations of
+   * one key can share a start time. Generations never repeat.
+   */
+  readonly reservationGeneration: bigint;
 }
 
 export function unusedRecord(key: Bytes32, at: UnixSeconds): ReplayRecord {
@@ -190,7 +227,12 @@ export function unusedRecord(key: Bytes32, at: UnixSeconds): ReplayRecord {
     updatedAtUnixSeconds: at,
     reservationExpiresAtUnixSeconds: null,
     resolution: null,
+    reservationGeneration: 0n,
   };
+}
+
+function parseGeneration(raw: unknown): bigint | undefined {
+  return typeof raw === 'bigint' && raw >= 0n && raw <= MAX_RESERVATION_GENERATION ? raw : undefined;
 }
 
 export interface TransitionRequest {
@@ -244,7 +286,7 @@ export function parseReconciledOutcome(raw: unknown): Result<ReconciledOutcome, 
 export function parseExecutionObservation(raw: unknown): Result<ExecutionObservation, ReplayError> {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return err(ReplayError.OBSERVATION_INVALID);
   const r = raw as Record<string, unknown>;
-  const known = new Set(['outcome', 'observedAtUnixSeconds', 'sourceId', 'reference']);
+  const known = new Set(['outcome', 'observedAtUnixSeconds', 'sourceId', 'reference', 'reservationGeneration']);
   for (const key of Object.keys(r)) if (!known.has(key)) return err(ReplayError.OBSERVATION_INVALID);
   const outcome = parseReconciledOutcome(r['outcome']);
   if (!outcome.ok) return outcome;
@@ -254,11 +296,15 @@ export function parseExecutionObservation(raw: unknown): Result<ExecutionObserva
   if (!sourceId.ok) return err(ReplayError.OBSERVATION_INVALID);
   const reference = parseBytes32(r['reference'], 'MALFORMED_TRUSTED_STATE');
   if (!reference.ok) return err(ReplayError.OBSERVATION_INVALID);
+  // Generation 0 is the record before any reservation; there is nothing to observe about it.
+  const generation = parseGeneration(r['reservationGeneration']);
+  if (generation === undefined || generation === 0n) return err(ReplayError.OBSERVATION_INVALID);
   return ok({
     outcome: outcome.value,
     observedAtUnixSeconds: observedAt.value,
     sourceId: sourceId.value,
     reference: reference.value,
+    reservationGeneration: generation,
   });
 }
 
@@ -274,7 +320,7 @@ export function parseReplayRecord(raw: unknown): Result<ReplayRecord, ReplayErro
     return err(ReplayError.MALFORMED_RECORD);
   }
   const r = raw as Record<string, unknown>;
-  const known = new Set(['key', 'status', 'updatedAtUnixSeconds', 'reservationExpiresAtUnixSeconds', 'resolution']);
+  const known = new Set(['key', 'status', 'updatedAtUnixSeconds', 'reservationExpiresAtUnixSeconds', 'resolution', 'reservationGeneration']);
   for (const field of Object.keys(r)) if (!known.has(field)) return err(ReplayError.MALFORMED_RECORD);
 
   const key = parseBytes32(r['key'], 'MALFORMED_TRUSTED_STATE');
@@ -307,17 +353,24 @@ export function parseReplayRecord(raw: unknown): Result<ReplayRecord, ReplayErro
     resolution = parsedResolution.value;
   }
 
+  const generation = parseGeneration(r['reservationGeneration']);
+  if (generation === undefined) return err(ReplayError.MALFORMED_RECORD);
+
   const hasReservation = expiry !== null && expiry > updatedAt.value;
   const hasNoReservation = expiry === null;
   const resolutionNotAfterState = resolution === null || resolution.observedAtUnixSeconds <= updatedAt.value;
+  // A resolution is about the reservation that just ended, which is the one the record still names.
+  const resolutionOfThisGeneration = resolution === null || resolution.reservationGeneration === generation;
+  const everReserved = generation > 0n;
   const validShape =
-    (status === ReplayStatus.UNUSED && hasNoReservation && resolutionNotAfterState &&
+    resolutionOfThisGeneration &&
+    ((status === ReplayStatus.UNUSED && hasNoReservation && resolutionNotAfterState &&
       (resolution === null || resolution.outcome === ReconciledOutcome.FAILED)) ||
-    (status === ReplayStatus.RESERVED && hasReservation && resolution === null) ||
-    (status === ReplayStatus.QUARANTINED && hasReservation && resolution === null) ||
-    (status === ReplayStatus.CONSUMED && hasNoReservation && resolution !== null &&
-      resolution.outcome === ReconciledOutcome.SETTLED && resolutionNotAfterState) ||
-    (status === ReplayStatus.UNKNOWN && hasNoReservation && resolution === null);
+      (status === ReplayStatus.RESERVED && hasReservation && resolution === null && everReserved) ||
+      (status === ReplayStatus.QUARANTINED && hasReservation && resolution === null && everReserved) ||
+      (status === ReplayStatus.CONSUMED && hasNoReservation && resolution !== null &&
+        resolution.outcome === ReconciledOutcome.SETTLED && resolutionNotAfterState) ||
+      (status === ReplayStatus.UNKNOWN && hasNoReservation && resolution === null));
   if (!validShape) return err(ReplayError.MALFORMED_RECORD);
 
   return ok({
@@ -326,6 +379,7 @@ export function parseReplayRecord(raw: unknown): Result<ReplayRecord, ReplayErro
     updatedAtUnixSeconds: updatedAt.value,
     reservationExpiresAtUnixSeconds: expiry,
     resolution,
+    reservationGeneration: generation,
   });
 }
 
@@ -388,12 +442,15 @@ export function applyTransition(request: TransitionRequest | unknown): Result<Re
       if (mandateExpiry !== undefined && expiresAt > mandateExpiry) expiresAt = mandateExpiry;
       const parsedExpiry = parseUnixSeconds(expiresAt, 'MALFORMED_TRUSTED_STATE');
       if (!parsedExpiry.ok || parsedExpiry.value <= now) return err(ReplayError.NOT_RESERVABLE);
+      // Never wrap: a repeated generation would let an old observation match.
+      if (current.reservationGeneration >= MAX_RESERVATION_GENERATION) return err(ReplayError.NOT_RESERVABLE);
       return ok({
         key: current.key,
         status: ReplayStatus.RESERVED,
         updatedAtUnixSeconds: now,
         reservationExpiresAtUnixSeconds: parsedExpiry.value,
         resolution: null,
+        reservationGeneration: current.reservationGeneration + 1n,
       });
     }
 
@@ -411,6 +468,7 @@ export function applyTransition(request: TransitionRequest | unknown): Result<Re
         updatedAtUnixSeconds: current.updatedAtUnixSeconds,
         reservationExpiresAtUnixSeconds: current.reservationExpiresAtUnixSeconds,
         resolution: null,
+        reservationGeneration: current.reservationGeneration,
       });
     }
 
@@ -428,6 +486,14 @@ export function applyTransition(request: TransitionRequest | unknown): Result<Re
       const observation = parseExecutionObservation(rawObservation);
       if (!observation.ok) return observation;
       const resolved = observation.value;
+      // An observation about an earlier reservation of this key is not about
+      // this one, however well it fits the timeline: a reservation can start in
+      // the same second the last was reconciled, and an observer holding an
+      // out-of-date copy of the record derives observations with current
+      // timestamps. Checked before the timeline so the refusal says why.
+      if (resolved.reservationGeneration !== current.reservationGeneration) {
+        return err(ReplayError.STALE_RESERVATION_OBSERVATION);
+      }
       // Local temporal consistency only. This establishes neither settlement
       // truth nor chain correspondence; Phase 6 owns those checks.
       if (
@@ -444,6 +510,7 @@ export function applyTransition(request: TransitionRequest | unknown): Result<Re
           updatedAtUnixSeconds: now,
           reservationExpiresAtUnixSeconds: null,
           resolution: resolved,
+          reservationGeneration: current.reservationGeneration,
         });
       }
       // FAILED, and only FAILED, restores the authorization — carrying the
@@ -454,6 +521,7 @@ export function applyTransition(request: TransitionRequest | unknown): Result<Re
         updatedAtUnixSeconds: now,
         reservationExpiresAtUnixSeconds: null,
         resolution: resolved,
+        reservationGeneration: current.reservationGeneration,
       });
     }
 

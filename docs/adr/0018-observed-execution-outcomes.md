@@ -117,6 +117,13 @@ than the supplied reconciliation instant. These are inclusive, signed-64-bit
 timestamp comparisons. They establish local temporal consistency only; Phase 6
 still owns proof that the reference and outcome correspond to chain state.
 
+Phase 6R.1b adds one field without changing the outcome vocabulary. A record
+carries a `reservationGeneration` that `RESERVE` increments, and an observation
+carries the generation of the record it was derived from; `RECONCILE` refuses any
+other generation (`STALE_RESERVATION_OBSERVATION`). The timeline check alone let
+an observation of an earlier reservation of the same mandate resolve a later one
+([replay-semantics.md §4a](../replay-semantics.md#4a-reservation-generations-phase-6r1b)).
+
 ### 3. `applyTransition` is total over plain values
 
 Every caller-controlled field is parsed before any branch is taken: the transition

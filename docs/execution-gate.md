@@ -498,6 +498,32 @@ its reservation proves the discipline was broken, so it is refused
 result through the kernel's own `applyTransition(RECONCILE)`, including a full
 fail → `UNUSED` → re-reserve → settle → `CONSUMED` cycle on a 30-day mandate.
 
+Mandate-supported agents must create execution authorizations through
+`admitAttemptUnderReservation` for the reconciliation guarantees to hold. Against
+an attempt signed outside it, what remains impossible is a second settlement and
+a `MANDATE_EXPIRED` failure before the gate refuses every attempt; what remains
+possible is a temporary divergence between the offchain record and the chain,
+including `FAILED` followed by that attempt's settlement. The gate cannot enforce
+the rule without a reservation input in the signed execution authorization, which
+is deliberately not added (Phase 6R.1b keeps the signed schemas frozen).
+
+**An observation resolves only the reservation it was derived from** (Phase
+6R.1b). Every kernel replay record carries a `reservationGeneration`: 0 before
+the first reservation, one more on every `RESERVE`, kept through `QUARANTINE` and
+`RECONCILE`, never reset and never wrapped. `observationFromGateEvidence` copies
+the generation of the record it was given into the observation, and `RECONCILE`
+refuses an observation of any other generation with
+`STALE_RESERVATION_OBSERVATION`, before its timeline checks. Before this, a
+`FAILED` observation derived from reservation 1 — delivered late, or derived
+afresh from an out-of-date copy of that record — was accepted against
+reservation 2 whenever its timestamp fit reservation 2's timeline, which it does
+when reservation 2 starts in the second the observation was made, or always for
+one derived after the fact. Reservation 2 then returned to `UNUSED` while an
+attempt admitted under it was still live. The gate still settled at most once;
+the offchain record was wrong. A counter is used rather than the reservation's
+start time because two reservations of one mandate can share a start second, and
+rather than the mandate digest because every reservation of a mandate shares it.
+
 This closes V-59 for the gate path: the observation is derived from chain state,
 not merely validated. Reading the chain is the caller's job; the rule is pure.
 The `confirmation` value passed to that rule is not cryptographic proof. The

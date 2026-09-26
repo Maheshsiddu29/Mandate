@@ -18,6 +18,7 @@ import {
   ReplayStatus,
   ReplayTransition,
   RETIRED_REPLAY_TRANSITIONS,
+  MAX_RESERVATION_GENERATION,
   applyTransition,
   isAvailable,
   mandateDigest,
@@ -47,16 +48,21 @@ function errorOf(r: { ok: true } | { ok: false; error: string }): string {
   return (r as { ok: false; error: string }).error;
 }
 
-/** A well-formed observation of what an attempt did. */
-function observation(outcome: string, at = NOW + 5n) {
-  return { outcome, observedAtUnixSeconds: at, sourceId: 'observer.chain.test', reference: TX };
+/** A well-formed observation of what an attempt did, under the first reservation unless told otherwise. */
+function observation(outcome: string, at = NOW + 5n, generation = 1n) {
+  return { outcome, observedAtUnixSeconds: at, sourceId: 'observer.chain.test', reference: TX, reservationGeneration: generation };
 }
 
 const reserve = (current: ReplayRecord, now = NOW, hold = 120n) =>
   applyTransition({ current, transition: ReplayTransition.RESERVE, nowUnixSeconds: now, reservationSeconds: hold });
 
 const reconcile = (current: ReplayRecord, outcome: string, now = NOW + 5n) =>
-  applyTransition({ current, transition: ReplayTransition.RECONCILE, nowUnixSeconds: now, observation: observation(outcome, now) });
+  applyTransition({
+    current,
+    transition: ReplayTransition.RECONCILE,
+    nowUnixSeconds: now,
+    observation: observation(outcome, now, current.reservationGeneration),
+  });
 
 test('the replay key is the mandate digest', () => {
   const m = validMandate();
@@ -162,7 +168,7 @@ test('N-5 REGRESSION: restoring an authorization requires a complete, well-forme
 
   // Present but incomplete: each field is load-bearing and none is defaulted.
   const complete = observation(ReconciledOutcome.FAILED);
-  for (const field of ['outcome', 'observedAtUnixSeconds', 'sourceId', 'reference'] as const) {
+  for (const field of ['outcome', 'observedAtUnixSeconds', 'sourceId', 'reference', 'reservationGeneration'] as const) {
     const partial: Record<string, unknown> = { ...complete };
     delete partial[field];
     assert.equal(
@@ -348,6 +354,14 @@ test('stored replay records enforce the complete shape of every state', () => {
     { label: 'UNUSED reservation', record: { ...unusedRecord(KEY, NOW), reservationExpiresAtUnixSeconds: NOW + 1n } },
     { label: 'CONSUMED without evidence', record: { ...consumed, resolution: null } },
     { label: 'UNKNOWN with resolution', record: { ...unusedRecord(KEY, NOW), status: ReplayStatus.UNKNOWN, resolution: failed } },
+    { label: 'missing generation', record: (({ reservationGeneration: _, ...rest }) => rest)(reserved) },
+    { label: 'generation is a number', record: { ...reserved, reservationGeneration: 1 } },
+    { label: 'negative generation', record: { ...reserved, reservationGeneration: -1n } },
+    { label: 'generation overflow', record: { ...reserved, reservationGeneration: MAX_RESERVATION_GENERATION + 1n } },
+    { label: 'RESERVED never reserved', record: { ...reserved, reservationGeneration: 0n } },
+    { label: 'QUARANTINED never reserved', record: { ...quarantined, reservationGeneration: 0n } },
+    { label: 'CONSUMED by another generation', record: { ...consumed, reservationGeneration: 2n } },
+    { label: 'restored by another generation', record: { ...restored, reservationGeneration: 2n } },
   ];
 
   for (const item of malformed) {
@@ -539,6 +553,7 @@ test('an unknown record cannot be transitioned into a known one', () => {
     updatedAtUnixSeconds: NOW,
     reservationExpiresAtUnixSeconds: null,
     resolution: null,
+    reservationGeneration: 0n,
   };
   for (const transition of Object.values(ReplayTransition)) {
     assert.equal(
@@ -575,6 +590,7 @@ test('every replay error is reachable, so none is dead security-looking surface'
     errorOf(applyTransition({ current: reserved, transition: ReplayTransition.QUARANTINE, nowUnixSeconds: NOW + 1n })),
     errorOf(applyTransition({ current: quarantined, transition: ReplayTransition.RECONCILE, nowUnixSeconds: NOW + 61n })),
     errorOf(applyTransition({ current: quarantined, transition: ReplayTransition.RECONCILE, nowUnixSeconds: NOW + 61n, observation: observation('UNKNOWN') })),
+    errorOf(applyTransition({ current: quarantined, transition: ReplayTransition.RECONCILE, nowUnixSeconds: NOW + 61n, observation: observation('FAILED', NOW + 61n, 2n) })),
   ]);
   assert.deepEqual([...Object.values(ReplayError)].filter((e) => !reached.has(e)), [], 'unreachable replay error');
 });
@@ -591,4 +607,77 @@ test('the verifier refuses every non-available replay status', () => {
     assert.ok(receipt.reasonCodes.includes(code as never), `${status} -> ${receipt.reasonCodes.join(', ')}`);
   }
   assert.equal(verify(buildWorld({ state: { replay: { value: { status: 'UNUSED' } } } })).decision, Decision.PASS);
+});
+
+// --- Phase 6R.1b: an observation resolves only the reservation it came from ---
+
+test('the reservation generation increments on every RESERVE and survives every other transition', () => {
+  const initial = unusedRecord(KEY, NOW);
+  assert.equal(initial.reservationGeneration, 0n);
+
+  const first = expectOk(reserve(initial, NOW, 120n));
+  assert.equal(first.reservationGeneration, 1n);
+  const quarantined = expectOk(applyTransition({ current: first, transition: ReplayTransition.QUARANTINE, nowUnixSeconds: NOW + 120n }));
+  assert.equal(quarantined.reservationGeneration, 1n, 'quarantine is the same reservation');
+  const failed = expectOk(reconcile(quarantined, ReconciledOutcome.FAILED, NOW + 130n));
+  assert.equal(failed.status, ReplayStatus.UNUSED);
+  assert.equal(failed.reservationGeneration, 1n, 'UNUSED does not reset the counter');
+  assert.equal(failed.resolution?.reservationGeneration, 1n, 'the resolution names the reservation it ended');
+
+  const second = expectOk(reserve(failed, NOW + 130n, 120n));
+  assert.equal(second.reservationGeneration, 2n);
+  const third = expectOk(reserve(expectOk(reconcile(second, ReconciledOutcome.FAILED, NOW + 140n)), NOW + 140n, 120n));
+  assert.equal(third.reservationGeneration, 3n);
+  const consumed = expectOk(reconcile(third, ReconciledOutcome.SETTLED, NOW + 150n));
+  assert.equal(consumed.status, ReplayStatus.CONSUMED);
+  assert.equal(consumed.reservationGeneration, 3n);
+  assert.equal(errorOf(reserve(consumed, NOW + 160n)), ReplayError.ALREADY_CONSUMED, 'CONSUMED stays terminal');
+});
+
+test('STALE REGRESSION: an observation of an earlier reservation cannot resolve a later one', () => {
+  // Reservation 1 fails and is reconciled in the same second that reservation 2
+  // begins, so the timeline alone cannot tell the two apart.
+  const r1 = expectOk(reserve(unusedRecord(KEY, NOW), NOW, 120n));
+  const o1 = observation(ReconciledOutcome.FAILED, NOW + 130n, r1.reservationGeneration);
+  const unused = expectOk(applyTransition({ current: r1, transition: ReplayTransition.RECONCILE, nowUnixSeconds: NOW + 130n, observation: o1 }));
+  const r2 = expectOk(reserve(unused, NOW + 130n, 600n));
+  assert.equal(r2.updatedAtUnixSeconds, o1.observedAtUnixSeconds, 'the observation fits the new reservation\'s timeline');
+
+  for (const stale of [o1, { ...o1, observedAtUnixSeconds: NOW + 200n }, { ...o1, outcome: ReconciledOutcome.SETTLED }]) {
+    const before = structuredClone(r2);
+    const result = applyTransition({ current: r2, transition: ReplayTransition.RECONCILE, nowUnixSeconds: NOW + 200n, observation: stale });
+    assert.equal(errorOf(result), ReplayError.STALE_RESERVATION_OBSERVATION, stale.outcome);
+    assert.deepEqual(r2, before);
+  }
+  // Nor does it resolve reservation 2 once quarantined, nor match a future generation.
+  const q2 = expectOk(applyTransition({ current: r2, transition: ReplayTransition.QUARANTINE, nowUnixSeconds: NOW + 730n }));
+  assert.equal(
+    errorOf(applyTransition({ current: q2, transition: ReplayTransition.RECONCILE, nowUnixSeconds: NOW + 800n, observation: { ...o1, observedAtUnixSeconds: NOW + 800n } })),
+    ReplayError.STALE_RESERVATION_OBSERVATION,
+  );
+  assert.equal(
+    errorOf(applyTransition({ current: r2, transition: ReplayTransition.RECONCILE, nowUnixSeconds: NOW + 200n, observation: observation('FAILED', NOW + 200n, 3n) })),
+    ReplayError.STALE_RESERVATION_OBSERVATION,
+  );
+
+  // An observation of reservation 2 itself still applies.
+  const o2 = observation(ReconciledOutcome.SETTLED, NOW + 200n, r2.reservationGeneration);
+  const consumed = expectOk(applyTransition({ current: r2, transition: ReplayTransition.RECONCILE, nowUnixSeconds: NOW + 200n, observation: o2 }));
+  assert.equal(consumed.status, ReplayStatus.CONSUMED);
+  assert.equal(consumed.resolution?.reservationGeneration, 2n);
+});
+
+test('an observation must name a reservation, and the generation never wraps', () => {
+  for (const generation of [0n, -1n, MAX_RESERVATION_GENERATION + 1n, 1, '1', null]) {
+    assert.equal(
+      errorOf(parseExecutionObservation({ ...observation(ReconciledOutcome.FAILED), reservationGeneration: generation })),
+      ReplayError.OBSERVATION_INVALID,
+      String(generation),
+    );
+  }
+  const last = { ...unusedRecord(KEY, NOW), reservationGeneration: MAX_RESERVATION_GENERATION - 1n };
+  const atMaximum = expectOk(reserve(last, NOW, 120n));
+  assert.equal(atMaximum.reservationGeneration, MAX_RESERVATION_GENERATION);
+  const exhausted = expectOk(reconcile(atMaximum, ReconciledOutcome.FAILED, NOW + 5n));
+  assert.equal(errorOf(reserve(exhausted, NOW + 6n)), ReplayError.NOT_RESERVABLE, 'refused rather than repeating a generation');
 });

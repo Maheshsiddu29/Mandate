@@ -34,6 +34,10 @@ does not decide.
 > instant. This is local temporal consistency, not proof that the referenced
 > chain execution occurred.
 >
+> **Phase 6R.1b: observations are bound to a reservation generation** (§4a), so
+> an observation of an earlier reservation of the same mandate cannot resolve a
+> later one.
+>
 > **Phase 6: the chain is the final replay authority for gate executions.** The
 > execution gate consumes the mandate digest — the replay key below — atomically
 > with settlement, and `observationFromGateEvidence` derives `RECONCILE`
@@ -123,9 +127,9 @@ with different evidentiary standards is what let the weaker one go unnoticed.
 
 | Transition | From | To | Requires |
 | --- | --- | --- | --- |
-| `RESERVE` | `UNUSED` | `RESERVED` | A positive reservation length, clamped to the mandate's expiry |
+| `RESERVE` | `UNUSED` | `RESERVED` | A positive reservation length, clamped to the mandate's expiry; takes the next reservation generation |
 | `QUARANTINE` | `RESERVED` | `QUARANTINED` | The reservation to have passed its own expiry |
-| `RECONCILE` | `RESERVED`, `QUARANTINED` | `CONSUMED` if `SETTLED`, `UNUSED` if `FAILED` | A validated `ExecutionObservation` |
+| `RECONCILE` | `RESERVED`, `QUARANTINED` | `CONSUMED` if `SETTLED`, `UNUSED` if `FAILED` | A validated `ExecutionObservation` of the record's own reservation generation |
 
 `RECLAIM`, `COMMIT` and `RELEASE` are exported as `RETIRED_REPLAY_TRANSITIONS` and
 refused with `UNKNOWN_TRANSITION`, so an integrator upgrading across either change
@@ -149,6 +153,10 @@ The stored shape is state-specific and is validated before transition logic:
 | `CONSUMED` | forbidden | required and exactly `SETTLED` |
 | `UNKNOWN` | forbidden | forbidden |
 
+Every record also carries `reservationGeneration` (§4a): 0 only while `UNUSED`
+or `UNKNOWN` and never reserved, at least 1 while `RESERVED`, `QUARANTINED` or
+`CONSUMED`, and a resolution must name the record's own generation.
+
 Unknown fields, malformed enums, out-of-range timestamps, inverted reservation
 times and incompatible status/field combinations are `MALFORMED_RECORD`. Such a
 record cannot enter transition logic or become available through `isAvailable`.
@@ -161,6 +169,46 @@ usable by testing for anything other than `CONSUMED`.
 A replay record whose `mandateDigest` is not the mandate being verified is
 treated as `REPLAY_STATE_UNKNOWN`, not as `UNUSED`: a record about some other
 mandate establishes nothing about this one.
+
+## 4a. Reservation generations (Phase 6R.1b)
+
+A mandate can be reserved, fail, and be reserved again, so the replay key does
+not say *which* reservation an observation is about. Each reservation therefore
+has a generation:
+
+```
+initial record              generation 0, UNUSED
+RESERVE                     generation 1, RESERVED
+QUARANTINE                  generation 1, QUARANTINED     (same reservation)
+RECONCILE(FAILED, gen 1)    generation 1, UNUSED          (not reset)
+RESERVE                     generation 2, RESERVED
+RECONCILE(FAILED, gen 1)    refused: STALE_RESERVATION_OBSERVATION
+RECONCILE(SETTLED, gen 2)   generation 2, CONSUMED        (terminal)
+```
+
+- `RESERVE` takes `current + 1`; nothing else changes the generation. It never
+  repeats, and at the uint64 maximum `RESERVE` is refused (`NOT_RESERVABLE`)
+  rather than wrapping to a value an old observation may carry.
+- An `ExecutionObservation` carries the `reservationGeneration` of the record it
+  was derived from, which is at least 1. Whatever derives it copies that value
+  from the record; for gate executions `observationFromGateEvidence` does so from
+  the kernel record inside the reservation record it is given.
+- `RECONCILE` refuses an observation of any other generation with
+  `STALE_RESERVATION_OBSERVATION`, before the timeline checks of §6a, and leaves
+  the record untouched. The observation may be perfectly true; it is about a
+  different attempt.
+
+Why not the timeline alone: `RESERVE` may happen in the same second the previous
+reservation was reconciled, so an observation of reservation 1 can fall exactly
+at reservation 2's start and pass §6a's inclusive bounds; and an observer holding
+an out-of-date copy of the record derives observations with *current*
+timestamps, which always fit. The independent Phase 6R.1a review reproduced the
+second case: reservation 2 returned to `UNUSED` while an attempt admitted under
+it could still settle.
+
+The generation is local bookkeeping, not a signed value. It does not enter MCE
+v2, Candidate V3, the execution commitment or anything the gate checks, and
+whatever performs `RECONCILE` remains as trusted as the store (§9).
 
 ## 5. When consumption occurs
 
@@ -198,6 +246,7 @@ safety one.
 | Quarantined, reconciliation **observed failure** | `RECONCILE(FAILED, evidence)` | Back to `UNUSED`; retry permitted |
 | Quarantined, reconciliation **could not establish the outcome** | none | Stays `QUARANTINED` |
 | A transition asserted with **no evidence**, or evidence that is incomplete or carries an unrecognized outcome | refused | `OBSERVATION_REQUIRED` or `OBSERVATION_INVALID`; the record does not move |
+| An observation of an **earlier reservation** of the same mandate | refused | `STALE_RESERVATION_OBSERVATION`; the record does not move (§4a) |
 
 The fourth row is the important one, and it is where this document was wrong
 before Phase 5R. Returning an authorization to `UNUSED` requires *observing*
@@ -245,6 +294,7 @@ interface ExecutionObservation {
   observedAtUnixSeconds: UnixSeconds;   // when
   sourceId: Identifier;                  // who observed it
   reference: Bytes32;                    // what was observed
+  reservationGeneration: bigint;         // which reservation it is about (§4a)
 }
 ```
 
@@ -368,7 +418,16 @@ the reservation (Phase 6R.1a).
 
 §6's "observed to fail → `UNUSED`; retry permitted" therefore holds for gate
 executions: the retry waits for the reservation the pipeline chose, not for the
-mandate to expire (Phase 6R.1 had required the latter).
+mandate to expire (Phase 6R.1 had required the latter). Each observation carries
+the generation of the record it was derived from (§4a), so a `FAILED` reading of
+an earlier reservation cannot resolve the retry's reservation while an attempt
+admitted under it is still live.
+
+These guarantees assume every execution attempt is signed through
+`admitAttemptUnderReservation`. An attempt signed outside it still settles at
+most once, and a `MANDATE_EXPIRED` failure is still never premature; but the
+offchain record can diverge from the chain for a while, including `FAILED`
+followed by that attempt's settlement.
 
 Two consequences for this state machine. First, a double reserve that an
 offchain store fails to prevent (§8) can no longer become a double *settlement*

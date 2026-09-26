@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { applyTransition, bytesToHex, ReplayTransition, unusedRecord, type Bytes32, type ReplayRecord } from '@mandate/kernel';
+import { applyTransition, bytesToHex, ReplayTransition, unusedRecord, type Bytes32, type ExecutionObservation, type ReplayRecord } from '@mandate/kernel';
 import {
   ConfirmationLevel,
   MAX_ATTEMPTS_PER_RESERVATION,
@@ -329,3 +329,269 @@ describe('reconciliation from gate evidence (Phase 6R.1a)', () => {
     assert.deepEqual(observationFromGateEvidence(rec, quiet(other, T0 + 601n), policy), { ok: false, refusal: 'EVIDENCE_MISMATCH' });
   });
 });
+
+describe('reservation generations (Phase 6R.1b)', () => {
+  it('STALE REGRESSION: an observation derived from reservation 1 cannot fail reservation 2 while its attempt is live', () => {
+    const m = longBuy().mandate;
+
+    // Reservation 1 (T0 .. T0+600) admits A; A never lands; O1 is derived at T0+601.
+    const a = withDeadline(longBuy(), T0 + 300n);
+    const r1 = admit(reserve(m, T0, 600n), a, T0);
+    assert.equal(r1.reservation.reservationGeneration, 1n);
+    const o1 = observationFromGateEvidence(r1, quiet(m, T0 + 601n), policy);
+    assert.ok(o1.ok);
+    assert.equal(o1.observation.outcome, 'FAILED');
+    assert.equal(o1.observation.reservationGeneration, 1n, 'the generation comes from the record, not the caller');
+
+    // Reconciled correctly, and reservation 2 opens in the very second O1 was observed.
+    const at = o1.observation.observedAtUnixSeconds;
+    const unused = applyTransition({ current: r1.reservation, transition: ReplayTransition.RECONCILE, nowUnixSeconds: at, observation: o1.observation });
+    assert.ok(unused.ok);
+    const b = withDeadline(longBuy(), T0 + 1_000n);
+    const r2 = admit(reserve(m, at, 600n, unused.value), b, at);
+    assert.equal(r2.reservation.reservationGeneration, 2n);
+    assert.equal(r2.reservation.updatedAtUnixSeconds, o1.observation.observedAtUnixSeconds, 'O1 fits reservation 2\'s timeline exactly');
+    assert.equal(gateSays(b, T0 + 700n), 'authorizes', 'B is live');
+
+    // O1 delivered again, and O1' derived afresh from the out-of-date reservation-1 record: neither applies.
+    const o1Again = observationFromGateEvidence(r1, quiet(m, T0 + 700n), policy);
+    assert.ok(o1Again.ok);
+    assert.equal(o1Again.failureBasis, 'ATTEMPTS_EXPIRED', 'judged against reservation 1, the reading is a genuine failure');
+    for (const stale of [o1.observation, o1Again.observation]) {
+      const before = structuredClone(r2.reservation);
+      const result = applyTransition({ current: r2.reservation, transition: ReplayTransition.RECONCILE, nowUnixSeconds: T0 + 710n, observation: stale });
+      assert.deepEqual(result, { ok: false, error: 'STALE_RESERVATION_OBSERVATION' });
+      assert.deepEqual(r2.reservation, before, 'the newer reservation is untouched');
+    }
+
+    // B is still live, may still settle, and reservation 2's own observation resolves it.
+    assert.equal(gateSays(b, T0 + 900n), 'authorizes');
+    const o2 = observationFromGateEvidence(r2, settledBy(m, commitmentOf(b), T0 + 900n), policy);
+    assert.ok(o2.ok);
+    assert.equal(o2.observation.reservationGeneration, 2n);
+    const consumed = applyTransition({ current: r2.reservation, transition: ReplayTransition.RECONCILE, nowUnixSeconds: T0 + 910n, observation: o2.observation });
+    assert.ok(consumed.ok);
+    assert.equal(consumed.value.status, 'CONSUMED');
+    assert.equal(gateSays(b, T0 + 950n, new Set([digestOf(m)])), 'MandateAlreadyConsumed');
+
+    // Had B not landed, reservation 2's own FAILED would apply, once B is dead.
+    assert.deepEqual(observationFromGateEvidence(r2, quiet(m, T0 + 1_206n), policy), { ok: false, refusal: 'OUTCOME_UNESTABLISHED' });
+    const o2Failed = observationFromGateEvidence(r2, quiet(m, T0 + 1_207n), policy);
+    assert.ok(o2Failed.ok);
+    const retried = applyTransition({ current: r2.reservation, transition: ReplayTransition.RECONCILE, nowUnixSeconds: T0 + 1_212n, observation: o2Failed.observation });
+    assert.ok(retried.ok);
+    assert.equal(retried.value.status, 'UNUSED');
+  });
+
+  it('randomized: stale observations never move the current reservation, and FAILED never precedes a live attempt', () => {
+    const counts = run(RUNS, STEPS);
+    // Non-vacuity: every interleaving the property is about actually happened.
+    assert.ok(counts.staleDelivered > 0 && counts.staleFailedWhileLive > 0, json(counts));
+    assert.ok(counts.retries > 0 && counts.settlements > 0 && counts.quarantines > 0, json(counts));
+    assert.ok(counts.attemptsExpired > 0 && counts.mandateExpired > 0 && counts.overlapping > 0, json(counts));
+    assert.ok(counts.deadAttemptsRefused > 0 && counts.admissionsRefused > 0, json(counts));
+  });
+});
+
+// --- Randomized reconciliation state machine ------------------------------------
+
+const RUNS = 200;
+const STEPS = 48;
+
+/** Deterministic PRNG, so a failure is reproducible from its run number. */
+function rng(seed: number): () => number {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
+  };
+}
+
+interface Counts {
+  retries: number;
+  settlements: number;
+  quarantines: number;
+  attemptsExpired: number;
+  mandateExpired: number;
+  overlapping: number;
+  staleDelivered: number;
+  staleFailedWhileLive: number;
+  deadAttemptsRefused: number;
+  admissionsRefused: number;
+}
+
+/**
+ * A pipeline, the kernel's replay store and the reference gate, driven in random
+ * order: reserve, admit (some deadlines past the ceiling), advance chain time,
+ * land any admitted attempt (including ones from earlier reservations), quarantine,
+ * reconcile from the current record, and deliver stale observations — both ones
+ * derived earlier and ones derived afresh from out-of-date records.
+ */
+function run(runs: number, steps: number): Counts {
+  const counts: Counts = {
+    retries: 0, settlements: 0, quarantines: 0, attemptsExpired: 0, mandateExpired: 0,
+    overlapping: 0, staleDelivered: 0, staleFailedWhileLive: 0, deadAttemptsRefused: 0, admissionsRefused: 0,
+  };
+  for (let runIndex = 0; runIndex < runs; runIndex += 1) {
+    const next = rng(0x6d616e64 + runIndex);
+    const pick = <T>(xs: readonly T[]): T => xs[Math.floor(next() * xs.length)] as T;
+    const between = (lo: number, hi: number): bigint => BigInt(lo + Math.floor(next() * (hi - lo + 1)));
+    const where = (step: number) => `run ${runIndex} step ${step}`;
+
+    const base = longBuy();
+    const mandate = { ...base.mandate, expiresAtUnixSeconds: T0 + between(700, 4_000) };
+    const digest = digestOf(mandate);
+    const signed = new Map<Bytes32, ReturnType<typeof sign>>();
+    const says = (u: Unsigned, at: bigint, consumed: ReadonlySet<string>): string => {
+      const c = commitmentOf(u);
+      let s = signed.get(c);
+      if (s === undefined) signed.set(c, (s = sign(u)));
+      const r = authorizeExecution(DEPLOYMENT, s, { chainId: CHAIN_ID, timestamp: at, consumed });
+      return r.ok ? 'authorizes' : r.rejection.error;
+    };
+
+    let now = T0;
+    let kernel: ReplayRecord = unusedRecord(digest, now);
+    let current: GateReservationRecord | null = null;
+    const outdated: GateReservationRecord[] = []; // every record the pipeline ever held, as it was then
+    const derived: ExecutionObservation[] = [];
+    const admitted = new Map<bigint, Unsigned[]>(); // by reservation generation
+    const failedGenerations = new Set<bigint>();
+    const consumed = new Set<string>();
+    let settledGeneration: bigint | null = null;
+    let settlementTx: Bytes32 | null = null;
+    let settledCommitment: Bytes32 | null = null;
+    let lastFailedLegitimately = false;
+    let settlementsThisRun = 0;
+
+    const evidenceNow = (): GateChainEvidence => ({
+      ...quiet(mandate, now),
+      observedAtUnixSeconds: now,
+      ...(settledCommitment === null
+        ? {}
+        : { consumedCommitment: settledCommitment, settlement: { transactionHash: settlementTx as Bytes32, executionCommitment: settledCommitment } }),
+    });
+    const liveAttemptOfCurrent = (): boolean =>
+      (admitted.get(kernel.reservationGeneration) ?? []).some((u) => says(u, now, consumed) === 'authorizes');
+
+    for (let step = 0; step < steps; step += 1) {
+      const action = next();
+      const wasConsumed = kernel.status === 'CONSUMED';
+      const before = structuredClone(kernel);
+
+      if (action < 0.18) {
+        now += between(1, 400);
+      } else if (action < 0.3) {
+        // RESERVE: always possible after a legitimate failure while the mandate has time left.
+        const r = applyTransition({
+          current: kernel, transition: ReplayTransition.RESERVE, nowUnixSeconds: now,
+          reservationSeconds: between(60, 900), mandateExpiresAtUnixSeconds: mandate.expiresAtUnixSeconds,
+        });
+        if (kernel.status === 'UNUSED' && now < mandate.expiresAtUnixSeconds) {
+          assert.ok(r.ok, `${where(step)}: retry refused ${json(r)}`);
+          if (lastFailedLegitimately) counts.retries += 1;
+        }
+        if (r.ok) {
+          assert.equal(r.value.reservationGeneration, kernel.reservationGeneration + 1n, where(step));
+          kernel = r.value;
+          current = { chainId: CHAIN_ID, gate: DEPLOYMENT.gate, mandateEncoding: bytesToHex(encodeGateMandate(mandate)), reservation: kernel, attempts: [] };
+          outdated.push(current);
+          lastFailedLegitimately = false;
+        }
+      } else if (action < 0.45) {
+        // Admit, sometimes with a deadline past the ceiling.
+        if (current === null) continue;
+        const ceiling = current.reservation.reservationExpiresAtUnixSeconds ?? now;
+        const u: Unsigned = { ...base, mandate, terms: { ...base.terms, deadline: now + between(0, Number(ceiling - now) + 60), fundingLimit: between(2_006, 2_010) * 10n ** 6n } };
+        const r = admitAttemptUnderReservation({ ...current, reservation: kernel }, { candidateDigest: candidateDigestOf(u), terms: u.terms }, now);
+        if (!r.ok) {
+          counts.admissionsRefused += 1;
+          continue;
+        }
+        current = r.record;
+        outdated.push(current);
+        const list = admitted.get(kernel.reservationGeneration) ?? [];
+        if (!list.some((x) => commitmentOf(x) === r.executionCommitment)) list.push(u);
+        admitted.set(kernel.reservationGeneration, list);
+        if (list.length > 1) counts.overlapping += 1;
+      } else if (action < 0.55) {
+        // Land any attempt ever admitted, from any reservation.
+        const generations = [...admitted.keys()];
+        if (generations.length === 0) continue;
+        const g = pick(generations);
+        const u = pick(admitted.get(g) ?? []);
+        const verdict = says(u, now, consumed);
+        if (failedGenerations.has(g)) {
+          // FAILED was reported for this reservation: none of its attempts may ever land.
+          assert.notEqual(verdict, 'authorizes', `${where(step)}: an attempt of a FAILED reservation settled`);
+          counts.deadAttemptsRefused += 1;
+        }
+        if (verdict === 'authorizes') {
+          consumed.add(digest);
+          settledGeneration = g;
+          settledCommitment = commitmentOf(u);
+          settlementTx = D((10 + runIndex % 80).toString(16).padStart(2, '0'));
+          counts.settlements += 1;
+          settlementsThisRun += 1;
+        }
+      } else if (action < 0.62) {
+        const r = applyTransition({ current: kernel, transition: ReplayTransition.QUARANTINE, nowUnixSeconds: now });
+        if (r.ok) {
+          assert.equal(r.value.reservationGeneration, kernel.reservationGeneration, where(step));
+          kernel = r.value;
+          counts.quarantines += 1;
+        }
+      } else if (action < 0.8) {
+        // Reconcile from the pipeline's current record.
+        if (current === null) continue;
+        const o = observationFromGateEvidence({ ...current, reservation: kernel }, evidenceNow(), policy);
+        if (!o.ok) continue;
+        derived.push(o.observation);
+        const r = applyTransition({ current: kernel, transition: ReplayTransition.RECONCILE, nowUnixSeconds: now, observation: o.observation });
+        assert.ok(r.ok, `${where(step)}: a current observation was refused ${json(r)}`);
+        if (o.observation.outcome === 'FAILED') {
+          assert.equal(liveAttemptOfCurrent(), false, `${where(step)}: FAILED while an admitted attempt can still land`);
+          failedGenerations.add(kernel.reservationGeneration);
+          if (o.failureBasis === 'ATTEMPTS_EXPIRED') counts.attemptsExpired += 1;
+          else counts.mandateExpired += 1;
+          lastFailedLegitimately = true;
+        }
+        kernel = r.value;
+      } else {
+        // Stale delivery: an earlier observation, or one derived now from an out-of-date record.
+        const older = outdated.filter((x) => x.reservation.reservationGeneration !== kernel.reservationGeneration);
+        const candidates: ExecutionObservation[] = derived.filter((o) => o.reservationGeneration !== kernel.reservationGeneration);
+        if (older.length > 0) {
+          const o = observationFromGateEvidence(pick(older), evidenceNow(), policy);
+          if (o.ok) candidates.push(o.observation);
+        }
+        if (candidates.length === 0) continue;
+        const stale = pick(candidates);
+        const live = liveAttemptOfCurrent();
+        const r = applyTransition({ current: kernel, transition: ReplayTransition.RECONCILE, nowUnixSeconds: now, observation: stale });
+        assert.equal(r.ok, false, `${where(step)}: a stale observation moved the record`);
+        if (kernel.status === 'RESERVED' || kernel.status === 'QUARANTINED') {
+          assert.deepEqual(r, { ok: false, error: 'STALE_RESERVATION_OBSERVATION' }, where(step));
+          if (stale.outcome === 'FAILED' && live) counts.staleFailedWhileLive += 1;
+        }
+        assert.deepEqual(kernel, before, where(step));
+        counts.staleDelivered += 1;
+      }
+
+      // Invariants after every step.
+      assert.ok(consumed.size <= 1, where(step));
+      assert.ok(settlementsThisRun <= 1, `${where(step)}: more than one settlement`);
+      if (wasConsumed) assert.deepEqual(kernel, before, `${where(step)}: CONSUMED changed`);
+      if (kernel.status === 'CONSUMED') assert.ok(consumed.has(digest), `${where(step)}: CONSUMED without a settlement`);
+      if (settledGeneration !== null && kernel.status !== 'CONSUMED') {
+        // The chain settled an admitted attempt: the store must still hold that reservation, unresolved.
+        assert.ok(kernel.status === 'RESERVED' || kernel.status === 'QUARANTINED', `${where(step)}: settled but ${kernel.status}`);
+        assert.equal(kernel.reservationGeneration, settledGeneration, `${where(step)}: settled under an earlier reservation`);
+      }
+    }
+  }
+  return counts;
+}

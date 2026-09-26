@@ -172,7 +172,8 @@ it to the matrix, making totality review part of the exported API change.
 and `admitAttemptUnderReservation` — its reservation record arrives from the
 pipeline's store. Every argument is strictly parsed: the mandate as canonical MCE
 v2 bytes through the kernel decoder, the replay record through the kernel's
-`parseReplayRecord`, each attempt's terms at their Solidity widths, and at most
+`parseReplayRecord` (including its reservation generation, a `bigint` in
+`[0, 2^64 - 1]`, since Phase 6R.1b), each attempt's terms at their Solidity widths, and at most
 `MAX_ATTEMPTS_PER_RESERVATION` attempts. A malformed argument is
 `EVIDENCE_MALFORMED` or `ATTEMPT_MALFORMED` respectively, never an exception.
 Each is probed with the same eleven hostile plain values at each of its three

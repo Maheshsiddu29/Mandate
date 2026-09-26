@@ -82,7 +82,7 @@ test('F-1 REGRESSION: a lapsed reservation quarantines instead of returning to U
   const key = `0x${'11'.repeat(32)}` as never;
 
   const reserved = applyTransition({
-    current: { key, status: ReplayStatus.UNUSED, updatedAtUnixSeconds: now, reservationExpiresAtUnixSeconds: null, resolution: null },
+    current: { key, status: ReplayStatus.UNUSED, updatedAtUnixSeconds: now, reservationExpiresAtUnixSeconds: null, resolution: null, reservationGeneration: 0n },
     transition: ReplayTransition.RESERVE,
     nowUnixSeconds: now,
     // The short hold that used to open the window: 300 seconds against an hour
@@ -112,7 +112,7 @@ test('F-1 REGRESSION: there is no transition from a lapsed reservation to permis
   const now = 1_800_000_000n;
   const key = `0x${'11'.repeat(32)}` as never;
   const reserved = applyTransition({
-    current: { key, status: ReplayStatus.UNUSED, updatedAtUnixSeconds: now, reservationExpiresAtUnixSeconds: null, resolution: null },
+    current: { key, status: ReplayStatus.UNUSED, updatedAtUnixSeconds: now, reservationExpiresAtUnixSeconds: null, resolution: null, reservationGeneration: 0n },
     transition: ReplayTransition.RESERVE,
     nowUnixSeconds: now,
     reservationSeconds: 60n,
@@ -153,6 +153,7 @@ test('F-1 REGRESSION: there is no transition from a lapsed reservation to permis
       observedAtUnixSeconds: now + 10_000n,
       sourceId: 'observer.chain.test',
       reference: `0x${'cd'.repeat(32)}`,
+      reservationGeneration: quarantined.value.reservationGeneration,
     },
   });
   assert.ok(reconciled.ok);
