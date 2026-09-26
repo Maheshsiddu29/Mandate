@@ -33,6 +33,38 @@ async function run(count: number, transport: Parameters<typeof selectWithJev>[0]
 }
 
 describe('jev selection modes', () => {
+  it('is total over malformed top-level and nested ordinary values', async () => {
+    const hostile: readonly unknown[] = [null, undefined, false, true, 0, 1, '', 'request', [], {}, { policy: null }];
+    for (const raw of hostile) {
+      await assert.doesNotReject(() => selectWithJev(raw), String(raw));
+      const result = await selectWithJev(raw);
+      assert.equal(result.status, 'INVALID_INPUT', String(raw));
+      assert.equal(result.routing.status, 'INVALID_INPUT', String(raw));
+    }
+
+    const base = { route: routeRequest(validRoutes(2)), transport: null, handoffState: jevHandoff() };
+    const malformed: readonly unknown[] = [
+      { ...base, policy: false },
+      { ...base, policy: { timeoutMs: 0 } },
+      { ...base, policy: { timeoutMs: Number.POSITIVE_INFINITY } },
+      { ...base, policy: { minimumConfidence: Number.NaN } },
+      { ...base, policy: { allowedModels: [7] } },
+      { ...base, transport: false },
+      { ...base, transport: {} },
+      { ...base, advisoryByRouteId: [] },
+      { ...base, circuit: {} },
+      { ...base, nowMs: 1 },
+      { ...base, verifier: 'verify' },
+      { ...base, extra: true },
+    ];
+    for (const raw of malformed) {
+      await assert.doesNotReject(() => selectWithJev(raw));
+      const result = await selectWithJev(raw);
+      assert.equal(result.status, 'INVALID_INPUT');
+      assert.notEqual(result.status, 'SELECTED');
+    }
+  });
+
   it('selects the candidate Jev names and records it as assisted', async () => {
     const result = await run(3, choosingTransport('route_002', 0.88));
     assert.equal(result.status, 'SELECTED');

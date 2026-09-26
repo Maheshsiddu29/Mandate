@@ -35,6 +35,15 @@ function signedRequest(quote: ProviderRouteQuote, mandate = ROUTER_MANDATE) {
 }
 
 describe('adversarial route providers', () => {
+  it('refuses malformed provider objects without invoking or throwing', () => {
+    for (const raw of [null, undefined, false, true, 0, 1, '', 'provider', [], {}, { discover: 'not-a-function' }]) {
+      assert.doesNotThrow(() => collectProviderRoutes(raw), String(raw));
+      const result = collectProviderRoutes(raw);
+      assert.equal(result.ok, false, String(raw));
+      if (!result.ok) assert.equal(result.error.code, 'MALFORMED_PROVIDER_RESPONSE');
+    }
+  });
+
   it('rejects provider spoofing and thrown provider failures', () => {
     const spoofed = collectProviderRoutes({ providerId: 'provider.expected', providerClass: 'SYNTHETIC_TEST', discover: () => [routeQuote()] });
     assert.equal(spoofed.ok, false);

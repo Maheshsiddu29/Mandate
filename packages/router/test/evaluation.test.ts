@@ -9,7 +9,14 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { Decision, parseIdentifier } from '@mandate/kernel';
 import { openRegistry } from '@mandate/registry';
-import { evaluateRoutes, route, selectEvaluated, type ProviderRouteQuote, type TrustedRouteCost } from '../src/index.ts';
+import {
+  evaluateRoutes,
+  resolveHandoff,
+  route,
+  selectEvaluated,
+  type ProviderRouteQuote,
+  type TrustedRouteCost,
+} from '../src/index.ts';
 import {
   ROUTER_AUTHORIZATION, ROUTER_CLOCK, ROUTER_DOMAIN, ROUTER_MANDATE, ROUTER_REGISTRY_INPUT,
   ROUTER_REQUESTED_QUANTITY, ROUTER_STATE, routeQuote, trustedCost, zeroFee,
@@ -136,6 +143,36 @@ describe('route evaluation and selection', () => {
 
     assert.doesNotThrow(() => route(null, null));
     assert.equal(route(null, null).status, 'INVALID_INPUT');
+  });
+
+  it('refuses plain objects at the validated evaluation and context boundaries', () => {
+    const hostile: readonly unknown[] = [null, undefined, false, true, 0, 1, 'evaluation', [], {}, {
+      context: {}, admissible: [], outcomes: [],
+    }];
+    for (const raw of hostile) {
+      assert.doesNotThrow(() => selectEvaluated(raw, 0, routerHandoff()), String(raw));
+      const selected = selectEvaluated(raw, 0, routerHandoff());
+      assert.equal(selected.status, 'INVALID_INPUT', String(raw));
+      if (selected.status === 'INVALID_INPUT') {
+        assert.equal(selected.errors[0]?.detail['cause'], 'UNVALIDATED_ROUTING_EVALUATION');
+      }
+
+      assert.doesNotThrow(() => resolveHandoff(routerHandoff(), raw), String(raw));
+      const handoff = resolveHandoff(routerHandoff(), raw);
+      assert.equal(handoff.ok, false, String(raw));
+      if (!handoff.ok) assert.equal(handoff.errors[0]?.detail['cause'], 'UNVALIDATED_ROUTING_CONTEXT');
+    }
+  });
+
+  it('does not transfer validated-internal authority through object spread', () => {
+    const evaluated = evaluateRoutes(request([withFee('route.a', 100n)]));
+    assert.equal(evaluated.status, 'EVALUATED');
+    if (evaluated.status !== 'EVALUATED') return;
+
+    const copiedEvaluation = { ...evaluated.evaluation };
+    const copiedContext = { ...evaluated.evaluation.context };
+    assert.equal(selectEvaluated(copiedEvaluation, 0, routerHandoff()).status, 'INVALID_INPUT');
+    assert.equal(resolveHandoff(routerHandoff(), copiedContext).ok, false);
   });
 
   it('re-parses registry snapshots and refuses malformed registry values without throwing', () => {

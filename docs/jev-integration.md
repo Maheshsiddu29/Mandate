@@ -1,6 +1,6 @@
 # Jev-assisted decision layer
 
-> **Status:** Phase 5. Jev is an **optional advisory selector** over a closed
+> **Status:** Phase 5R.3. Jev is an **optional advisory selector** over a closed
 > set of candidates that the deterministic pipeline has already admitted. It is
 > not part of the authorization path. Nothing here executes, funds, bridges or
 > submits anything.
@@ -118,6 +118,14 @@ Jev may not change quantity, notional, recipient, address, representation,
 chain, issuer, price, costs, route steps, or any mandate constraint. Those
 values never leave the process in a form Jev could echo back, and nothing Jev
 returns is parsed as any of them.
+
+`selectWithJev` is also a plain-value boundary. It validates the request object
+and its policy, transport, advisory map, circuit and callback seams before any
+field is used. A malformed request returns `INVALID_INPUT`; it does not become
+an advisory choice, deterministic selection, or shortcut around fresh handoff
+verification. The shared boundary matrix and the distinction between external
+and validated-internal APIs are documented in
+[public-trust-boundaries.md](public-trust-boundaries.md).
 
 ## 3. The closed choice set
 

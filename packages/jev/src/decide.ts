@@ -97,6 +97,139 @@ export interface JevRoutingRequest {
   readonly verifier?: Verifier;
 }
 
+interface ValidatedJevRoutingRequest {
+  readonly route: unknown;
+  readonly transport: JevTransport | null;
+  readonly policy: JevPolicy;
+  readonly advisoryByRouteId: Readonly<Record<string, RouteAdvisoryContext>>;
+  readonly handoffState: unknown;
+  readonly circuit: AdvisoryCircuit | undefined;
+  readonly nowMs: (() => number) | undefined;
+  readonly verifier: Verifier;
+}
+
+type JevRequestParseResult =
+  | { readonly ok: true; readonly value: ValidatedJevRoutingRequest }
+  | { readonly ok: false; readonly errors: readonly RouteExclusion[] };
+
+const JEV_REQUEST_FIELDS = [
+  'route', 'transport', 'policy', 'advisoryByRouteId', 'handoffState', 'circuit', 'nowMs', 'verifier',
+] as const;
+const JEV_POLICY_FIELDS = ['enabled', 'model', 'timeoutMs', 'minimumConfidence', 'allowedModels'] as const;
+const MAX_MODEL_LENGTH = 128;
+const MAX_TIMEOUT_MS = 2_147_483_647;
+const MAX_ALLOWED_MODELS = 256;
+
+function requestError(input: string, cause: string): JevRequestParseResult {
+  return { ok: false, errors: [{ code: 'INPUT_INVALID', detail: { input, cause } }] };
+}
+
+function plainObject(raw: unknown): Record<string, unknown> | undefined {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;
+  return raw as Record<string, unknown>;
+}
+
+function boundedModel(raw: unknown): string | undefined {
+  if (typeof raw !== 'string' || raw.length === 0 || raw.length > MAX_MODEL_LENGTH) return undefined;
+  return /[^\x20-\x7e]/.test(raw) ? undefined : raw;
+}
+
+function parsePolicy(raw: unknown): JevPolicy | undefined {
+  if (raw === undefined) return DEFAULT_JEV_POLICY;
+  const policy = plainObject(raw);
+  if (policy === undefined || Object.keys(policy).some((key) => !JEV_POLICY_FIELDS.includes(key as typeof JEV_POLICY_FIELDS[number]))) {
+    return undefined;
+  }
+
+  const enabled = policy['enabled'] ?? DEFAULT_JEV_POLICY.enabled;
+  const model = policy['model'] ?? DEFAULT_JEV_POLICY.model;
+  const timeoutMs = policy['timeoutMs'] ?? DEFAULT_JEV_POLICY.timeoutMs;
+  const minimumConfidence = policy['minimumConfidence'] === undefined
+    ? DEFAULT_JEV_POLICY.minimumConfidence
+    : policy['minimumConfidence'];
+  const rawAllowedModels = policy['allowedModels'] === undefined
+    ? DEFAULT_JEV_POLICY.allowedModels
+    : policy['allowedModels'];
+
+  if (typeof enabled !== 'boolean' || boundedModel(model) === undefined) return undefined;
+  if (typeof timeoutMs !== 'number' || !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > MAX_TIMEOUT_MS) {
+    return undefined;
+  }
+  if (minimumConfidence !== null && (
+    typeof minimumConfidence !== 'number'
+    || !Number.isFinite(minimumConfidence)
+    || minimumConfidence < 0
+    || minimumConfidence > 1
+  )) return undefined;
+
+  let allowedModels: readonly string[] | null;
+  if (rawAllowedModels === null) {
+    allowedModels = null;
+  } else if (
+    Array.isArray(rawAllowedModels)
+    && rawAllowedModels.length <= MAX_ALLOWED_MODELS
+    && rawAllowedModels.every((item) => boundedModel(item) !== undefined)
+    && new Set(rawAllowedModels).size === rawAllowedModels.length
+  ) {
+    allowedModels = [...rawAllowedModels] as string[];
+  } else {
+    return undefined;
+  }
+
+  return { enabled, model: model as string, timeoutMs, minimumConfidence, allowedModels };
+}
+
+function parseJevRoutingRequest(raw: unknown): JevRequestParseResult {
+  const request = plainObject(raw);
+  if (request === undefined) return requestError('request', 'MALFORMED_JEV_REQUEST');
+  if (Object.keys(request).some((key) => !JEV_REQUEST_FIELDS.includes(key as typeof JEV_REQUEST_FIELDS[number]))) {
+    return requestError('request', 'UNKNOWN_FIELD');
+  }
+
+  const policy = parsePolicy(request['policy']);
+  if (policy === undefined) return requestError('request.policy', 'MALFORMED_JEV_POLICY');
+
+  const rawTransport = request['transport'];
+  const transportObject = plainObject(rawTransport);
+  const transport = rawTransport === null
+    ? null
+    : transportObject !== undefined && typeof transportObject['send'] === 'function'
+      ? transportObject as unknown as JevTransport
+      : undefined;
+  if (transport === undefined) return requestError('request.transport', 'MALFORMED_JEV_TRANSPORT');
+
+  const rawAdvisory = request['advisoryByRouteId'];
+  const advisoryObject = rawAdvisory === undefined ? {} : plainObject(rawAdvisory);
+  if (advisoryObject === undefined) return requestError('request.advisoryByRouteId', 'MALFORMED_ADVISORY_CONTEXT');
+  const advisoryByRouteId: Record<string, RouteAdvisoryContext> = Object.create(null) as Record<string, RouteAdvisoryContext>;
+  for (const [routeId, context] of Object.entries(advisoryObject)) {
+    advisoryByRouteId[routeId] = context as RouteAdvisoryContext;
+  }
+
+  const rawCircuit = request['circuit'];
+  if (rawCircuit !== undefined && !(rawCircuit instanceof AdvisoryCircuit)) {
+    return requestError('request.circuit', 'MALFORMED_ADVISORY_CIRCUIT');
+  }
+  const rawNowMs = request['nowMs'];
+  if (rawNowMs !== undefined && typeof rawNowMs !== 'function') return requestError('request.nowMs', 'MALFORMED_CLOCK');
+  const rawVerifier = request['verifier'];
+  if (rawVerifier !== undefined && typeof rawVerifier !== 'function') return requestError('request.verifier', 'MALFORMED_VERIFIER');
+
+  return {
+    ok: true,
+    value: {
+      route: request['route'],
+      transport,
+      policy,
+      advisoryByRouteId,
+      handoffState: request['handoffState'],
+      circuit: rawCircuit as AdvisoryCircuit | undefined,
+      nowMs: rawNowMs as (() => number) | undefined,
+      verifier: (rawVerifier as Verifier | undefined) ?? verify,
+    },
+  };
+}
+
 export interface JevSelectionCommon {
   readonly selectionMode: SelectionMode;
   readonly jevReceipt: JevDecisionReceipt | null;
@@ -246,9 +379,26 @@ function selectionReceipt(
  * Run the deterministic pipeline, optionally consult Jev over the closed set,
  * and re-verify whatever was chosen before handing it off.
  */
-export async function selectWithJev(request: JevRoutingRequest): Promise<JevRoutingResult> {
-  const policy: JevPolicy = { ...DEFAULT_JEV_POLICY, ...request.policy };
-  const verifier = request.verifier ?? verify;
+export function selectWithJev(request: unknown): Promise<JevRoutingResult>;
+export function selectWithJev(request: JevRoutingRequest): Promise<JevRoutingResult>;
+export async function selectWithJev(rawRequest: unknown): Promise<JevRoutingResult> {
+  const parsedRequest = parseJevRoutingRequest(rawRequest);
+  if (!parsedRequest.ok) {
+    const routing: RoutingResult = { status: 'INVALID_INPUT', errors: parsedRequest.errors };
+    return {
+      status: 'INVALID_INPUT',
+      errors: parsedRequest.errors,
+      selectionMode: SelectionMode.DETERMINISTIC,
+      jevReceipt: null,
+      routing,
+      handoffVerification: null,
+      selectionReceipt: null,
+      deterministicCandidate: null,
+    };
+  }
+  const request = parsedRequest.value;
+  const policy = request.policy;
+  const verifier = request.verifier;
 
   const evaluated = evaluateRoutes(request.route, verifier);
   if (evaluated.status === 'INVALID_INPUT') {

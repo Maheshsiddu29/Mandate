@@ -128,19 +128,28 @@ export interface RouteProvider {
 }
 
 /** Invoke one provider and ensure it cannot mislabel another provider's output. */
-export function collectProviderRoutes(provider: RouteProvider): ParseResult<readonly ProviderRouteQuote[]> {
-  const providerId = parseIdentifier(provider.providerId);
-  if (!providerId.ok || !Object.values(ProviderClass).includes(provider.providerClass)) return failure({ path: 'provider' });
+export function collectProviderRoutes(provider: RouteProvider | unknown): ParseResult<readonly ProviderRouteQuote[]> {
+  if (typeof provider !== 'object' || provider === null || Array.isArray(provider)) return failure({ path: 'provider' });
+  const value = provider as Record<string, unknown>;
+  const providerId = parseIdentifier(value['providerId']);
+  const providerClass = value['providerClass'];
+  const discover = value['discover'];
+  if (
+    !providerId.ok
+    || typeof providerClass !== 'string'
+    || !Object.values(ProviderClass).includes(providerClass as ProviderClass)
+    || typeof discover !== 'function'
+  ) return failure({ path: 'provider' });
   let raw: unknown;
   try {
-    raw = provider.discover();
+    raw = discover.call(provider);
   } catch {
     return failure({ path: 'provider.discover' });
   }
   const parsed = parseProviderRouteSet(raw);
   if (!parsed.ok) return parsed;
   for (const quote of parsed.value) {
-    if (quote.providerId !== providerId.value || quote.providerClass !== provider.providerClass) {
+    if (quote.providerId !== providerId.value || quote.providerClass !== providerClass) {
       return { ok: false, error: { code: 'PROVIDER_IDENTITY_MISMATCH', detail: { routeId: quote.routeId, field: 'provider' } } };
     }
   }

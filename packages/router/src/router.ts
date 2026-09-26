@@ -78,6 +78,15 @@ export interface HandoffInputs {
 
 type Verifier = (request: VerifyRequest) => VerificationReceipt;
 
+// These brands separate values produced by this module's parsing/evaluation
+// boundary from structurally similar plain objects. They are intentionally not
+// exported: a caller can consume an evaluation, but cannot construct a trusted
+// one by assertion-free ordinary TypeScript.
+const VALIDATED_ROUTING_CONTEXT: unique symbol = Symbol('validated-routing-context');
+const VALIDATED_ROUTING_EVALUATION: unique symbol = Symbol('validated-routing-evaluation');
+const validatedRoutingContexts = new WeakSet<object>();
+const validatedRoutingEvaluations = new WeakSet<object>();
+
 /**
  * One kernel-PASS candidate, with the quality inputs its ranking position was
  * computed from and the receipt that admitted it.
@@ -90,6 +99,7 @@ export interface AdmissibleRoute {
 
 /** The parsed, trusted inputs a routing decision was computed over. */
 export interface RoutingContext {
+  readonly [VALIDATED_ROUTING_CONTEXT]: true;
   readonly mandate: CanonicalMandate;
   readonly authorization: AuthorizationEnvelope;
   readonly registry: Registry;
@@ -108,6 +118,7 @@ export interface RoutingContext {
  * registry and the kernel admitted appears in it exactly once.
  */
 export interface RoutingEvaluation {
+  readonly [VALIDATED_ROUTING_EVALUATION]: true;
   readonly context: RoutingContext;
   readonly admissible: readonly AdmissibleRoute[];
   readonly outcomes: readonly RouteOutcome[];
@@ -116,6 +127,32 @@ export interface RoutingEvaluation {
 export type RoutingEvaluationResult =
   | { readonly status: 'EVALUATED'; readonly evaluation: RoutingEvaluation }
   | { readonly status: 'INVALID_INPUT'; readonly errors: readonly RouteExclusion[] };
+
+function isValidatedRoutingContext(raw: unknown): raw is RoutingContext {
+  return typeof raw === 'object'
+    && raw !== null
+    && !Array.isArray(raw)
+    && validatedRoutingContexts.has(raw);
+}
+
+function isValidatedRoutingEvaluation(raw: unknown): raw is RoutingEvaluation {
+  return typeof raw === 'object'
+    && raw !== null
+    && !Array.isArray(raw)
+    && validatedRoutingEvaluations.has(raw);
+}
+
+function validatedContext(value: Omit<RoutingContext, typeof VALIDATED_ROUTING_CONTEXT>): RoutingContext {
+  Object.defineProperty(value, VALIDATED_ROUTING_CONTEXT, { value: true });
+  validatedRoutingContexts.add(value);
+  return value as RoutingContext;
+}
+
+function validatedEvaluation(value: Omit<RoutingEvaluation, typeof VALIDATED_ROUTING_EVALUATION>): RoutingEvaluation {
+  Object.defineProperty(value, VALIDATED_ROUTING_EVALUATION, { value: true });
+  validatedRoutingEvaluations.add(value);
+  return value as RoutingEvaluation;
+}
 
 /**
  * Stage one: parse, filter and rank. No selection and no final verification.
@@ -248,21 +285,18 @@ export function evaluateRoutes(request: RouteRequest | unknown, verifier: Verifi
 
   ranked.sort((left, right) => compareRanked(left, right, mandate.value.side));
   const sortedOutcomes = [...outcomes].sort((left, right) => left.routeId < right.routeId ? -1 : left.routeId > right.routeId ? 1 : 0);
+  const context = validatedContext({
+    mandate: mandate.value,
+    authorization: authorization.value,
+    registry: registry.value,
+    trustedState: trustedState.value,
+    clock: clock.value,
+    expectedDomain: domain.value,
+    requestedQuantity: requestedQuantity.value,
+  });
   return {
     status: 'EVALUATED',
-    evaluation: {
-      context: {
-        mandate: mandate.value,
-        authorization: authorization.value,
-        registry: registry.value,
-        trustedState: trustedState.value,
-        clock: clock.value,
-        expectedDomain: domain.value,
-        requestedQuantity: requestedQuantity.value,
-      },
-      admissible: ranked,
-      outcomes: sortedOutcomes,
-    },
+    evaluation: validatedEvaluation({ context, admissible: ranked, outcomes: sortedOutcomes }),
   };
 }
 
@@ -274,16 +308,28 @@ export function evaluateRoutes(request: RouteRequest | unknown, verifier: Verifi
  * evaluation instead of silently choosing something else.
  */
 export function selectEvaluated(
-  evaluation: RoutingEvaluation,
-  index: number,
+  evaluation: RoutingEvaluation | unknown,
+  index: number | unknown,
   handoff: HandoffInputs | unknown,
   verifier: Verifier = verify,
+): RoutingResult {
+  if (!isValidatedRoutingEvaluation(evaluation)) {
+    return { status: 'INVALID_INPUT', errors: [inputError('evaluation', 'UNVALIDATED_ROUTING_EVALUATION')] };
+  }
+  return selectValidatedEvaluation(evaluation, index, handoff, verifier);
+}
+
+function selectValidatedEvaluation(
+  evaluation: RoutingEvaluation,
+  index: number | unknown,
+  handoff: HandoffInputs | unknown,
+  verifier: Verifier,
 ): RoutingResult {
   const { context, admissible, outcomes } = evaluation;
 
   // Parsed before anything else: a handoff that cannot be established is not a
   // reason to fall back on evaluation state, it is a reason not to hand off.
-  const resolved = resolveHandoff(handoff, context);
+  const resolved = resolveValidatedHandoff(handoff, context);
   if (!resolved.ok) return { status: 'INVALID_INPUT', errors: resolved.errors };
   const { trustedState: handoffState, clock: handoffClock } = resolved;
   const handoffDigest = trustedStateDigest(handoffState);
@@ -291,7 +337,7 @@ export function selectEvaluated(
   if (admissible.length === 0) {
     return { status: 'NO_VALID_ROUTE', finalVerificationReceipt: null, receipt: finishReceipt(context, outcomes, [], null, null, handoffDigest, handoffClock.nowUnixSeconds) };
   }
-  if (!Number.isSafeInteger(index) || index < 0 || index >= admissible.length) {
+  if (typeof index !== 'number' || !Number.isSafeInteger(index) || index < 0 || index >= admissible.length) {
     return { status: 'INVALID_INPUT', errors: [{ code: 'INPUT_INVALID', detail: { input: 'selectedIndex', cause: String(index) } }] };
   }
 
@@ -338,7 +384,14 @@ export type ResolvedHandoff =
  * Phase 6 gate closes it, and until then the orchestrator's clock is a named
  * member of the trusted computing base.
  */
-export function resolveHandoff(handoff: HandoffInputs | unknown, context: RoutingContext): ResolvedHandoff {
+export function resolveHandoff(handoff: HandoffInputs | unknown, context: RoutingContext | unknown): ResolvedHandoff {
+  if (!isValidatedRoutingContext(context)) {
+    return { ok: false, errors: [inputError('evaluation.context', 'UNVALIDATED_ROUTING_CONTEXT')] };
+  }
+  return resolveValidatedHandoff(handoff, context);
+}
+
+function resolveValidatedHandoff(handoff: HandoffInputs | unknown, context: RoutingContext): ResolvedHandoff {
   if (typeof handoff !== 'object' || handoff === null || Array.isArray(handoff)) {
     return { ok: false, errors: [{ code: 'HANDOFF_STATE_MISSING', detail: { input: 'handoff' } }] };
   }

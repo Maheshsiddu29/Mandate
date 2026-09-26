@@ -1,6 +1,6 @@
 # Deterministic routing
 
-> **Status:** Phase 5R.2 implementation. The router is deterministic, offline and
+> **Status:** Phase 5R.3 implementation. The router is deterministic, offline and
 > model-free. It constructs no transaction and submits nothing.
 
 ## Boundary
@@ -67,12 +67,17 @@ returns `admissible` in the ADR 0010 order, so index 0 is the deterministic
 preferred candidate and is the single fallback target. An index outside the
 closed set is refused rather than resolved to something else.
 
-Both routing entrypoints are total over parsed, plain boundary values. A
+All externally reachable routing decision entrypoints are total over ordinary
+parsed/plain boundary values. A
 non-object request, malformed nested input or malformed registry produces
 `INVALID_INPUT` with auditable `INPUT_INVALID` exclusions rather than an
 exception. The registry is re-opened from its strictly parsed snapshot at this
-boundary; caller-supplied indexes are never trusted. `route` likewise parses a
-handoff object before reading it and refuses a missing or malformed handoff.
+boundary; caller-supplied indexes are never trusted. `selectEvaluated` accepts
+only an opaque evaluation produced by `evaluateRoutes`, and `resolveHandoff`
+accepts only its opaque context; copied or deserialized lookalikes refuse before
+field access. `route` likewise parses a handoff object before reading it and
+refuses a missing or malformed handoff. The complete A/B inventory is in
+[public-trust-boundaries.md](public-trust-boundaries.md).
 
 The ranking itself is unchanged. Nothing in the router is aware that an
 advisory layer exists, and a structural test still fails if the router's source
