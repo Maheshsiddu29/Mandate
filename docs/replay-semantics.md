@@ -352,14 +352,23 @@ state ([execution-gate.md §9](execution-gate.md#9-replay-events-and-reconciliat
   of time.
 
 `observationFromGateEvidence` (`packages/execution-gate`) turns a reading of the
-gate into the `ExecutionObservation` that `RECONCILE` requires:
+gate into the `ExecutionObservation` that `RECONCILE` requires. Attempt signing
+is bounded first: `admitAttemptUnderReservation` admits an execution attempt only
+under a live `RESERVED` record for the mandate, with a chain-time deadline at or
+before the reservation's expiry, so that expiry bounds every attempt signed under
+the reservation (Phase 6R.1a).
 
 | Reading (at the required confirmation level) | Observation |
 | --- | --- |
 | Consumed, with the matching `MandateExecuted` log | `SETTLED`, referenced by transaction hash — even if a different signed attempt consumed it |
-| Not consumed, at a block whose timestamp has **reached the mandate's expiry** | `FAILED`, referenced by the attempt's commitment |
-| Not consumed, mandate not yet expired — even if this attempt's deadline has passed | no observation: any attempt the agent signs under this mandate may still land (Phase 6R.1) |
+| Not consumed, at a block past the **reservation's** expiry | `FAILED` (attempts expired): back to `UNUSED`, and the mandate may be retried while valid |
+| Not consumed, at a block at or after the **mandate's** expiry | `FAILED` (mandate expired): `verify` then refuses it as `MANDATE_EXPIRED` |
+| Not consumed, reservation not yet past | no observation: an attempt admitted under it may still land |
 | Below the required confirmation level, contradictory or malformed | no observation |
+
+§6's "observed to fail → `UNUSED`; retry permitted" therefore holds for gate
+executions: the retry waits for the reservation the pipeline chose, not for the
+mandate to expire (Phase 6R.1 had required the latter).
 
 Two consequences for this state machine. First, a double reserve that an
 offchain store fails to prevent (§8) can no longer become a double *settlement*

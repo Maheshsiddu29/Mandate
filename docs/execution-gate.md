@@ -93,6 +93,7 @@ MandateExecutionGate.execute(mandate, principalSig, candidate, terms, agentSig)
 ════════════════════════════════════════════════════════════════════════════════
 OFFCHAIN
   read executionCommitmentOf + MandateExecuted at the required confirmation level
+  admitAttemptUnderReservation before signing (deadline ≤ reservation expiry)
   observationFromGateEvidence → RECONCILE(SETTLED | FAILED)           (packages/execution-gate)
 ```
 
@@ -393,29 +394,70 @@ data that is not already public in the transaction's calldata.
 | Which execution? | The stored commitment, and the `MandateExecuted` log that carries it |
 | Actual delivered amounts | `actualDebit`, `actualCredit` in the log |
 | Transaction identity | The log's transaction hash |
-| Did it fail? | Not consumed at a final block whose timestamp has **reached the mandate's expiry** — not merely one attempt's deadline |
+| Did the attempts fail? | Not consumed at a final block whose timestamp is **past the reservation's expiry**, which bounds the deadline of every attempt signed under it |
+| Did the mandate expire? | Not consumed at a final block whose timestamp has reached the mandate's `expiresAt` — a separate fact |
 
-`observationFromGateEvidence` (`packages/execution-gate/src/reconciliation.ts`)
-turns a reading into the kernel's `ExecutionObservation`, or refuses:
-`NOT_FINAL` below the required level; `EVIDENCE_MISMATCH` for another chain,
-gate or mandate; `EVIDENCE_INCONSISTENT` for a consumption without its log or
-vice versa; `OUTCOME_UNESTABLISHED` for an unconsumed mandate while final chain
-time is still before the mandate's `expiresAt`; `EVIDENCE_MALFORMED` for any
-malformed input. The attempt record therefore carries the signed mandate expiry,
-not the attempt deadline. The replay key is the mandate digest, so until expiry
-the agent may sign another execution of the same mandate with a later deadline
-and the gate will settle it; one attempt's deadline passing establishes nothing
-about the authorization (Phase 6R.1 — before it, this module reported `FAILED`
-there, and the kernel's `RECONCILE` would have returned an authorization that
-could still be consumed to `UNUSED`). At `expiresAt` the gate refuses every
-attempt and chain timestamps never decrease, so a final unconsumed reading there
-is the first point at which no execution opportunity remains. The cost is
-liveness only: a mandate whose attempts all reverted stays unresolved until it
-expires, while a retry inside the window remains a further attempt under the
-same reservation. A `SETTLED` from a
-different signed attempt is still `SETTLED` — the authorization is consumed — and
-the settling commitment is returned so the discrepancy is surfaced. A test drives
-the result through the kernel's own `applyTransition(RECONCILE)`.
+The gate's replay key is the mandate digest, so an agent may sign several
+execution attempts of one mandate, each with its own chain-time deadline, and
+whichever lands first consumes it. Reconciliation keeps two facts apart
+(Phase 6R.1a):
+
+- **the attempts failed** — every attempt that could still settle under the
+  current reservation is past its deadline and nothing consumed the mandate.
+  `RECONCILE(FAILED)` returns the record to `UNUSED`, and the mandate may be
+  reserved and tried again while it is valid;
+- **the mandate expired** — the gate refuses every attempt from `expiresAt` on,
+  whoever signed it.
+
+Phase 6R.1 reported `FAILED` only at mandate expiry, which made a retry after any
+reverted attempt impossible for the mandate's whole life: the kernel refuses a
+candidate while the record is `RESERVED` or `QUARANTINED`, and by the time
+`FAILED` restored it, `verify` refused it as `MANDATE_EXPIRED`.
+
+**Attempt deadlines are bounded by the reservation.** `admitAttemptUnderReservation`
+is the pre-signing rule. It admits an attempt only while the kernel replay record
+for the mandate's digest is `RESERVED` and live on the pipeline's clock, and only
+with a deadline at or before that reservation's expiry; it returns the execution
+commitment to sign and the record to store, with the attempt appended (at most
+`MAX_ATTEMPTS_PER_RESERVATION` = 8; a rebroadcast of an admitted attempt is not a
+new one). The reservation expiry is therefore one ceiling on every deadline signed
+under it, however many attempts are live at once. A pipeline that wants a retry
+soon after a failure reserves for about as long as its attempt's deadline.
+
+`observationFromGateEvidence(record, evidence, policy)` takes that record — the
+chain and gate, the mandate as the MCE v2 bytes the principal signed, the kernel
+replay record, and the signed attempts each with its commitment — and a reading:
+
+| Reading (at the required confirmation level) | Result |
+| --- | --- |
+| Consumed, with the matching `MandateExecuted` log | `SETTLED`, referenced by transaction hash, with `settledCommitment` and whether a recorded attempt signed it |
+| Not consumed, block timestamp ≥ mandate `expiresAt` | `FAILED`, basis `MANDATE_EXPIRED` |
+| Not consumed, block timestamp > reservation expiry | `FAILED`, basis `ATTEMPTS_EXPIRED`, referenced by the last attempt signed (or the mandate digest if none was) |
+| Not consumed, block timestamp ≤ reservation expiry | `OUTCOME_UNESTABLISHED`: an attempt admitted with a deadline up to the reservation's expiry could still land |
+
+The gate refuses `block.timestamp > deadline` and chain timestamps never
+decrease, so once a final block is past the ceiling no attempt under the
+reservation can land. Attempts under an earlier reservation were already past
+*that* ceiling when it was reconciled `FAILED`. Nothing is taken on trust: the
+mandate digest and expiry are derived from the signed bytes (a record whose bytes
+hash to another digest is `EVIDENCE_MISMATCH`); every recorded attempt's
+commitment must re-derive from its fields, so its deadline is the one the gate
+enforces (`EVIDENCE_INCONSISTENT` otherwise); and the reservation must be the
+kernel's `RESERVED` or `QUARANTINED` record for that digest (`RESERVATION_MISMATCH`,
+`NOT_RESOLVABLE`). Other refusals: `NOT_FINAL` below the required level;
+`EVIDENCE_MISMATCH` for another chain, gate or mandate; `EVIDENCE_INCONSISTENT`
+for a consumption without its log or vice versa; `EVIDENCE_MALFORMED` for any
+malformed input.
+
+**The assumption is signing discipline**: attempts are signed only through
+`admitAttemptUnderReservation`. An attempt signed outside it is not bounded by
+the reservation. It still cannot settle twice — the gate consumes the digest at
+most once — and if it settles, reconciliation reports `SETTLED` with
+`settledByRecordedAttempt: false`. A record that itself carries an attempt past
+its reservation proves the discipline was broken, so it is refused
+(`ATTEMPT_OUTSIDE_RESERVATION`) until the mandate expires. Tests drive every
+result through the kernel's own `applyTransition(RECONCILE)`, including a full
+fail → `UNUSED` → re-reserve → settle → `CONSUMED` cycle on a 30-day mandate.
 
 This closes V-59 for the gate path: the observation is derived from chain state,
 not merely validated. Reading the chain is the caller's job; the rule is pure.

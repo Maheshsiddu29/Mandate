@@ -168,12 +168,17 @@ it to the matrix, making totality review part of the exported API change.
 
 ## Phase 6: `@mandate/execution-gate` and the onchain gate
 
-**A.** `observationFromGateEvidence` — its evidence arrives from a chain reader.
-Every argument is strictly parsed; a malformed attempt record, evidence or policy
-is `EVIDENCE_MALFORMED`, never an exception. It is probed with the same eleven
-hostile plain values at each of its three argument positions, with no mutation of
-input, plus malformed nested fields (wrong case, wrong numeric type, inherited
-names, out-of-range timestamps).
+**A.** `observationFromGateEvidence` — its evidence arrives from a chain reader —
+and `admitAttemptUnderReservation` — its reservation record arrives from the
+pipeline's store. Every argument is strictly parsed: the mandate as canonical MCE
+v2 bytes through the kernel decoder, the replay record through the kernel's
+`parseReplayRecord`, each attempt's terms at their Solidity widths, and at most
+`MAX_ATTEMPTS_PER_RESERVATION` attempts. A malformed argument is
+`EVIDENCE_MALFORMED` or `ATTEMPT_MALFORMED` respectively, never an exception.
+Each is probed with the same eleven hostile plain values at each of its three
+argument positions, with no mutation of input, plus malformed nested fields
+(wrong case, wrong numeric type, inherited names, out-of-range timestamps,
+oversized sets and route data).
 
 **B.** Everything else the package exports is a typed internal API: the wire
 encoders and `toGate*` converters take kernel-parsed values; the reference model
