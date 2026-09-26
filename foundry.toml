@@ -30,5 +30,11 @@ ignored_warnings_from = ["node_modules"]
 runs = 1024
 seed = "0x6d616e64617465"
 
+[profile.default.invariant]
+runs = 256
+depth = 64
+fail_on_revert = false
+failure_persist_dir = "contracts/cache/invariant"
+
 [fmt]
 line_length = 120
