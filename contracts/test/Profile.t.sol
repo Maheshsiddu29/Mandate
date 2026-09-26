@@ -53,8 +53,10 @@ contract LeanAdapter is IMandateExecutionAdapter, IFixtureSettlement {
 /// allowlist entry after the one the market requires, and the candidate's
 /// evaluation-state identifier. Every set is at the 16-entry profile maximum,
 /// route data is 4,096 non-zero bytes, and every free numeric field is at its
-/// maximum. The attempt is correctly signed and settles through `LeanAdapter`,
-/// so the gas figure is the gate's rather than a test double's bookkeeping. The chain identifier
+/// maximum. The attempt is correctly signed and settles through `LeanAdapter`
+/// (etched at the gate's adapter address, because the supported fixture adapter
+/// refuses route data), so the gas figure is the gate's rather than a test
+/// double's bookkeeping, for the largest calldata the gate accepts. The chain identifier
 /// and representation identifier are derived by the gate and cannot be longer.
 ///
 /// `packages/execution-gate/test/corpus.test.ts` rebuilds the same shape with
@@ -98,15 +100,19 @@ contract ProfileTest is GateTestBase {
         string memory quantityUnit = _id("qunit.", 0);
         string memory settlementUnit = _id("sunit.", 0);
 
-        LeanAdapter adapter = new LeanAdapter(address(scriptedToken), address(funding), AAPL_PRICE, 4e6);
-        scriptedToken.mint(address(adapter), 10e18);
         MarketConfig[] memory markets = new MarketConfig[](1);
-        markets[0] = _market(address(scriptedToken), address(adapter), asset, issuer, venue, false);
+        markets[0] = _market(address(scriptedToken), asset, issuer, venue, false);
         markets[0].quantityUnit = quantityUnit;
         markets[0].settlementUnit = settlementUnit;
         markets[0].fixturePrice =
             Price({numeratorUnit: settlementUnit, denominatorUnit: quantityUnit, decimals: 6, atoms: AAPL_PRICE});
         g = new MandateExecutionGate(markets);
+        // The gate's own FixtureVenueAdapter refuses route data, so the maximal
+        // 4,096-byte route is measured through a lean adapter etched at the gate's
+        // adapter address: the gate's cost for the largest calldata it accepts.
+        address adapter = address(_adapterOf(g, address(scriptedToken)));
+        vm.etch(adapter, address(new LeanAdapter(address(scriptedToken), address(funding), AAPL_PRICE, 4e6)).code);
+        scriptedToken.mint(adapter, 10e18);
         vm.prank(principal);
         funding.approve(address(g), type(uint256).max);
 

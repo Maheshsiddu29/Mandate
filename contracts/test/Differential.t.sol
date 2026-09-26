@@ -95,7 +95,12 @@ contract DifferentialTest is Test {
 
     // Addresses fixed by packages/execution-gate/test/support/world.ts.
     address internal constant GATE = address(0xa7e0);
-    address internal constant ADAPTER = address(0xada0);
+    /// @dev The adapters the gate creates for markets 0..3, as `world.ts` computes
+    /// them (`marketAdapter`): the gate's CREATEs 2, 4, 6 and 8.
+    address internal constant ADAPTER_AAPL = 0xe3Fe4b532e6608f851C52d0F1E4fB3707Ee4474E;
+    address internal constant ADAPTER_NVDA = 0x4503e80954976c37929ad5324490dC65bdAAf312;
+    address internal constant ADAPTER_SYNTH = 0xCa70C389B15D4B0Ab15cA5e5B6262dB0114886cb;
+    address internal constant ADAPTER_EIGHT = 0xF87aF03Cd93664E8f91F5F1e59d9056dA760B142;
     address internal constant FUNDING6 = address(0xf006);
     address internal constant FUNDING18 = address(0xf018);
     address internal constant AAPL = address(0xaa01);
@@ -111,7 +116,7 @@ contract DifferentialTest is Test {
 
     address internal principal;
     MandateExecutionGate internal gate;
-    ScriptedAdapter internal adapter;
+    address[4] internal adapters;
     CodecHarness internal harness;
 
     function setUp() public {
@@ -125,27 +130,43 @@ contract DifferentialTest is Test {
         _token(NVDA, "Fixture NVIDIA Stock Token", "fNVDA", 18);
         _token(SYNTH, "Fixture Synthetic Apple", "sAAPL", 18);
         _token(EIGHT, "Fixture Apple 8dp", "fAAPL8", 8);
-        deployCodeTo("ScriptedAdapter.sol:ScriptedAdapter", ADAPTER);
-        adapter = ScriptedAdapter(ADAPTER);
-        // The same economic prices as the 18-decimal fixture prices below, in
-        // each market's funding-token atoms per whole token.
-        adapter.setFixtureSettlement(AAPL, FUNDING6, 200e6);
-        adapter.setFixtureSettlement(NVDA, FUNDING6, 100e6);
-        adapter.setFixtureSettlement(SYNTH, FUNDING6, 200e6);
-        adapter.setFixtureSettlement(EIGHT, FUNDING18, 200e18);
-
         MarketConfig[] memory markets = new MarketConfig[](4);
         markets[0] = _market(AAPL, FUNDING6, _asset("US0378331005"), "issuer.alpha", "venue.fixture", false);
         markets[1] = _market(NVDA, FUNDING6, _asset("US67066G1040"), "issuer.alpha", "venue.fixture", false);
         markets[2] = _market(SYNTH, FUNDING6, _asset("US0378331005"), "issuer.synthetic", "venue.fixture", true);
         markets[3] = _market(EIGHT, FUNDING18, _asset("US0378331005"), "issuer.alpha", "venue.other", false);
-        deployCodeTo("MandateExecutionGate.sol:MandateExecutionGate", abi.encode(markets), GATE);
+        _deployGateAt(abi.encode(markets));
         gate = MandateExecutionGate(GATE);
 
+        // The gate created each market's adapter; both sides must name the same one.
+        adapters = [ADAPTER_AAPL, ADAPTER_NVDA, ADAPTER_SYNTH, ADAPTER_EIGHT];
+        address[4] memory representations = [AAPL, NVDA, SYNTH, EIGHT];
         address[6] memory tokens = [FUNDING6, FUNDING18, AAPL, NVDA, SYNTH, EIGHT];
-        for (uint256 i = 0; i < tokens.length; ++i) {
-            MockERC20(tokens[i]).mint(ADAPTER, 1e40);
+        address scriptedCode = address(new ScriptedAdapter());
+        for (uint256 i = 0; i < adapters.length; ++i) {
+            assertEq(vm.computeCreateAddress(GATE, 2 * i + 2), adapters[i], "world.ts adapter derivation");
+            assertEq(
+                gate.marketOf(keccak256(bytes(MandateCodec.representationId(CHAIN, representations[i])))).adapter,
+                adapters[i],
+                "gate-created adapter address"
+            );
+            // Test cheat: the scripted double replaces the fixture adapter's code, so
+            // this world can exercise every adapter behaviour the gate must survive.
+            vm.etch(adapters[i], scriptedCode.code);
+            for (uint256 j = 0; j < tokens.length; ++j) {
+                MockERC20(tokens[j]).mint(adapters[i], 1e40);
+            }
         }
+    }
+
+    /// @dev `deployCodeTo`, but with the account nonce a CREATE would give the new
+    /// contract (1, EIP-161), so the gate's own CREATEs land where `world.ts` expects.
+    function _deployGateAt(bytes memory args) internal {
+        vm.etch(GATE, abi.encodePacked(vm.getCode("MandateExecutionGate.sol:MandateExecutionGate"), args));
+        vm.setNonce(GATE, 1);
+        (bool ok, bytes memory runtime) = GATE.call("");
+        require(ok, "gate construction failed");
+        vm.etch(GATE, runtime);
     }
 
     /// @dev Read per test, never stored: the ABI corpus is megabytes.
@@ -174,7 +195,6 @@ contract DifferentialTest is Test {
         return MarketConfig({
             representation: token,
             fundingToken: funding,
-            adapter: ADAPTER,
             canonicalAsset: asset,
             issuer: issuer,
             venue: venue,
@@ -182,7 +202,8 @@ contract DifferentialTest is Test {
             settlementUnit: "USD",
             synthetic: synthetic,
             classification: MARKET_FIXTURE,
-            fixturePrice: Price({numeratorUnit: "USD", denominatorUnit: "TOKEN", decimals: 18, atoms: fixturePrice})
+            fixturePrice: Price({numeratorUnit: "USD", denominatorUnit: "TOKEN", decimals: 18, atoms: fixturePrice}),
+            fixtureFeeBps: 30
         });
     }
 
@@ -229,7 +250,9 @@ contract DifferentialTest is Test {
             MockERC20(t.token).mint(principal, t.principalBalance);
             vm.startPrank(principal);
             MockERC20(t.token).approve(GATE, t.gateAllowance);
-            MockERC20(t.token).approve(ADAPTER, t.adapterAllowance);
+            for (uint256 k = 0; k < adapters.length; ++k) {
+                MockERC20(t.token).approve(adapters[k], t.adapterAllowance);
+            }
             vm.stopPrank();
             MockERC20(t.token).setDecimals(t.decimals);
         }
@@ -243,8 +266,13 @@ contract DifferentialTest is Test {
         string memory label = string.concat(id, "#", vm.toString(index));
         vm.chainId(a.chainId);
         vm.warp(a.timestamp);
-        adapter.setScript(
-            ScriptedAdapter.Script({
+        // The script applies to the adapter of the market the candidate names; an
+        // unsupported representation reaches no adapter at all.
+        address marketAdapter = gate.marketOf(keccak256(bytes(a.candidate.representationId))).adapter;
+        if (marketAdapter == address(0)) marketAdapter = adapters[0];
+        ScriptedAdapter(marketAdapter)
+            .setScript(
+                ScriptedAdapter.Script({
                 mode: ScriptedAdapter.Mode(a.script.mode),
                 deliver: a.script.deliver,
                 refund: a.script.refund,
@@ -254,7 +282,7 @@ contract DifferentialTest is Test {
                 bubbleReentry: false,
                 extraPull: a.script.extraPull
             })
-        );
+            );
 
         vm.recordLogs();
         bool settled;

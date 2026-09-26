@@ -64,10 +64,15 @@ export const MAX_PROFILE_SET_SIZE = 16;
 export const MAX_EXECUTION_DATA_BYTES = 4_096;
 export const MAX_MARKETS = 32;
 
-/** Solidity `MarketConfig`, plus the decimals the constructor pins. */
+/**
+ * Solidity `MarketConfig`, plus what the constructor determines: the pinned
+ * decimals and the adapter it creates (Phase 6R.1a). The fixture fee only
+ * shapes the venue, which the model does not simulate, so it is not carried.
+ */
 export interface GateMarket {
   readonly representation: Address;
   readonly fundingToken: Address;
+  /** The `FixtureVenueAdapter` the gate's constructor created for this market. */
   readonly adapter: Address;
   readonly representationDecimals: number;
   readonly fundingDecimals: number;

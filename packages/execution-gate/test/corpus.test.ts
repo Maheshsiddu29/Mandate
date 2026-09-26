@@ -41,7 +41,7 @@ describe('gate differential corpus', () => {
     }
     const missing = Object.entries(GATE_ERRORS)
       // Constructor-only.
-      .filter(([name]) => !['InvalidMarket', 'RealMarketStateSourceRequired', 'FixtureSettlementInconsistent'].includes(name))
+      .filter(([name]) => !['InvalidMarket', 'RealMarketStateSourceRequired', 'FixturePriceNotRepresentable'].includes(name))
       .filter(([name, types]) => !selectors.has(selectorOf(errorSignature(name, types))))
       .map(([name]) => name);
     assert.deepEqual(missing, []);

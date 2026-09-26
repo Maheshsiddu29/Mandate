@@ -30,12 +30,19 @@ import {CodecHarness} from "./CodecHarness.sol";
 /// Markets (chain 46630, the Robinhood Chain testnet ID; every token and venue is
 /// a labelled fixture, not a deployed Robinhood contract):
 ///
-/// | market   | token  | adapter              | asset | issuer            | venue          | synthetic |
-/// | -------- | ------ | -------------------- | ----- | ----------------- | -------------- | --------- |
-/// | AAPL     | fAAPL  | FixtureVenueAdapter  | AAPL  | issuer.alpha      | venue.fixture  | no        |
-/// | NVDA     | fNVDA  | FixtureVenueAdapter  | NVDA  | issuer.alpha      | venue.fixture  | no        |
-/// | SYNTH    | sAAPL  | FixtureVenueAdapter  | AAPL  | issuer.synthetic  | venue.fixture  | yes       |
-/// | SCRIPTED | xAAPL  | ScriptedAdapter      | AAPL  | issuer.alpha      | venue.scripted | no        |
+/// | market   | token  | adapter                         | asset | issuer            | venue          | synthetic |
+/// | -------- | ------ | ------------------------------- | ----- | ----------------- | -------------- | --------- |
+/// | AAPL     | fAAPL  | FixtureVenueAdapter             | AAPL  | issuer.alpha      | venue.fixture  | no        |
+/// | NVDA     | fNVDA  | FixtureVenueAdapter             | NVDA  | issuer.alpha      | venue.fixture  | no        |
+/// | SYNTH    | sAAPL  | FixtureVenueAdapter             | AAPL  | issuer.synthetic  | venue.fixture  | yes       |
+/// | SCRIPTED | xAAPL  | ScriptedAdapter (etched, test)  | AAPL  | issuer.alpha      | venue.scripted | no        |
+///
+/// The gate creates every market's `FixtureVenue` and `FixtureVenueAdapter`
+/// itself (Phase 6R.1a); tests read them back with `marketOf`/`fixtureVenueOf`.
+/// The SCRIPTED market's adapter then has its code replaced by `ScriptedAdapter`
+/// with `vm.etch`. That is a test cheat, not a deployable configuration: it
+/// models the code at the gate's own adapter address misbehaving in every way an
+/// adapter can, which is what the gate's measured settlement must survive.
 abstract contract GateTestBase is Test {
     uint256 internal constant CHAIN = 46_630;
     string internal constant CHAIN_ID_STRING = "eip155:46630";
@@ -86,20 +93,14 @@ abstract contract GateTestBase is Test {
         synth = new MockERC20("Fixture Synthetic Apple", "sAAPL", 18);
         scriptedToken = new MockERC20("Fixture Scripted Apple", "xAAPL", 18);
 
-        aaplVenue = new FixtureVenue(aapl, funding, AAPL_PRICE, FEE_BPS);
-        nvdaVenue = new FixtureVenue(nvda, funding, NVDA_PRICE, FEE_BPS);
-        synthVenue = new FixtureVenue(synth, funding, AAPL_PRICE, FEE_BPS);
-        scripted = new ScriptedAdapter();
-        scripted.setFixtureSettlement(address(scriptedToken), address(funding), AAPL_PRICE);
-
-        // Adapters name their gate, and the gate names its adapters: predict the
-        // gate's CREATE address, which follows the three adapter deployments.
-        address predictedGate = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 3);
-        aaplAdapter = new FixtureVenueAdapter(predictedGate, aaplVenue);
-        nvdaAdapter = new FixtureVenueAdapter(predictedGate, nvdaVenue);
-        synthAdapter = new FixtureVenueAdapter(predictedGate, synthVenue);
         gate = new MandateExecutionGate(_marketConfigs());
-        assertEq(address(gate), predictedGate, "gate address prediction");
+        aaplVenue = _venueOf(gate, address(aapl));
+        nvdaVenue = _venueOf(gate, address(nvda));
+        synthVenue = _venueOf(gate, address(synth));
+        aaplAdapter = _adapterOf(gate, address(aapl));
+        nvdaAdapter = _adapterOf(gate, address(nvda));
+        synthAdapter = _adapterOf(gate, address(synth));
+        scripted = _scriptAdapter(gate, address(scriptedToken));
 
         _stock(address(aaplVenue), aapl);
         _stock(address(nvdaVenue), nvda);
@@ -140,7 +141,6 @@ abstract contract GateTestBase is Test {
 
     function _market(
         address token,
-        address adapter,
         CanonicalAsset memory asset,
         string memory issuer,
         string memory venue,
@@ -150,7 +150,6 @@ abstract contract GateTestBase is Test {
         return MarketConfig({
             representation: token,
             fundingToken: address(funding),
-            adapter: adapter,
             canonicalAsset: asset,
             issuer: issuer,
             venue: venue,
@@ -158,18 +157,17 @@ abstract contract GateTestBase is Test {
             settlementUnit: "USD",
             synthetic: synthetic_,
             classification: MARKET_FIXTURE,
-            fixturePrice: Price({numeratorUnit: "USD", denominatorUnit: "TOKEN", decimals: 6, atoms: fixturePrice})
+            fixturePrice: Price({numeratorUnit: "USD", denominatorUnit: "TOKEN", decimals: 6, atoms: fixturePrice}),
+            fixtureFeeBps: FEE_BPS
         });
     }
 
     function _marketConfigs() internal view returns (MarketConfig[] memory markets) {
         markets = new MarketConfig[](4);
-        markets[0] = _market(address(aapl), address(aaplAdapter), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
-        markets[1] = _market(address(nvda), address(nvdaAdapter), _nvdaAsset(), "issuer.alpha", "venue.fixture", false);
-        markets[2] =
-            _market(address(synth), address(synthAdapter), _aaplAsset(), "issuer.synthetic", "venue.fixture", true);
-        markets[3] =
-            _market(address(scriptedToken), address(scripted), _aaplAsset(), "issuer.alpha", "venue.scripted", false);
+        markets[0] = _market(address(aapl), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
+        markets[1] = _market(address(nvda), _nvdaAsset(), "issuer.alpha", "venue.fixture", false);
+        markets[2] = _market(address(synth), _aaplAsset(), "issuer.synthetic", "venue.fixture", true);
+        markets[3] = _market(address(scriptedToken), _aaplAsset(), "issuer.alpha", "venue.scripted", false);
     }
 
     function _usd(uint256 atoms) internal pure returns (Amount memory) {
@@ -326,11 +324,27 @@ abstract contract GateTestBase is Test {
         return abi.encodeWithSelector(selector);
     }
 
-    /// @notice A scripted adapter that declares `representation` settles against
-    /// `fundingToken` at the 6-decimal AAPL fixture price.
-    function _scriptedAdapterFor(address representation, address fundingToken) internal returns (ScriptedAdapter a) {
-        a = new ScriptedAdapter();
-        a.setFixtureSettlement(representation, fundingToken, AAPL_PRICE);
+    /// @notice The gate's market key for `token`.
+    function _keyOf(address token) internal view returns (bytes32) {
+        return keccak256(bytes(harness.representationId(CHAIN, token)));
+    }
+
+    /// @notice The `FixtureVenueAdapter` gate `g` created for `token`.
+    function _adapterOf(MandateExecutionGate g, address token) internal view returns (FixtureVenueAdapter) {
+        return FixtureVenueAdapter(g.marketOf(_keyOf(token)).adapter);
+    }
+
+    /// @notice The `FixtureVenue` gate `g` created for `token`.
+    function _venueOf(MandateExecutionGate g, address token) internal view returns (FixtureVenue) {
+        return FixtureVenue(g.fixtureVenueOf(_keyOf(token)));
+    }
+
+    /// @notice Test cheat: replace the code at `token`'s gate-created adapter with
+    /// `ScriptedAdapter`, so a test can script how the adapter misbehaves. The
+    /// fixture adapter keeps no storage, so the scripted one starts clean.
+    function _scriptAdapter(MandateExecutionGate g, address token) internal returns (ScriptedAdapter a) {
+        a = ScriptedAdapter(address(_adapterOf(g, token)));
+        vm.etch(address(a), address(new ScriptedAdapter()).code);
     }
 
     function _scriptHonest(uint256 deliver, uint256 refund) internal {

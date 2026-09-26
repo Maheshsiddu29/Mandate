@@ -7,7 +7,12 @@
   "world": {
     "chainId": "46630",
     "gate": "0x000000000000000000000000000000000000a7e0",
-    "adapter": "0x000000000000000000000000000000000000ada0",
+    "adapters": [
+      "0xe3fe4b532e6608f851c52d0f1e4fb3707ee4474e",
+      "0x4503e80954976c37929ad5324490dc65bdaaf312",
+      "0xca70c389b15d4b0ab15ca5e5b6262db0114886cb",
+      "0xf87af03cd93664e8f91f5f1e59d9056da760b142"
+    ],
     "domain": {
       "name": "Mandate",
       "version": "1",

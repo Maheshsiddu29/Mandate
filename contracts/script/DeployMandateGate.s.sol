@@ -4,11 +4,11 @@ pragma solidity 0.8.37;
 import {Script, console2} from "forge-std/Script.sol";
 
 import {MandateExecutionGate} from "../src/MandateExecutionGate.sol";
-import {CanonicalAsset, MarketConfig, Price, MARKET_FIXTURE} from "../src/MandateTypes.sol";
+import {CanonicalAsset, Market, MarketConfig, Price, MARKET_FIXTURE} from "../src/MandateTypes.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {FixtureVenue} from "../src/fixture/FixtureVenue.sol";
 import {FixtureVenueAdapter} from "../src/fixture/FixtureVenueAdapter.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {MandateCodec} from "../src/libraries/MandateCodec.sol";
 
 /// @title DeployMandateGate — deterministic deployment of the gate and its fixture markets
 /// @notice MANUAL ONLY. Never run by CI with `--broadcast`, and Phase 6 authorizes
@@ -16,20 +16,30 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 /// when a deployment *is* separately authorized, what gets deployed is fully
 /// determined by a reviewed config file and the deployer's nonce.
 ///
-/// For every market in the config it deploys one `FixtureVenue` (a labelled
-/// settlement fixture, not a market) and its `FixtureVenueAdapter`, then the gate.
-/// Adapters name the gate and the gate names the adapters, so the gate's address
-/// is predicted from the deployer nonce and asserted after deployment.
+/// It deploys exactly one contract, the gate. The gate's constructor creates each
+/// market's `FixtureVenue` (a labelled settlement fixture, not a market) and
+/// `FixtureVenueAdapter` itself, at the price the config types once
+/// (`fixturePrice` atoms at `fixturePriceDecimals`), converted exactly to the
+/// funding token's atoms (Phase 6R.1a). The script therefore has no adapter or
+/// venue to choose, and no address to predict; it logs what the gate created.
+/// Stocking a venue with inventory is a separate, manual step.
 ///
-/// Each market's price is written once, typed (`fixturePrice` atoms at
-/// `fixturePriceDecimals`), and is both the gate's pinned price and — converted
-/// exactly to the funding token's atoms — the venue's. The gate's constructor
-/// independently refuses a venue at any other economic price, so this
-/// conversion is a convenience, not the enforcement.
+/// Refuses: a config whose `chainId` is not the connected chain and any known
+/// mainnet — Ethereum, Arbitrum One, Arbitrum Nova and Robinhood Chain mainnet.
+/// The gate itself refuses a fixture price finer than its funding token can
+/// express (`FixturePriceNotRepresentable`).
 ///
-/// Refuses: a config whose `chainId` is not the connected chain, any known
-/// mainnet — Ethereum, Arbitrum One, Arbitrum Nova and Robinhood Chain mainnet —
-/// and a fixture price finer than its funding token can express.
+/// `verify(gate, json)` is the deployment-manifest check, and `deploy` runs it on
+/// what it just deployed. For every market in the config it reads the gate's
+/// market table and compares the runtime code at the market's adapter and venue
+/// with a reference `FixtureVenueAdapter(gate, venue)` and
+/// `FixtureVenue(representation, funding, price, fee)` instantiated in the
+/// script's own (never broadcast) execution. Immutables are part of runtime
+/// code, so equal code is equal implementation *and* equal wiring. It needs no
+/// trust in how the gate was deployed: a gate whose runtime code is right but
+/// whose markets were written by other initcode fails it. Run it read-only
+/// against any deployment:
+///   forge script contracts/script/DeployMandateGate.s.sol --sig "verify(address,string)" <gate> "$(cat <config>)" --rpc-url <rpc>
 ///
 /// Usage (simulation only unless `--broadcast` is added by a human):
 ///   MANDATE_GATE_CONFIG=contracts/deploy/local-fixture.json \
@@ -37,9 +47,10 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 contract DeployMandateGate is Script {
     error ConfiguredForAnotherChain(uint256 configured, uint256 connected);
     error MainnetRefused(uint256 chainId);
-    error GateAddressMispredicted(address predicted, address deployed);
     error FixtureClassificationRequired();
-    error FixturePriceNotRepresentable(uint256 market);
+    error MarketNotAsConfigured(uint256 market);
+    error FixtureVenueNotReviewedCode(uint256 market);
+    error FixtureAdapterNotReviewedCode(uint256 market);
 
     struct Deployment {
         MandateExecutionGate gate;
@@ -66,57 +77,79 @@ contract DeployMandateGate is Script {
 
         uint256 count = _marketCount(json);
         MarketConfig[] memory markets = new MarketConfig[](count);
-        d.venues = new FixtureVenue[](count);
-        d.adapters = new FixtureVenueAdapter[](count);
+        for (uint256 i = 0; i < count; ++i) {
+            markets[i] = _market(json, i);
+        }
 
         vm.startBroadcast(deployer);
-        for (uint256 i = 0; i < count; ++i) {
-            string memory p = string.concat(".markets[", vm.toString(i), "]");
-            d.venues[i] = new FixtureVenue(
-                IERC20(vm.parseJsonAddress(json, string.concat(p, ".representation"))),
-                IERC20(vm.parseJsonAddress(json, string.concat(p, ".fundingToken"))),
-                venuePrice(json, i),
-                uint16(vm.parseJsonUint(json, string.concat(p, ".fixtureFeeBps")))
-            );
-        }
-        // Next come `count` adapters, then the gate.
-        address predictedGate = vm.computeCreateAddress(deployer, vm.getNonce(deployer) + count);
-        for (uint256 i = 0; i < count; ++i) {
-            d.adapters[i] = new FixtureVenueAdapter(predictedGate, d.venues[i]);
-            markets[i] = _market(json, i, address(d.adapters[i]));
-        }
         d.gate = new MandateExecutionGate(markets);
         vm.stopBroadcast();
+        verify(d.gate, json);
 
-        if (address(d.gate) != predictedGate) revert GateAddressMispredicted(predictedGate, address(d.gate));
+        d.venues = new FixtureVenue[](count);
+        d.adapters = new FixtureVenueAdapter[](count);
         console2.log("MandateExecutionGate", address(d.gate));
         console2.log("chainId", block.chainid);
         for (uint256 i = 0; i < count; ++i) {
+            bytes32 key = keccak256(bytes(MandateCodec.representationId(block.chainid, markets[i].representation)));
+            d.venues[i] = FixtureVenue(d.gate.fixtureVenueOf(key));
+            d.adapters[i] = FixtureVenueAdapter(d.gate.marketOf(key).adapter);
             console2.log("  market", i);
             console2.log("    fixture venue   ", address(d.venues[i]));
             console2.log("    fixture adapter ", address(d.adapters[i]));
         }
     }
 
-    /// @notice The typed fixture price in funding-token atoms per whole token,
-    /// exactly. A price with more precision than the funding token refuses.
-    function venuePrice(string memory json, uint256 i) public view returns (uint256) {
-        string memory p = string.concat(".markets[", vm.toString(i), "]");
-        uint256 atoms = vm.parseJsonUint(json, string.concat(p, ".fixturePrice"));
-        uint256 priceDecimals = vm.parseJsonUint(json, string.concat(p, ".fixturePriceDecimals"));
-        uint256 fundingDecimals =
-            IERC20Metadata(vm.parseJsonAddress(json, string.concat(p, ".fundingToken"))).decimals();
-        if (fundingDecimals >= priceDecimals) return atoms * 10 ** (fundingDecimals - priceDecimals);
-        uint256 divisor = 10 ** (priceDecimals - fundingDecimals);
-        if (atoms % divisor != 0) revert FixturePriceNotRepresentable(i);
-        return atoms / divisor;
+    /// @notice Refuses unless every configured market's adapter and venue are the
+    /// reviewed fixture contracts, wired to that market's tokens, its exact price,
+    /// its fee and this gate. Read-only: the reference instances it creates exist
+    /// only in the script's local execution.
+    function verify(MandateExecutionGate gate, string memory json) public returns (bool) {
+        uint256 count = _marketCount(json);
+        for (uint256 i = 0; i < count; ++i) {
+            MarketConfig memory config = _market(json, i);
+            bytes32 key = keccak256(bytes(MandateCodec.representationId(block.chainid, config.representation)));
+            Market memory m = gate.marketOf(key);
+            address venue = gate.fixtureVenueOf(key);
+            if (
+                m.representation != config.representation || m.fundingToken != config.fundingToken
+                    || m.fixturePriceAtoms != config.fixturePrice.atoms
+                    || m.fixturePriceDecimals != config.fixturePrice.decimals || venue == address(0)
+            ) revert MarketNotAsConfigured(i);
+
+            uint256 price = _fundingAtomsPerToken(config.fixturePrice, m.fundingDecimals, i);
+            FixtureVenue referenceVenue = new FixtureVenue(
+                IERC20(config.representation), IERC20(config.fundingToken), price, config.fixtureFeeBps
+            );
+            if (venue.codehash != address(referenceVenue).codehash) revert FixtureVenueNotReviewedCode(i);
+            FixtureVenueAdapter referenceAdapter = new FixtureVenueAdapter(address(gate), FixtureVenue(venue));
+            if (m.adapter.codehash != address(referenceAdapter).codehash) revert FixtureAdapterNotReviewedCode(i);
+        }
+        return true;
+    }
+
+    /// @dev The venue price the gate derives from a typed price; unrepresentable
+    /// means the gate could not have been built from this config.
+    function _fundingAtomsPerToken(Price memory price, uint8 fundingDecimals, uint256 market)
+        internal
+        pure
+        returns (uint256)
+    {
+        if (fundingDecimals >= price.decimals) {
+            uint256 factor = 10 ** uint256(fundingDecimals - price.decimals);
+            if (price.atoms > type(uint256).max / factor) revert MarketNotAsConfigured(market);
+            return price.atoms * factor;
+        }
+        uint256 divisor = 10 ** uint256(price.decimals - fundingDecimals);
+        if (price.atoms % divisor != 0) revert MarketNotAsConfigured(market);
+        return price.atoms / divisor;
     }
 
     function _marketCount(string memory json) internal view returns (uint256 n) {
         while (vm.keyExistsJson(json, string.concat(".markets[", vm.toString(n), "]"))) ++n;
     }
 
-    function _market(string memory json, uint256 i, address adapter) internal pure returns (MarketConfig memory) {
+    function _market(string memory json, uint256 i) internal pure returns (MarketConfig memory) {
         string memory p = string.concat(".markets[", vm.toString(i), "]");
         if (keccak256(bytes(vm.parseJsonString(json, string.concat(p, ".classification")))) != keccak256("FIXTURE")) {
             revert FixtureClassificationRequired();
@@ -124,7 +157,6 @@ contract DeployMandateGate is Script {
         return MarketConfig({
             representation: vm.parseJsonAddress(json, string.concat(p, ".representation")),
             fundingToken: vm.parseJsonAddress(json, string.concat(p, ".fundingToken")),
-            adapter: adapter,
             canonicalAsset: CanonicalAsset({
                 assetClass: vm.parseJsonString(json, string.concat(p, ".canonicalAsset.assetClass")),
                 idScheme: vm.parseJsonString(json, string.concat(p, ".canonicalAsset.idScheme")),
@@ -141,7 +173,8 @@ contract DeployMandateGate is Script {
                 denominatorUnit: vm.parseJsonString(json, string.concat(p, ".quantityUnit")),
                 decimals: uint8(vm.parseJsonUint(json, string.concat(p, ".fixturePriceDecimals"))),
                 atoms: vm.parseJsonUint(json, string.concat(p, ".fixturePrice"))
-            })
+            }),
+            fixtureFeeBps: uint16(vm.parseJsonUint(json, string.concat(p, ".fixtureFeeBps")))
         });
     }
 }

@@ -4,7 +4,6 @@ pragma solidity 0.8.37;
 import {MandateExecutionGate} from "../src/MandateExecutionGate.sol";
 import {Amount, Candidate, ExecutionTerms, Mandate, MarketConfig, SIDE_BUY, SIDE_SELL} from "../src/MandateTypes.sol";
 import {FixtureVenue} from "../src/fixture/FixtureVenue.sol";
-import {FixtureVenueAdapter} from "../src/fixture/FixtureVenueAdapter.sol";
 import {GateArithmetic} from "../src/libraries/GateArithmetic.sol";
 import {ExactMath} from "./utils/ExactMath.sol";
 import {GateTestBase} from "./utils/GateTestBase.sol";
@@ -185,14 +184,11 @@ contract MaxNotionalTest is GateTestBase {
     /// @dev A one-market gate over `aapl` whose fixture venue settles at
     /// `fundingAtomsPerToken` (6-decimal fUSDC), with that price pinned.
     function _gateAt(uint256 fundingAtomsPerToken) internal returns (FixtureVenue venue) {
-        venue = new FixtureVenue(aapl, funding, fundingAtomsPerToken, FEE_BPS);
-        address predicted = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
-        FixtureVenueAdapter adapter = new FixtureVenueAdapter(predicted, venue);
         MarketConfig[] memory markets = new MarketConfig[](1);
-        markets[0] = _market(address(aapl), address(adapter), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
+        markets[0] = _market(address(aapl), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
         markets[0].fixturePrice.atoms = fundingAtomsPerToken;
         gate = new MandateExecutionGate(markets);
-        assertEq(address(gate), predicted);
+        venue = _venueOf(gate, address(aapl));
         aapl.mint(address(venue), 1e40);
         funding.mint(address(venue), 1e30);
         vm.startPrank(principal);

@@ -62,7 +62,9 @@ consult a model or re-run the kernel verifier. Those stay offchain (§11).
 
 There is one entry point, no owner, no admin, no setter, no upgrade path, no
 `delegatecall`, no `tx.origin`, no native-token path, and no arbitrary call: the
-gate calls exactly one adapter per market with exactly one call shape.
+gate calls exactly one adapter per market with exactly one call shape — and since
+Phase 6R.1a that adapter, and the venue behind it, are contracts the gate's own
+constructor created (§5).
 
 ## 2. Architecture
 
@@ -218,6 +220,45 @@ repository identifies a venue contract and interface to integrate against.
   pair and any route data; it approves the venue for exactly the order's input
   and resets the approval to zero; it refunds unspent input and holds nothing.
 
+**The gate creates both (Phase 6R.1a).** A market is configured by its tokens,
+identifiers, typed fixture price and venue fee — never by an adapter or venue
+address. For each market the constructor converts the typed price exactly into
+funding-token atoms per whole token (`FixturePriceNotRepresentable` if it cannot),
+then `new FixtureVenue(representation, funding, price, fee)` and
+`new FixtureVenueAdapter(address(this), venue)`, from code compiled into the
+gate. `marketOf(key).adapter` and `fixtureVenueOf(key)` return them, and
+`MarketSupported` logs both addresses and the venue price.
+
+What this makes **verified or pinned**, rather than trusted:
+
+| Relationship | How it holds |
+| --- | --- |
+| adapter implementation | the gate's embedded `FixtureVenueAdapter` creation code |
+| venue implementation | the gate's embedded `FixtureVenue` creation code; no setter, every parameter immutable |
+| adapter → gate, adapter → venue | constructor arguments the gate supplies (`address(this)`, the venue it just created) |
+| venue → representation, funding token | the market's own configured tokens |
+| venue price = gate fixture price | one typed price, converted exactly by the gate; unrepresentable prices refused |
+
+Before 6R.1a the constructor accepted an adapter address and asked it, through
+`IFixtureSettlement`, what price its venue settled at: a *trusted interface
+response*. The Phase 6R.1 review showed a directly constructed gate settling a BUY
+under a 100 USD `maxNotional` for 500 USD through an adapter that answered with
+the compliant price, and for 1,000 USD through the genuine adapter pointed at a
+look-alike venue. Neither can now be expressed: there is no constructor input
+that names an adapter or a venue (`FixtureTrust.t.sol` keeps both contracts
+deployed and shows the same BUY paying exactly the fixture quote, 100.3 fUSDC).
+
+**Verifying a deployment.** The gate's runtime code does not prove its
+constructor ran: other initcode could return identical runtime code with a
+different market table. So the deployment script's `verify(gate, config)`
+checks what is actually deployed: for every configured market, the market table
+matches the config, and the runtime code at the market's adapter and venue equals
+a reference `FixtureVenueAdapter(gate, venue)` and
+`FixtureVenue(representation, funding, price, fee)` instantiated in the script's
+own unbroadcast execution. Immutables are part of runtime code, so equal code is
+equal implementation and equal wiring (§13). The gate's own runtime code is
+verified from source as before.
+
 Nothing built on this may be described as a live trade, live liquidity or a
 Robinhood venue integration. What the fixture demonstrates is the gate's security
 boundary: authorization, binding, replay, time, and settlement on measured
@@ -270,17 +311,15 @@ side (ADR 0014).
   construction. Candidate prices may use another decimal scale only when the
   rational value is exactly equal. This closes the zero-price/max-notional
   bypass without pretending to solve real-market price freshness.
-- **Fixture price and venue price are one price (Phase 6R.1).** The pinned
-  typed price and the integer the fixture venue settles at are written by
-  different code from different inputs. The constructor asks each market's
-  adapter for its venue's settlement terms (`IFixtureSettlement`) and refuses
-  `FixtureSettlementInconsistent` unless the venue settles against the
-  configured funding token at exactly `fixturePrice.atoms / 10^decimals`
-  settlement units per whole token, expressed in funding atoms. A typed price
-  finer than the funding token can express has no equal integer venue price and
-  is refused by the same comparison. This is enforced by the constructor itself,
-  so a direct deployment cannot bypass it; the deployment script additionally
-  converts the typed price exactly and refuses one it cannot represent.
+- **Fixture price and venue price are one price (Phase 6R.1a).** The typed
+  price the gate authorizes against is the only price written. The constructor
+  converts it exactly into the funding atoms per whole token the venue charges
+  and creates the venue with that value (§5); a typed price finer than the
+  funding token can express, or one whose funding-atom form overflows, is
+  refused `FixturePriceNotRepresentable`. No deployed contract is asked what its
+  price is. (Phase 6R.1 compared the typed price with what each adapter
+  reported through `IFixtureSettlement`, which a hostile adapter or a
+  look-alike venue could answer falsely.)
 - **Fees.** Candidate notional plus BUY fees or minus SELL fees is checked
   against the principal-signed limit before settlement. Measured balance deltas
   then enforce the realized result independently.
@@ -482,7 +521,8 @@ Run: `npm run contracts:test` (regenerates the corpus ABI, then `forge test`).
 | `MaxNotional.t.sol` | 13 + 2 fuzz × 1,024 runs | Phase 6R.1 M-1 on the real fixture path: the audit PoCs, declared precision 0–38 with every signature valid, one atom either side at the principal's precision, decimal-conversion boundaries, huge-quantity/tiny-price and tiny-quantity/huge-price, 512-bit intermediates, randomized precision combinations on both sides. Since 6R.1a: every declared × principal precision pair (39 × 39) on each side through the real venue; the product rule against the exact oracle at full operand width and at every one of the 39³ decimal triples; and replays of the inputs that overflowed the 6R.1 oracle |
 | `ExactMath.t.sol` | 1 + 2 fuzz × 1,024 runs | The exact 512-bit test oracle (`utils/ExactMath.sol`) against plain arithmetic where it cannot overflow, hand-computed extremes, and the defining property of the floor and ceiling it reports |
 | `Profile.t.sol` | 1 | The worst-case executable attempt — maximal identifiers, full sets, 4,096 non-zero route bytes — settles; calldata size pinned jointly with `corpus.test.ts`; intrinsic and execution gas logged (§13) |
-| `DeployScript.t.sol` | 6 | §13, including exact typed-price conversion and the constructor's refusal of a mismatched venue |
+| `DeployScript.t.sol` | 10 | §13: the script deploys only the gate, whose own CREATEs are the venue and adapter; exact typed-price conversion; the gate's refusal of an unrepresentable price; the deployment-manifest `verify`, including adapter or venue code substituted after deployment, a config the gate was not built from, and the gate's runtime code without its market table |
+| `FixtureTrust.t.sol` | 4 | Phase 6R.1a: with the review's lying adapter and look-alike venue deployed and stocked, a directly constructed gate cannot reach either; the review's BUY and SELL shapes settle at exactly the fixture quote; the gate's venue price cannot change |
 
 Invariants, each checked after every call of every run:
 
@@ -628,15 +668,25 @@ policy and never lives in the gate.
 
 - **No deployment was performed in Phase 6.** No transaction was sent to any
   network, test or main. CI never deploys.
-- `contracts/script/DeployMandateGate.s.sol` deploys fixture venues, their
-  adapters and the gate from a reviewed JSON config, predicting the gate's
-  address from the deployer nonce and asserting it. It refuses a chain that does
-  not match its config and refuses Ethereum, Arbitrum One, Arbitrum Nova and
-  Robinhood Chain mainnet outright. It writes each market's price once, typed,
-  and gives the venue that price converted exactly to funding-token atoms,
-  refusing `FixturePriceNotRepresentable` when it cannot. It is exercised only by
-  `DeployScript.t.sol`. The gate constructor independently refuses a venue at any
-  other economic price (§6), so a hand-rolled deployment is held to the same rule.
+- `contracts/script/DeployMandateGate.s.sol` deploys exactly one contract, the
+  gate, from a reviewed JSON config; the gate creates each market's venue and
+  adapter (§5). It refuses a chain that does not match its config and refuses
+  Ethereum, Arbitrum One, Arbitrum Nova and Robinhood Chain mainnet outright.
+  After deploying it runs `verify(gate, config)`, the deployment-manifest check:
+  every configured market's table entry must match the config, and the runtime
+  code at its adapter and venue must equal the reviewed contracts instantiated
+  with the expected arguments (`FixtureAdapterNotReviewedCode`,
+  `FixtureVenueNotReviewedCode`, `MarketNotAsConfigured`). `verify` is
+  read-only and can be run against any deployment with
+  `forge script … --sig "verify(address,string)"`. Both are exercised only by
+  `DeployScript.t.sol`, including code substituted at the adapter or venue
+  address and the gate's runtime code without its market table. Stocking a venue
+  with inventory is a separate manual step.
+- Deploying creates two contracts per market. `MAX_MARKETS` = 32 costs about
+  40.9M gas in one transaction (measured in `MandateExecutionGate.t.sol`), above
+  a 32M per-transaction cap such as Arbitrum's; a deployment with that many
+  markets must be checked against the target chain's limit. The committed config
+  has one market.
 - `contracts/deploy/local-fixture.json` targets a local development chain only.
   **No Robinhood Chain testnet config is committed**: the repository holds no
   verified testnet Stock Token or funding-token addresses, and a testnet
@@ -697,9 +747,11 @@ policy and never lives in the gate.
 | Upgradeable token | **UNSUPPORTED / DEPLOYMENT-PROHIBITED** | Immutable address does not pin behavior |
 | Representation == funding token | **DEPLOYMENT-PROHIBITED** | Constructor rejects it; two balance legs would be ambiguous |
 
-All token, adapter and venue code is trusted deployment surface. Balance deltas
-prove only the balances reported by those token contracts. They do not prove
-legal/economic equivalence or venue provenance.
+Token code is trusted deployment surface. Adapter and venue code is not
+supplied by anyone: it is the gate's embedded fixture code, checkable after
+deployment with `verify` (§5, §13). Balance deltas prove only the balances
+reported by the token contracts. They do not prove legal/economic equivalence or
+venue provenance.
 
 ## 14. Slither findings
 
@@ -715,7 +767,7 @@ detector classes**, all in `contracts/src`. Disposition:
 | S-4 | `unused-return` | `_signedBy`: `ECDSA.tryRecover` third value | **Intentional, suppressed with reason.** It only describes why recovery failed; the error enum decides |
 | S-5 | `missing-zero-check` | `FixtureVenueAdapter` constructor | **Fixed.** Zero gate or venue now reverts `InvalidConfig` |
 | S-6 | `timestamp` | `_checkTime` | **Intended, suppressed with reason.** Chain time is the Phase 6 authority (INV-10); see §12 |
-| S-7 | `calls-loop` ×3 | constructor `decimals()` ×2 and `fixtureSettlement` per market | **Accepted, suppressed with reason.** Constructor only, over a deployer-chosen list; a reverting token or adapter correctly fails deployment. The third call (6R.1) is the fixture venue price check (§6) |
+| S-7 | `calls-loop` ×2 | constructor `decimals()` ×2 per market | **Accepted, suppressed with reason.** Constructor only, over a deployer-chosen list; a reverting token correctly fails deployment. The 6R.1 third call, reading each adapter's price, is gone in 6R.1a: the constructor calls no adapter (§5) |
 | S-8 | `cyclomatic-complexity` | `_checkBinding` | **Accepted, suppressed with reason.** A flat list of independent checks in interface order |
 | S-9 | `naming-convention` ×10 | immutables in `UPPER_CASE` | **Style disagreement, detector excluded.** forge-lint requires `SCREAMING_SNAKE_CASE` immutables; the two tools conflict and the Solidity style guide sides with forge-lint |
 | S-10 | `unused-return` | `GateArithmetic.notionalBounds`: low limb of `Math.mul512` | **Intentional, suppressed with reason.** Only the high limb determines whether the quotient fits `uint256`; the following `mulDiv` and `mulmod` independently consume the full product for quotient and remainder |
@@ -737,7 +789,13 @@ dispositioned above. The final normal run analyzed **21 contracts with 101
 detectors and reported 0 results** (exit 0). `--show-ignored-findings` reports
 **13 reviewed results**: S-1 (1), S-2 (2), S-3/S-4/S-10/S-11 (5), S-6 (1),
 S-7 (3) and S-8 (1). Removing the S-11 suppression makes the normal run fail
-(exit 255), so the gate still fails closed on a new finding. Every suppression is an inline `slither-disable-next-line` beside a
+(exit 255), so the gate still fails closed on a new finding.
+
+**Phase 6R.1a run.** The constructor now creates each market's venue and adapter
+and reads nothing from them. The normal run analyzed **21 contracts with 101
+detectors and reported 0 results**; `--show-ignored-findings` reports **12
+reviewed results**, S-7 dropping to 2. The two `new` expressions per market are
+not flagged. Every suppression is an inline `slither-disable-next-line` beside a
 comment giving the reason, so the reasoning travels with the code. forge-lint
 reports nothing in `contracts/src`; test doubles are excluded from linting
 because they deliberately do what lints forbid.

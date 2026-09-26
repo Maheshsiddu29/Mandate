@@ -283,12 +283,8 @@ contract AdversarialTest is GateTestBase {
 
     function test_callbackTokenCannotReenterDuringTheTransfer() public {
         HookToken hookFunding = new HookToken(6);
-        ScriptedAdapter adapter = _scriptedAdapterFor(address(scriptedToken), address(hookFunding));
-        MarketConfig[] memory markets = new MarketConfig[](1);
-        markets[0] =
-            _market(address(scriptedToken), address(adapter), _aaplAsset(), "issuer.alpha", "venue.scripted", false);
-        markets[0].fundingToken = address(hookFunding);
-        MandateExecutionGate hooked = new MandateExecutionGate(markets);
+        MandateExecutionGate hooked = _gateFor(address(scriptedToken), address(hookFunding));
+        ScriptedAdapter adapter = _scriptAdapter(hooked, address(scriptedToken));
 
         hookFunding.mint(principal, 10_000e6);
         scriptedToken.mint(address(adapter), QTY);
@@ -333,12 +329,9 @@ contract AdversarialTest is GateTestBase {
     // Unsupported token behaviour
     // ------------------------------------------------------------------
 
-    function _gateFor(address representation, address fundingToken, address adapter)
-        internal
-        returns (MandateExecutionGate g)
-    {
+    function _gateFor(address representation, address fundingToken) internal returns (MandateExecutionGate g) {
         MarketConfig[] memory markets = new MarketConfig[](1);
-        markets[0] = _market(representation, adapter, _aaplAsset(), "issuer.alpha", "venue.scripted", false);
+        markets[0] = _market(representation, _aaplAsset(), "issuer.alpha", "venue.scripted", false);
         markets[0].fundingToken = fundingToken;
         g = new MandateExecutionGate(markets);
     }
@@ -364,8 +357,8 @@ contract AdversarialTest is GateTestBase {
 
     function test_feeOnTransferOutputFailsClosed() public {
         FeeOnTransferToken taxed = new FeeOnTransferToken(18, 100); // 1%
-        ScriptedAdapter adapter = _scriptedAdapterFor(address(taxed), address(funding));
-        MandateExecutionGate g = _gateFor(address(taxed), address(funding), address(adapter));
+        MandateExecutionGate g = _gateFor(address(taxed), address(funding));
+        ScriptedAdapter adapter = _scriptAdapter(g, address(taxed));
         taxed.mint(address(adapter), 100e18);
         vm.prank(principal);
         funding.approve(address(g), type(uint256).max);
@@ -389,8 +382,8 @@ contract AdversarialTest is GateTestBase {
     /// fee pushes below it refuses. Only the representation leg must be exact.
     function test_feeOnTransferSellProceedsSettleOnlyWhenTheMeasuredCreditMeetsTheMinimum() public {
         FeeOnTransferToken taxedFunding = new FeeOnTransferToken(6, 100); // 1%
-        ScriptedAdapter adapter = _scriptedAdapterFor(address(scriptedToken), address(taxedFunding));
-        MandateExecutionGate g = _gateFor(address(scriptedToken), address(taxedFunding), address(adapter));
+        MandateExecutionGate g = _gateFor(address(scriptedToken), address(taxedFunding));
+        ScriptedAdapter adapter = _scriptAdapter(g, address(scriptedToken));
         taxedFunding.mint(address(adapter), 10_000e6);
         vm.prank(principal);
         scriptedToken.approve(address(g), type(uint256).max);
@@ -420,8 +413,8 @@ contract AdversarialTest is GateTestBase {
 
     function test_feeOnTransferInputCannotRaiseTheDebitAboveTheTransferredAmount() public {
         FeeOnTransferToken taxedFunding = new FeeOnTransferToken(6, 100); // 1%
-        ScriptedAdapter adapter = _scriptedAdapterFor(address(scriptedToken), address(taxedFunding));
-        MandateExecutionGate g = _gateFor(address(scriptedToken), address(taxedFunding), address(adapter));
+        MandateExecutionGate g = _gateFor(address(scriptedToken), address(taxedFunding));
+        ScriptedAdapter adapter = _scriptAdapter(g, address(scriptedToken));
         taxedFunding.mint(principal, 10_000e6);
         scriptedToken.mint(address(adapter), QTY);
         vm.prank(principal);
@@ -444,8 +437,8 @@ contract AdversarialTest is GateTestBase {
 
     function test_noReturnFundingTokenIsExplicitlySupported() public {
         NoReturnERC20 legacy = new NoReturnERC20(6);
-        ScriptedAdapter adapter = _scriptedAdapterFor(address(scriptedToken), address(legacy));
-        MandateExecutionGate g = _gateFor(address(scriptedToken), address(legacy), address(adapter));
+        MandateExecutionGate g = _gateFor(address(scriptedToken), address(legacy));
+        ScriptedAdapter adapter = _scriptAdapter(g, address(scriptedToken));
         legacy.mint(principal, 10_000e6);
         scriptedToken.mint(address(adapter), QTY);
         vm.prank(principal);
@@ -465,8 +458,8 @@ contract AdversarialTest is GateTestBase {
 
     function test_malformedTokenReturnDataFailsClosedAndConsumesNothing() public {
         MalformedReturnERC20 malformed = new MalformedReturnERC20(6);
-        ScriptedAdapter adapter = _scriptedAdapterFor(address(scriptedToken), address(malformed));
-        MandateExecutionGate g = _gateFor(address(scriptedToken), address(malformed), address(adapter));
+        MandateExecutionGate g = _gateFor(address(scriptedToken), address(malformed));
+        _scriptAdapter(g, address(scriptedToken));
         malformed.mint(principal, 10_000e6);
         vm.prank(principal);
         (bool approved,) =
@@ -484,15 +477,12 @@ contract AdversarialTest is GateTestBase {
 
     function test_failedFixtureApprovalResetRevertsEverythingAtomically() public {
         FailZeroApproveToken resetFailing = new FailZeroApproveToken(6);
-        FixtureVenue venue = new FixtureVenue(scriptedToken, resetFailing, AAPL_PRICE, FEE_BPS);
-        address predictedGate = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
-        FixtureVenueAdapter adapter = new FixtureVenueAdapter(predictedGate, venue);
         MarketConfig[] memory markets = new MarketConfig[](1);
-        markets[0] =
-            _market(address(scriptedToken), address(adapter), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
+        markets[0] = _market(address(scriptedToken), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
         markets[0].fundingToken = address(resetFailing);
         MandateExecutionGate g = new MandateExecutionGate(markets);
-        assertEq(address(g), predictedGate);
+        FixtureVenue venue = _venueOf(g, address(scriptedToken));
+        FixtureVenueAdapter adapter = _adapterOf(g, address(scriptedToken));
 
         resetFailing.mint(principal, 10_000e6);
         resetFailing.mint(address(venue), 10_000e6);

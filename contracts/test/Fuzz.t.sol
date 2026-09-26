@@ -4,7 +4,6 @@ pragma solidity 0.8.37;
 import {MandateExecutionGate} from "../src/MandateExecutionGate.sol";
 import {Candidate, ExecutionTerms, Mandate, MarketConfig, SIDE_BUY, SIDE_SELL} from "../src/MandateTypes.sol";
 import {FixtureVenue} from "../src/fixture/FixtureVenue.sol";
-import {FixtureVenueAdapter} from "../src/fixture/FixtureVenueAdapter.sol";
 import {GateTestBase} from "./utils/GateTestBase.sol";
 
 /// @notice Property tests. Each asserts the gate's outcome equals an independent
@@ -190,15 +189,15 @@ contract FuzzTest is GateTestBase {
         quantity = bound(quantity, 1, 100e18);
         limitUsd = bound(limitUsd, 0, 2_000_000);
 
-        FixtureVenue venue = new FixtureVenue(aapl, funding, price, feeBps);
-        address predicted = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
-        FixtureVenueAdapter adapter = new FixtureVenueAdapter(predicted, venue);
         MarketConfig[] memory markets = new MarketConfig[](1);
-        markets[0] = _market(address(aapl), address(adapter), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
+        markets[0] = _market(address(aapl), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
         markets[0].fixturePrice.decimals = 6;
         markets[0].fixturePrice.atoms = price;
+        markets[0].fixtureFeeBps = feeBps;
         gate = new MandateExecutionGate(markets);
-        assertEq(address(gate), predicted);
+        FixtureVenue venue = _venueOf(gate, address(aapl));
+        assertEq(venue.PRICE(), price);
+        assertEq(venue.FEE_BPS(), feeBps);
         aapl.mint(address(venue), quantity);
         vm.prank(principal);
         funding.approve(address(gate), type(uint256).max);

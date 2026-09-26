@@ -125,8 +125,6 @@ struct MarketConfig {
     address representation;
     /// @dev The ERC-20 the principal pays with on BUY and is paid in on SELL.
     address fundingToken;
-    /// @dev The only adapter the gate will call for this representation.
-    address adapter;
     CanonicalAsset canonicalAsset;
     string issuer;
     string venue;
@@ -143,12 +141,16 @@ struct MarketConfig {
     /// @dev Immutable price of the engineered fixture. Real markets require an
     /// authenticated inclusion-time state source and cannot use this field.
     Price fixturePrice;
+    /// @dev The fixture venue's fee, in basis points (< 10,000). The venue and
+    /// its adapter are created by the gate's constructor, never supplied.
+    uint16 fixtureFeeBps;
 }
 
 /// @notice The reduced, immutable market record the gate checks against.
 struct Market {
     address representation;
     address fundingToken;
+    /// @dev The `FixtureVenueAdapter` the gate's constructor created for this market.
     address adapter;
     uint8 representationDecimals;
     uint8 fundingDecimals;

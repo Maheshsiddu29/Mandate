@@ -789,7 +789,7 @@ export function generateGateCorpus(): GateCorpus {
     model: 'packages/execution-gate/src/model.ts',
     encoding: 'MCE v2 mandate, Candidate V3, EIP-712 {Mandate, 1, chainId, gate} (docs/execution-gate.md)',
     note: 'Integers are decimal strings. The Solidity harness replays the ABI form of these same entries, written by the same generator run to contracts/generated/gate-v1.abi.json (not committed). Tokens are labelled fixtures and the adapter is ScriptedAdapter: this corpus exercises the gate decision, not a venue.',
-    world: toJson({ chainId: CHAIN_ID, gate: ADDR.gate, adapter: ADDR.adapter, domain: DOMAIN, tokens: defaultSetup().map((t) => t.token), seeds: { vectors: '0x6d616e64', validation: '0x76616c69' } }),
+    world: toJson({ chainId: CHAIN_ID, gate: ADDR.gate, adapters: DEPLOYMENT.markets.map((m) => m.adapter), domain: DOMAIN, tokens: defaultSetup().map((t) => t.token), seeds: { vectors: '0x6d616e64', validation: '0x76616c69' } }),
     counts: {
       vectors: vectors.length,
       attempts,

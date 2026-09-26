@@ -46,6 +46,7 @@ contract MandateExecutionGateTest is GateTestBase {
         assertEq(m.representation, address(aapl));
         assertEq(m.fundingToken, address(funding));
         assertEq(m.adapter, address(aaplAdapter));
+        assertEq(gate.fixtureVenueOf(_keyOf(address(aapl))), address(aaplVenue));
         assertEq(m.representationDecimals, 18);
         assertEq(m.fundingDecimals, 6);
         assertEq(m.fixturePriceDecimals, 6);
@@ -56,18 +57,24 @@ contract MandateExecutionGateTest is GateTestBase {
     function test_construction_emitsOneMarketSupportedPerMarket() public {
         vm.recordLogs();
         MarketConfig[] memory markets = new MarketConfig[](1);
-        markets[0] = _market(address(aapl), address(aaplAdapter), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
+        markets[0] = _market(address(aapl), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
         MandateExecutionGate g = new MandateExecutionGate(markets);
         Vm.Log[] memory logs = vm.getRecordedLogs();
+        // The venue and adapter constructors emit nothing: one log, the gate's.
         assertEq(logs.length, 1);
         assertEq(logs[0].emitter, address(g));
-        assertEq(logs[0].topics[0], keccak256("MarketSupported(bytes32,address,address,address,string)"));
+        assertEq(
+            logs[0].topics[0], keccak256("MarketSupported(bytes32,address,address,address,address,uint256,string)")
+        );
         string memory representationId = harness.representationId(CHAIN, address(aapl));
         assertEq(logs[0].topics[1], keccak256(bytes(representationId)));
         assertEq(logs[0].topics[2], bytes32(uint256(uint160(address(aapl)))));
         assertEq(logs[0].topics[3], bytes32(uint256(uint160(address(funding)))));
-        (address adapter_, string memory emittedId) = abi.decode(logs[0].data, (address, string));
-        assertEq(adapter_, address(aaplAdapter));
+        (address adapter_, address venue_, uint256 venuePrice, string memory emittedId) =
+            abi.decode(logs[0].data, (address, address, uint256, string));
+        assertEq(adapter_, address(_adapterOf(g, address(aapl))));
+        assertEq(venue_, address(_venueOf(g, address(aapl))));
+        assertEq(venuePrice, 200e6);
         assertEq(emittedId, representationId);
     }
 
@@ -82,8 +89,7 @@ contract MandateExecutionGateTest is GateTestBase {
     }
 
     function test_construction_refusesMalformedMarkets() public {
-        MarketConfig memory ok =
-            _market(address(aapl), address(aaplAdapter), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
+        MarketConfig memory ok = _market(address(aapl), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
         MarketConfig[8] memory bad;
         for (uint256 i = 0; i < bad.length; ++i) {
             bad[i] = ok;
@@ -91,7 +97,7 @@ contract MandateExecutionGateTest is GateTestBase {
         bad[0].representation = address(0);
         bad[1].fundingToken = address(0);
         bad[2].fundingToken = address(aapl); // representation == funding
-        bad[3].adapter = address(0xdead); // no code
+        bad[3].fixtureFeeBps = 10_000; // a venue fee of 100%
         bad[4].issuer = "issuer alpha"; // not an identifier
         bad[5].settlementUnit = "";
         bad[6].canonicalAsset.value = "US0378331005.";
@@ -103,8 +109,7 @@ contract MandateExecutionGateTest is GateTestBase {
     }
 
     function test_construction_refusesMalformedFixturePrice() public {
-        MarketConfig memory market =
-            _market(address(aapl), address(aaplAdapter), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
+        MarketConfig memory market = _market(address(aapl), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
         market.fixturePrice.atoms = 0;
         vm.expectRevert(MandateExecutionGate.InvalidMarket.selector);
         new MandateExecutionGate(_one(market));
@@ -115,75 +120,88 @@ contract MandateExecutionGateTest is GateTestBase {
     }
 
     // ------------------------------------------------------------------
-    // Construction: fixture venue price == gate fixture price (6R.1)
+    // Construction: the gate creates its own fixture (6R.1a)
     // ------------------------------------------------------------------
 
     function _aaplConfig() internal view returns (MarketConfig memory) {
-        return _market(address(aapl), address(aaplAdapter), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
+        return _market(address(aapl), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
     }
 
-    /// @notice The venue settles at 200e6 fUSDC atoms per token. Any typed price
-    /// equal to 200 USD is the same economic price, at any scale.
-    function test_construction_fixtureSettlement_acceptsTheSamePriceAtAnyScale() public {
-        uint8[4] memory scales = [6, 7, 18, 38];
+    /// @notice Every market's venue and adapter are the gate's own CREATEs of the
+    /// reviewed `FixtureVenue` and `FixtureVenueAdapter`, wired to that market's
+    /// tokens, its typed price and this gate. Runtime code is compared with a
+    /// reference instantiation of the same contracts with the expected arguments:
+    /// immutables are part of runtime code, so equal code means equal wiring.
+    function test_construction_createsItsOwnFixtureFromReviewedCode() public {
+        address[3] memory tokens = [address(aapl), address(nvda), address(synth)];
+        uint256[3] memory prices = [AAPL_PRICE, NVDA_PRICE, AAPL_PRICE];
+        for (uint256 i = 0; i < tokens.length; ++i) {
+            FixtureVenue venue = _venueOf(gate, tokens[i]);
+            FixtureVenueAdapter adapter = _adapterOf(gate, tokens[i]);
+            // The (i+1)-th market's venue and adapter are the gate's CREATEs 2i+1 and 2i+2.
+            assertEq(address(venue), vm.computeCreateAddress(address(gate), 2 * i + 1));
+            assertEq(address(adapter), vm.computeCreateAddress(address(gate), 2 * i + 2));
+            assertEq(adapter.GATE(), address(gate));
+            assertEq(address(adapter.VENUE()), address(venue));
+            assertEq(address(venue.REPRESENTATION()), tokens[i]);
+            assertEq(address(venue.FUNDING()), address(funding));
+            assertEq(venue.PRICE(), prices[i]);
+            assertEq(venue.REPRESENTATION_UNIT(), 1e18);
+            assertEq(venue.FEE_BPS(), FEE_BPS);
+
+            FixtureVenue referenceVenue = new FixtureVenue(MockERC20(tokens[i]), funding, prices[i], FEE_BPS);
+            FixtureVenueAdapter referenceAdapter = new FixtureVenueAdapter(address(gate), venue);
+            assertEq(keccak256(address(venue).code), keccak256(address(referenceVenue).code), "venue code");
+            assertEq(keccak256(address(adapter).code), keccak256(address(referenceAdapter).code), "adapter code");
+        }
+    }
+
+    /// @notice The venue charges the typed price in funding atoms, at any typed scale.
+    function test_construction_venuePriceIsTheTypedPriceAtAnyScale() public {
+        uint8[5] memory scales = [0, 6, 7, 18, 38];
         for (uint256 i = 0; i < scales.length; ++i) {
             MarketConfig memory market = _aaplConfig();
             market.fixturePrice.decimals = scales[i];
             market.fixturePrice.atoms = 200 * 10 ** uint256(scales[i]);
-            new MandateExecutionGate(_one(market));
+            MandateExecutionGate g = new MandateExecutionGate(_one(market));
+            assertEq(_venueOf(g, address(aapl)).PRICE(), 200e6);
+            assertEq(g.marketOf(_keyOf(address(aapl))).fixturePriceAtoms, 200 * 10 ** uint256(scales[i]));
         }
+        // An 18-decimal funding token: the same 200 USD is 200e18 atoms.
+        MarketConfig memory wide = _aaplConfig();
+        wide.fundingToken = address(new MockERC20("Fixture USD 18", "fUSD18", 18));
+        assertEq(_venueOf(new MandateExecutionGate(_one(wide)), address(aapl)).PRICE(), 200e18);
     }
 
-    function test_construction_fixtureSettlement_refusesAVenueAtAnotherPrice() public {
-        uint256[4] memory wrong = [uint256(200e6 + 1), 200e6 - 1, 200e18, 200];
-        for (uint256 i = 0; i < wrong.length; ++i) {
-            MarketConfig memory market = _aaplConfig();
-            market.fixturePrice.atoms = wrong[i];
-            vm.expectRevert(MandateExecutionGate.FixtureSettlementInconsistent.selector);
-            new MandateExecutionGate(_one(market));
-        }
-        // The same raw atoms at the wrong scale are a different price.
-        MarketConfig memory scaled = _aaplConfig();
-        scaled.fixturePrice.decimals = 18;
-        vm.expectRevert(MandateExecutionGate.FixtureSettlementInconsistent.selector);
-        new MandateExecutionGate(_one(scaled));
-    }
-
-    /// @notice A price finer than the 6-decimal funding token has no equal venue
-    /// price: 200.0000005 USD is refused against a venue at 200.000000 or 200.000001.
-    function test_construction_fixtureSettlement_refusesPriceDecimalsTheFundingTokenCannotExpress() public {
-        uint256[2] memory venuePrices = [uint256(200e6), 200e6 + 1];
-        for (uint256 i = 0; i < venuePrices.length; ++i) {
-            FixtureVenue venue = new FixtureVenue(aapl, funding, venuePrices[i], FEE_BPS);
-            FixtureVenueAdapter adapter = new FixtureVenueAdapter(address(0xa7e), venue);
-            MarketConfig memory market = _aaplConfig();
-            market.adapter = address(adapter);
-            market.fixturePrice.decimals = 7;
-            market.fixturePrice.atoms = 2_000_000_005;
-            vm.expectRevert(MandateExecutionGate.FixtureSettlementInconsistent.selector);
-            new MandateExecutionGate(_one(market));
-        }
-    }
-
-    function test_construction_fixtureSettlement_refusesAVenueSettlingAnotherFundingToken() public {
+    /// @notice A price finer than the 6-decimal funding token has no exact venue
+    /// price (200.0000005 USD), and a price whose funding-atom form overflows has
+    /// none either. Both are refused rather than rounded.
+    function test_construction_refusesAPriceTheFundingTokenCannotExpress() public {
         MarketConfig memory market = _aaplConfig();
-        market.fundingToken = address(new MockERC20("Other USD", "oUSD", 6));
-        vm.expectRevert(MandateExecutionGate.FixtureSettlementInconsistent.selector);
+        market.fixturePrice.decimals = 7;
+        market.fixturePrice.atoms = 2_000_000_005;
+        vm.expectRevert(MandateExecutionGate.FixturePriceNotRepresentable.selector);
+        new MandateExecutionGate(_one(market));
+
+        market = _aaplConfig();
+        market.fundingToken = address(new MockERC20("Fixture USD 38", "fUSD38", 38));
+        market.fixturePrice.decimals = 0;
+        market.fixturePrice.atoms = type(uint256).max / 1e37;
+        vm.expectRevert(MandateExecutionGate.FixturePriceNotRepresentable.selector);
         new MandateExecutionGate(_one(market));
     }
 
-    function test_construction_fixtureSettlement_refusesAnAdapterForAnotherRepresentation() public {
+    /// @notice The venue settles against exactly the configured funding token and
+    /// representation, whatever else exists: there is nothing else to wire.
+    function test_construction_venueTradesExactlyTheConfiguredPair() public {
+        MockERC20 other = new MockERC20("Other USD", "oUSD", 6);
         MarketConfig memory market = _aaplConfig();
-        market.adapter = address(nvdaAdapter);
-        vm.expectRevert(FixtureVenueAdapter.UnsupportedOrder.selector);
-        new MandateExecutionGate(_one(market));
-    }
-
-    function test_construction_fixtureSettlement_refusesAnAdapterThatDeclaresNoSettlement() public {
-        MarketConfig memory market = _aaplConfig();
-        market.adapter = address(funding); // has code, has no fixtureSettlement
-        vm.expectRevert();
-        new MandateExecutionGate(_one(market));
+        market.fundingToken = address(other);
+        MandateExecutionGate g = new MandateExecutionGate(_one(market));
+        FixtureVenue venue = _venueOf(g, address(aapl));
+        assertEq(address(venue.FUNDING()), address(other));
+        assertEq(address(venue.REPRESENTATION()), address(aapl));
+        assertEq(g.marketOf(_keyOf(address(aapl))).fundingToken, address(other));
     }
 
     function test_profile_marketCountExactAndAboveBoundary() public {
@@ -191,11 +209,11 @@ contract MandateExecutionGateTest is GateTestBase {
         MarketConfig[] memory markets = new MarketConfig[](maximum);
         for (uint256 i = 0; i < maximum; ++i) {
             MockERC20 token = new MockERC20("Fixture", "FX", 18);
-            scripted.setFixtureSettlement(address(token), address(funding), AAPL_PRICE);
-            markets[i] =
-                _market(address(token), address(scripted), _aaplAsset(), "issuer.alpha", "venue.scripted", false);
+            markets[i] = _market(address(token), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
         }
+        uint256 before = gasleft();
         MandateExecutionGate maximumGate = new MandateExecutionGate(markets);
+        emit log_named_uint("deployment gas, 32 markets", before - gasleft());
         assertTrue(address(maximumGate) != address(0));
         vm.expectRevert(MandateExecutionGate.InvalidMarket.selector);
         new MandateExecutionGate(new MarketConfig[](maximum + 1));
@@ -203,8 +221,8 @@ contract MandateExecutionGateTest is GateTestBase {
 
     function test_construction_refusesDuplicateRepresentations() public {
         MarketConfig[] memory markets = new MarketConfig[](2);
-        markets[0] = _market(address(aapl), address(aaplAdapter), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
-        markets[1] = _market(address(aapl), address(nvdaAdapter), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
+        markets[0] = _market(address(aapl), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
+        markets[1] = _market(address(aapl), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
         vm.expectRevert(MandateExecutionGate.InvalidMarket.selector);
         new MandateExecutionGate(markets);
     }
@@ -212,25 +230,21 @@ contract MandateExecutionGateTest is GateTestBase {
     function test_construction_refusesTokensBeyondKernelDecimals() public {
         MockERC20 wide = new MockERC20("Wide", "W", 39);
         vm.expectRevert(MandateExecutionGate.InvalidMarket.selector);
-        new MandateExecutionGate(
-            _one(_market(address(wide), address(aaplAdapter), _aaplAsset(), "issuer.alpha", "venue.fixture", false))
-        );
+        new MandateExecutionGate(_one(_market(address(wide), _aaplAsset(), "issuer.alpha", "venue.fixture", false)));
     }
 
     function test_construction_refusesRealMarketWithoutAuthenticatedStateSource() public {
-        MarketConfig memory market =
-            _market(address(aapl), address(aaplAdapter), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
+        MarketConfig memory market = _aaplConfig();
         market.classification = MARKET_REAL;
         vm.expectRevert(MandateExecutionGate.RealMarketStateSourceRequired.selector);
         new MandateExecutionGate(_one(market));
     }
 
     function test_construction_refusesTokenAddressesWithoutCode() public {
-        MarketConfig memory market =
-            _market(address(0x1111), address(aaplAdapter), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
+        MarketConfig memory market = _market(address(0x1111), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
         vm.expectRevert(MandateExecutionGate.InvalidMarket.selector);
         new MandateExecutionGate(_one(market));
-        market = _market(address(aapl), address(aaplAdapter), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
+        market = _aaplConfig();
         market.fundingToken = address(0x2222);
         vm.expectRevert(MandateExecutionGate.InvalidMarket.selector);
         new MandateExecutionGate(_one(market));

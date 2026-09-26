@@ -103,6 +103,17 @@ This is not registry resolution: nothing is looked up, ranked or interpreted. It
 is the onchain analogue of "addresses come from the registry" (INV-7) for a gate
 that has no registry.
 
+**Amended in Phase 6R.1a.** For the only supported class, a labelled fixture, the
+adapter is no longer a supplied fact. The constructor creates each market's
+`FixtureVenue` and `FixtureVenueAdapter` itself from code compiled into the gate,
+at the market's typed fixture price converted exactly into funding atoms, so
+implementation, wiring and price follow from the gate's bytecode and constructor
+arguments rather than from anything a deployed contract reports. Phase 6R.1 had
+asked a supplied adapter for its venue's price, which a hostile adapter or a
+look-alike venue could answer falsely. A real-market adapter, when one exists,
+will need its own equally mechanical identity rule; that belongs to the phase
+that introduces it.
+
 ### 5. Principal authority and settlement are independently established
 
 Before transferring anything, the gate establishes that the candidate price is

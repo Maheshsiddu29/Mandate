@@ -2,14 +2,16 @@
  * The differential world: one fixed deployment both implementations replay.
  *
  * Every address here is where `contracts/test/Differential.t.sol` deploys the
- * corresponding contract with `deployCodeTo`, so the gate's EIP-712 domain, the
- * representation identifiers and therefore every digest and signature are the
- * same on both sides. The tokens are labelled fixtures and the adapter is the
- * `ScriptedAdapter` test double — this world exercises the gate's decision, not
- * a venue.
+ * corresponding contract, so the gate's EIP-712 domain, the representation
+ * identifiers and therefore every digest and signature are the same on both
+ * sides. The tokens are labelled fixtures. Each market's adapter is the one the
+ * gate's constructor creates (Phase 6R.1a), at the gate's own CREATE address;
+ * the harness then etches the `ScriptedAdapter` test double over it — this world
+ * exercises the gate's decision, not a venue.
  */
 
-import { eip712SigningHash, keccak256, type Bytes32 } from '@mandate/kernel';
+import { keccak_256 } from '@noble/hashes/sha3.js';
+import { bytesToHex, eip712SigningHash, hexToBytes, keccak256, type Bytes32 } from '@mandate/kernel';
 import { addressOf, signHash, TEST_PRIVATE_KEY, TEST_PRIVATE_KEY_2 } from '../../../kernel/test/support/signing.ts';
 import {
   caip2,
@@ -46,9 +48,31 @@ export const STRANGER = addressOf(STRANGER_KEY);
 /** Where a misbehaving adapter sends output it should have sent to the principal. */
 export const SINK = '0x000000000000000000000000000000000000dead';
 
+/**
+ * The address a contract at `sender` creates with its `nonce`-th CREATE:
+ * `keccak256(rlp([sender, nonce]))[12:]`, for the small nonces a constructor uses.
+ */
+export function createAddress(sender: string, nonce: number): string {
+  if (!Number.isInteger(nonce) || nonce < 1 || nonce > 0x7f) throw new Error(`unsupported nonce ${nonce}`);
+  const addr = hexToBytes(sender);
+  if (addr === undefined || addr.length !== 20) throw new Error(`not an address: ${sender}`);
+  const rlp = new Uint8Array([0xd6, 0x94, ...addr, nonce]);
+  return `0x${bytesToHex(keccak_256(rlp)).slice(26)}`;
+}
+
+const GATE_ADDRESS = '0x000000000000000000000000000000000000a7e0';
+
+/**
+ * The adapter the gate creates for its `index`-th market. Each market's
+ * constructor step creates the venue, then the adapter; a newly created
+ * contract's nonce starts at 1 (EIP-161), so market i's adapter is CREATE 2i+2.
+ */
+export function marketAdapter(index: number): string {
+  return createAddress(GATE_ADDRESS, 2 * index + 2);
+}
+
 export const ADDR = {
-  gate: '0x000000000000000000000000000000000000a7e0',
-  adapter: '0x000000000000000000000000000000000000ada0',
+  gate: GATE_ADDRESS,
   funding6: '0x000000000000000000000000000000000000f006',
   funding18: '0x000000000000000000000000000000000000f018',
   aapl: '0x000000000000000000000000000000000000aa01',
@@ -72,11 +96,11 @@ export const TOKENS = [
   { address: ADDR.eightDecimal, name: 'Fixture Apple 8dp', symbol: 'fAAPL8', decimals: 8 },
 ] as const;
 
-function market(representation: string, fundingToken: string, representationDecimals: number, fundingDecimals: number, overrides: Partial<GateMarket> = {}): GateMarket {
+function market(index: number, representation: string, fundingToken: string, representationDecimals: number, fundingDecimals: number, overrides: Partial<GateMarket> = {}): GateMarket {
   return {
     representation,
     fundingToken,
-    adapter: ADDR.adapter,
+    adapter: marketAdapter(index),
     representationDecimals,
     fundingDecimals,
     canonicalAsset: AAPL,
@@ -95,13 +119,13 @@ export const DEPLOYMENT: GateDeployment = {
   chainId: CHAIN_ID,
   gate: ADDR.gate,
   markets: [
-    market(ADDR.aapl, ADDR.funding6, 18, 6),
-    market(ADDR.nvda, ADDR.funding6, 18, 6, {
+    market(0, ADDR.aapl, ADDR.funding6, 18, 6),
+    market(1, ADDR.nvda, ADDR.funding6, 18, 6, {
       canonicalAsset: NVDA,
       fixturePrice: { numeratorUnit: 'USD', denominatorUnit: 'TOKEN', decimals: 18, atoms: 100n * 10n ** 18n },
     }),
-    market(ADDR.synth, ADDR.funding6, 18, 6, { issuer: 'issuer.synthetic', synthetic: true }),
-    market(ADDR.eightDecimal, ADDR.funding18, 8, 18, { venue: 'venue.other' }),
+    market(2, ADDR.synth, ADDR.funding6, 18, 6, { issuer: 'issuer.synthetic', synthetic: true }),
+    market(3, ADDR.eightDecimal, ADDR.funding18, 8, 18, { venue: 'venue.other' }),
   ],
 };
 
@@ -273,9 +297,12 @@ class Ledger {
   constructor(setup: readonly TokenSetup[]) {
     for (const s of setup) {
       this.balances.set(`${s.token}:${PRINCIPAL}`, s.principalBalance);
-      this.balances.set(`${s.token}:${ADDR.adapter}`, ADAPTER_INVENTORY);
       this.allowances.set(`${s.token}:${PRINCIPAL}:${ADDR.gate}`, s.gateAllowance);
-      this.allowances.set(`${s.token}:${PRINCIPAL}:${ADDR.adapter}`, s.adapterAllowance);
+      // Every market's adapter holds inventory of every token and receives the same allowance.
+      for (const m of DEPLOYMENT.markets) {
+        this.balances.set(`${s.token}:${m.adapter}`, ADAPTER_INVENTORY);
+        this.allowances.set(`${s.token}:${PRINCIPAL}:${m.adapter}`, s.adapterAllowance);
+      }
     }
   }
 
@@ -366,20 +393,21 @@ function interact(ledger: Ledger, plan: ExecutionPlan, script: Script) {
   const inputBefore = ledger.balance(plan.inputToken, plan.principal);
   const outputBefore = ledger.balance(plan.outputToken, plan.recipient);
 
-  const pull = ledger.transferFrom(plan.inputToken, ADDR.gate, plan.principal, ADDR.adapter, plan.inputAmount);
+  const adapter = plan.market.adapter;
+  const pull = ledger.transferFrom(plan.inputToken, ADDR.gate, plan.principal, adapter, plan.inputAmount);
   if (pull !== undefined) return pull;
 
   if (script.mode === ScriptMode.REVERT) return encodeRevert('ScriptedRevert()', []);
   if (script.mode === ScriptMode.PULL_FROM_PRINCIPAL) {
-    const extra = ledger.transferFrom(plan.inputToken, ADDR.adapter, plan.principal, ADDR.adapter, script.extraPull);
+    const extra = ledger.transferFrom(plan.inputToken, adapter, plan.principal, adapter, script.extraPull);
     if (extra !== undefined) return extra;
   }
   if (script.deliver !== 0n) {
-    const failed = ledger.transfer(plan.outputToken, ADDR.adapter, script.deliverElsewhere ? SINK : plan.recipient, script.deliver);
+    const failed = ledger.transfer(plan.outputToken, adapter, script.deliverElsewhere ? SINK : plan.recipient, script.deliver);
     if (failed !== undefined) return failed;
   }
   if (script.refund !== 0n) {
-    const failed = ledger.transfer(plan.inputToken, ADDR.adapter, plan.principal, script.refund);
+    const failed = ledger.transfer(plan.inputToken, adapter, plan.principal, script.refund);
     if (failed !== undefined) return failed;
   }
   return {

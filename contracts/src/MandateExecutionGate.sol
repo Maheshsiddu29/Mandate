@@ -19,8 +19,9 @@ import {
 } from "./MandateTypes.sol";
 import {GateArithmetic} from "./libraries/GateArithmetic.sol";
 import {ExecutionOrder, IMandateExecutionAdapter} from "./interfaces/IMandateExecutionAdapter.sol";
-import {IFixtureSettlement} from "./interfaces/IFixtureSettlement.sol";
 import {MandateCodec} from "./libraries/MandateCodec.sol";
+import {FixtureVenue} from "./fixture/FixtureVenue.sol";
+import {FixtureVenueAdapter} from "./fixture/FixtureVenueAdapter.sol";
 
 /// @title MandateExecutionGate
 /// @notice The onchain half of Mandate: a transaction that materially differs
@@ -30,6 +31,13 @@ import {MandateCodec} from "./libraries/MandateCodec.sol";
 /// markets are fixed at construction. The gate is not a generic executor: it
 /// calls exactly one adapter per market, with exactly one call shape, and it
 /// never forwards caller-chosen targets or calldata.
+///
+/// Every market is a labelled settlement fixture, and the constructor creates
+/// that market's `FixtureVenue` and `FixtureVenueAdapter` itself from code
+/// compiled into this contract (Phase 6R.1a). No adapter or venue is ever
+/// supplied, so which code settles a market, at which price and against which
+/// tokens, is a function of this contract's bytecode and its constructor
+/// arguments — not of anything a deployed contract reports about itself.
 ///
 /// Authority chain, checked in this order on every call:
 ///
@@ -60,6 +68,8 @@ contract MandateExecutionGate is ReentrancyGuard {
     uint256 public constant MAX_PROFILE_SET_SIZE = 16;
     uint256 public constant MAX_EXECUTION_DATA_BYTES = 4_096;
     uint256 public constant MAX_MARKETS = 32;
+    /// @dev `FixtureVenue` refuses a fee of 100% or more; refused here first, as `InvalidMarket`.
+    uint256 private constant FIXTURE_FEE_BPS_LIMIT = 10_000;
 
     // ------------------------------------------------------------------
     // EIP-712
@@ -97,6 +107,10 @@ contract MandateExecutionGate is ReentrancyGuard {
     /// Written only by the constructor.
     mapping(bytes32 representationIdHash => Market) private _markets;
 
+    /// @dev The `FixtureVenue` the constructor created for each market. Read only
+    /// by `fixtureVenueOf`: execution needs only the adapter, which names it.
+    mapping(bytes32 representationIdHash => address venue) private _fixtureVenues;
+
     /// @dev The final replay authority for gate executions. Keyed by the mandate
     /// digest (the kernel's replay key); the value is the execution commitment
     /// that consumed it. Zero means unconsumed. Only a successful execution
@@ -113,6 +127,8 @@ contract MandateExecutionGate is ReentrancyGuard {
         address indexed representation,
         address indexed fundingToken,
         address adapter,
+        address fixtureVenue,
+        uint256 fixtureVenuePrice,
         string representationId
     );
 
@@ -141,7 +157,7 @@ contract MandateExecutionGate is ReentrancyGuard {
 
     error InvalidMarket();
     error RealMarketStateSourceRequired();
-    error FixtureSettlementInconsistent();
+    error FixturePriceNotRepresentable();
     error ExecutionProfileExceeded();
     error WrongChain();
     error UnsupportedMandateVersion();
@@ -207,7 +223,7 @@ contract MandateExecutionGate is ReentrancyGuard {
         if (
             config.representation == address(0) || config.fundingToken == address(0)
                 || config.representation == config.fundingToken || config.representation.code.length == 0
-                || config.fundingToken.code.length == 0 || config.adapter.code.length == 0
+                || config.fundingToken.code.length == 0
         ) revert InvalidMarket();
         if (config.classification != MARKET_FIXTURE) revert RealMarketStateSourceRequired();
         if (
@@ -225,6 +241,7 @@ contract MandateExecutionGate is ReentrancyGuard {
             keccak256(bytes(config.fixturePrice.numeratorUnit)) != keccak256(bytes(config.settlementUnit))
                 || keccak256(bytes(config.fixturePrice.denominatorUnit)) != keccak256(bytes(config.quantityUnit))
                 || config.fixturePrice.decimals > MandateCodec.MAX_DECIMALS || config.fixturePrice.atoms == 0
+                || config.fixtureFeeBps >= FIXTURE_FEE_BPS_LIMIT
         ) revert InvalidMarket();
 
         // Constructor only, over a deployer-chosen market list: a token whose
@@ -244,28 +261,27 @@ contract MandateExecutionGate is ReentrancyGuard {
         bytes32 key = keccak256(bytes(representationId));
         if (_markets[key].representation != address(0)) revert InvalidMarket();
 
-        // The price the gate authorizes against and the price the venue settles
-        // at must be one economic price: `atoms / 10^decimals` settlement units
-        // per whole token must equal the venue's funding atoms per whole token
-        // over `10^fundingDecimals`, the declared funding assumption (docs §6).
-        // Checked here, not only in the deployment script, so no construction
-        // path can pair a gate with a venue at another price. A typed price
-        // finer than the funding token can express has no equal integer venue
-        // price, so it is refused by the same comparison.
-        // slither-disable-next-line calls-loop
-        (address venueFunding, uint256 venuePrice) =
-            IFixtureSettlement(config.adapter).fixtureSettlement(config.representation);
-        if (
-            venueFunding != config.fundingToken
-                || GateArithmetic.compare(
-                        config.fixturePrice.atoms, config.fixturePrice.decimals, venuePrice, fundingDecimals
-                    ) != 0
-        ) revert FixtureSettlementInconsistent();
+        // One price, written once. The venue charges funding-token atoms per
+        // whole token; `atoms / 10^decimals` settlement units per whole token is
+        // exactly that many funding atoms over `10^fundingDecimals`, the declared
+        // funding assumption (docs §6). A typed price finer than the funding
+        // token can express has no exact venue price and is refused.
+        (bool representable, uint256 venuePrice) =
+            _fundingAtomsPerToken(config.fixturePrice.atoms, config.fixturePrice.decimals, fundingDecimals);
+        if (!representable) revert FixturePriceNotRepresentable();
+
+        // The venue and adapter are created here, from code compiled into this
+        // contract, wired to this market's tokens, this price and this gate.
+        // Nothing is read back from them: their behaviour is their bytecode.
+        FixtureVenue venue = new FixtureVenue(
+            IERC20(config.representation), IERC20(config.fundingToken), venuePrice, config.fixtureFeeBps
+        );
+        FixtureVenueAdapter adapter = new FixtureVenueAdapter(address(this), venue);
 
         Market storage market = _markets[key];
         market.representation = config.representation;
         market.fundingToken = config.fundingToken;
-        market.adapter = config.adapter;
+        market.adapter = address(adapter);
         market.representationDecimals = representationDecimals;
         market.fundingDecimals = fundingDecimals;
         market.synthetic = config.synthetic;
@@ -277,7 +293,32 @@ contract MandateExecutionGate is ReentrancyGuard {
         market.settlementUnitHash = keccak256(bytes(config.settlementUnit));
         market.fixturePriceDecimals = config.fixturePrice.decimals;
         market.fixturePriceAtoms = config.fixturePrice.atoms;
-        emit MarketSupported(key, config.representation, config.fundingToken, config.adapter, representationId);
+        _fixtureVenues[key] = address(venue);
+        emit MarketSupported(
+            key,
+            config.representation,
+            config.fundingToken,
+            address(adapter),
+            address(venue),
+            venuePrice,
+            representationId
+        );
+    }
+
+    /// @dev `atoms / 10^priceDecimals` whole funding units, in funding atoms, exactly.
+    function _fundingAtomsPerToken(uint256 atoms, uint8 priceDecimals, uint8 fundingDecimals)
+        private
+        pure
+        returns (bool representable, uint256 fundingAtoms)
+    {
+        if (fundingDecimals >= priceDecimals) {
+            uint256 factor = 10 ** uint256(fundingDecimals - priceDecimals);
+            if (atoms > type(uint256).max / factor) return (false, 0);
+            return (true, atoms * factor);
+        }
+        uint256 divisor = 10 ** uint256(priceDecimals - fundingDecimals);
+        if (atoms % divisor != 0) return (false, 0);
+        return (true, atoms / divisor);
     }
 
     // ------------------------------------------------------------------
@@ -696,6 +737,11 @@ contract MandateExecutionGate is ReentrancyGuard {
     /// @notice The supported market for a representation identifier hash.
     function marketOf(bytes32 representationIdHash) external view returns (Market memory) {
         return _markets[representationIdHash];
+    }
+
+    /// @notice The `FixtureVenue` this gate created for a market, or zero.
+    function fixtureVenueOf(bytes32 representationIdHash) external view returns (address) {
+        return _fixtureVenues[representationIdHash];
     }
 
     /// @notice This gate's EIP-712 domain separator (ADR 0001 domain, this chain, this address).
