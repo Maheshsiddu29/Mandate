@@ -696,7 +696,7 @@ policy and never lives in the gate.
   address and the gate's runtime code without its market table. Stocking a venue
   with inventory is a separate manual step.
 - Deploying creates two contracts per market. `MAX_MARKETS` = 32 costs about
-  40.9M gas in one transaction (measured in `MandateExecutionGate.t.sol`), above
+  38.6M gas in one transaction (measured in `MandateExecutionGate.t.sol`), above
   a 32M per-transaction cap such as Arbitrum's; a deployment with that many
   markets must be checked against the target chain's limit. The committed config
   has one market.
@@ -720,7 +720,10 @@ policy and never lives in the gate.
   non-zero, and at most 764,840 under an EIP-7623-style 40-gas floor; Arbitrum
   additionally charges for L1 data, which is not modelled here. The settled
   `execute` call used **6,646,656 gas** through an adapter that only fills, so
-  the figure is the gate's. Gas grows linearly with identifier length
+  the figure is the gate's (Phase 6R.1a re-measured **6,646,628** with that lean
+  adapter etched at the gate-created adapter address, since the fixture adapter
+  refuses route data; this is an upper bound for the largest calldata the gate
+  accepts, and on the fixture path route data must be empty). Gas grows linearly with identifier length
   (≈1.13M at 16-byte identifiers, ≈3.49M at 64) because the gate validates and
   re-encodes every identifier byte to re-derive the digests. The Nitro node
   default is 95,000 transaction-data bytes, so calldata keeps more than 80%

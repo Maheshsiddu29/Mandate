@@ -1,5 +1,13 @@
 # Phase 6R.1 completion report — exact principal notional enforcement
 
+> **Phase 6R.1a follow-up.** The independent review of this phase confirmed M-1
+> closed and found two further issues. §5's reconciliation rule made a retry
+> after any failed attempt impossible until mandate expiry; FAILED now follows
+> the reservation that bounds every attempt's deadline. §3's constructor check
+> relied on what a supplied adapter reported through `IFixtureSettlement`; the
+> gate now creates each fixture venue and adapter itself, and the interface is
+> removed. See [phase-6r1a-report.md](phase-6r1a-report.md).
+
 **Verdict: READY FOR INDEPENDENT PHASE 6R.1 REVIEW.** This is not a deployment
 approval. Phase 7 has not begun. Nothing was deployed and no transaction was
 sent. The only executable market class is still a labelled, fixed-price
