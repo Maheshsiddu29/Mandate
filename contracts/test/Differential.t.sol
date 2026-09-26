@@ -127,6 +127,12 @@ contract DifferentialTest is Test {
         _token(EIGHT, "Fixture Apple 8dp", "fAAPL8", 8);
         deployCodeTo("ScriptedAdapter.sol:ScriptedAdapter", ADAPTER);
         adapter = ScriptedAdapter(ADAPTER);
+        // The same economic prices as the 18-decimal fixture prices below, in
+        // each market's funding-token atoms per whole token.
+        adapter.setFixtureSettlement(AAPL, FUNDING6, 200e6);
+        adapter.setFixtureSettlement(NVDA, FUNDING6, 100e6);
+        adapter.setFixtureSettlement(SYNTH, FUNDING6, 200e6);
+        adapter.setFixtureSettlement(EIGHT, FUNDING18, 200e18);
 
         MarketConfig[] memory markets = new MarketConfig[](4);
         markets[0] = _market(AAPL, FUNDING6, _asset("US0378331005"), "issuer.alpha", "venue.fixture", false);

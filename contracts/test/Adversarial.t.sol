@@ -283,7 +283,7 @@ contract AdversarialTest is GateTestBase {
 
     function test_callbackTokenCannotReenterDuringTheTransfer() public {
         HookToken hookFunding = new HookToken(6);
-        ScriptedAdapter adapter = new ScriptedAdapter();
+        ScriptedAdapter adapter = _scriptedAdapterFor(address(scriptedToken), address(hookFunding));
         MarketConfig[] memory markets = new MarketConfig[](1);
         markets[0] =
             _market(address(scriptedToken), address(adapter), _aaplAsset(), "issuer.alpha", "venue.scripted", false);
@@ -364,7 +364,7 @@ contract AdversarialTest is GateTestBase {
 
     function test_feeOnTransferOutputFailsClosed() public {
         FeeOnTransferToken taxed = new FeeOnTransferToken(18, 100); // 1%
-        ScriptedAdapter adapter = new ScriptedAdapter();
+        ScriptedAdapter adapter = _scriptedAdapterFor(address(taxed), address(funding));
         MandateExecutionGate g = _gateFor(address(taxed), address(funding), address(adapter));
         taxed.mint(address(adapter), 100e18);
         vm.prank(principal);
@@ -384,7 +384,7 @@ contract AdversarialTest is GateTestBase {
 
     function test_feeOnTransferInputCannotRaiseTheDebitAboveTheTransferredAmount() public {
         FeeOnTransferToken taxedFunding = new FeeOnTransferToken(6, 100); // 1%
-        ScriptedAdapter adapter = new ScriptedAdapter();
+        ScriptedAdapter adapter = _scriptedAdapterFor(address(scriptedToken), address(taxedFunding));
         MandateExecutionGate g = _gateFor(address(scriptedToken), address(taxedFunding), address(adapter));
         taxedFunding.mint(principal, 10_000e6);
         scriptedToken.mint(address(adapter), QTY);
@@ -408,7 +408,7 @@ contract AdversarialTest is GateTestBase {
 
     function test_noReturnFundingTokenIsExplicitlySupported() public {
         NoReturnERC20 legacy = new NoReturnERC20(6);
-        ScriptedAdapter adapter = new ScriptedAdapter();
+        ScriptedAdapter adapter = _scriptedAdapterFor(address(scriptedToken), address(legacy));
         MandateExecutionGate g = _gateFor(address(scriptedToken), address(legacy), address(adapter));
         legacy.mint(principal, 10_000e6);
         scriptedToken.mint(address(adapter), QTY);
@@ -429,7 +429,7 @@ contract AdversarialTest is GateTestBase {
 
     function test_malformedTokenReturnDataFailsClosedAndConsumesNothing() public {
         MalformedReturnERC20 malformed = new MalformedReturnERC20(6);
-        ScriptedAdapter adapter = new ScriptedAdapter();
+        ScriptedAdapter adapter = _scriptedAdapterFor(address(scriptedToken), address(malformed));
         MandateExecutionGate g = _gateFor(address(scriptedToken), address(malformed), address(adapter));
         malformed.mint(principal, 10_000e6);
         vm.prank(principal);

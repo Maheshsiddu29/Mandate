@@ -19,6 +19,7 @@ import {
 } from "./MandateTypes.sol";
 import {GateArithmetic} from "./libraries/GateArithmetic.sol";
 import {ExecutionOrder, IMandateExecutionAdapter} from "./interfaces/IMandateExecutionAdapter.sol";
+import {IFixtureSettlement} from "./interfaces/IFixtureSettlement.sol";
 import {MandateCodec} from "./libraries/MandateCodec.sol";
 
 /// @title MandateExecutionGate
@@ -140,6 +141,7 @@ contract MandateExecutionGate is ReentrancyGuard {
 
     error InvalidMarket();
     error RealMarketStateSourceRequired();
+    error FixtureSettlementInconsistent();
     error ExecutionProfileExceeded();
     error WrongChain();
     error UnsupportedMandateVersion();
@@ -241,6 +243,24 @@ contract MandateExecutionGate is ReentrancyGuard {
         string memory representationId = MandateCodec.representationId(block.chainid, config.representation);
         bytes32 key = keccak256(bytes(representationId));
         if (_markets[key].representation != address(0)) revert InvalidMarket();
+
+        // The price the gate authorizes against and the price the venue settles
+        // at must be one economic price: `atoms / 10^decimals` settlement units
+        // per whole token must equal the venue's funding atoms per whole token
+        // over `10^fundingDecimals`, the declared funding assumption (docs §6).
+        // Checked here, not only in the deployment script, so no construction
+        // path can pair a gate with a venue at another price. A typed price
+        // finer than the funding token can express has no equal integer venue
+        // price, so it is refused by the same comparison.
+        // slither-disable-next-line calls-loop
+        (address venueFunding, uint256 venuePrice) =
+            IFixtureSettlement(config.adapter).fixtureSettlement(config.representation);
+        if (
+            venueFunding != config.fundingToken
+                || GateArithmetic.compare(
+                        config.fixturePrice.atoms, config.fixturePrice.decimals, venuePrice, fundingDecimals
+                    ) != 0
+        ) revert FixtureSettlementInconsistent();
 
         Market storage market = _markets[key];
         market.representation = config.representation;

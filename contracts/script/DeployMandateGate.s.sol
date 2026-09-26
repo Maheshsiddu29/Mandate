@@ -8,6 +8,7 @@ import {CanonicalAsset, MarketConfig, Price, MARKET_FIXTURE} from "../src/Mandat
 import {FixtureVenue} from "../src/fixture/FixtureVenue.sol";
 import {FixtureVenueAdapter} from "../src/fixture/FixtureVenueAdapter.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 /// @title DeployMandateGate — deterministic deployment of the gate and its fixture markets
 /// @notice MANUAL ONLY. Never run by CI with `--broadcast`, and Phase 6 authorizes
@@ -20,8 +21,15 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 /// Adapters name the gate and the gate names the adapters, so the gate's address
 /// is predicted from the deployer nonce and asserted after deployment.
 ///
-/// Refuses: a config whose `chainId` is not the connected chain, and any known
-/// mainnet — Ethereum, Arbitrum One, Arbitrum Nova and Robinhood Chain mainnet.
+/// Each market's price is written once, typed (`fixturePrice` atoms at
+/// `fixturePriceDecimals`), and is both the gate's pinned price and — converted
+/// exactly to the funding token's atoms — the venue's. The gate's constructor
+/// independently refuses a venue at any other economic price, so this
+/// conversion is a convenience, not the enforcement.
+///
+/// Refuses: a config whose `chainId` is not the connected chain, any known
+/// mainnet — Ethereum, Arbitrum One, Arbitrum Nova and Robinhood Chain mainnet —
+/// and a fixture price finer than its funding token can express.
 ///
 /// Usage (simulation only unless `--broadcast` is added by a human):
 ///   MANDATE_GATE_CONFIG=contracts/deploy/local-fixture.json \
@@ -31,6 +39,7 @@ contract DeployMandateGate is Script {
     error MainnetRefused(uint256 chainId);
     error GateAddressMispredicted(address predicted, address deployed);
     error FixtureClassificationRequired();
+    error FixturePriceNotRepresentable(uint256 market);
 
     struct Deployment {
         MandateExecutionGate gate;
@@ -66,7 +75,7 @@ contract DeployMandateGate is Script {
             d.venues[i] = new FixtureVenue(
                 IERC20(vm.parseJsonAddress(json, string.concat(p, ".representation"))),
                 IERC20(vm.parseJsonAddress(json, string.concat(p, ".fundingToken"))),
-                vm.parseJsonUint(json, string.concat(p, ".fixturePrice")),
+                venuePrice(json, i),
                 uint16(vm.parseJsonUint(json, string.concat(p, ".fixtureFeeBps")))
             );
         }
@@ -87,6 +96,20 @@ contract DeployMandateGate is Script {
             console2.log("    fixture venue   ", address(d.venues[i]));
             console2.log("    fixture adapter ", address(d.adapters[i]));
         }
+    }
+
+    /// @notice The typed fixture price in funding-token atoms per whole token,
+    /// exactly. A price with more precision than the funding token refuses.
+    function venuePrice(string memory json, uint256 i) public view returns (uint256) {
+        string memory p = string.concat(".markets[", vm.toString(i), "]");
+        uint256 atoms = vm.parseJsonUint(json, string.concat(p, ".fixturePrice"));
+        uint256 priceDecimals = vm.parseJsonUint(json, string.concat(p, ".fixturePriceDecimals"));
+        uint256 fundingDecimals =
+            IERC20Metadata(vm.parseJsonAddress(json, string.concat(p, ".fundingToken"))).decimals();
+        if (fundingDecimals >= priceDecimals) return atoms * 10 ** (fundingDecimals - priceDecimals);
+        uint256 divisor = 10 ** (priceDecimals - fundingDecimals);
+        if (atoms % divisor != 0) revert FixturePriceNotRepresentable(i);
+        return atoms / divisor;
     }
 
     function _marketCount(string memory json) internal view returns (uint256 n) {

@@ -255,6 +255,17 @@ side (ADR 0014).
   construction. Candidate prices may use another decimal scale only when the
   rational value is exactly equal. This closes the zero-price/max-notional
   bypass without pretending to solve real-market price freshness.
+- **Fixture price and venue price are one price (Phase 6R.1).** The pinned
+  typed price and the integer the fixture venue settles at are written by
+  different code from different inputs. The constructor asks each market's
+  adapter for its venue's settlement terms (`IFixtureSettlement`) and refuses
+  `FixtureSettlementInconsistent` unless the venue settles against the
+  configured funding token at exactly `fixturePrice.atoms / 10^decimals`
+  settlement units per whole token, expressed in funding atoms. A typed price
+  finer than the funding token can express has no equal integer venue price and
+  is refused by the same comparison. This is enforced by the constructor itself,
+  so a direct deployment cannot bypass it; the deployment script additionally
+  converts the typed price exactly and refuses one it cannot represent.
 - **Fees.** Candidate notional plus BUY fees or minus SELL fees is checked
   against the principal-signed limit before settlement. Measured balance deltas
   then enforce the realized result independently.
@@ -395,7 +406,7 @@ Run: `npm run contracts:test` (regenerates the corpus ABI, then `forge test`).
 | `Fuzz.t.sol` | 15 × 1,024 runs | Principal/agent economics, exact rational arithmetic, quantities, prices, decimal scales, exact fill, time, replay, post-signature mutations, signatures, recipient, representation and chain |
 | `invariant/GateInvariants.t.sol` | 12 invariants × 256 runs × depth 64, plus a deterministic non-vacuity test | Below |
 | `Differential.t.sol` | 4 | §11 |
-| `DeployScript.t.sol` | 3 | §13 |
+| `DeployScript.t.sol` | 6 | §13, including exact typed-price conversion and the constructor's refusal of a mismatched venue |
 
 Invariants, each checked after every call of every run:
 
@@ -520,7 +531,11 @@ policy and never lives in the gate.
   adapters and the gate from a reviewed JSON config, predicting the gate's
   address from the deployer nonce and asserting it. It refuses a chain that does
   not match its config and refuses Ethereum, Arbitrum One, Arbitrum Nova and
-  Robinhood Chain mainnet outright. It is exercised only by `DeployScript.t.sol`.
+  Robinhood Chain mainnet outright. It writes each market's price once, typed,
+  and gives the venue that price converted exactly to funding-token atoms,
+  refusing `FixturePriceNotRepresentable` when it cannot. It is exercised only by
+  `DeployScript.t.sol`. The gate constructor independently refuses a venue at any
+  other economic price (§6), so a hand-rolled deployment is held to the same rule.
 - `contracts/deploy/local-fixture.json` targets a local development chain only.
   **No Robinhood Chain testnet config is committed**: the repository holds no
   verified testnet Stock Token or funding-token addresses, and a testnet

@@ -90,6 +90,7 @@ abstract contract GateTestBase is Test {
         nvdaVenue = new FixtureVenue(nvda, funding, NVDA_PRICE, FEE_BPS);
         synthVenue = new FixtureVenue(synth, funding, AAPL_PRICE, FEE_BPS);
         scripted = new ScriptedAdapter();
+        scripted.setFixtureSettlement(address(scriptedToken), address(funding), AAPL_PRICE);
 
         // Adapters name their gate, and the gate names its adapters: predict the
         // gate's CREATE address, which follows the three adapter deployments.
@@ -323,6 +324,13 @@ abstract contract GateTestBase is Test {
 
     function _err(bytes4 selector) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(selector);
+    }
+
+    /// @notice A scripted adapter that declares `representation` settles against
+    /// `fundingToken` at the 6-decimal AAPL fixture price.
+    function _scriptedAdapterFor(address representation, address fundingToken) internal returns (ScriptedAdapter a) {
+        a = new ScriptedAdapter();
+        a.setFixtureSettlement(representation, fundingToken, AAPL_PRICE);
     }
 
     function _scriptHonest(uint256 deliver, uint256 refund) internal {

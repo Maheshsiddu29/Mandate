@@ -6,6 +6,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 
 import {SIDE_BUY, SIDE_SELL} from "../MandateTypes.sol";
 import {ExecutionOrder, IMandateExecutionAdapter} from "../interfaces/IMandateExecutionAdapter.sol";
+import {IFixtureSettlement} from "../interfaces/IFixtureSettlement.sol";
 import {FixtureVenue} from "./FixtureVenue.sol";
 
 /// @title FixtureVenueAdapter — adapter for the SETTLEMENT FIXTURE
@@ -24,7 +25,7 @@ import {FixtureVenue} from "./FixtureVenue.sol";
 ///
 /// None of this is what makes execution safe — the gate's settlement check is.
 /// It is what keeps an adapter defect from becoming anyone's standing authority.
-contract FixtureVenueAdapter is IMandateExecutionAdapter {
+contract FixtureVenueAdapter is IMandateExecutionAdapter, IFixtureSettlement {
     using SafeERC20 for IERC20;
 
     address public immutable GATE;
@@ -39,6 +40,18 @@ contract FixtureVenueAdapter is IMandateExecutionAdapter {
         if (gate == address(0) || address(venue) == address(0)) revert InvalidConfig();
         GATE = gate;
         VENUE = venue;
+    }
+
+    /// @inheritdoc IFixtureSettlement
+    /// @dev Read straight from the venue's immutables, so what the gate's
+    /// constructor checks is the price every later trade actually settles at.
+    function fixtureSettlement(address representation)
+        external
+        view
+        returns (address fundingToken, uint256 fundingAtomsPerWholeToken)
+    {
+        if (representation != address(VENUE.REPRESENTATION())) revert UnsupportedOrder();
+        return (address(VENUE.FUNDING()), VENUE.PRICE());
     }
 
     /// @inheritdoc IMandateExecutionAdapter

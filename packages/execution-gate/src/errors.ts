@@ -62,6 +62,7 @@ export const GATE_ERRORS = {
   // Constructor-only.
   InvalidMarket: [],
   RealMarketStateSourceRequired: [],
+  FixtureSettlementInconsistent: [],
 } as const satisfies Record<string, readonly ('uint256' | 'address')[]>;
 
 export type GateErrorName = keyof typeof GATE_ERRORS;
