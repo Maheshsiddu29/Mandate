@@ -3,7 +3,13 @@
 **Intent-aware execution infrastructure for AI agents transacting in tokenized
 financial assets.**
 
-> **Status: Phase 5R.1 complete — an advisory model layer that cannot authorize, hardened twice.** The deterministic
+> **Status: Phase 6 implemented locally and awaiting review — an onchain execution
+> gate, tested against a labelled settlement fixture and not deployed.** The
+> sections below describe Phases 1–5R.3; the gate is summarized under
+> [The execution gate](#the-execution-gate) and specified in
+> [docs/execution-gate.md](docs/execution-gate.md).
+>
+> The deterministic
 > verifier, its domain types, canonical encoding, EIP-712 authorization, receipts
 > and replay semantics are built and tested in `packages/kernel`. The canonical
 > asset and representation registry — identifier schemes, reference resolution,
@@ -15,9 +21,9 @@ financial assets.**
 > quality, ranks exact costs, reverifies the winner and emits deterministic
 > receipts. `packages/jev` attaches TypeSafe's Jev as an **optional advisory
 > selector over an already-closed admissible set**: it may choose, abstain,
-> fail, be wrong or be malicious, and it can never authorize. Transaction
-> construction/submission, execution contracts, funding and the web experience
-> are **not** built. The kernel, registry and router still make no network call
+> fail, be wrong or be malicious, and it can never authorize. A real venue
+> integration, testnet execution, funding and the web experience are **not**
+> built. The kernel, registry and router still make no network call
 > of any kind. **Jev has not been characterized against a live account** — see
 > [docs/jev-characterization.md](docs/jev-characterization.md); every Phase 5
 > result comes from recorded fixtures, deterministic stubs and adversarial
@@ -169,8 +175,32 @@ mandate is computed against that mandate and is not stored anywhere.
 
 ```bash
 npm install
-npm run check      # 567 offline tests plus fixtures, replays, boundaries and repository safety gates
+npm run check      # offline TypeScript tests plus fixtures, replays, boundaries and repository safety gates
 ```
+
+### The execution gate
+
+`contracts/src/MandateExecutionGate.sol` is the onchain half: **a transaction
+that materially differs from what Mandate authorized and verified offchain cannot
+settle through it.** It re-derives the mandate and candidate digests, checks the
+principal's existing signature and the agent's signed execution commitment under
+one EIP-712 domain, uses chain time, consumes the mandate digest atomically, binds
+the candidate to immutable market facts, and settles on the principal's
+*measured* balance deltas against the signed economic bound. Every trader and
+every agent uses the same gate; there are no modes.
+
+The only supported execution path runs against a **labelled settlement fixture**,
+because the repository evidences no executable Robinhood venue. Nothing has been
+deployed and no transaction has been sent.
+
+```bash
+git submodule update --init          # forge-std
+npm run contracts:test               # regenerate the differential corpus ABI, then forge test
+npm run contracts:slither            # Slither, failing on any unreviewed finding
+```
+
+**Mandate does not choose investments for users. It enforces the authority users
+grant to agents.**
 
 ## Documentation
 
@@ -185,6 +215,7 @@ npm run check      # 567 offline tests plus fixtures, replays, boundaries and re
 | [docs/reason-codes.md](docs/reason-codes.md) | The 51 stable verifier reason codes. Generated from the registry, so it cannot drift. |
 | [docs/registry-reason-codes.md](docs/registry-reason-codes.md) | The 21 registry reason codes, and the kernel codes registry decisions reuse. Generated. |
 | [docs/replay-semantics.md](docs/replay-semantics.md) | How a mandate is consumed, and the one obligation the kernel cannot enforce for an integrator. |
+| [docs/execution-gate.md](docs/execution-gate.md) | Phase 6: the onchain execution gate — commitment hierarchy, replay, settlement, differential testing, Slither findings, threat model and residual risks. |
 | [docs/robinhood-integration.md](docs/robinhood-integration.md) | Verified endpoints, schemas, issuer semantics, price/multiplier rules, timestamps and real-data limitations. |
 | [docs/mainnet-replay.md](docs/mainnet-replay.md) | Recorded-mainnet replay methodology, synthetic labelling and validation report. |
 | [docs/routing.md](docs/routing.md) | Candidate model, provider boundary, ranking, costs, limits and selection receipts. |
@@ -199,6 +230,7 @@ npm run check      # 567 offline tests plus fixtures, replays, boundaries and re
 | [docs/adr/](docs/adr/) | Architecture decision records: authorization architecture, canonical encoding, kernel language and dependency boundary. |
 | [corpus/v2/README.md](corpus/v2/README.md) | Verifier decision-vector format, for reimplementers. |
 | [corpus/registry-v1/README.md](corpus/registry-v1/README.md) | Registry decision-vector format, and exactly which fixture data is real and which is synthetic. |
+| [corpus/gate-v1/README.md](corpus/gate-v1/README.md) | TypeScript ↔ Solidity execution-gate differential corpus. |
 | [AGENTS.md](AGENTS.md) | Operating rules for coding agents working in this repository. Read before making any change. |
 
 Other documents summarize; `docs/mandate-design.md` is the source of truth and
@@ -239,6 +271,9 @@ See [MVP scope](docs/mandate-design.md#20-buildathon-mvp-scope) and
 ├── packages/adapter-robinhood/ strict Robinhood REST/RPC normalization
 │   ├── src/               adapters, provenance, exact price and epoch semantics
 │   └── test/              recorded fixtures, offline replay and failure tests
+├── packages/execution-gate/ offchain half of the Phase 6 gate: commitment, reference model, reconciliation
+├── contracts/             Solidity: the execution gate, codec, labelled fixture venue, Foundry tests
+├── corpus/gate-v1/        TypeScript ↔ Solidity execution-gate vectors
 ├── corpus/v2/             cross-implementation verifier decision vectors
 ├── corpus/registry-v1/    cross-implementation registry decision vectors
 ├── corpus/mainnet-v1/     recorded mainnet replay vectors and metrics
@@ -259,7 +294,7 @@ See [MVP scope](docs/mandate-design.md#20-buildathon-mvp-scope) and
 
 Directories are created when they hold real code. The dependency direction is
 `adapter → registry → kernel`, never the reverse, and structural tests enforce
-it from all three packages.
+it from all three packages. `execution-gate → kernel` is enforced the same way.
 
 ## Contributing
 

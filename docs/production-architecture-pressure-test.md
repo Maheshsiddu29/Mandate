@@ -1205,3 +1205,35 @@ remain outside the ordinary plain-value guarantee, exactly as scoped by N-6.
 
 **Pre-Phase-6 readiness after Phase 5R.3:** both new HIGH findings are closed.
 Phase 6 remains unopened.
+
+## Phase 6 — the execution gate
+
+Phase 6 implements the gate this document assigned it
+([execution-gate.md](execution-gate.md), [ADR 0019](adr/0019-onchain-execution-gate.md)).
+Against the §21 closure items:
+
+| Item | Status |
+| --- | --- |
+| 6 · Atomic consumption of the mandate digest | **CLOSED** — written before any external call, unwound by any revert (INV-ONCHAIN-1, -2, -6) |
+| 7 · Re-assertion of the full commitment | **PARTIAL** — mandate and candidate digests are re-derived onchain and signed, so fees, registry snapshot digest, state digest and epoch are bound to the transaction; they are **not** compared against chain-observed values, because there is no onchain registry root or epoch authority |
+| 8 · `block.timestamp` as the safety clock | **CLOSED** for execution; F-9 is closed by construction on the gate path |
+| 9 · `representationId` → token mapping onchain | **CLOSED** — derived from the token address at construction, immutable |
+| 10 · Reference price and epoch asserted at execution | **OPEN, by decision** — would require interpreting Robinhood metadata in Solidity; recorded as residual risk 1 |
+| 11 · Reorg reconciliation | **CLOSED as policy** — chain state is truth, reconciliation requires a confirmation level (default `FINALIZED`), and the gate makes an early reconciliation cost availability rather than a second settlement |
+
+From "Still owned by Phase 6": atomic consumption, chain-sourced time and
+transaction binding are **closed**; reorg reconciliation is **closed as
+policy**; an observation derived from chain state rather than validated (V-59)
+is **closed for gate executions** by `observationFromGateEvidence`; key
+reconciliation in a replay store (N-7) remains **open** because no persistent
+store was built in this phase; a cross-snapshot proof (V-60) remains unwanted.
+
+Of the §21 differential-test table, MCE encoding, `mandateDigest`, EIP-712
+signing and recovery, `candidateDigest`, the validity window and replay
+consumption now have a second implementation and a shared corpus. Notional
+consistency, deviation, freshness, epoch comparison and the registry snapshot
+digest remain offchain-only and are listed as such in execution-gate.md §11.
+
+**Pre-review status:** no unresolved CRITICAL or HIGH finding is known. Slither's
+one High (`arbitrary-send-erc20`) is a demonstrated false positive
+(execution-gate.md §14). Independent review of Phase 6 has not yet happened.

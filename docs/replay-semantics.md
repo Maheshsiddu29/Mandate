@@ -32,7 +32,13 @@ does not decide.
 > state-specific values before any transition, and reconciliation observations
 > must fit the preserved reservation timeline and the supplied reconciliation
 > instant. This is local temporal consistency, not proof that the referenced
-> chain execution occurred; authoritative chain verification remains Phase 6.
+> chain execution occurred.
+>
+> **Phase 6: the chain is the final replay authority for gate executions.** The
+> execution gate consumes the mandate digest — the replay key below — atomically
+> with settlement, and `observationFromGateEvidence` derives `RECONCILE`
+> observations from gate state rather than accepting assertions (§10). Nothing in
+> this state machine changed.
 
 ## 1. Pure verification and stateful consumption are separate
 
@@ -221,8 +227,10 @@ The cost is a real liveness one: an unresolved crash holds the authorization
 until someone reconciles it. That is the same trade the reserve-before-signing
 order already makes, and it is the correct direction for a safety control.
 
-**Authoritative reconciliation is not built.** It needs chain observation, which
-is Phase 6. What Phase 5R guarantees is that its absence fails closed: with no
+**Authoritative reconciliation: the rule is built, the service is not.** Phase 6
+supplies the chain facts and a pure rule that turns them into an observation
+(§10); a running service that reads the chain and applies it is not built. What
+Phase 5R guarantees is that its absence fails closed: with no
 reconciliation, a quarantined authorization simply stays unavailable. Phase
 5R.1 required complete structural evidence; Phase 5R.2 additionally requires
 that evidence to be locally possible in time.
@@ -257,7 +265,7 @@ the same rule can be applied after a reservation lapses.
 
 **It is a structurally and temporally validated assertion, not a proof.** Nothing here confirms that
 `reference` really settled or really failed — that needs chain observation, which
-is Phase 6 (V-59). Whatever performs a `RECONCILE` is as trusted as the replay
+Phase 6 provides for gate executions (V-59, §10). Whatever performs a `RECONCILE` is as trusted as the replay
 store itself and belongs in the trusted computing base alongside it.
 
 What it closes is narrower and real: an unsubstantiated caller command can no
@@ -319,8 +327,8 @@ cleared them silently — and unsafely.
 
 - **Alert on quarantine depth, not just on rate.** Each quarantined record is an
   authorization whose transaction may or may not have executed.
-- **Reconciliation is chain observation**, so it arrives with Phase 6. Until
-  then a quarantined mandate stays unavailable and the principal reauthorizes if
+- **Reconciliation is chain observation.** Phase 6 defines the chain facts and
+  the rule (§10); until something runs it, a quarantined mandate stays unavailable and the principal reauthorizes if
   they still want the trade. That is fail-closed and it is also inconvenient,
   which is the honest description.
 - **A `RECONCILE` is an assertion about the world.** Whatever performs it is as
@@ -329,3 +337,34 @@ cleared them silently — and unsafely.
   source and attached to a reference, and it is recorded on the record — so
   "who restored this authorization, on what evidence" is answerable from the store
   rather than from a log nobody kept.
+
+## 10. Onchain replay authority (Phase 6)
+
+For executions through `MandateExecutionGate`, the chain holds the final replay
+state ([execution-gate.md §9](execution-gate.md#9-replay-events-and-reconciliation)):
+
+- `executionCommitmentOf(mandateDigest)` is written in the same transaction as the
+  settlement and unwound by any revert. It is keyed on the **same replay key** as
+  this state machine. One authorization settles at most once, whatever the
+  offchain store believes.
+- A reverted execution consumes nothing, so the offchain `RESERVED` or
+  `QUARANTINED` record is resolved by observing the chain, never by the passage
+  of time.
+
+`observationFromGateEvidence` (`packages/execution-gate`) turns a reading of the
+gate into the `ExecutionObservation` that `RECONCILE` requires:
+
+| Reading (at the required confirmation level) | Observation |
+| --- | --- |
+| Consumed, with the matching `MandateExecuted` log | `SETTLED`, referenced by transaction hash — even if a different signed attempt consumed it |
+| Not consumed, at a block **past the attempt's deadline** | `FAILED`, referenced by the attempt's commitment |
+| Not consumed, deadline not yet passed | no observation: a copy of the signed attempt may still land |
+| Below the required confirmation level, contradictory or malformed | no observation |
+
+Two consequences for this state machine. First, a double reserve that an
+offchain store fails to prevent (§8) can no longer become a double *settlement*
+through the gate: its cost drops from safety to liveness. Second, the default
+confirmation level is `FINALIZED`; resolving earlier risks an offchain record
+that a reorg contradicts, which again costs availability, not a second
+settlement.
+

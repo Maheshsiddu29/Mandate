@@ -17,10 +17,11 @@ source of truth.
   optional Jev advisory layer. Phase 5R through 5R.3 hardened signed economic
   authority, replay, fresh-state handoff, layered candidate commitments,
   registry snapshot binding, public plain-value boundaries and canonical
-  parser/encoder domain agreement. Transaction
-  construction/submission, execution contracts, funding and web work remain
-  unbuilt.
-- **Last structural revision:** Phase 5R.3.
+  parser/encoder domain agreement. Phase 6 adds the onchain execution gate
+  (`contracts/`, `packages/execution-gate`), tested locally against a labelled
+  settlement fixture and **not deployed**. A real venue integration, funding and
+  web work remain unbuilt.
+- **Last structural revision:** Phase 6 ([ADR 0019](adr/0019-onchain-execution-gate.md)).
 
 ## How to read status labels
 
@@ -1043,6 +1044,14 @@ matches what the kernel generates. What does not exist yet is a *second*
 implementation to run it against — the mechanism is built, the differential
 comparison begins when the on-chain gate lands in Phase 6.
 
+**Implemented for the gate, Phase 6.** The Solidity gate is a second
+implementation of MCE encoding, the kernel decoder's structural rules, the
+EIP-712 signing hash and signature acceptance. `corpus/gate-v1` — generated from
+the kernel and a reference model, including every parseable input of `corpus/v2`
+and `corpus/mainnet-v1` — is replayed against it, and the two agree on every
+digest, commitment, settled amount and exact revert data
+([execution-gate.md §11](execution-gate.md#11-differential-testing-and-the-onchainoffchain-split)).
+
 ## 11. Jev's role and its limits
 
 > **Status: IMPLEMENTED in Phase 5.** The role, the constraints and the
@@ -1203,7 +1212,7 @@ supplies one exact requested quantity; every comparable route must fill it.
 | Venue and route | Which venue, which path, which contracts |
 | Economics | Input amount, expected output, reference price, expected deviation, fees, all with units and decimals |
 | State snapshot | Observed market state, corporate-action state, operational state — each with source, provenance and observation time |
-| Binding | Domain-separated candidate digest; transaction binding remains Phase 6 |
+| Binding | Domain-separated candidate digest; bound to the transaction by the Phase 6 gate's execution commitment ([execution-gate.md §3](execution-gate.md#3-commitment-hierarchy)) |
 
 The candidate's binding to observed state is **layered by the kind of fact**
 ([ADR 0017](adr/0017-layered-candidate-state-commitments.md)):
@@ -1388,6 +1397,16 @@ everything else in the transaction from taking effect.
 
 ### 14.3 The execution gate
 
+**IMPLEMENTED, Phase 6, with one deliberate departure from this DRAFT.** See
+[execution-gate.md](execution-gate.md) and
+[ADR 0019](adr/0019-onchain-execution-gate.md). The EVM cannot introspect the
+other calls in a transaction, so a read-only gate *beside* the action would bind
+nothing; the gate is therefore the executor — it performs the action itself, so
+its position relative to the action is structural. The property the DRAFT's
+"read-only and side-effect free" wording protected — adding the gate cannot let
+anything unverified settle — holds. The DRAFT text follows unchanged for the
+record.
+
 **DRAFT.** Off-chain verification decides; something must then ensure the
 submitted transaction is the verified one. Between a PASS and inclusion there
 is a window in which the transaction can be substituted, reordered, delayed
@@ -1476,6 +1495,18 @@ dependence on mutable external references.
 
 These are the properties that define Mandate. A change that breaks one is a
 change to the product, not an implementation detail.
+
+**Phase 6 status.** **INV-13 is established for the gate path**: the gate
+re-derives the mandate and candidate digests and requires an agent signature over
+an execution commitment that binds them to every execution term, so a mutated
+transaction cannot settle. **INV-10's safety-critical time is now chain time** for
+execution: validity window and deadline are checked against `block.timestamp`.
+**INV-12's final replay authority is onchain**: the mandate digest is consumed
+atomically with the settlement, one authorization settles at most once, and a
+reverted execution consumes nothing. INV-1's economic half is enforced on
+*measured* balance deltas. None of the invariants below changed; the gate
+enforces the subset the chain can observe, and the rest stay offchain
+([execution-gate.md §11](execution-gate.md#11-differential-testing-and-the-onchainoffchain-split)).
 
 **Phase 5R.3 status.** Four rounds of adversarial review have been applied on top
 of Phase 5 and nothing in this section changed as a result — no invariant was
@@ -1588,24 +1619,24 @@ addressed by the current design; recorded deliberately.
 | --- | --- | --- | --- |
 | Stale price | Freshness bounds with provenance (INV-17) | 1, 3 | DESIGN |
 | Stale corporate-action state | Epoch binding; freshness bound (INV-9) | 1, 3 | DESIGN |
-| Scheduled transition crosses during flight | Clock-aware state comparison at execution (INV-10); refusal window | 3, 6 | DESIGN |
+| Scheduled transition crosses during flight | Clock-aware state comparison at execution (INV-10); refusal window | 3, 6 | PARTIAL — chain time bounds the window; the epoch is not re-asserted onchain ([execution-gate.md §16](execution-gate.md#16-residual-risks)) |
 | Market halt | Halt policy in mandate; state check | 1, 3 | DESIGN |
 | Stale mandate (expired) | Expiry check (INV-12) | 1 | DESIGN |
-| Replay of a mandate | Nonce consumption (INV-12) | 1, 6 | DESIGN |
+| Replay of a mandate | Nonce consumption (INV-12) | 1, 6 | **BUILT** — atomic onchain consumption |
 | Market-data provider lies | Provenance, conflict detection, fail-closed on conflict; on-chain preferred where available | 3 | PARTIAL |
 
 ### 17.4 Execution
 
 | Threat | Addressed by | Phase | Status |
 | --- | --- | --- | --- |
-| Amount mutation between decision and submission | Commitment binding; execution gate (INV-13) | 6 | DESIGN |
+| Amount mutation between decision and submission | Commitment binding; execution gate (INV-13) | 6 | **BUILT** |
 | Decimal or unit mistake | Units and decimals mandatory on every quantity (INV-18); exact arithmetic (INV-16) | 1 | DESIGN |
-| Malicious route provider | Routes are candidates, not instructions; verifier re-checks; commitment binding | 4, 6 | PHASE 4 CONTROLLED; transaction binding remains Phase 6 |
+| Malicious route provider | Routes are candidates, not instructions; verifier re-checks; commitment binding | 4, 6 | **BUILT** — transaction binding by the Phase 6 gate |
 | Candidate differs materially from intent | Intent-fidelity checks (§10.2 family G) | 1 | DESIGN |
 | Partial execution | Atomic settlement in MVP (§14.2); non-atomic settlement is FUTURE and unaddressed | 6 | PARTIAL |
 | Bridge failure | Out of MVP scope; cross-chain is FUTURE | 9+ | OPEN |
 | MEV, sandwiching, ordering | Deviation bounds limit economic damage; not otherwise addressed | 4, 6 | PARTIAL |
-| Gate program upgraded between verification and execution | Pin deployment identity and re-check before submission; immutable or timelocked deployment needed in production | 6 | PARTIAL |
+| Gate program upgraded between verification and execution | Pin deployment identity and re-check before submission; immutable or timelocked deployment needed in production | 6 | **BUILT** — the gate is immutable, and its address is in both signatures' domain |
 
 ### 17.5 Surrounding system
 
@@ -2051,7 +2082,9 @@ the wrong shape.
 | **9+** | Cross-chain network and broader asset classes | Out of buildathon scope. See [§22](#22-future-architecture) and [§23](#23-expansion-beyond-equities) |
 
 Phases 0–5 and the Phase 5R through 5R.3 pre-Phase-6 remediations are complete.
-Phase 6 has not started.
+Phase 6 is implemented and tested locally against a labelled settlement fixture,
+not deployed, and awaiting review; testnet execution was not authorized in this
+phase.
 
 ### 25.1 Rules that apply to every phase
 

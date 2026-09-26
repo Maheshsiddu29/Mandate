@@ -1,9 +1,11 @@
 # Public trust boundaries
 
-> **Status: Phase 5R.3, implemented.** This inventory covers the exported
-> plain-value construction and decision entrypoints in the kernel, registry,
-> router and Jev packages. The executable inventory is
-> `packages/jev/test/public-boundaries.test.ts`.
+> **Status: Phase 5R.3, implemented; extended in Phase 6.** This inventory covers
+> the exported plain-value construction and decision entrypoints in the kernel,
+> registry, router and Jev packages. The executable inventory is
+> `packages/jev/test/public-boundaries.test.ts`. Phase 6's
+> `@mandate/execution-gate` is classified below and pinned by its own
+> `packages/execution-gate/test/public-boundaries.test.ts`.
 
 ## Policy
 
@@ -163,3 +165,29 @@ force and a new one reaches those boundaries automatically. That is
 explicit exported-name inventory is intentional: a contributor adding a public
 decision or construction entrypoint must classify it beside its peers and add
 it to the matrix, making totality review part of the exported API change.
+
+## Phase 6: `@mandate/execution-gate` and the onchain gate
+
+**A.** `observationFromGateEvidence` — its evidence arrives from a chain reader.
+Every argument is strictly parsed; a malformed attempt record, evidence or policy
+is `EVIDENCE_MALFORMED`, never an exception. It is probed with the same eleven
+hostile plain values at each of its three argument positions, with no mutation of
+input, plus malformed nested fields (wrong case, wrong numeric type, inherited
+names, out-of-range timestamps).
+
+**B.** Everything else the package exports is a typed internal API: the wire
+encoders and `toGate*` converters take kernel-parsed values; the reference model
+(`authorizeExecution`, `settleExecution`) takes gate wire values; the commitment,
+scaling, signature-recovery and revert-data helpers take typed values. The
+reference model is not a route by which deserialized input authorizes anything —
+its purpose is to state, for the differential test and for pre-flight checks,
+what the onchain gate will decide. A test pins the full list of exported
+functions so adding one forces this classification to be revisited.
+
+**The onchain gate is its own boundary.** Solidity's ABI decoder rejects calldata
+that does not decode into the declared types, and `MandateCodec` then applies the
+kernel decoder's structural rules to every field before any is used. Every
+fixed-width field in the gate's structs is exactly the width the kernel encoder
+writes (`u8`, `u16`, `u32`, `u64`, `i64`, `u256`), so parser/encoder domain
+agreement holds by type; identifier lengths and set counts are bounded before
+they are length-prefixed.

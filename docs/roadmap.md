@@ -3,7 +3,8 @@
 Phased engineering plan: what each phase delivers, how it is known to be done,
 and what it depends on.
 
-> **Status: Phase 5R.3 complete.** Phase 6 and beyond are planned, not started.
+> **Status: Phase 6 implemented locally, awaiting review.** Phase 7 and beyond are
+> planned, not started. Nothing has been deployed.
 > Rationale for the phase ordering is in
 > [mandate-design.md §25](mandate-design.md#25-phased-engineering-roadmap);
 > scope boundaries are in
@@ -345,30 +346,42 @@ Solidity is the expensive mistake.
 
 ## Phase 6 — On-chain execution gate and settlement
 
-**Delivers**
+**Implemented and tested locally; not deployed; awaiting review.** Semantics,
+threat model and residual risks are in [execution-gate.md](execution-gate.md);
+the decision is [ADR 0019](adr/0019-onchain-execution-gate.md).
 
-- the on-chain gate: commitment re-assertion, atomic with the action
-  ([§14.3](mandate-design.md#143-the-execution-gate));
-- self-position checking, so ordering is not left to the transaction builder;
-- nonce consumption for replay protection;
-- submission, result observation, and receipt completion;
-- the deliberate failure demonstrations
-  ([§20.3](mandate-design.md#203-the-failure-demonstrations)).
+**Delivered**
 
-**Exit criteria**
+- `MandateExecutionGate`: an immutable executor gate that re-encodes MCE v2 and
+  Candidate V3, verifies the principal's existing `MandateAuthorization` and the
+  agent's `ExecutionAuthorization` under the ADR 0001 domain, enforces chain time,
+  consumes the mandate digest atomically, binds candidate, mandate and pinned
+  market facts, and settles on the principal's measured balance deltas;
+- one supported execution path against a **labelled settlement fixture** — the
+  repository evidences no executable Robinhood venue (§5 of the gate document);
+- `@mandate/execution-gate`: wire form, execution commitment, a reference model
+  of the gate built on the kernel's decoder and signature rule, and the rule that
+  turns confirmed chain evidence into the kernel's `ExecutionObservation`;
+- `corpus/gate-v1` and a TypeScript ↔ Solidity differential harness over it;
+- Foundry unit, adversarial, fuzz and stateful invariant suites, forge-lint and
+  Slither in CI, and a deterministic, mainnet-refusing deployment script.
 
-- a verified execution lands on testnet;
-- a transaction mutated after verification is rejected by the gate;
-- the gate is read-only and side-effect free;
-- all failure demonstrations produce their expected reason codes;
-- the off-chain verifier and the on-chain gate agree on the shared
-  decision-vector corpus
-  ([§10.5](mandate-design.md#105-differential-verification));
-- what was demonstrated is stated precisely, with no overclaiming.
+**Exit criteria, as the original plan stated them**
 
-**Depends on:** Phase 4. **Reuse:** re-derive the gate's ideas for EVM; do not
-port the prior Solana program
-([statelatch-reuse.md §5](statelatch-reuse.md#5-where-reuse-saves-the-most-time)).
+| Criterion | Result |
+| --- | --- |
+| A verified execution lands on testnet | **Not done — not authorized in this phase**, and no testnet venue is evidenced. Local execution against the fixture is tested |
+| A transaction mutated after verification is rejected by the gate | **Met** — every committed field, by vector, fuzz and invariant |
+| The gate is read-only and side-effect free | **Superseded** by ADR 0019: the EVM cannot bind an action it does not perform, so the gate is the executor; the protected property — nothing unverified settles — holds |
+| All failure demonstrations produce their expected codes | **Met for the gate's own refusals** (demonstration 10); 1–9 remain kernel refusals |
+| The offchain verifier and onchain gate agree on a shared corpus | **Met** — 222 attempts, 139 mandate and 188 candidate encodings |
+| What was demonstrated is stated precisely | See execution-gate.md §5 and §16 |
+
+**Not delivered, deliberately:** deployment of any kind, a real venue adapter,
+onchain re-assertion of price, epoch or registry snapshot, a persistent replay
+store, and funding (Phase 7).
+
+**Depends on:** Phase 5R.3.
 
 ---
 
@@ -432,7 +445,8 @@ the design document before it belongs in code.
 | 5 | Jev-assisted decision layer | 4 | ✅ complete (live characterization performed 2026-09-25) |
 | 5R | Pressure-test remediation (F-1…F-16) | 5 | ✅ complete |
 | 5R.1 | Post-remediation audit remediation (N-1…N-10) | 5R | ✅ complete |
-| 6 | On-chain execution gate and settlement | 5R.1 | planned |
+| 5R.2–5R.3 | Replay evidence, public boundaries, encoder domains | 5R.1 | ✅ complete |
+| 6 | On-chain execution gate and settlement | 5R.3 | ✅ implemented locally, not deployed; awaiting review |
 | 7 | Stablecoin funding adapters | 6 | planned, flexible |
 | 8 | Demo product and web experience | 6 | planned |
 | 9+ | Cross-chain network, broader asset classes | 8 | future |

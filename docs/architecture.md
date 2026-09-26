@@ -22,10 +22,12 @@ System structure, component boundaries, and where each concern is enforced.
 > consistency for reconciliation evidence. Phase 5R.3 completes the explicit
 > public-boundary inventory and totality matrix for ordinary parsed/plain values,
 > and aligns every canonical parser with its fixed-width writer
-> ([public-trust-boundaries.md](public-trust-boundaries.md)). It does not verify evidence against chain
-> state; that remains Phase 6.
-> Transaction construction and submission, execution
-> contracts, funding and web work remain planned. Jev has not been
+> ([public-trust-boundaries.md](public-trust-boundaries.md)).
+> **Phase 6** adds the onchain execution gate (`contracts/`) and its offchain
+> half (`packages/execution-gate`), which derives replay observations from chain
+> evidence; it is tested locally against a labelled settlement fixture and not
+> deployed ([execution-gate.md](execution-gate.md)). A real venue integration,
+> funding and web work remain planned. Jev has not been
 > characterized against a live account
 > ([jev-characterization.md](jev-characterization.md)).
 > The "Phase" column records when a component lands; see [roadmap.md](roadmap.md).

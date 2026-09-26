@@ -22,7 +22,11 @@ Read it before proposing architectural changes. If a change contradicts it,
 either the change is wrong or the document needs updating first — resolve which
 before writing code.
 
-The repository is currently at the end of **Phase 5R.3** — Phase 5, the
+The repository is at the end of **Phase 6** — the onchain execution gate
+(`contracts/`, `packages/execution-gate`, [ADR 0019](docs/adr/0019-onchain-execution-gate.md),
+[docs/execution-gate.md](docs/execution-gate.md)), implemented and tested locally
+against a labelled settlement fixture, **not deployed**, and awaiting review.
+Before it came **Phase 5R.3** — Phase 5, the
 production-architecture remediation, and the post-remediation audit fixes, all
 recorded in
 [docs/production-architecture-pressure-test.md](docs/production-architecture-pressure-test.md)
@@ -46,13 +50,15 @@ only it is structural. Replay resolutions require a validated observed outcome
 (`packages/adapter-robinhood`), the deterministic candidate/router package
 (`packages/router`), the optional Jev advisory layer (`packages/jev`), and
 verifier, registry, recorded-mainnet, mainnet-routing, simulation and
-Jev-evaluation corpora are built. Transaction construction or submission,
-execution contracts, funding and web work are **not** built. Do not start a
-later phase until it is explicitly opened.
+Jev-evaluation corpora are built. Phase 6 adds the execution gate and
+`corpus/gate-v1`. A real venue integration, any deployment or chain write,
+funding and web work are **not** built. Do not start a later phase until it is
+explicitly opened, and never deploy or send a transaction without explicit
+authorization.
 
 The dependency directions are `adapter → registry → kernel`,
-`router → registry → kernel` and `jev → router → registry → kernel`, never the
-reverse, and it is enforced by structural tests
+`router → registry → kernel`, `jev → router → registry → kernel` and
+`execution-gate → kernel`, never the reverse, and it is enforced by structural tests
 ([ADR 0004](docs/adr/0004-registry-package-boundary.md),
 [ADR 0012](docs/adr/0012-jev-closed-set-authority-boundary.md)). The kernel,
 registry and router perform no I/O; the Robinhood adapter and the Jev client
@@ -232,6 +238,29 @@ npm run jev:evaluate                 # regenerate the advisory evaluation report
 npm run jev:benchmark                # local advisory latency cost
 npm run jev:characterize             # LIVE: requires TYPESAFE_API_KEY, never in CI
 ```
+
+Solidity (Phase 6) uses Foundry `v1.7.1` and solc `0.8.37`; `forge-std` is a git
+submodule and OpenZeppelin Contracts an exact-pinned npm devDependency:
+
+```bash
+npm run contracts:fmt        # forge fmt --check
+npm run contracts:build      # forge build --sizes
+npm run contracts:lint       # forge lint --deny notes, deployable code only
+npm run gate-corpus:generate # corpus/gate-v1 plus its ABI form for Differential.t.sol
+npm run contracts:test       # corpus ABI, then forge test (unit, fuzz, differential, invariants)
+npm run contracts:slither    # slither . — fails on any finding not reviewed in code
+```
+
+Run Slither after tests: its build skips test contracts and leaves a cache that
+`forge test` then treats as fresh (`forge build --force` recovers). No command
+deploys; `contracts/script/DeployMandateGate.s.sol` is manual only and refuses
+every known mainnet.
+
+The execution-gate package's runtime dependencies are fixed to
+`@mandate/kernel`, `@noble/curves` and `@noble/hashes` at the kernel's pinned
+versions ([ADR 0019](docs/adr/0019-onchain-execution-gate.md)); it performs no
+I/O, and `structure.test.ts` enforces both, plus that its error vocabulary matches
+the Solidity gate's.
 
 `jev:characterize` is the only command that contacts TypeSafe. It refuses to
 run without a credential and exits with code 2, so a blocked run is never
