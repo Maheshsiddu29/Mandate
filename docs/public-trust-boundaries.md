@@ -55,6 +55,18 @@ transport, advisory map, circuit, clock callback and verifier seams before
 reading or using them. A malformed advisory request is `INVALID_INPUT`; it
 cannot create a candidate, select a route or bypass handoff verification.
 
+`route`, `evaluateRoutes` and `selectEvaluated` validate their optional
+verifier seam the same way. `undefined` selects the default kernel verifier;
+anything that is not callable is `INPUT_INVALID` with cause
+`MALFORMED_VERIFIER`, rather than a `TypeError` raised from inside the ranking
+loop. Each of the three checks it independently, so the property belongs to
+each boundary rather than being inherited from the one it delegates to. The
+parameter keeps its `Verifier` type so an inline callback still takes its
+argument type from the signature; the run-time check exists because that type
+is erased and is not a boundary (ADR 0003). The check is shallow on purpose:
+a verifier that is callable but wrong is a caller-supplied trusted component,
+not a malformed value.
+
 ## A: external construction boundaries
 
 The same test inventory covers these 43 exported parsers and neutralizers:

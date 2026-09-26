@@ -128,6 +128,29 @@ export type RoutingEvaluationResult =
   | { readonly status: 'EVALUATED'; readonly evaluation: RoutingEvaluation }
   | { readonly status: 'INVALID_INPUT'; readonly errors: readonly RouteExclusion[] };
 
+/**
+ * The optional verifier seam.
+ *
+ * `undefined` means the default kernel verifier, which is what an ordinary
+ * caller passes. Anything else has to actually be callable: reaching the
+ * ranking loop with a non-function seam throws a `TypeError` from inside the
+ * evaluation instead of returning the typed refusal every other malformed input
+ * at these boundaries returns.
+ *
+ * The parameter stays typed as `Verifier` so an inline callback still gets its
+ * argument type from the signature; the check is the run-time half, because a
+ * TypeScript type is erased and is not a boundary (ADR 0003). It is the same
+ * seam check `selectWithJev` applies to its own verifier and
+ * `collectProviderRoutes` applies to `discover`.
+ *
+ * Deliberately shallow: arity and return shape are the type contract's
+ * business, and a verifier that is callable but wrong is a caller-supplied
+ * trusted component, not a malformed value.
+ */
+function isVerifier(raw: unknown): raw is Verifier {
+  return typeof raw === 'function';
+}
+
 function isValidatedRoutingContext(raw: unknown): raw is RoutingContext {
   return typeof raw === 'object'
     && raw !== null
@@ -162,6 +185,9 @@ function validatedEvaluation(value: Omit<RoutingEvaluation, typeof VALIDATED_ROU
  * implementation. The ranking here is the only ranking in the system.
  */
 export function evaluateRoutes(request: RouteRequest | unknown, verifier: Verifier = verify): RoutingEvaluationResult {
+  if (!isVerifier(verifier)) {
+    return { status: 'INVALID_INPUT', errors: [inputError('verifier', 'MALFORMED_VERIFIER')] };
+  }
   const r: Record<string, unknown> =
     typeof request === 'object' && request !== null && !Array.isArray(request)
       ? request as Record<string, unknown>
@@ -316,6 +342,9 @@ export function selectEvaluated(
   if (!isValidatedRoutingEvaluation(evaluation)) {
     return { status: 'INVALID_INPUT', errors: [inputError('evaluation', 'UNVALIDATED_ROUTING_EVALUATION')] };
   }
+  if (!isVerifier(verifier)) {
+    return { status: 'INVALID_INPUT', errors: [inputError('verifier', 'MALFORMED_VERIFIER')] };
+  }
   return selectValidatedEvaluation(evaluation, index, handoff, verifier);
 }
 
@@ -451,6 +480,11 @@ function resolveValidatedHandoff(handoff: HandoffInputs | unknown, context: Rout
  * advisory reuses these two stages rather than re-implementing either.
  */
 export function route(request: RouteRequest | unknown, handoff: HandoffInputs | unknown, verifier: Verifier = verify): RoutingResult {
+  // Checked here as well as in `evaluateRoutes`, so this boundary's totality is
+  // its own property rather than an inherited implementation detail.
+  if (!isVerifier(verifier)) {
+    return { status: 'INVALID_INPUT', errors: [inputError('verifier', 'MALFORMED_VERIFIER')] };
+  }
   const evaluated = evaluateRoutes(request, verifier);
   if (evaluated.status === 'INVALID_INPUT') return evaluated;
   return selectEvaluated(evaluated.evaluation, 0, handoff, verifier);

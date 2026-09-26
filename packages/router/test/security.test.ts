@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { mandateDigest, trustedStateDigest, parseIdentifier } from '@mandate/kernel';
+import { mandateDigest, trustedStateDigest, parseIdentifier, verify } from '@mandate/kernel';
 import { openRegistry } from '@mandate/registry';
 import { envelopeFor, TEST_PRIVATE_KEY } from '../../kernel/test/support/signing.ts';
-import { collectProviderRoutes, route, routingCandidateDigest, type ProviderRouteQuote } from '../src/index.ts';
+import {
+  collectProviderRoutes, evaluateRoutes, route, routingCandidateDigest, selectEvaluated,
+  type ProviderRouteQuote, type RouteExclusion, type RoutingEvaluationResult, type RoutingResult,
+} from '../src/index.ts';
 import {
   ROUTER_CLOCK, ROUTER_DOMAIN, ROUTER_MANDATE, ROUTER_REGISTRY_INPUT, ROUTER_REGISTRY_SNAPSHOT_DIGEST,
   ROUTER_REQUESTED_QUANTITY, ROUTER_STATE,
@@ -157,5 +160,64 @@ describe('adversarial route providers', () => {
     assert.equal(first.status, 'NO_VALID_ROUTE');
     assert.equal(second.status, 'NO_VALID_ROUTE');
     if (first.status === 'NO_VALID_ROUTE' && second.status === 'NO_VALID_ROUTE') assert.notEqual(first.receipt.receiptDigest, second.receipt.receiptDigest);
+  });
+});
+
+/**
+ * The optional verifier seam (Phase 5R.3 follow-up).
+ *
+ * `route`, `evaluateRoutes` and `selectEvaluated` are external decision
+ * boundaries, so a malformed seam has to come back as the same typed refusal
+ * every other malformed input at those boundaries produces. Before this was
+ * checked, a non-function verifier reached the ranking loop and threw a
+ * `TypeError` from inside the evaluation.
+ */
+describe('the optional verifier seam', () => {
+  const MALFORMED: readonly unknown[] = [null, false, true, 0, 1, '', 'verify', [], {}, { call: 1 }];
+  const EXPECTED: readonly RouteExclusion[] = [
+    { code: 'INPUT_INVALID', detail: { input: 'verifier', cause: 'MALFORMED_VERIFIER' } },
+  ];
+
+  const errorsOf = (result: RoutingResult | RoutingEvaluationResult): readonly RouteExclusion[] | null =>
+    result.status === 'INVALID_INPUT' ? result.errors : null;
+
+  it('refuses a non-callable verifier at all three boundaries without throwing', () => {
+    const request = signedRequest(routeQuote());
+    const evaluated = evaluateRoutes(request);
+    assert.equal(evaluated.status, 'EVALUATED', 'the fixture request must evaluate');
+    if (evaluated.status !== 'EVALUATED') return;
+
+    let cases = 0;
+    for (const raw of MALFORMED) {
+      const boundaries: readonly (readonly [string, () => RoutingResult | RoutingEvaluationResult])[] = [
+        ['route', () => route(request, routerHandoff(), raw as never)],
+        ['evaluateRoutes', () => evaluateRoutes(request, raw as never)],
+        ['selectEvaluated', () => selectEvaluated(evaluated.evaluation, 0, routerHandoff(), raw as never)],
+      ];
+      for (const [name, invoke] of boundaries) {
+        let result: RoutingResult | RoutingEvaluationResult | undefined;
+        assert.doesNotThrow(() => { result = invoke(); }, `${name} threw for ${String(raw)}`);
+        assert.equal(result?.status, 'INVALID_INPUT', `${name} did not refuse ${String(raw)}`);
+        assert.deepEqual(errorsOf(result as RoutingResult), EXPECTED, `${name} refused ${String(raw)} with the wrong reason`);
+        cases += 1;
+      }
+    }
+    assert.equal(cases, 30);
+  });
+
+  it('takes the default verifier when the seam is omitted or explicitly undefined', () => {
+    const request = signedRequest(routeQuote());
+    assert.equal(route(request, routerHandoff()).status, 'SELECTED');
+    assert.equal(route(request, routerHandoff(), undefined).status, 'SELECTED');
+    assert.equal(evaluateRoutes(request).status, 'EVALUATED');
+    assert.equal(evaluateRoutes(request, undefined).status, 'EVALUATED');
+  });
+
+  it('still routes through a caller-supplied verifier that is callable', () => {
+    const request = signedRequest(routeQuote());
+    let calls = 0;
+    const result = route(request, routerHandoff(), (input) => { calls += 1; return verify(input); });
+    assert.equal(result.status, 'SELECTED');
+    assert.equal(calls, 2, 'evaluation and handoff re-verification both use the seam');
   });
 });
