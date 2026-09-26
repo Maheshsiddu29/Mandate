@@ -9,6 +9,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { isDeepStrictEqual } from 'node:util';
 import {
   applyTransition,
   isAvailable,
@@ -71,6 +72,9 @@ import {
   selectWithJev,
 } from '../src/index.ts';
 
+/** The one hostile corpus every public boundary in this file is probed with. */
+const ARBITRARY_STRING = 'not a valid request!';
+
 const HOSTILE_PLAIN_VALUES: readonly unknown[] = [
   null,
   undefined,
@@ -79,7 +83,7 @@ const HOSTILE_PLAIN_VALUES: readonly unknown[] = [
   0,
   1,
   '',
-  'not a valid request!',
+  ARBITRARY_STRING,
   [],
   {},
   { malformed: { nested: true } },
@@ -135,7 +139,29 @@ export const EXTERNAL_DECISION_BOUNDARIES: readonly BoundaryCase[] = [
   },
 ] as const;
 
-const HOSTILE_CONSTRUCTION_VALUES: readonly unknown[] = [null, undefined, false, true, 0, 1, [], {}, { malformed: true }];
+/**
+ * Construction boundaries are probed with the same corpus as decision
+ * boundaries, not a weaker one.
+ *
+ * It used to be a separate nine-value list with no `''` and no arbitrary
+ * string, which left the single most likely wrong-type input for a parser whose
+ * valid domain *is* a string unprobed at 41 of the 43 entrypoints. Aliasing the
+ * one corpus rather than restating it means the two cannot drift apart again.
+ */
+const HOSTILE_CONSTRUCTION_VALUES: readonly unknown[] = HOSTILE_PLAIN_VALUES;
+
+/**
+ * The corpus minus the values a particular parser legitimately *accepts*.
+ *
+ * A few entrypoints have a valid domain that the shared corpus intersects: an
+ * empty route set is a real empty set, absent requirements are real absence,
+ * and an arbitrary printable string is a real display name or lookup key.
+ * Asserting a refusal there would assert a bug. Subtracting by value keeps each
+ * exception visible and keeps every other corpus value in force, so a new
+ * corpus value reaches these boundaries automatically.
+ */
+const acceptsInstead = (...accepted: readonly unknown[]): readonly unknown[] =>
+  HOSTILE_PLAIN_VALUES.filter((value) => !accepted.some((item) => isDeepStrictEqual(item, value)));
 
 interface ConstructionBoundaryCase {
   readonly packageName: BoundaryCase['packageName'];
@@ -174,28 +200,39 @@ export const EXTERNAL_CONSTRUCTION_BOUNDARIES: readonly ConstructionBoundaryCase
   { packageName: 'kernel', exportName: 'parseExecutionObservation', invoke: parseExecutionObservation, refuses: resultRefusal },
   { packageName: 'kernel', exportName: 'parseReplayRecord', invoke: parseReplayRecord, refuses: resultRefusal },
   { packageName: 'registry', exportName: 'validateCanonicalAssetId', invoke: validateCanonicalAssetId, refuses: resultRefusal },
-  { packageName: 'registry', exportName: 'parseDisplayText', invoke: parseDisplayText, refuses: resultRefusal },
+  {
+    packageName: 'registry', exportName: 'parseDisplayText', invoke: parseDisplayText, refuses: resultRefusal,
+    // Printable ASCII within the length bound is what display text *is*.
+    values: acceptsInstead(ARBITRARY_STRING),
+  },
   { packageName: 'registry', exportName: 'parseMic', invoke: parseMic, refuses: resultRefusal },
   { packageName: 'registry', exportName: 'parseTicker', invoke: parseTicker, refuses: resultRefusal },
   { packageName: 'registry', exportName: 'parseCanonicalAssetRecord', invoke: parseCanonicalAssetRecord, refuses: resultRefusal },
-  { packageName: 'registry', exportName: 'parseReference', invoke: parseReference, refuses: resultRefusal },
+  {
+    packageName: 'registry', exportName: 'parseReference', invoke: parseReference, refuses: resultRefusal,
+    // Any bounded string is a valid PLAIN reference; resolution, not parsing, decides it is unknown.
+    values: acceptsInstead(ARBITRARY_STRING),
+  },
   { packageName: 'registry', exportName: 'parseContractAddress', invoke: parseContractAddress, refuses: resultRefusal },
   { packageName: 'registry', exportName: 'parseRepresentationId', invoke: parseRepresentationId, refuses: resultRefusal },
   { packageName: 'registry', exportName: 'parseRepresentationRecord', invoke: parseRepresentationRecord, refuses: resultRefusal },
   { packageName: 'registry', exportName: 'parseRegistrySnapshot', invoke: parseRegistrySnapshot, refuses: resultRefusal },
   {
     packageName: 'registry', exportName: 'parseAdditionalRequirements', invoke: parseAdditionalRequirements, refuses: resultRefusal,
-    values: [false, true, 0, 1, '', 'not requirements', [], { futureField: true }],
+    // Absent requirements and empty requirements are both legitimately empty.
+    values: acceptsInstead(null, undefined, {}),
   },
   { packageName: 'registry', exportName: 'parseJurisdiction', invoke: parseJurisdiction, refuses: resultRefusal },
   { packageName: 'router', exportName: 'parseProviderRouteQuote', invoke: parseProviderRouteQuote, refuses: resultRefusal },
   {
     packageName: 'router', exportName: 'parseProviderRouteSet', invoke: parseProviderRouteSet, refuses: resultRefusal,
-    values: [null, undefined, false, true, 0, 1, {}, { malformed: true }],
+    // An empty route set is a real empty set, not a malformed one.
+    values: acceptsInstead([]),
   },
   {
     packageName: 'router', exportName: 'parseTrustedRouteCosts', invoke: parseTrustedRouteCosts, refuses: resultRefusal,
-    values: [null, undefined, false, true, 0, 1, {}, { malformed: true }],
+    // An empty cost set is a real empty set, not a malformed one.
+    values: acceptsInstead([]),
   },
   { packageName: 'jev', exportName: 'parseJevChoiceResponse', invoke: (raw) => parseJevChoiceResponse(raw, 'route_selection'), refuses: resultRefusal },
   { packageName: 'jev', exportName: 'parseJevModels', invoke: parseJevModels, refuses: resultRefusal },
@@ -247,7 +284,7 @@ test('10 public decision boundaries refuse 11 hostile plain values without throw
   assert.equal(assertions, 110);
 });
 
-test('43 exported construction boundaries fail closed over malformed plain values', () => {
+test('43 exported construction boundaries fail closed over the shared hostile corpus', () => {
   let assertions = 0;
   for (const boundary of EXTERNAL_CONSTRUCTION_BOUNDARIES) {
     for (const raw of boundary.values ?? HOSTILE_CONSTRUCTION_VALUES) {
@@ -261,5 +298,7 @@ test('43 exported construction boundaries fail closed over malformed plain value
       assertions += 1;
     }
   }
-  assert.equal(assertions, 384);
+  // 38 boundaries take the full 11-value corpus; five subtract the corpus
+  // values their own valid domain contains. 38 * 11 + 10 + 10 + 8 + 10 + 10.
+  assert.equal(assertions, 466);
 });

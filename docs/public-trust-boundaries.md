@@ -148,8 +148,18 @@ fixed-width range exception.**
 ## Regression and inventory guard
 
 The cross-package suite executes 110 hostile decision-boundary cases (ten
-boundaries times eleven shared values) and 384 construction-boundary cases.
-Each case asserts no exception, fail-closed output and no input mutation. The
+boundaries times eleven shared values) and 466 construction-boundary cases.
+Each case asserts no exception, fail-closed output and no input mutation.
+
+Both halves now draw on one corpus. The construction half used to have its own
+nine-value list with no empty string and no arbitrary string, which left the
+most likely wrong-type input for a parser whose valid domain *is* a string
+unprobed at 41 of the 43 entrypoints. Five boundaries subtract the corpus
+values their own valid domain contains — an empty route or cost set, absent or
+empty requirements, and an arbitrary printable string as a display name or
+lookup key — and subtract them by value, so every other corpus value stays in
+force and a new one reaches those boundaries automatically. That is
+38 × 11 + 10 + 10 + 8 + 10 + 10. The
 explicit exported-name inventory is intentional: a contributor adding a public
 decision or construction entrypoint must classify it beside its peers and add
 it to the matrix, making totality review part of the exported API change.
