@@ -23,6 +23,42 @@ jobs:
       - run: npm run generated:check
       - run: npm run audit:security
 
+  # The Phase 6 execution gate. Validation only: this job compiles, tests and
+  # statically analyses the contracts. It never deploys, never holds a key and
+  # never contacts a chain (docs/execution-gate.md §13).
+  solidity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # OpenZeppelin Contracts is an exact-pinned npm devDependency.
+      - run: npm ci
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.7.1
+      - run: npm run contracts:fmt
+      - run: npm run contracts:build
+      - run: npm run contracts:lint
+      # Writes the ABI form of the committed corpus that Differential.t.sol replays.
+      - run: npm run gate-corpus:generate
+      - name: Unit, fuzz and differential suites
+        run: forge test --no-match-path 'contracts/test/invariant/*'
+      - name: Stateful invariant suite
+        run: forge test --match-path 'contracts/test/invariant/*'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install slither-analyzer==0.11.6
+      # Last: Slither cleans and rebuilds without tests. `fail_on: low` in
+      # slither.config.json fails on any finding not already reviewed in code.
+      - run: npm run contracts:slither
+
   optional-live-robinhood:
     if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest

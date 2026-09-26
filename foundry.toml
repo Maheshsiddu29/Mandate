@@ -44,3 +44,8 @@ failure_persist_dir = "contracts/cache/invariant"
 
 [fmt]
 line_length = 120
+
+[lint]
+# Lint the code that would be deployed. Test doubles deliberately do what lints
+# forbid (the scripted adapter's raw transfers model a hostile adapter).
+ignore = ["contracts/test/**/*.sol"]
