@@ -1,5 +1,11 @@
 # Phase 6R completion report
 
+> **Phase 6R.1 follow-up.** The independent review of this phase found M-1:
+> `maxNotional` compared only the agent's declared notional, whose precision the
+> agent chooses. §1's "declared notional must not exceed principal-signed
+> `maxNotional`" was therefore not the bound it appeared to be. See
+> [phase-6r1-report.md](phase-6r1-report.md).
+
 **Verdict: READY FOR INDEPENDENT PHASE 6R REVIEW.** This is not a deployment
 approval. Phase 7 has not begun. The only executable market class remains a
 labelled, fixed-price settlement fixture.
@@ -114,7 +120,7 @@ boundaries are tested.
 > identifiers, all-zero route data, signing inside the gas window). The
 > reproduced worst case is 18,596 bytes, 250,508 intrinsic calldata gas and
 > 6,646,656 execution gas; see [execution-gate.md §13](execution-gate.md#13-deployment-policy)
->.
+> and [phase-6r1-report.md](phase-6r1-report.md).
 
 Worst-case encoded `execute` calldata is **17,156 bytes** and its intrinsic
 calldata gas is **172,784**. A local exact-profile settlement measured

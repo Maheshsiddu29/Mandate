@@ -3,7 +3,7 @@
 Phased engineering plan: what each phase delivers, how it is known to be done,
 and what it depends on.
 
-> **Status: Phase 6R implemented locally, awaiting independent review.** Phase 7 and beyond are
+> **Status: Phase 6R.1 implemented locally, awaiting independent review.** Phase 7 and beyond are
 > planned, not started. Nothing has been deployed.
 > Rationale for the phase ordering is in
 > [mandate-design.md §25](mandate-design.md#25-phased-engineering-roadmap);
@@ -346,7 +346,7 @@ Solidity is the expensive mistake.
 
 ## Phase 6 — On-chain execution gate and settlement
 
-**Phase 6R implemented and tested locally; not deployed; awaiting independent review.** Semantics,
+**Phase 6R.1 implemented and tested locally; not deployed; awaiting independent review.** Semantics,
 threat model and residual risks are in [execution-gate.md](execution-gate.md);
 the decision is [ADR 0019](adr/0019-onchain-execution-gate.md).
 
@@ -359,7 +359,11 @@ the decision is [ADR 0019](adr/0019-onchain-execution-gate.md).
   market facts, and settles on the principal's measured balance deltas;
 - Phase 6R independently enforces immutable fixture price, quantity × price
   notional, signed `maxNotional`, declared side-specific economics and exact
-  quantity; it rejects all `REAL_MARKET` configurations pending authenticated
+  quantity; Phase 6R.1 makes `maxNotional` bound the true quantity × price at
+  the principal's precision in the kernel and the gate (M-1), proves each
+  fixture venue settles at the pinned price, and fails a mandate in
+  reconciliation only once it has expired
+  ([report](phase-6r1-report.md)); it rejects all `REAL_MARKET` configurations pending authenticated
   inclusion-time state;
 - one supported execution path against a **labelled settlement fixture** — the
   repository evidences no executable Robinhood venue (§5 of the gate document);
@@ -451,7 +455,8 @@ the design document before it belongs in code.
 | 5R.1 | Post-remediation audit remediation (N-1…N-10) | 5R | ✅ complete |
 | 5R.2–5R.3 | Replay evidence, public boundaries, encoder domains | 5R.1 | ✅ complete |
 | 6 | On-chain execution gate and settlement fixture | 5R.3 | historical baseline, locally implemented; remediated by 6R |
-| 6R | Principal-authority closure and execution-gate hardening | 6 | ✅ implemented locally, not deployed; awaiting independent review |
+| 6R | Principal-authority closure and execution-gate hardening | 6 | implemented locally; remediated by 6R.1 |
+| 6R.1 | Exact principal notional enforcement (M-1) | 6R | ✅ implemented locally, not deployed; awaiting independent review |
 | 7 | Stablecoin funding adapters | 6 | planned, flexible |
 | 8 | Demo product and web experience | 6 | planned |
 | 9+ | Cross-chain network, broader asset classes | 8 | future |
