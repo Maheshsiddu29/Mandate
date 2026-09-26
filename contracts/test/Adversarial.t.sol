@@ -382,6 +382,42 @@ contract AdversarialTest is GateTestBase {
         g.execute(m, ps, c, t, as_);
     }
 
+    /// @notice SELL whose funding token (the output) charges 1% per transfer. The
+    /// gate measures what the principal actually received, after the fee, against
+    /// the agent's signed minimum (itself at least the principal's signed
+    /// MIN_TOTAL_CREDIT). A credit that still meets it settles safely; one that the
+    /// fee pushes below it refuses. Only the representation leg must be exact.
+    function test_feeOnTransferSellProceedsSettleOnlyWhenTheMeasuredCreditMeetsTheMinimum() public {
+        FeeOnTransferToken taxedFunding = new FeeOnTransferToken(6, 100); // 1%
+        ScriptedAdapter adapter = _scriptedAdapterFor(address(scriptedToken), address(taxedFunding));
+        MandateExecutionGate g = _gateFor(address(scriptedToken), address(taxedFunding), address(adapter));
+        taxedFunding.mint(address(adapter), 10_000e6);
+        vm.prank(principal);
+        scriptedToken.approve(address(g), type(uint256).max);
+
+        Mandate memory m = _sellMandate();
+        Candidate memory c = _scriptedCandidate(SIDE_SELL);
+        ExecutionTerms memory t = _sellTerms(); // at least 1,990.000000 credited
+
+        // 2,010 sent, 1,989.9 received: below the minimum, so it refuses.
+        adapter.setScript(
+            ScriptedAdapter.Script(ScriptedAdapter.Mode.SCRIPTED, 2_010e6, 0, address(0), address(0), "", false, 0)
+        );
+        (bytes memory ps, bytes memory as_) = _signFor(g, m, c, t);
+        vm.expectRevert(abi.encodeWithSelector(MandateExecutionGate.CreditBelowMinimum.selector, 1_989.9e6, 1_990e6));
+        g.execute(m, ps, c, t, as_);
+
+        // 2,020 sent, 1,999.8 received: the principal's measured credit meets the
+        // signed minimum, so settlement is within authority despite the fee.
+        adapter.setScript(
+            ScriptedAdapter.Script(ScriptedAdapter.Mode.SCRIPTED, 2_020e6, 0, address(0), address(0), "", false, 0)
+        );
+        (,, uint256 credit) = g.execute(m, ps, c, t, as_);
+        assertEq(credit, 1_999.8e6);
+        assertGe(credit, t.fundingLimit);
+        assertEq(taxedFunding.balanceOf(principal), 1_999.8e6);
+    }
+
     function test_feeOnTransferInputCannotRaiseTheDebitAboveTheTransferredAmount() public {
         FeeOnTransferToken taxedFunding = new FeeOnTransferToken(6, 100); // 1%
         ScriptedAdapter adapter = _scriptedAdapterFor(address(scriptedToken), address(taxedFunding));

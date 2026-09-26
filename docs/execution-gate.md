@@ -285,9 +285,15 @@ side (ADR 0014).
   then enforce the realized result independently.
 - **Fee-on-transfer and other non-standard tokens** are excluded by the curated
   market table. If one were listed anyway: on the input side the principal is
-  still debited at most the transferred amount (`feeOnTransferInput…`); on the
-  output side the principal receives less than required and the execution
-  refuses (`feeOnTransferOutputFailsClosed`). Rebasing tokens are unsupported.
+  still debited at most the transferred amount (`feeOnTransferInput…`). On the
+  output side the rule depends on the leg. A fee-on-transfer *representation*
+  cannot deliver the exact quantity FILL_OR_KILL requires, so it refuses
+  (`feeOnTransferOutputFailsClosed`). A fee-on-transfer *funding token* paid
+  out on a SELL is measured after the fee: if the principal's actual credit
+  still meets the agent's `fundingLimit` — and so the signed
+  `MIN_TOTAL_CREDIT` — settlement is safe and proceeds; if the fee pushes it
+  below, the execution refuses `CreditBelowMinimum`
+  (`feeOnTransferSellProceeds…`). Rebasing tokens are unsupported.
 - **Native ETH** is not supported: `execute` is not payable.
 - **Refunds** of unspent input go to the principal and simply reduce the measured
   debit.
@@ -623,7 +629,8 @@ policy and never lives in the gate.
 | Empty-return legacy ERC-20 | **SUPPORTED, review required** | SafeERC20 accepts empty success data; explicitly tested |
 | Malformed return data | **FAILS CLOSED** | SafeERC20 reverts; consumption and transfers roll back |
 | Fee-on-transfer input | **SUPPORTED only when deployment review accepts its economics** | Net principal debit remains bounded; adapter may receive less |
-| Fee-on-transfer output | **FAILS CLOSED** | Exact output delta is not met |
+| Fee-on-transfer representation (BUY output, SELL input) | **FAILS CLOSED** | The representation leg must move by exactly the candidate quantity; a transfer fee breaks that (`feeOnTransferOutputFailsClosed`) |
+| Fee-on-transfer funding token as SELL output | **SAFE when the measured credit meets the signed minimum; otherwise FAILS CLOSED** | The gate measures what the principal actually received, after the fee, against the agent's `fundingLimit`, itself at least the principal's signed `MIN_TOTAL_CREDIT`. A credit that still meets it is within authority; one the fee pushes below it reverts `CreditBelowMinimum` (`feeOnTransferSellProceeds…`). Still subject to deployment review, since the venue's quoted proceeds are not what the principal receives |
 | Callback token | **FAILS CLOSED against gate re-entry** | `nonReentrant`; callback test settles only the outer authorization |
 | Rebasing token | **UNSUPPORTED / DEPLOYMENT-PROHIBITED** | In-call/exogenous balance movement makes deltas ambiguous |
 | Token lying about `balanceOf` | **UNSUPPORTED / DEPLOYMENT-PROHIBITED** | Delta verification cannot establish truth from a dishonest oracle |
