@@ -25,6 +25,11 @@ via_ir = true
 bytecode_hash = "none"
 # OpenZeppelin 5.6 names an identifier `error`; that warning is theirs, not ours.
 ignored_warnings_from = ["node_modules"]
+# Reads only: the generated gate corpus ABI, and build artifacts (deployCodeTo).
+fs_permissions = [
+    { access = "read", path = "./contracts/generated" },
+    { access = "read", path = "./contracts/out" },
+]
 
 [profile.default.fuzz]
 runs = 1024
