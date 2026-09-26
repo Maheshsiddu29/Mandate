@@ -197,7 +197,11 @@ contract MandateExecutionGate is ReentrancyGuard {
                 || !MandateCodec.isIdentifierBytes(bytes(config.settlementUnit))
         ) revert InvalidMarket();
 
+        // Constructor only, over a deployer-chosen market list: a token whose
+        // `decimals()` reverts fails the deployment, which is the right outcome.
+        // slither-disable-next-line calls-loop
         uint8 representationDecimals = IERC20Metadata(config.representation).decimals();
+        // slither-disable-next-line calls-loop
         uint8 fundingDecimals = IERC20Metadata(config.fundingToken).decimals();
         // Beyond the kernel's decimal range no signed amount can be compared exactly.
         if (representationDecimals > MandateCodec.MAX_DECIMALS || fundingDecimals > MandateCodec.MAX_DECIMALS) {
@@ -324,7 +328,9 @@ contract MandateExecutionGate is ReentrancyGuard {
 
     /// @dev Chain time is the only clock. The window matches the kernel's
     /// `checkValidityWindow` exactly: live on `notBefore`, expired *on*
-    /// `expiresAt`. The agent's deadline is inclusive.
+    /// `expiresAt`. The agent's deadline is inclusive. Using `block.timestamp`
+    /// here is the point of Phase 6 (INV-10), not an oversight (docs §14, S-6).
+    // slither-disable-next-line timestamp
     function _checkTime(Mandate calldata mandate, ExecutionTerms calldata terms) private view {
         // block.timestamp is far below 2^255, so the signed widening is exact.
         int256 nowSeconds = int256(block.timestamp);
@@ -338,7 +344,10 @@ contract MandateExecutionGate is ReentrancyGuard {
 
     /// @dev The subset of the kernel's pure candidate-versus-mandate checks the
     /// chain can re-establish, plus the pinned registry facts that turn a
-    /// representation identifier into an asset, an issuer and a venue.
+    /// representation identifier into an asset, an issuer and a venue. A flat
+    /// list of independent checks in interface order; splitting it would hide
+    /// the order the reference model reproduces.
+    // slither-disable-next-line cyclomatic-complexity
     function _checkBinding(Mandate calldata mandate, Candidate calldata candidate, Market memory market) private view {
         if (candidate.agent != mandate.agent) revert AgentMismatch();
         if (candidate.side != mandate.side) revert SideMismatch();
@@ -427,9 +436,16 @@ contract MandateExecutionGate is ReentrancyGuard {
         IERC20 output = IERC20(plan.outputToken);
         address recipient = terms.recipient;
 
+        // Pre-call balances are pre-call on purpose: settlement is the net delta
+        // across the whole interaction, whatever the adapter or venue did in
+        // between. Re-entry into the gate is blocked by `nonReentrant` (docs §14, S-2).
         uint256 inputBefore = input.balanceOf(principal);
         uint256 outputBefore = output.balanceOf(recipient);
 
+        // `principal` is not arbitrary: `_authorize` has verified the principal's
+        // EIP-712 signature over this mandate's digest under this gate's domain,
+        // and bounded `inputAmount` by that signed mandate (docs §14, S-1).
+        // slither-disable-next-line arbitrary-send-erc20
         input.safeTransferFrom(principal, plan.market.adapter, plan.inputAmount);
         IMandateExecutionAdapter(plan.market.adapter)
             .execute(
@@ -453,7 +469,9 @@ contract MandateExecutionGate is ReentrancyGuard {
 
         // BUY: debit <= fundingLimit <= signed MAX_TOTAL_DEBIT; credit >= quantity.
         // SELL: debit <= quantity; credit >= fundingLimit >= signed MIN_TOTAL_CREDIT.
+        // slither-disable-next-line reentrancy-balance
         if (actualDebit > plan.inputAmount) revert DebitExceedsLimit(actualDebit, plan.inputAmount);
+        // slither-disable-next-line reentrancy-balance
         if (actualCredit < plan.minOutput) revert CreditBelowMinimum(actualCredit, plan.minOutput);
     }
 
@@ -461,6 +479,8 @@ contract MandateExecutionGate is ReentrancyGuard {
     /// `v` in {27, 28}, low `s`, recovered signer equal to the named party.
     function _signedBy(bytes32 structHash, bytes calldata signature, address signer) private view returns (bool) {
         bytes32 digest = keccak256(abi.encodePacked(hex"1901", _DOMAIN_SEPARATOR, structHash));
+        // The third value only describes *why* recovery failed; the error enum decides.
+        // slither-disable-next-line unused-return
         (address recovered, ECDSA.RecoverError recoverError,) = ECDSA.tryRecover(digest, signature);
         return recoverError == ECDSA.RecoverError.NoError && recovered == signer;
     }

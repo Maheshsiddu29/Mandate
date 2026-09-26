@@ -73,8 +73,11 @@ kernel, registry and router neither declare nor import `@mandate/jev`.
 - **Evidence:** digest mutation, order-independence, replay and final-verifier
   failure tests.
 - **Residual risk:** receipts are commitments, not signatures or durable
-  storage. Execution binding remains Phase 6.
-- **Status:** controlled for Phase 4; atomic transaction binding remains open.
+  storage.
+- **Status:** controlled. Atomic transaction binding is provided by the Phase 6
+  gate: the agent signs an execution commitment over the candidate digest and
+  every execution term, and any mutation is refused
+  ([execution-gate.md §3](execution-gate.md#3-commitment-hierarchy)).
 
 ### Resource exhaustion
 
@@ -266,15 +269,27 @@ local array. There is no deserialization of model output into a domain object.
   tests in `pressure-test-findings.test.ts`.
 - **Residual risk:** the handoff state is still supplied by the caller, and a
   caller that rewinds both the evaluation and the handoff instant consistently
-  defeats every age bound. No off-chain component can detect that. Binding to
-  chain-observed state and `block.timestamp` at submission is Phase 6 work
-  (INV-10, INV-13).
-- **Status:** controlled off-chain; atomic binding remains open.
+  defeats every age bound. No off-chain component can detect that. The Phase 6
+  gate checks the mandate's validity window and the agent's deadline against
+  `block.timestamp`, so a rewound clock can no longer extend an authorization at
+  execution. Dynamic state (price, halt, epoch) is still not re-asserted onchain
+  ([execution-gate.md §16](execution-gate.md#16-residual-risks)).
+- **Status:** controlled off-chain; chain time enforced at execution; dynamic
+  state re-assertion open.
 
 ## Solidity analysis
 
-There are no Solidity contracts. Slither and Foundry are therefore not
-installed or represented as having run. As soon as Solidity is introduced,
-the release gate must add `forge build`, `forge test`, invariant suites and
-`slither .`, with every finding fixed, justified or recorded as residual risk.
+Phase 6 introduced Solidity (`contracts/`). CI runs `forge fmt --check`,
+`forge build`, `forge lint --deny notes`, the unit, fuzz, differential and
+invariant suites, and Slither 0.11.6 with `fail_on: low`.
+
+Slither's first run reported 21 results in 8 detector classes, all in
+`contracts/src`. One was fixed (a missing zero-address check in the fixture
+adapter); the High-severity `arbitrary-send-erc20` is a false positive because the
+`from` address is the principal whose signature `_authorize` has just verified;
+the rest are intended behaviour or style disagreements, each suppressed inline
+beside its reason. The run is now at zero, and a deliberately unsafe probe
+contract was confirmed to fail it. Every finding and its disposition is in
+[execution-gate.md §14](execution-gate.md#14-slither-findings); the gate's threat
+model and residual risks are §15 and §16 there.
 

@@ -1,0 +1,6 @@
+{
+  "filter_paths": "contracts/test|contracts/lib|contracts/script|node_modules",
+  "exclude_dependencies": true,
+  "detectors_to_exclude": "naming-convention",
+  "fail_on": "low"
+}

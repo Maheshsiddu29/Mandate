@@ -30,11 +30,13 @@ contract FixtureVenueAdapter is IMandateExecutionAdapter {
     address public immutable GATE;
     FixtureVenue public immutable VENUE;
 
+    error InvalidConfig();
     error OnlyGate();
     error UnsupportedOrder();
     error UnsupportedRouteData();
 
     constructor(address gate, FixtureVenue venue) {
+        if (gate == address(0) || address(venue) == address(0)) revert InvalidConfig();
         GATE = gate;
         VENUE = venue;
     }
@@ -56,9 +58,14 @@ contract FixtureVenueAdapter is IMandateExecutionAdapter {
         uint256 heldBefore = input.balanceOf(address(this));
 
         input.forceApprove(address(VENUE), order.inputAmount);
+        // The venue's returned cost or proceeds are deliberately unused: this
+        // adapter measures what left its balance, and the gate measures the
+        // principal's. Neither trusts a counterparty's report (docs §14, S-3).
         if (isBuy) {
+            // slither-disable-next-line unused-return
             VENUE.buy(order.minOutput, order.inputAmount, order.recipient);
         } else {
+            // slither-disable-next-line unused-return
             VENUE.sell(order.inputAmount, order.minOutput, order.recipient);
         }
         input.forceApprove(address(VENUE), 0);
