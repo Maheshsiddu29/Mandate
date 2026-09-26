@@ -5,7 +5,7 @@ repository summarize parts of this one and link back to it; this file is the
 source of truth.
 
 - **Document status:** canonical specification.
-- **Implementation status:** Phase 5R.2 complete — the mandate core kernel
+- **Implementation status:** Phase 5R.3 complete — the mandate core kernel
   (types, canonical encoding, EIP-712 authorization, deterministic verifier,
   receipts, replay semantics, decision-vector corpus) and the canonical asset and
   representation registry (identifier schemes, reference resolution,
@@ -14,12 +14,13 @@ source of truth.
   Robinhood REST/RPC adapter, recorded mainnet fixtures and replay corpus, plus
   deterministic candidate construction, admissibility, exact-cost ranking,
   selection receipts, mainnet routing replay and seeded simulation, and the
-  optional Jev advisory layer. Phase 5R through 5R.2 hardened signed economic
+  optional Jev advisory layer. Phase 5R through 5R.3 hardened signed economic
   authority, replay, fresh-state handoff, layered candidate commitments,
-  registry snapshot binding and public plain-value boundaries. Transaction
+  registry snapshot binding, public plain-value boundaries and canonical
+  parser/encoder domain agreement. Transaction
   construction/submission, execution contracts, funding and web work remain
   unbuilt.
-- **Last structural revision:** Phase 5R.2.
+- **Last structural revision:** Phase 5R.3.
 
 ## How to read status labels
 
@@ -40,7 +41,7 @@ by tests. Everything else should be read as what Mandate is *specified to do*,
 not what it does. See [Buildathon MVP scope](#20-buildathon-mvp-scope) for what
 is being built first, and [roadmap.md](roadmap.md) for current phase status.
 
-As of Phase 5R.2 the implemented surface is the kernel, canonical asset and
+As of Phase 5R.3 the implemented surface is the kernel, canonical asset and
 representation registry (§5, §6), external Robinhood adapter (§18), deterministic
 router, and optional Jev advisory layer. Recorded REST/RPC state flows through
 the same registry and verifier as synthetic worlds; no decision engine imports
@@ -1476,7 +1477,7 @@ dependence on mutable external references.
 These are the properties that define Mandate. A change that breaks one is a
 change to the product, not an implementation detail.
 
-**Phase 5R.2 status.** Three rounds of adversarial review have been applied on top
+**Phase 5R.3 status.** Four rounds of adversarial review have been applied on top
 of Phase 5 and nothing in this section changed as a result — no invariant was
 weakened, retired or reinterpreted. What changed is where three of them are
 enforced. **INV-1 and INV-13's off-chain half**: an execution candidate's binding
@@ -1490,8 +1491,11 @@ documented and not enforced, so an unsubstantiated command could restore
 permission. **INV-5**: a trusted state that declares no registry snapshot is now
 `UNKNOWN` rather than accepted, which is the fail-closed reading this invariant
 already required. Phase 5R.2 makes replay records state-shape validated, requires
-observations to fit the preserved reservation timeline, and completes totality at
-the public plain-value request boundaries; none changes an invariant. The ledger is
+observations to fit the preserved reservation timeline. Phase 5R.3 completes
+totality across the inventoried public plain-value boundaries and requires every
+successfully parsed canonical value to fit its fixed-width encoder; none changes
+an invariant. The boundary policy is
+[public-trust-boundaries.md](public-trust-boundaries.md), and the ledger is
 [§24 of the pressure test](production-architecture-pressure-test.md).
 
 **Phase 5 status.** **INV-3 is now established.** Its structural half was
@@ -2046,7 +2050,7 @@ the wrong shape.
 | **8** | Demo product and web experience | Public demonstration showing PASS and, prominently, REJECT with reasons; live and engineered data visibly separated |
 | **9+** | Cross-chain network and broader asset classes | Out of buildathon scope. See [§22](#22-future-architecture) and [§23](#23-expansion-beyond-equities) |
 
-Phases 0–5 and the Phase 5R through 5R.2 pre-Phase-6 remediations are complete.
+Phases 0–5 and the Phase 5R through 5R.3 pre-Phase-6 remediations are complete.
 Phase 6 has not started.
 
 ### 25.1 Rules that apply to every phase

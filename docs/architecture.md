@@ -2,7 +2,7 @@
 
 System structure, component boundaries, and where each concern is enforced.
 
-> **Status: Phase 5R.2 complete.** The kernel, registry, read-only Robinhood
+> **Status: Phase 5R.3 complete.** The kernel, registry, read-only Robinhood
 > external-data adapter, deterministic router and the optional Jev advisory
 > layer are built, and the remediations the
 > [architecture pressure test](production-architecture-pressure-test.md)
@@ -18,9 +18,11 @@ System structure, component boundaries, and where each concern is enforced.
 > resolution carries validated evidence
 > ([ADR 0018](adr/0018-observed-execution-outcomes.md)). MCE is at schema v2 for
 > the mandate and trusted state; the execution candidate is at schema v3.
-> Phase 5R.2 adds complete stored replay-record validation, local temporal
-> consistency for reconciliation evidence, and total public decision boundaries
-> for ordinary parsed/plain values. It does not verify evidence against chain
+> Phase 5R.2 adds complete stored replay-record validation and local temporal
+> consistency for reconciliation evidence. Phase 5R.3 completes the explicit
+> public-boundary inventory and totality matrix for ordinary parsed/plain values,
+> and aligns every canonical parser with its fixed-width writer
+> ([public-trust-boundaries.md](public-trust-boundaries.md)). It does not verify evidence against chain
 > state; that remains Phase 6.
 > Transaction construction and submission, execution
 > contracts, funding and web work remain planned. Jev has not been
@@ -245,12 +247,16 @@ verify({ mandate, authorization, candidate, trustedState, clock, expectedDomain 
 
 Totality is a property of that signature and was found to be false at the
 encoding boundary before Phase 5R: an unbounded collection made the digest step
-throw, so a refusal produced no receipt. Every collection the encoders count is
-now bounded by its parser.
+throw, so a refusal produced no receipt. Phase 5R.3 mechanically rechecked the
+fixed-width domains for mandate, candidate, state and registry encodings; every
+successfully parsed canonical value is now encodable, including signed-64-bit
+registry timestamps and `u16` eligibility lists.
 
 It accepts `unknown` for each input and parses at the boundary. That is what
 makes totality real: a caller cannot hand it something unparseable and receive
-a thrown error it might mistake for a transport failure.
+a thrown error it might mistake for a transport failure. The same A/B boundary
+rule is now inventoried across all four decision packages in
+[public-trust-boundaries.md](public-trust-boundaries.md).
 
 ## 5b. Phase 2: the registry
 

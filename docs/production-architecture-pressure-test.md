@@ -1164,7 +1164,7 @@ reconciliation path that verifies an observation rather than validating it (V-59
 key reconciliation in the replay store (N-7), and a cross-snapshot compatibility
 proof if one is ever wanted instead of failing closed (V-60).
 
-## Phase 5R.2 — final pre-Phase-6 remediation
+## Phase 5R.2 — replay and outer-request remediation
 
 The final independent pre-Phase-6 audit reported zero CRITICAL findings and
 three HIGH findings. Phase 5R.2 closes exactly those findings and the associated
@@ -1174,7 +1174,7 @@ documentation drift; it does not open or implement Phase 6.
 | --- | --- | --- |
 | Temporally impossible replay evidence could restore authorization | **REMEDIATED** | `RECONCILE` accepts an observation only at or after the preserved reservation start and at or before the supplied reconciliation instant. Out-of-range or impossible timestamps are `OBSERVATION_INVALID`; the existing record stays unavailable |
 | Malformed stored replay records could enter transition logic | **REMEDIATED** | `parseReplayRecord` strictly validates keys, enums, signed-64-bit timestamps, resolution structure, unknown fields and the complete state-specific field invariants before dispatch. Invalid records are `MALFORMED_RECORD` and `isAvailable` fails closed |
-| Public decision APIs threw for ordinary malformed plain values | **REMEDIATED** | `verify`, `applyTransition`, `evaluateRoutes` and `route` normalize their outer request boundary before field access. Routing re-opens the supplied registry snapshot rather than trusting indexes. Malformed values produce rejecting receipts, replay errors or `INVALID_INPUT` results |
+| The audited outer public decision APIs threw for ordinary malformed plain values | **REMEDIATED for the named APIs; closure completed in 5R.3** | `verify`, `applyTransition`, `evaluateRoutes` and `route` normalize their outer request boundary before field access. Routing re-opens the supplied registry snapshot rather than trusting indexes. The later 5R.3 audit found the same class at exported selection boundaries; see below |
 
 Replay evidence in Phase 5R.2 is structurally and temporally validated only.
 That proves neither that the reference exists nor that its stated outcome is
@@ -1185,3 +1185,23 @@ reconciliation.
 **Pre-Phase-6 readiness after remediation:** zero unresolved CRITICAL findings
 and zero unresolved HIGH pre-Phase-6 findings, subject to independent
 verification of this phase.
+
+## Phase 5R.3 — public-boundary and encoder-domain closure
+
+The independent verification of Phase 5R.2 found two HIGH findings. Both are
+remediated without changing authority ownership or opening Phase 6.
+
+| Finding | Status | Remediation |
+| --- | --- | --- |
+| Exported selection boundaries still threw for malformed ordinary values | **REMEDIATED** | `selectEvaluated` and `resolveHandoff` are safe wrappers over private validated cores and accept only module-issued opaque evaluation/context identities. `selectWithJev` validates its entire outer request before field access. `collectProviderRoutes` was included in the same closure. Ten external decision boundaries and 43 construction boundaries are pinned by the cross-package hostile-value matrix |
+| Registry timestamp parsing accepted values its canonical `i64` writer could not encode | **REMEDIATED** | Snapshot creation time now enforces `[-2^63, 2^63 - 1]` before digesting. The fixed-width audit found and closed one additional same-class gap: eligibility jurisdiction lists now enforce their encoded `u16` count before iteration |
+
+The architectural rule and complete inventory are in
+[public-trust-boundaries.md](public-trust-boundaries.md). Phase 5R.2 completed
+the four outer request APIs it named; it did not establish repository-wide
+public-boundary closure. Phase 5R.3 supplies that missing inventory, shared
+matrix and export-review guard. Hostile `Proxy` objects and throwing getters
+remain outside the ordinary plain-value guarantee, exactly as scoped by N-6.
+
+**Pre-Phase-6 readiness after Phase 5R.3:** both new HIGH findings are closed.
+Phase 6 remains unopened.

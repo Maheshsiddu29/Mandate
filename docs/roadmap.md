@@ -3,7 +3,7 @@
 Phased engineering plan: what each phase delivers, how it is known to be done,
 and what it depends on.
 
-> **Status: Phase 5R.2 complete.** Phase 6 and beyond are planned, not started.
+> **Status: Phase 5R.3 complete.** Phase 6 and beyond are planned, not started.
 > Rationale for the phase ordering is in
 > [mandate-design.md §25](mandate-design.md#25-phased-engineering-roadmap);
 > scope boundaries are in
@@ -298,7 +298,7 @@ INV-3 expressed as a scheduling property.
 
 ---
 
-## Phase 5R and 5R.1 — adversarial review and remediation ✅
+## Phase 5R through 5R.3 — adversarial review and remediation ✅
 
 Not a feature phase. Two rounds of adversarial review of everything Phases 1–5
 built, applied before the Solidity execution structure freezes the protocol.
@@ -322,6 +322,16 @@ pass. Candidate commitments are now layered by the kind of fact each carries
 ([ADR 0017](adr/0017-layered-candidate-state-commitments.md)), and every replay
 resolution requires a validated observed outcome
 ([ADR 0018](adr/0018-observed-execution-outcomes.md)).
+
+**5R.2** strictly validates stored replay records and the local temporal
+consistency of reconciliation evidence, and totalizes the four outer request
+APIs named by that audit.
+
+**5R.3** closes the remaining exported selection boundaries, validates Jev's
+top-level request before field access, enforces registry `i64` timestamp and
+`u16` eligibility-list domains before encoding, and adds the explicit
+[public trust-boundary inventory](public-trust-boundaries.md) plus a shared
+hostile-value regression matrix. Phase 6 remains unopened.
 
 **Exit criterion:** every finding either closed or explicitly assigned to a later
 phase, with each closure pinned by a test that fails if the defect returns. The
