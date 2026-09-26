@@ -258,16 +258,29 @@ look-alike venue. Neither can now be expressed: there is no constructor input
 that names an adapter or a venue (`FixtureTrust.t.sol` keeps both contracts
 deployed and shows the same BUY paying exactly the fixture quote, 100.3 fUSDC).
 
-**Verifying a deployment.** The gate's runtime code does not prove its
-constructor ran: other initcode could return identical runtime code with a
-different market table. So the deployment script's `verify(gate, config)`
-checks what is actually deployed: for every configured market, the market table
-matches the config, and the runtime code at the market's adapter and venue equals
-a reference `FixtureVenueAdapter(gate, venue)` and
-`FixtureVenue(representation, funding, decimals…, price, fee)` instantiated in the script's
-own unbroadcast execution. Immutables are part of runtime code, so equal code is
-equal implementation and equal wiring (§13). The gate's own runtime code is
-verified from source as before.
+**What `verify` checks, and what it does not** (corrected in Phase 6R.1b). The
+deployment script's `verify(gate, config)` verifies the configured fixture
+venue/adapter wiring visible through the supplied gate: for every market in the
+config, the gate's market table has that representation, funding token and typed
+price, and the runtime code at the market's adapter and venue equals a reference
+`FixtureVenueAdapter(gate, venue)` and `FixtureVenue(representation, funding,
+decimals…, price, fee)` built from the config and the gate's pinned decimals in
+the script's own unbroadcast execution. Immutables are part of runtime code, so
+equal code is equal implementation and equal wiring *of those two contracts*.
+
+It does **not** authenticate the gate's creation transaction, prove that the gate
+was built from the reviewed initcode and constructor arguments, or prove that the
+supplied configuration is the gate's complete market set. It checks neither the
+gate's own code, nor the absence of extra markets, nor a market's canonical
+asset, issuer, venue, quantity or settlement unit, synthetic flag or decimals
+(beyond the venue agreeing with the gate's pinned decimals), nor the gate's chain
+ID or domain separator. Runtime bytecode alone proves nothing about constructor
+configuration: the independent Phase 6R.1a review constructed a gate with
+byte-identical runtime code and malicious constructor-derived state that passed
+`verify`. Production or testnet deployment acceptance therefore requires the
+final deployment-provenance check over the finalized Phase 6 bytecode and
+constructor configuration (§13, *Final deployment provenance gate*), which is not
+built.
 
 Nothing built on this may be described as a live trade, live liquidity or a
 Robinhood venue integration. What the fixture demonstrates is the gate's security
@@ -721,21 +734,58 @@ policy and never lives in the gate.
   gate, from a reviewed JSON config; the gate creates each market's venue and
   adapter (§5). It refuses a chain that does not match its config and refuses
   Ethereum, Arbitrum One, Arbitrum Nova and Robinhood Chain mainnet outright.
-  After deploying it runs `verify(gate, config)`, the deployment-manifest check:
-  every configured market's table entry must match the config, and the runtime
-  code at its adapter and venue must equal the reviewed contracts instantiated
-  with the expected arguments (`FixtureAdapterNotReviewedCode`,
-  `FixtureVenueNotReviewedCode`, `MarketNotAsConfigured`). `verify` is
-  read-only and can be run against any deployment with
-  `forge script … --sig "verify(address,string)"`. Both are exercised only by
-  `DeployScript.t.sol`, including code substituted at the adapter or venue
-  address and the gate's runtime code without its market table. Stocking a venue
-  with inventory is a separate manual step.
-- Deploying creates two contracts per market. `MAX_MARKETS` = 32 costs about
-  38.6M gas in one transaction (measured in `MandateExecutionGate.t.sol`), above
-  a 32M per-transaction cap such as Arbitrum's; a deployment with that many
-  markets must be checked against the target chain's limit. The committed config
-  has one market.
+  After deploying it runs `verify(gate, config)`, a fixture-wiring check: every
+  configured market's representation, funding token and typed price must match
+  the gate's table, and the runtime code at its adapter and venue must equal the
+  reviewed contracts instantiated with the expected arguments
+  (`FixtureAdapterNotReviewedCode`, `FixtureVenueNotReviewedCode`,
+  `MarketNotAsConfigured`). `verify` is read-only and can be run against any
+  deployment with `forge script … --sig "verify(address,string)"`. Both are
+  exercised only by `DeployScript.t.sol`, including code substituted at the
+  adapter or venue address, venue code with other units, and the gate's runtime
+  code without its market table. **`verify` does not establish that the gate is
+  genuine** (§5): it is not a deployment-provenance check. Stocking a venue with
+  inventory is a separate manual step.
+- **Deployment gas** (corrected in Phase 6R.1b). Deploying creates two contracts
+  per market, so gas grows linearly: about **1.12M per fixture market** as of
+  Phase 6R.1a, **1.15M** since 6R.1b (the venue carries two more immutables).
+  The 38.6M figure previously quoted for 32 markets was the constructor's
+  execution gas inside a test, without the transaction's intrinsic and calldata
+  cost. Full-transaction gas:
+
+  | Markets | Independent 6R.1a review | Local model, 6R.1a | Local model, 6R.1b |
+  | ---: | ---: | ---: | ---: |
+  | 1 | 4,256,913 | 4,252,478 | 4,281,711 |
+  | 4 | 7,632,021 | 7,612,242 | 7,726,336 |
+  | 5 | 8,757,980 | 8,733,769 | 8,876,150 |
+  | 6 | 9,883,973 | 9,855,306 | 10,025,974 |
+  | 8 | 12,136,003 | 12,098,460 | 12,325,702 |
+  | 12 | 16,640,525 | 16,585,194 | 16,925,584 |
+  | 16 | 21,145,599 | 21,072,504 | 21,526,042 |
+  | 24 | 30,157,404 | 30,048,757 | 30,728,591 |
+  | 25 | — | — | 31,883,667 |
+  | 26 | 32,410,844 | 32,293,309 | 33,029,717 |
+  | 32 | 39,171,406 | 39,027,219 | 39,933,349 |
+
+  The local model is the CREATE frame's measured execution gas (which includes
+  CREATE's 32,000 and the EIP-3860 initcode word charge) plus 21,000 and EIP-2028
+  calldata gas for the initcode and constructor arguments, for gates of
+  18-decimal fixture tokens; it runs 0.1–0.4% below the review's measurement.
+  Classification:
+  - **protocol/configuration maximum:** `MAX_MARKETS` = 32; the constructor
+    accepts 32 and refuses 33;
+  - **deployable in one transaction under a 32M gas limit:** at most about **25
+    markets** by this local model (25 is 31.88M, about 0.12M of margin, so 24 is
+    the conservative figure); 26 or more, and certainly 32 (≈39.2–39.9M), do not
+    fit;
+  - **current one-market MVP:** about 4.28M, well within such a limit; the
+    committed config has one market.
+
+  No target chain's transaction or block gas limit has been verified in this
+  repository. The 32M figure is the threshold used by the review, not a
+  confirmed Robinhood Chain limit; the target chain's limits must be confirmed
+  before any deployment. Reducing deployment cost (shared or lazily deployed
+  fixture contracts) is Phase 6R.2 benchmarking work, not done here.
 - `contracts/deploy/local-fixture.json` targets a local development chain only.
   **No Robinhood Chain testnet config is committed**: the repository holds no
   verified testnet Stock Token or funding-token addresses, and a testnet
@@ -782,6 +832,32 @@ policy and never lives in the gate.
   deployment at a new address, and therefore a new EIP-712 domain: signatures for
   the old gate cannot be replayed on the new one.
 
+### Final deployment provenance gate (release requirement, not implemented)
+
+**FINAL DEPLOYMENT PROVENANCE GATE.** Before any production or testnet deployment
+is accepted, a check that does not exist yet must authenticate the deployment
+itself, not just the fixture wiring `verify` sees. It is deferred until after
+Phase 6R.2 because gas optimization will change the compiler settings, the
+bytecode and possibly the constructor layout, and a provenance check built now
+would have to be regenerated. At minimum it must verify:
+
+- the source commit;
+- the solc version;
+- whether the optimizer is enabled, and `optimizer_runs`;
+- `via_ir`;
+- the EVM version;
+- the gate's creation bytecode (initcode);
+- the constructor arguments;
+- the chain ID;
+- the expected gate address (deployer and nonce, or the creation transaction);
+- the complete market configuration, and the market count;
+- the complete `MarketSupported` event set (no extra market);
+- the gate's runtime bytecode;
+- each market's fixture venue and adapter wiring (what `verify` checks today);
+- the EIP-712 domain separator.
+
+Until it exists, no deployment may be described as verified.
+
 ### Vetted-token policy
 
 | Behaviour | Classification | Reason |
@@ -800,8 +876,10 @@ policy and never lives in the gate.
 | Representation == funding token | **DEPLOYMENT-PROHIBITED** | Constructor rejects it; two balance legs would be ambiguous |
 
 Token code is trusted deployment surface. Adapter and venue code is not
-supplied by anyone: it is the gate's embedded fixture code, checkable after
-deployment with `verify` (§5, §13). Balance deltas prove only the balances
+supplied by anyone: on a gate genuinely built from the reviewed initcode it is
+the gate's embedded fixture code, and its wiring is checkable after deployment
+with `verify` (§5, §13) — which does not itself establish that the gate is
+genuine. Balance deltas prove only the balances
 reported by the token contracts. They do not prove legal/economic equivalence or
 venue provenance.
 

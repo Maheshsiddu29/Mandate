@@ -29,16 +29,24 @@ import {MandateCodec} from "../src/libraries/MandateCodec.sol";
 /// The gate itself refuses a fixture price finer than its funding token can
 /// express (`FixturePriceNotRepresentable`).
 ///
-/// `verify(gate, json)` is the deployment-manifest check, and `deploy` runs it on
-/// what it just deployed. For every market in the config it reads the gate's
-/// market table and compares the runtime code at the market's adapter and venue
-/// with a reference `FixtureVenueAdapter(gate, venue)` and
-/// `FixtureVenue(representation, funding, price, fee)` instantiated in the
-/// script's own (never broadcast) execution. Immutables are part of runtime
-/// code, so equal code is equal implementation *and* equal wiring. It needs no
-/// trust in how the gate was deployed: a gate whose runtime code is right but
-/// whose markets were written by other initcode fails it. Run it read-only
-/// against any deployment:
+/// `verify(gate, json)` checks the configured fixture wiring visible through the
+/// supplied gate, and `deploy` runs it on what it just deployed. For every market
+/// in the config it reads the gate's market table (representation, funding token,
+/// typed price) and compares the runtime code at the market's adapter and venue
+/// with a reference `FixtureVenueAdapter(gate, venue)` and `FixtureVenue(...)`
+/// built from the config and the gate's pinned decimals in the script's own
+/// (never broadcast) execution. Immutables are part of runtime code, so equal
+/// code is equal implementation and equal wiring *for those two contracts*.
+///
+/// It does NOT authenticate the gate's creation transaction, prove that the gate
+/// was built from the reviewed initcode and constructor arguments, or prove that
+/// the config is the gate's complete market set: it does not check the gate's
+/// own code, extra markets, or a market's canonical asset, issuer, venue, units,
+/// synthetic flag, decimals, chain ID or domain separator. A gate with the
+/// reviewed runtime code and malicious constructor-derived state can pass it
+/// (independent Phase 6R.1a review). Deployment acceptance needs the final
+/// deployment-provenance check (docs/execution-gate.md §13), which is not built.
+/// Run it read-only against any deployment:
 ///   forge script contracts/script/DeployMandateGate.s.sol --sig "verify(address,string)" <gate> "$(cat <config>)" --rpc-url <rpc>
 ///
 /// Usage (simulation only unless `--broadcast` is added by a human):

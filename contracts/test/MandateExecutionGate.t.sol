@@ -216,7 +216,7 @@ contract MandateExecutionGateTest is GateTestBase {
         }
         uint256 before = gasleft();
         MandateExecutionGate maximumGate = new MandateExecutionGate(markets);
-        emit log_named_uint("deployment gas, 32 markets", before - gasleft());
+        emit log_named_uint("constructor execution gas, 32 markets (no intrinsic or calldata gas)", before - gasleft());
         assertTrue(address(maximumGate) != address(0));
         vm.expectRevert(MandateExecutionGate.InvalidMarket.selector);
         new MandateExecutionGate(new MarketConfig[](maximum + 1));

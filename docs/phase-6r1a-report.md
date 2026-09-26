@@ -121,6 +121,14 @@ against any deployment. It refuses:
 - a config the gate was not built from (`MarketNotAsConfigured`);
 - the gate's runtime code without its market table (`MarketNotAsConfigured`).
 
+> **Corrected in Phase 6R.1b.** `verify` checks the configured fixture
+> venue/adapter wiring visible through the supplied gate. It does not
+> authenticate the gate's creation, prove the gate was built from the reviewed
+> initcode and constructor arguments, or prove the config is the gate's complete
+> market set; the independent review built a gate with identical runtime code and
+> malicious constructor-derived state that passed it. See
+> [execution-gate.md §5 and §13](execution-gate.md#13-deployment-policy).
+
 ## 7. Token and price wiring verification
 
 | Relationship | Established by |
@@ -334,6 +342,11 @@ should pass on its own.
   per market. `MAX_MARKETS` = 32 measures about 38.6M gas, above a 32M
   per-transaction cap such as Arbitrum's. The committed config has one market;
   a larger deployment must be checked against the target chain.
+  *Corrected in Phase 6R.1b:* 38.6M was constructor execution gas only; the
+  full transaction is about 39.2M (review) and about 1.12M per market, so at most
+  about 25 markets fit under a 32M limit. That limit is not a verified
+  Robinhood Chain figure. See
+  [execution-gate.md §13](execution-gate.md#13-deployment-policy).
 - **Hostile-adapter tests now use `vm.etch`** over the gate-created adapter. This
   models misbehaving code at that address, which production can no longer
   install. The measured-settlement defence is still exercised, but through a

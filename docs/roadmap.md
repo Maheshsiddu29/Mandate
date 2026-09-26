@@ -366,7 +366,8 @@ the decision is [ADR 0019](adr/0019-onchain-execution-gate.md).
   ([report](phase-6r1-report.md)); Phase 6R.1a fails an execution attempt once
   the reservation that bounds every attempt's deadline has passed, keeping
   mandate expiry a separate basis, and makes the gate create each fixture
-  market's venue and adapter itself, verifiable after deployment
+  market's venue and adapter itself, with that wiring checkable after deployment
+  (gate provenance itself is not yet verified)
   ([report](phase-6r1a-report.md)); it rejects all `REAL_MARKET` configurations pending authenticated
   inclusion-time state;
 - one supported execution path against a **labelled settlement fixture** — the

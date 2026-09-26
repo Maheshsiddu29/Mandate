@@ -112,7 +112,10 @@ arguments rather than from anything a deployed contract reports. Phase 6R.1 had
 asked a supplied adapter for its venue's price, which a hostile adapter or a
 look-alike venue could answer falsely. A real-market adapter, when one exists,
 will need its own equally mechanical identity rule; that belongs to the phase
-that introduces it.
+that introduces it. This holds for a gate genuinely created from the reviewed
+initcode; proving that a deployed gate was is the final deployment-provenance
+check ([execution-gate.md §13](../execution-gate.md#13-deployment-policy)), which
+is not built (Phase 6R.1b).
 
 ### 5. Principal authority and settlement are independently established
 
