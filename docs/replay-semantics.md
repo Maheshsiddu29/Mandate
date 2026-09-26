@@ -3,7 +3,7 @@
 How a mandate is consumed, what "consumed" means, and what Phase 1 deliberately
 does not decide.
 
-> **Status: Phase 5R.1, implemented.** The state machine is in
+> **Status: Phase 5R.2, implemented.** The state machine is in
 > `packages/kernel/src/replay.ts`; the verifier's read of replay state is in
 > `packages/kernel/src/verifier/checks.ts`. Invariant:
 > [INV-12](mandate-design.md#16-major-invariants).
@@ -27,6 +27,12 @@ does not decide.
 > resolution now carries validated evidence
 > ([ADR 0018](adr/0018-observed-execution-outcomes.md)). The findings are N-3,
 > N-4, N-5 and N-7 of the independent post-remediation audit.
+>
+> **Hardened in Phase 5R.2.** Stored replay records are now parsed as complete
+> state-specific values before any transition, and reconciliation observations
+> must fit the preserved reservation timeline and the supplied reconciliation
+> instant. This is local temporal consistency, not proof that the referenced
+> chain execution occurred; authoritative chain verification remains Phase 6.
 
 ## 1. Pure verification and stateful consumption are separate
 
@@ -127,6 +133,20 @@ gets a typed error from a total function rather than `undefined` out of a switch
 | `QUARANTINED` | `MANDATE_QUARANTINED` | An attempt lapsed with its outcome unestablished. Unavailable until reconciled |
 | `UNKNOWN` | `REPLAY_STATE_UNKNOWN` | Could not be established. Fails closed |
 
+The stored shape is state-specific and is validated before transition logic:
+
+| Status | Reservation context | Resolution |
+| --- | --- | --- |
+| `UNUSED` | forbidden | null for an initial record, or a validated `FAILED` observation after reconciliation |
+| `RESERVED` | required; expiry strictly after reservation start | forbidden |
+| `QUARANTINED` | required and preserved from the reservation | forbidden |
+| `CONSUMED` | forbidden | required and exactly `SETTLED` |
+| `UNKNOWN` | forbidden | forbidden |
+
+Unknown fields, malformed enums, out-of-range timestamps, inverted reservation
+times and incompatible status/field combinations are `MALFORMED_RECORD`. Such a
+record cannot enter transition logic or become available through `isAvailable`.
+
 `QUARANTINED` is distinct from `RESERVED` because the operational response
 differs: a reservation resolves itself, a quarantine needs someone to go and
 look. `isAvailable(record)` is exported so a caller cannot treat a quarantine as
@@ -201,10 +221,11 @@ The cost is a real liveness one: an unresolved crash holds the authorization
 until someone reconciles it. That is the same trade the reserve-before-signing
 order already makes, and it is the correct direction for a safety control.
 
-**Reconciliation itself is not built.** It needs chain observation, which is
-Phase 6. What Phase 5R guarantees is that its absence fails closed: with no
-reconciliation, a quarantined authorization simply stays unavailable. What Phase
-5R.1 adds is that its *presence* must be substantiated.
+**Authoritative reconciliation is not built.** It needs chain observation, which
+is Phase 6. What Phase 5R guarantees is that its absence fails closed: with no
+reconciliation, a quarantined authorization simply stays unavailable. Phase
+5R.1 required complete structural evidence; Phase 5R.2 additionally requires
+that evidence to be locally possible in time.
 
 ## 6a. What an observation is, and what it is not
 
@@ -226,7 +247,15 @@ The accepted observation is then stored on the record as `resolution`, which is
 what makes the guarantee auditable rather than procedural: a `CONSUMED` or `UNUSED`
 record whose `resolution` is null was not resolved by an observation.
 
-**It is a validated assertion, not a proof.** Nothing here confirms that
+Before it can affect authorization, its observation time must be at or after the
+reservation start retained by the record and at or before the reconciliation
+instant supplied to `applyTransition`. Both boundaries are inclusive. Every
+timestamp is parsed as a signed 64-bit Unix second; out-of-range values and
+impossible ordering return `OBSERVATION_INVALID` without replacing the current
+record. Quarantine preserves the reservation start and expiry specifically so
+the same rule can be applied after a reservation lapses.
+
+**It is a structurally and temporally validated assertion, not a proof.** Nothing here confirms that
 `reference` really settled or really failed — that needs chain observation, which
 is Phase 6 (V-59). Whatever performs a `RECONCILE` is as trusted as the replay
 store itself and belongs in the trusted computing base alongside it.

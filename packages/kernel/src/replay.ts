@@ -161,9 +161,15 @@ export type ReplayError = (typeof ReplayError)[keyof typeof ReplayError];
 export interface ReplayRecord {
   readonly key: Bytes32;
   readonly status: ReplayStatus;
-  /** When the current status was entered. */
+  /**
+   * The reservation start while RESERVED or QUARANTINED; otherwise, when the
+   * current status was entered.
+   *
+   * QUARANTINE deliberately preserves this value and the reservation expiry.
+   * They are the local timeline against which later observations are checked.
+   */
   readonly updatedAtUnixSeconds: UnixSeconds;
-  /** Set when RESERVED: the instant after which the reservation may be reclaimed. */
+  /** Set while RESERVED or QUARANTINED: the reservation's expiry. */
   readonly reservationExpiresAtUnixSeconds: UnixSeconds | null;
   /**
    * The observation that moved this record to a resolved status, or null.
@@ -256,18 +262,71 @@ export function parseExecutionObservation(raw: unknown): Result<ExecutionObserva
   });
 }
 
-/** Validate the stored record before anything is asserted over it. */
-function parseReplayRecord(raw: ReplayRecord): Result<ReplayRecord, ReplayError> {
-  if (typeof raw !== 'object' || raw === null) return err(ReplayError.MALFORMED_RECORD);
-  const key = parseBytes32(raw.key, 'MALFORMED_TRUSTED_STATE');
-  if (!key.ok) return err(ReplayError.MALFORMED_RECORD);
-  if (typeof raw.status !== 'string' || !Object.prototype.hasOwnProperty.call(ReplayStatus, raw.status)) {
+/**
+ * Parse a stored replay record and enforce the complete shape of every state.
+ *
+ * A replay store is a runtime boundary, not a source of trustworthy TypeScript
+ * values. Unknown fields and state/field combinations reject so corrupted or
+ * version-skewed data can never be interpreted as a more permissive state.
+ */
+export function parseReplayRecord(raw: unknown): Result<ReplayRecord, ReplayError> {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     return err(ReplayError.MALFORMED_RECORD);
   }
-  if (typeof raw.updatedAtUnixSeconds !== 'bigint') return err(ReplayError.MALFORMED_RECORD);
-  const expiry = raw.reservationExpiresAtUnixSeconds;
-  if (expiry !== null && typeof expiry !== 'bigint') return err(ReplayError.MALFORMED_RECORD);
-  return ok(raw);
+  const r = raw as Record<string, unknown>;
+  const known = new Set(['key', 'status', 'updatedAtUnixSeconds', 'reservationExpiresAtUnixSeconds', 'resolution']);
+  for (const field of Object.keys(r)) if (!known.has(field)) return err(ReplayError.MALFORMED_RECORD);
+
+  const key = parseBytes32(r['key'], 'MALFORMED_TRUSTED_STATE');
+  if (!key.ok) return err(ReplayError.MALFORMED_RECORD);
+  const rawStatus = r['status'];
+  if (typeof rawStatus !== 'string' || !Object.prototype.hasOwnProperty.call(ReplayStatus, rawStatus)) {
+    return err(ReplayError.MALFORMED_RECORD);
+  }
+  const status = ReplayStatus[rawStatus as keyof typeof ReplayStatus];
+  const updatedAt = parseUnixSeconds(r['updatedAtUnixSeconds'], 'MALFORMED_TRUSTED_STATE');
+  if (!updatedAt.ok) return err(ReplayError.MALFORMED_RECORD);
+
+  const rawExpiry = r['reservationExpiresAtUnixSeconds'];
+  let expiry: UnixSeconds | null;
+  if (rawExpiry === null) {
+    expiry = null;
+  } else {
+    const parsedExpiry = parseUnixSeconds(rawExpiry, 'MALFORMED_TRUSTED_STATE');
+    if (!parsedExpiry.ok) return err(ReplayError.MALFORMED_RECORD);
+    expiry = parsedExpiry.value;
+  }
+
+  const rawResolution = r['resolution'];
+  let resolution: ExecutionObservation | null;
+  if (rawResolution === null) {
+    resolution = null;
+  } else {
+    const parsedResolution = parseExecutionObservation(rawResolution);
+    if (!parsedResolution.ok) return err(ReplayError.MALFORMED_RECORD);
+    resolution = parsedResolution.value;
+  }
+
+  const hasReservation = expiry !== null && expiry > updatedAt.value;
+  const hasNoReservation = expiry === null;
+  const resolutionNotAfterState = resolution === null || resolution.observedAtUnixSeconds <= updatedAt.value;
+  const validShape =
+    (status === ReplayStatus.UNUSED && hasNoReservation && resolutionNotAfterState &&
+      (resolution === null || resolution.outcome === ReconciledOutcome.FAILED)) ||
+    (status === ReplayStatus.RESERVED && hasReservation && resolution === null) ||
+    (status === ReplayStatus.QUARANTINED && hasReservation && resolution === null) ||
+    (status === ReplayStatus.CONSUMED && hasNoReservation && resolution !== null &&
+      resolution.outcome === ReconciledOutcome.SETTLED && resolutionNotAfterState) ||
+    (status === ReplayStatus.UNKNOWN && hasNoReservation && resolution === null);
+  if (!validShape) return err(ReplayError.MALFORMED_RECORD);
+
+  return ok({
+    key: key.value,
+    status,
+    updatedAtUnixSeconds: updatedAt.value,
+    reservationExpiresAtUnixSeconds: expiry,
+    resolution,
+  });
 }
 
 /**
@@ -279,17 +338,22 @@ function parseReplayRecord(raw: ReplayRecord): Result<ReplayRecord, ReplayError>
  * adding a future member is a compile error rather than a silent fall-through
  * that returns `undefined`.
  */
-export function applyTransition(request: TransitionRequest): Result<ReplayRecord, ReplayError> {
-  const parsedTransition = parseReplayTransition(request.transition);
+export function applyTransition(request: TransitionRequest | unknown): Result<ReplayRecord, ReplayError> {
+  if (typeof request !== 'object' || request === null || Array.isArray(request)) {
+    return err(ReplayError.MALFORMED_RECORD);
+  }
+  const r = request as Record<string, unknown>;
+  const parsedTransition = parseReplayTransition(r['transition']);
   if (!parsedTransition.ok) return parsedTransition;
   const transition = parsedTransition.value;
 
-  const parsedRecord = parseReplayRecord(request.current);
+  const parsedRecord = parseReplayRecord(r['current']);
   if (!parsedRecord.ok) return parsedRecord;
   const current = parsedRecord.value;
 
-  if (typeof request.nowUnixSeconds !== 'bigint') return err(ReplayError.MALFORMED_RECORD);
-  const now = request.nowUnixSeconds;
+  const parsedNow = parseUnixSeconds(r['nowUnixSeconds'], 'MALFORMED_TRUSTED_STATE');
+  if (!parsedNow.ok) return err(ReplayError.MALFORMED_RECORD);
+  const now = parsedNow.value;
 
   if (current.status === ReplayStatus.UNKNOWN) {
     // An unknown record cannot be transitioned into a known one by asserting a
@@ -308,19 +372,27 @@ export function applyTransition(request: TransitionRequest): Result<ReplayRecord
         // unestablished. Either way a second attempt must not take it.
         return err(ReplayError.NOT_RESERVABLE);
       }
-      const hold = request.reservationSeconds;
+      if (now < current.updatedAtUnixSeconds) return err(ReplayError.MALFORMED_RECORD);
+      const hold = r['reservationSeconds'];
       if (typeof hold !== 'bigint' || hold <= 0n) return err(ReplayError.NOT_RESERVABLE);
       let expiresAt = now + hold;
-      const mandateExpiry = request.mandateExpiresAtUnixSeconds;
-      if (mandateExpiry !== undefined && typeof mandateExpiry !== 'bigint') return err(ReplayError.MALFORMED_RECORD);
+      const rawMandateExpiry = r['mandateExpiresAtUnixSeconds'];
+      let mandateExpiry: UnixSeconds | undefined;
+      if (rawMandateExpiry !== undefined) {
+        const parsedMandateExpiry = parseUnixSeconds(rawMandateExpiry, 'MALFORMED_TRUSTED_STATE');
+        if (!parsedMandateExpiry.ok) return err(ReplayError.MALFORMED_RECORD);
+        mandateExpiry = parsedMandateExpiry.value;
+      }
       // A reservation outliving the mandate would keep an already-dead
       // authorization locked for no benefit.
       if (mandateExpiry !== undefined && expiresAt > mandateExpiry) expiresAt = mandateExpiry;
+      const parsedExpiry = parseUnixSeconds(expiresAt, 'MALFORMED_TRUSTED_STATE');
+      if (!parsedExpiry.ok || parsedExpiry.value <= now) return err(ReplayError.NOT_RESERVABLE);
       return ok({
         key: current.key,
         status: ReplayStatus.RESERVED,
         updatedAtUnixSeconds: now,
-        reservationExpiresAtUnixSeconds: expiresAt,
+        reservationExpiresAtUnixSeconds: parsedExpiry.value,
         resolution: null,
       });
     }
@@ -334,8 +406,10 @@ export function applyTransition(request: TransitionRequest): Result<ReplayRecord
       return ok({
         key: current.key,
         status: ReplayStatus.QUARANTINED,
-        updatedAtUnixSeconds: now,
-        reservationExpiresAtUnixSeconds: null,
+        // Preserve the reservation timeline. Quarantine marks uncertainty; it
+        // must not erase the context later evidence is validated against.
+        updatedAtUnixSeconds: current.updatedAtUnixSeconds,
+        reservationExpiresAtUnixSeconds: current.reservationExpiresAtUnixSeconds,
         resolution: null,
       });
     }
@@ -347,12 +421,22 @@ export function applyTransition(request: TransitionRequest): Result<ReplayRecord
         // ever held.
         return err(ReplayError.NOT_RESOLVABLE);
       }
-      if (request.observation === undefined || request.observation === null) {
+      const rawObservation = r['observation'];
+      if (rawObservation === undefined || rawObservation === null) {
         return err(ReplayError.OBSERVATION_REQUIRED);
       }
-      const observation = parseExecutionObservation(request.observation);
+      const observation = parseExecutionObservation(rawObservation);
       if (!observation.ok) return observation;
       const resolved = observation.value;
+      // Local temporal consistency only. This establishes neither settlement
+      // truth nor chain correspondence; Phase 6 owns those checks.
+      if (
+        now < current.updatedAtUnixSeconds ||
+        resolved.observedAtUnixSeconds < current.updatedAtUnixSeconds ||
+        resolved.observedAtUnixSeconds > now
+      ) {
+        return err(ReplayError.OBSERVATION_INVALID);
+      }
       if (resolved.outcome === ReconciledOutcome.SETTLED) {
         return ok({
           key: current.key,
@@ -390,6 +474,7 @@ export function applyTransition(request: TransitionRequest): Result<ReplayRecord
  * `QUARANTINED` is unavailable, and that is the whole point of it: the only
  * statuses that permit a new attempt are the ones whose outcome is known.
  */
-export function isAvailable(record: ReplayRecord): boolean {
-  return record.status === ReplayStatus.UNUSED;
+export function isAvailable(record: ReplayRecord | unknown): boolean {
+  const parsed = parseReplayRecord(record);
+  return parsed.ok && parsed.value.status === ReplayStatus.UNUSED;
 }

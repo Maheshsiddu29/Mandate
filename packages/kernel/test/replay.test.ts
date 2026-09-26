@@ -22,6 +22,7 @@ import {
   isAvailable,
   mandateDigest,
   parseExecutionObservation,
+  parseReplayRecord,
   parseReconciledOutcome,
   parseReplayTransition,
   replayKey,
@@ -306,6 +307,76 @@ test('N-4 REGRESSION: a malformed record is refused rather than transitioned', (
   );
 });
 
+test('stored replay records enforce the complete shape of every state', () => {
+  const reserved = expectOk(reserve(unusedRecord(KEY, NOW), NOW, 120n));
+  const quarantined = expectOk(applyTransition({
+    current: reserved,
+    transition: ReplayTransition.QUARANTINE,
+    nowUnixSeconds: NOW + 120n,
+  }));
+  const settled = observation(ReconciledOutcome.SETTLED, NOW + 5n);
+  const failed = observation(ReconciledOutcome.FAILED, NOW + 5n);
+  const consumed = expectOk(reconcile(reserved, ReconciledOutcome.SETTLED, NOW + 5n));
+  const restored = expectOk(reconcile(reserved, ReconciledOutcome.FAILED, NOW + 5n));
+
+  for (const [label, record] of [
+    ['initial UNUSED', unusedRecord(KEY, NOW)],
+    ['restored UNUSED', restored],
+    ['RESERVED', reserved],
+    ['QUARANTINED', quarantined],
+    ['CONSUMED', consumed],
+    ['UNKNOWN', { ...unusedRecord(KEY, NOW), status: ReplayStatus.UNKNOWN }],
+  ] as const) {
+    assert.equal(parseReplayRecord(record).ok, true, label);
+  }
+
+  const malformed: readonly { readonly label: string; readonly record: unknown }[] = [
+    { label: 'RESERVED + SETTLED', record: { ...reserved, resolution: settled } },
+    { label: 'RESERVED + FAILED', record: { ...reserved, resolution: failed } },
+    { label: 'CONSUMED + FAILED', record: { ...consumed, resolution: failed } },
+    { label: 'QUARANTINED + terminal resolution', record: { ...quarantined, resolution: settled } },
+    { label: 'invalid enum', record: { ...reserved, status: 'RELEASED' } },
+    { label: 'missing reservation', record: { ...reserved, reservationExpiresAtUnixSeconds: null } },
+    { label: 'inverted reservation timestamps', record: { ...reserved, reservationExpiresAtUnixSeconds: NOW - 1n } },
+    { label: 'equal reservation timestamps', record: { ...reserved, reservationExpiresAtUnixSeconds: NOW } },
+    { label: 'malformed resolution', record: { ...consumed, resolution: { outcome: 'SETTLED' } } },
+    { label: 'timestamp overflow', record: { ...reserved, updatedAtUnixSeconds: 2n ** 63n } },
+    { label: 'expiry overflow', record: { ...reserved, reservationExpiresAtUnixSeconds: 2n ** 63n } },
+    { label: 'resolution timestamp overflow', record: { ...consumed, resolution: { ...settled, observedAtUnixSeconds: 2n ** 63n } } },
+    { label: 'resolution after state update', record: { ...consumed, resolution: { ...settled, observedAtUnixSeconds: consumed.updatedAtUnixSeconds + 1n } } },
+    { label: 'extra incompatible field', record: { ...reserved, released: true } },
+    { label: 'UNUSED reservation', record: { ...unusedRecord(KEY, NOW), reservationExpiresAtUnixSeconds: NOW + 1n } },
+    { label: 'CONSUMED without evidence', record: { ...consumed, resolution: null } },
+    { label: 'UNKNOWN with resolution', record: { ...unusedRecord(KEY, NOW), status: ReplayStatus.UNKNOWN, resolution: failed } },
+  ];
+
+  for (const item of malformed) {
+    assert.equal(errorOf(parseReplayRecord(item.record)), ReplayError.MALFORMED_RECORD, item.label);
+    const transition = applyTransition({
+      current: item.record,
+      transition: ReplayTransition.RECONCILE,
+      nowUnixSeconds: NOW + 10n,
+      observation: failed,
+    });
+    assert.equal(errorOf(transition), ReplayError.MALFORMED_RECORD, item.label);
+    assert.equal(isAvailable(item.record), false, `${item.label} must remain unavailable`);
+  }
+});
+
+test('the transition boundary refuses malformed plain top-level values without throwing', () => {
+  for (const raw of [null, undefined, false, true, 0, 1, 'RESERVE', [], {}, { current: null }] as const) {
+    assert.doesNotThrow(() => applyTransition(raw));
+    const result = applyTransition(raw);
+    assert.equal(result.ok, false, String(raw));
+    assert.ok(
+      result.ok === false &&
+        (result.error === ReplayError.MALFORMED_RECORD || result.error === ReplayError.UNKNOWN_TRANSITION),
+      String(raw),
+    );
+  }
+  assert.equal(errorOf(applyTransition(null)), ReplayError.MALFORMED_RECORD);
+});
+
 test('a reservation can only be quarantined after it expires', () => {
   const reserved = expectOk(reserve(unusedRecord(KEY, NOW), NOW, 120n));
   const quarantine = (now: bigint) =>
@@ -316,8 +387,76 @@ test('a reservation can only be quarantined after it expires', () => {
   // reservation lapsing says the attempt stopped reporting, not that it failed.
   assert.equal(expectOk(quarantine(NOW + 120n)).status, ReplayStatus.QUARANTINED, 'at the boundary');
   assert.equal(expectOk(quarantine(NOW + 121n)).status, ReplayStatus.QUARANTINED);
-  assert.equal(expectOk(quarantine(NOW + 120n)).reservationExpiresAtUnixSeconds, null);
+  assert.equal(
+    expectOk(quarantine(NOW + 120n)).reservationExpiresAtUnixSeconds,
+    NOW + 120n,
+    'quarantine preserves the reservation timeline for reconciliation',
+  );
+  assert.equal(expectOk(quarantine(NOW + 120n)).updatedAtUnixSeconds, NOW);
   assert.equal(expectOk(quarantine(NOW + 120n)).resolution, null, 'a quarantine establishes no outcome');
+});
+
+test('reconciliation observations must fit the reservation and evaluation timeline', () => {
+  const reserved = expectOk(reserve(unusedRecord(KEY, NOW), NOW, 120n));
+  const quarantined = expectOk(applyTransition({
+    current: reserved,
+    transition: ReplayTransition.QUARANTINE,
+    nowUnixSeconds: NOW + 120n,
+  }));
+
+  const validCases = [
+    { label: 'exactly at reservation', observedAt: NOW, reconciledAt: NOW + 10n },
+    { label: 'after reservation', observedAt: NOW + 1n, reconciledAt: NOW + 10n },
+    { label: 'exactly at reconciliation', observedAt: NOW + 10n, reconciledAt: NOW + 10n },
+  ] as const;
+  for (const current of [reserved, quarantined]) {
+    for (const item of validCases) {
+      const result = applyTransition({
+        current,
+        transition: ReplayTransition.RECONCILE,
+        nowUnixSeconds: item.reconciledAt,
+        observation: observation(ReconciledOutcome.FAILED, item.observedAt),
+      });
+      assert.equal(expectOk(result).status, ReplayStatus.UNUSED, `${current.status}: ${item.label}`);
+    }
+  }
+
+  const invalidCases = [
+    { label: 'one second before reservation', observedAt: NOW - 1n, reconciledAt: NOW + 10n },
+    { label: 'one second after reconciliation', observedAt: NOW + 11n, reconciledAt: NOW + 10n },
+    { label: 'far future', observedAt: 2n ** 62n, reconciledAt: NOW + 10n },
+    { label: 'zero', observedAt: 0n, reconciledAt: NOW + 10n },
+    { label: 'timestamp overflow', observedAt: 2n ** 63n, reconciledAt: NOW + 10n },
+  ] as const;
+  for (const current of [reserved, quarantined]) {
+    for (const item of invalidCases) {
+      const before = structuredClone(current);
+      const result = applyTransition({
+        current,
+        transition: ReplayTransition.RECONCILE,
+        nowUnixSeconds: item.reconciledAt,
+        observation: observation(ReconciledOutcome.FAILED, item.observedAt),
+      });
+      assert.equal(errorOf(result), ReplayError.OBSERVATION_INVALID, `${current.status}: ${item.label}`);
+      assert.deepEqual(current, before, `${current.status}: ${item.label} must not mutate the record`);
+      assert.equal(isAvailable(current), false, `${current.status}: ${item.label} must not restore authorization`);
+    }
+  }
+
+  const maximum = 2n ** 63n - 1n;
+  const atBoundary = expectOk(reserve(unusedRecord(KEY, maximum - 1n), maximum - 1n, 1n));
+  const reconciled = applyTransition({
+    current: atBoundary,
+    transition: ReplayTransition.RECONCILE,
+    nowUnixSeconds: maximum,
+    observation: observation(ReconciledOutcome.SETTLED, maximum),
+  });
+  assert.equal(expectOk(reconciled).status, ReplayStatus.CONSUMED, 'the exact maximum is valid without overflow');
+  assert.equal(
+    errorOf(reserve(unusedRecord(KEY, maximum), maximum, 1n)),
+    ReplayError.NOT_RESERVABLE,
+    'a reservation timestamp beyond the maximum is a typed refusal',
+  );
 });
 
 test('a lapsed reservation never restores permission, however long it has been', () => {
@@ -424,7 +563,11 @@ test('every replay error is reachable, so none is dead security-looking surface'
   const reached = new Set<string>([
     errorOf(applyTransition({ current: { ...reserved, status: 'NOPE' as never }, transition: ReplayTransition.RESERVE, nowUnixSeconds: NOW })),
     errorOf(applyTransition({ current: reserved, transition: 'RELEASE', nowUnixSeconds: NOW })),
-    errorOf(applyTransition({ current: { ...reserved, status: ReplayStatus.UNKNOWN }, transition: ReplayTransition.RESERVE, nowUnixSeconds: NOW })),
+    errorOf(applyTransition({
+      current: { ...unusedRecord(KEY, NOW), status: ReplayStatus.UNKNOWN },
+      transition: ReplayTransition.RESERVE,
+      nowUnixSeconds: NOW,
+    })),
     errorOf(reserve(reserved)),
     errorOf(applyTransition({ current: unusedRecord(KEY, NOW), transition: ReplayTransition.QUARANTINE, nowUnixSeconds: NOW })),
     errorOf(reconcile(unusedRecord(KEY, NOW), ReconciledOutcome.FAILED)),

@@ -109,6 +109,14 @@ that the assertion must be complete, attributed, attached to a specific referenc
 and recorded. Whatever performs a `RECONCILE` remains inside the trusted computing
 base alongside the replay store, as ADR 0015 already stated.
 
+Phase 5R.2 tightened this boundary without changing the outcome vocabulary. A
+stored record is parsed against its complete state-specific invariants, a
+quarantine retains its reservation start and expiry, and an observation is
+accepted only when it is no earlier than that reservation start and no later
+than the supplied reconciliation instant. These are inclusive, signed-64-bit
+timestamp comparisons. They establish local temporal consistency only; Phase 6
+still owns proof that the reference and outcome correspond to chain state.
+
 ### 3. `applyTransition` is total over plain values
 
 Every caller-controlled field is parsed before any branch is taken: the transition
