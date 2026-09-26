@@ -8,6 +8,7 @@ import {Market} from "../src/MandateTypes.sol";
 import {DeployMandateGate} from "../script/DeployMandateGate.s.sol";
 import {LookAlikeVenue, LyingAdapter} from "./mocks/LookAlikeFixture.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {FixtureVenue} from "../src/fixture/FixtureVenue.sol";
 import {CodecHarness} from "./utils/CodecHarness.sol";
 
 /// @notice The deployment script is exercised locally, never broadcast: it is
@@ -119,6 +120,21 @@ contract DeployScriptTest is Test {
         vm.chainId(31_337);
         DeployMandateGate.Deployment memory d = script.deploy(config, DEPLOYER);
         vm.etch(address(d.venues[0]), address(new LookAlikeVenue(IERC20(REPRESENTATION), IERC20(FUNDING), 200e6)).code);
+        vm.expectRevert(abi.encodeWithSelector(DeployMandateGate.FixtureVenueNotReviewedCode.selector, 0));
+        script.verify(d.gate, config);
+    }
+
+    /// @notice The reviewed venue code with any other units — here a 6-decimal
+    /// representation, where the gate pinned 18 — is not the venue this market has.
+    function test_verifyRefusesAVenueWithOtherUnits() public {
+        vm.chainId(31_337);
+        DeployMandateGate.Deployment memory d = script.deploy(config, DEPLOYER);
+        assertEq(d.venues[0].REPRESENTATION_DECIMALS(), 18);
+        assertEq(d.venues[0].FUNDING_DECIMALS(), 6);
+        vm.etch(
+            address(d.venues[0]),
+            address(new FixtureVenue(IERC20(REPRESENTATION), IERC20(FUNDING), 6, 6, 200e6, 30)).code
+        );
         vm.expectRevert(abi.encodeWithSelector(DeployMandateGate.FixtureVenueNotReviewedCode.selector, 0));
         script.verify(d.gate, config);
     }

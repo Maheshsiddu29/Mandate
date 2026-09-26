@@ -127,3 +127,30 @@ contract FailZeroApproveToken is MockERC20 {
         return super.approve(spender, value);
     }
 }
+
+/// @notice Answers `decimals()` with one value to a chosen caller and another to
+/// everyone else. Unsupported behaviour. The independent 6R.1a review used such a
+/// token to tell the gate 18 decimals and the venue the gate created 6, while
+/// construction still succeeded (Phase 6R.1b).
+contract CallerDependentDecimalsToken is ERC20 {
+    address public favoured;
+    uint8 public immutable TO_FAVOURED;
+    uint8 public immutable TO_OTHERS;
+
+    constructor(uint8 toFavoured, uint8 toOthers) ERC20("Caller-Dependent Decimals", "CDD") {
+        TO_FAVOURED = toFavoured;
+        TO_OTHERS = toOthers;
+    }
+
+    function favour(address caller) external {
+        favoured = caller;
+    }
+
+    function decimals() public view override returns (uint8) {
+        return msg.sender == favoured ? TO_FAVOURED : TO_OTHERS;
+    }
+
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+}

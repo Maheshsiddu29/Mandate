@@ -148,8 +148,11 @@ contract MandateExecutionGateTest is GateTestBase {
             assertEq(venue.PRICE(), prices[i]);
             assertEq(venue.REPRESENTATION_UNIT(), 1e18);
             assertEq(venue.FEE_BPS(), FEE_BPS);
+            // One source of units: the venue's are exactly the gate's pinned decimals.
+            assertEq(venue.REPRESENTATION_DECIMALS(), gate.marketOf(_keyOf(tokens[i])).representationDecimals);
+            assertEq(venue.FUNDING_DECIMALS(), gate.marketOf(_keyOf(tokens[i])).fundingDecimals);
 
-            FixtureVenue referenceVenue = new FixtureVenue(MockERC20(tokens[i]), funding, prices[i], FEE_BPS);
+            FixtureVenue referenceVenue = new FixtureVenue(MockERC20(tokens[i]), funding, 18, 6, prices[i], FEE_BPS);
             FixtureVenueAdapter referenceAdapter = new FixtureVenueAdapter(address(gate), venue);
             assertEq(keccak256(address(venue).code), keccak256(address(referenceVenue).code), "venue code");
             assertEq(keccak256(address(adapter).code), keccak256(address(referenceAdapter).code), "adapter code");

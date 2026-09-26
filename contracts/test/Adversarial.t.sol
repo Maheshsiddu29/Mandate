@@ -566,8 +566,8 @@ contract AdversarialTest is GateTestBase {
 
     function test_fixtureVenue_refusesInvalidConfiguration() public {
         vm.expectRevert(FixtureVenue.FixtureInvalidConfig.selector);
-        new FixtureVenue(aapl, funding, 0, 30);
+        new FixtureVenue(aapl, funding, 18, 6, 0, 30);
         vm.expectRevert(FixtureVenue.FixtureInvalidConfig.selector);
-        new FixtureVenue(aapl, funding, 1, 10_000);
+        new FixtureVenue(aapl, funding, 18, 6, 1, 10_000);
     }
 }

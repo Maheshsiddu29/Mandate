@@ -272,9 +272,16 @@ contract MandateExecutionGate is ReentrancyGuard {
 
         // The venue and adapter are created here, from code compiled into this
         // contract, wired to this market's tokens, this price and this gate.
-        // Nothing is read back from them: their behaviour is their bytecode.
+        // Nothing is read back from them: their behaviour is their bytecode. The
+        // venue takes the decimals pinned above rather than asking the tokens
+        // again, so the gate and its venue cannot hold different units.
         FixtureVenue venue = new FixtureVenue(
-            IERC20(config.representation), IERC20(config.fundingToken), venuePrice, config.fixtureFeeBps
+            IERC20(config.representation),
+            IERC20(config.fundingToken),
+            representationDecimals,
+            fundingDecimals,
+            venuePrice,
+            config.fixtureFeeBps
         );
         FixtureVenueAdapter adapter = new FixtureVenueAdapter(address(this), venue);
 

@@ -2,7 +2,6 @@
 pragma solidity 0.8.37;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
@@ -26,9 +25,13 @@ contract FixtureVenue {
 
     IERC20 public immutable REPRESENTATION;
     IERC20 public immutable FUNDING;
+    /// @notice The representation's decimals, as the gate pinned them.
+    uint8 public immutable REPRESENTATION_DECIMALS;
+    /// @notice The funding token's decimals, as the gate pinned them: the scale of `PRICE`.
+    uint8 public immutable FUNDING_DECIMALS;
     /// @notice Funding-token atoms per one whole representation token.
     uint256 public immutable PRICE;
-    /// @notice `10 ** representation.decimals()`.
+    /// @notice `10 ** REPRESENTATION_DECIMALS`.
     uint256 public immutable REPRESENTATION_UNIT;
     uint16 public immutable FEE_BPS;
 
@@ -36,14 +39,26 @@ contract FixtureVenue {
     error FixtureCostExceedsMaximum(uint256 cost, uint256 maximum);
     error FixtureProceedsBelowMinimum(uint256 proceeds, uint256 minimum);
 
-    constructor(IERC20 representation, IERC20 funding, uint256 price, uint16 feeBps) {
+    /// @dev The decimals are the ones the gate read and pinned, passed in rather
+    /// than read again: a token can answer `decimals()` differently to different
+    /// callers, and the venue's units must be the gate's (Phase 6R.1b).
+    constructor(
+        IERC20 representation,
+        IERC20 funding,
+        uint8 representationDecimals,
+        uint8 fundingDecimals,
+        uint256 price,
+        uint16 feeBps
+    ) {
         if (address(representation) == address(0) || address(funding) == address(0) || price == 0 || feeBps >= BPS) {
             revert FixtureInvalidConfig();
         }
         REPRESENTATION = representation;
         FUNDING = funding;
+        REPRESENTATION_DECIMALS = representationDecimals;
+        FUNDING_DECIMALS = fundingDecimals;
         PRICE = price;
-        REPRESENTATION_UNIT = 10 ** uint256(IERC20Metadata(address(representation)).decimals());
+        REPRESENTATION_UNIT = 10 ** uint256(representationDecimals);
         FEE_BPS = feeBps;
     }
 

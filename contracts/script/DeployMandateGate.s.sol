@@ -119,7 +119,12 @@ contract DeployMandateGate is Script {
 
             uint256 price = _fundingAtomsPerToken(config.fixturePrice, m.fundingDecimals, i);
             FixtureVenue referenceVenue = new FixtureVenue(
-                IERC20(config.representation), IERC20(config.fundingToken), price, config.fixtureFeeBps
+                IERC20(config.representation),
+                IERC20(config.fundingToken),
+                m.representationDecimals,
+                m.fundingDecimals,
+                price,
+                config.fixtureFeeBps
             );
             if (venue.codehash != address(referenceVenue).codehash) revert FixtureVenueNotReviewedCode(i);
             FixtureVenueAdapter referenceAdapter = new FixtureVenueAdapter(address(gate), FixtureVenue(venue));

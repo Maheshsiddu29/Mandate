@@ -2,10 +2,20 @@
 pragma solidity 0.8.37;
 
 import {MandateExecutionGate} from "../src/MandateExecutionGate.sol";
-import {Amount, Candidate, ExecutionTerms, Mandate, MarketConfig, SIDE_BUY, SIDE_SELL} from "../src/MandateTypes.sol";
+import {
+    Amount,
+    Candidate,
+    ExecutionTerms,
+    Mandate,
+    Market,
+    MarketConfig,
+    SIDE_BUY,
+    SIDE_SELL
+} from "../src/MandateTypes.sol";
 import {FixtureVenue} from "../src/fixture/FixtureVenue.sol";
 import {FixtureVenueAdapter} from "../src/fixture/FixtureVenueAdapter.sol";
 import {LookAlikeVenue, LyingAdapter} from "./mocks/LookAlikeFixture.sol";
+import {CallerDependentDecimalsToken} from "./mocks/MockTokens.sol";
 import {GateTestBase} from "./utils/GateTestBase.sol";
 
 /// @notice Phase 6R.1a: the fixture's price is a property of code the gate itself
@@ -106,5 +116,58 @@ contract FixtureTrustTest is GateTestBase {
         (bool ok,) = address(venue).call(abi.encodeWithSignature("setPrice(uint256)", 2_000e6));
         assertFalse(ok);
         assertEq(venue.PRICE(), AAPL_PRICE);
+    }
+
+    /// @notice Phase 6R.1b: tokens that tell the gate one number of decimals and
+    /// every other caller another. Before, the gate pinned 18 for the
+    /// representation while the venue it created asked again and was told 6, so
+    /// the two held units 10^12 apart and construction still succeeded. Now the
+    /// gate reads each token once and the venue is given what the gate pinned.
+    function test_venueTakesTheGatesPinnedDecimalsNotItsOwnRead() public {
+        CallerDependentDecimalsToken rep = new CallerDependentDecimalsToken(18, 6);
+        CallerDependentDecimalsToken fund = new CallerDependentDecimalsToken(6, 18);
+        address predicted = vm.computeCreateAddress(address(this), vm.getNonce(address(this)));
+        rep.favour(predicted);
+        fund.favour(predicted);
+        MarketConfig[] memory markets = new MarketConfig[](1);
+        markets[0] = _market(address(rep), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
+        markets[0].fundingToken = address(fund);
+        MandateExecutionGate g = new MandateExecutionGate(markets);
+        assertEq(address(g), predicted);
+        FixtureVenue venue = _venueOf(g, address(rep));
+        Market memory m = g.marketOf(_keyOf(address(rep)));
+
+        // The tokens really are caller-dependent: the gate is told 18 and 6, the venue 6 and 18.
+        vm.prank(address(g));
+        assertEq(rep.decimals(), 18);
+        vm.prank(address(venue));
+        assertEq(rep.decimals(), 6);
+        vm.prank(address(venue));
+        assertEq(fund.decimals(), 18);
+
+        // One source of truth: the venue's units are the gate's pinned ones.
+        assertEq(m.representationDecimals, 18);
+        assertEq(m.fundingDecimals, 6);
+        assertEq(venue.REPRESENTATION_DECIMALS(), m.representationDecimals);
+        assertEq(venue.FUNDING_DECIMALS(), m.fundingDecimals);
+        assertEq(venue.REPRESENTATION_UNIT(), 10 ** uint256(m.representationDecimals));
+        // The typed 200 USD at 6 decimals is 200e6 funding atoms per whole 18-decimal token.
+        assertEq(venue.PRICE(), 200e6);
+        assertEq(venue.quoteBuy(10e18), 2_006e6);
+        assertEq(address(venue).codehash, address(new FixtureVenue(rep, fund, 18, 6, 200e6, FEE_BPS)).codehash);
+
+        // And a trade through that gate settles in the gate's units: 10 tokens at 200 USD plus 30 bps.
+        rep.mint(address(venue), 1_000e18);
+        fund.mint(principal, 1_000_000e6);
+        vm.prank(principal);
+        fund.approve(address(g), type(uint256).max);
+        gate = g;
+        Mandate memory mandate = _mandate();
+        Candidate memory c = _candidateFor(address(rep), SIDE_BUY);
+        ExecutionTerms memory t = _terms();
+        (, uint256 debit, uint256 credit) =
+            g.execute(mandate, _signMandate(mandate), c, t, _signExecution(mandate, c, t));
+        assertEq(debit, 2_006e6);
+        assertEq(credit, 10e18);
     }
 }

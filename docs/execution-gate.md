@@ -224,7 +224,8 @@ repository identifies a venue contract and interface to integrate against.
 identifiers, typed fixture price and venue fee — never by an adapter or venue
 address. For each market the constructor converts the typed price exactly into
 funding-token atoms per whole token (`FixturePriceNotRepresentable` if it cannot),
-then `new FixtureVenue(representation, funding, price, fee)` and
+then `new FixtureVenue(representation, funding, representationDecimals,
+fundingDecimals, price, fee)` and
 `new FixtureVenueAdapter(address(this), venue)`, from code compiled into the
 gate. `marketOf(key).adapter` and `fixtureVenueOf(key)` return them, and
 `MarketSupported` logs both addresses and the venue price.
@@ -238,6 +239,15 @@ What this makes **verified or pinned**, rather than trusted:
 | adapter → gate, adapter → venue | constructor arguments the gate supplies (`address(this)`, the venue it just created) |
 | venue → representation, funding token | the market's own configured tokens |
 | venue price = gate fixture price | one typed price, converted exactly by the gate; unrepresentable prices refused |
+| venue decimals = gate pinned decimals | the gate reads each token's `decimals()` once and passes the values to the venue, which never reads them itself (Phase 6R.1b) |
+
+Before 6R.1b the venue's constructor read the representation's `decimals()`
+again. A token that answers by caller could tell the gate 18 and the venue 6, and
+construction still succeeded: the gate's comparisons and the venue's quotes then
+used units 10^12 apart. The principal stayed protected by measured settlement,
+but the fixture was internally inconsistent. The venue now takes both pinned
+values (`REPRESENTATION_DECIMALS`, `FUNDING_DECIMALS`; `FixtureTrust.t.sol`
+reproduces the token and inspects the venue's units).
 
 Before 6R.1a the constructor accepted an adapter address and asked it, through
 `IFixtureSettlement`, what price its venue settled at: a *trusted interface
@@ -254,7 +264,7 @@ different market table. So the deployment script's `verify(gate, config)`
 checks what is actually deployed: for every configured market, the market table
 matches the config, and the runtime code at the market's adapter and venue equals
 a reference `FixtureVenueAdapter(gate, venue)` and
-`FixtureVenue(representation, funding, price, fee)` instantiated in the script's
+`FixtureVenue(representation, funding, decimals…, price, fee)` instantiated in the script's
 own unbroadcast execution. Immutables are part of runtime code, so equal code is
 equal implementation and equal wiring (§13). The gate's own runtime code is
 verified from source as before.
@@ -547,8 +557,8 @@ Run: `npm run contracts:test` (regenerates the corpus ABI, then `forge test`).
 | `MaxNotional.t.sol` | 16 + 2 fuzz × 1,024 runs | Phase 6R.1 M-1 on the real fixture path: the audit PoCs, declared precision 0–38 with every signature valid, one atom either side at the principal's precision, decimal-conversion boundaries, huge-quantity/tiny-price and tiny-quantity/huge-price, 512-bit intermediates, randomized precision combinations on both sides. Since 6R.1a: every declared × principal precision pair (39 × 39) on each side through the real venue; the product rule against the exact oracle at full operand width and at every one of the 39³ decimal triples; replays of the inputs that overflowed the 6R.1 oracle; and, on the WIDE market, a true gross beyond every uint256 bound refused with the unrepresentable product as the only refusing condition, beside a representable control that settles. Since 6R.1b: the division-path boundary where the floor at the principal's precision is exactly uint256 max with a non-zero remainder (a 38-decimal token at 52 USD against a bound of uint256 max at 37 decimals, 52 q = 10 (2^256 − 1) + 6), refused on both sides on its own single-market gate, beside a control one atom lower with an identical declared notional that settles; a gate that saturated that ceiling to uint256 max would settle 0.6 of an atom past the bound |
 | `ExactMath.t.sol` | 2 + 2 fuzz × 1,024 runs | The exact 512-bit test oracle (`utils/ExactMath.sol`) against plain arithmetic where it cannot overflow, hand-computed extremes, the defining property of the floor and ceiling it reports, and (6R.1b) a floor of exactly uint256 max with a remainder reported unrepresentable rather than saturated |
 | `Profile.t.sol` | 1 | The worst-case executable attempt — maximal identifiers, full sets, 4,096 non-zero route bytes — settles; calldata size pinned jointly with `corpus.test.ts`; intrinsic and execution gas logged (§13) |
-| `DeployScript.t.sol` | 10 | §13: the script deploys only the gate, whose own CREATEs are the venue and adapter; exact typed-price conversion; the gate's refusal of an unrepresentable price; the deployment-manifest `verify`, including adapter or venue code substituted after deployment, a config the gate was not built from, and the gate's runtime code without its market table |
-| `FixtureTrust.t.sol` | 4 | Phase 6R.1a: with the review's lying adapter and look-alike venue deployed and stocked, a directly constructed gate cannot reach either; the review's BUY and SELL shapes settle at exactly the fixture quote; the gate's venue price cannot change |
+| `DeployScript.t.sol` | 11 | §13: the script deploys only the gate, whose own CREATEs are the venue and adapter; exact typed-price conversion; the gate's refusal of an unrepresentable price; the deployment-manifest `verify`, including adapter or venue code substituted after deployment, a config the gate was not built from, the gate's runtime code without its market table, and (6R.1b) reviewed venue code with other units |
+| `FixtureTrust.t.sol` | 5 | Phase 6R.1a: with the review's lying adapter and look-alike venue deployed and stocked, a directly constructed gate cannot reach either; the review's BUY and SELL shapes settle at exactly the fixture quote; the gate's venue price cannot change. Phase 6R.1b: tokens whose `decimals()` depends on the caller — the gate's venue holds exactly the gate's pinned units and a trade settles in them |
 
 Invariants, each checked after every call of every run:
 
@@ -809,7 +819,7 @@ detector classes**, all in `contracts/src`. Disposition:
 | S-4 | `unused-return` | `_signedBy`: `ECDSA.tryRecover` third value | **Intentional, suppressed with reason.** It only describes why recovery failed; the error enum decides |
 | S-5 | `missing-zero-check` | `FixtureVenueAdapter` constructor | **Fixed.** Zero gate or venue now reverts `InvalidConfig` |
 | S-6 | `timestamp` | `_checkTime` | **Intended, suppressed with reason.** Chain time is the Phase 6 authority (INV-10); see §12 |
-| S-7 | `calls-loop` ×2 | constructor `decimals()` ×2 per market | **Accepted, suppressed with reason.** Constructor only, over a deployer-chosen list; a reverting token correctly fails deployment. The 6R.1 third call, reading each adapter's price, is gone in 6R.1a: the constructor calls no adapter (§5) |
+| S-7 | `calls-loop` ×2 | constructor `decimals()` ×2 per market | **Accepted, suppressed with reason.** Constructor only, over a deployer-chosen list; a reverting token correctly fails deployment. The 6R.1 third call, reading each adapter's price, is gone in 6R.1a: the constructor calls no adapter (§5). Before 6R.1b the venue's constructor also read the representation's `decimals()`; a token answering by caller could give the venue other units than the gate, so the venue now takes the gate's pinned values |
 | S-8 | `cyclomatic-complexity` | `_checkBinding` | **Accepted, suppressed with reason.** A flat list of independent checks in interface order |
 | S-9 | `naming-convention` ×10 | immutables in `UPPER_CASE` | **Style disagreement, detector excluded.** forge-lint requires `SCREAMING_SNAKE_CASE` immutables; the two tools conflict and the Solidity style guide sides with forge-lint |
 | S-10 | `unused-return` | `GateArithmetic.notionalBounds`: low limb of `Math.mul512` | **Intentional, suppressed with reason.** Only the high limb determines whether the quotient fits `uint256`; the following `mulDiv` and `mulmod` independently consume the full product for quotient and remainder |
