@@ -3,7 +3,7 @@
 **Intent-aware execution infrastructure for AI agents transacting in tokenized
 financial assets.**
 
-> **Status: Phase 6R.1a implemented locally and awaiting independent review — an onchain execution
+> **Status: Phase 6R.1b (pre-optimization cleanup) implemented locally and awaiting independent review — an onchain execution
 > gate, tested against a labelled settlement fixture and not deployed.** The
 > sections below describe Phases 1–5R.3; the gate is summarized under
 > [The execution gate](#the-execution-gate) and specified in
@@ -224,6 +224,7 @@ grant to agents.**
 | [docs/phase-6r-report.md](docs/phase-6r-report.md) | Phase 6R remediation, validation evidence, deployment policy and remaining risk. |
 | [docs/phase-6r1-report.md](docs/phase-6r1-report.md) | Phase 6R.1: exact principal notional enforcement (M-1), fixture price consistency, reconciliation expiry rule, reproduced profile figures. |
 | [docs/phase-6r1a-report.md](docs/phase-6r1a-report.md) | Phase 6R.1a: attempt-scoped reconciliation bounded by the reservation, gate-created fixture venue and adapter with fixture-wiring verification, overflow-branch and exact-oracle test closure. |
+| [docs/phase-6r1b-report.md](docs/phase-6r1b-report.md) | Phase 6R.1b: reservation-generation binding for reconciliation, the M4 ceiling boundary, pinned fixture decimals, corrected deployment-verification and gas claims. |
 | [docs/robinhood-integration.md](docs/robinhood-integration.md) | Verified endpoints, schemas, issuer semantics, price/multiplier rules, timestamps and real-data limitations. |
 | [docs/mainnet-replay.md](docs/mainnet-replay.md) | Recorded-mainnet replay methodology, synthetic labelling and validation report. |
 | [docs/routing.md](docs/routing.md) | Candidate model, provider boundary, ranking, costs, limits and selection receipts. |

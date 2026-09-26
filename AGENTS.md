@@ -22,9 +22,10 @@ Read it before proposing architectural changes. If a change contradicts it,
 either the change is wrong or the document needs updating first — resolve which
 before writing code.
 
-The repository is at the end of **Phase 6R.1a** (reconciliation coherence and
-fixture trust closure; [docs/phase-6r1a-report.md](docs/phase-6r1a-report.md)),
-after **Phase 6R.1** (exact principal notional enforcement;
+The repository is at the end of **Phase 6R.1b** (final pre-optimization cleanup;
+[docs/phase-6r1b-report.md](docs/phase-6r1b-report.md)), after **Phase 6R.1a**
+(reconciliation coherence and fixture trust closure;
+[docs/phase-6r1a-report.md](docs/phase-6r1a-report.md)), after **Phase 6R.1** (exact principal notional enforcement;
 [docs/phase-6r1-report.md](docs/phase-6r1-report.md)), on top of
 **Phase 6** — the onchain execution gate
 (`contracts/`, `packages/execution-gate`, [ADR 0019](docs/adr/0019-onchain-execution-gate.md),
