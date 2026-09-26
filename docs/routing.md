@@ -67,6 +67,13 @@ returns `admissible` in the ADR 0010 order, so index 0 is the deterministic
 preferred candidate and is the single fallback target. An index outside the
 closed set is refused rather than resolved to something else.
 
+Both routing entrypoints are total over parsed, plain boundary values. A
+non-object request, malformed nested input or malformed registry produces
+`INVALID_INPUT` with auditable `INPUT_INVALID` exclusions rather than an
+exception. The registry is re-opened from its strictly parsed snapshot at this
+boundary; caller-supplied indexes are never trusted. `route` likewise parses a
+handoff object before reading it and refuses a missing or malformed handoff.
+
 The ranking itself is unchanged. Nothing in the router is aware that an
 advisory layer exists, and a structural test still fails if the router's source
 acquires a model import.

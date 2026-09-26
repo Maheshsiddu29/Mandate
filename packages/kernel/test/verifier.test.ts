@@ -537,6 +537,26 @@ test('the verifier is total: arbitrary junk produces a receipt, never a throw', 
   }
 });
 
+test('the verifier public boundary is total over malformed top-level plain values', () => {
+  const topLevel: readonly unknown[] = [null, undefined, false, true, 0, 1, 'request', [], {}, { mandate: null }];
+  for (const raw of topLevel) {
+    assert.doesNotThrow(() => verify(raw), String(raw));
+    const receipt = verify(raw);
+    assert.equal(receipt.decision, Decision.REJECT, String(raw));
+    assert.ok(receipt.reasonCodes.length > 0, String(raw));
+    assert.equal(typeof receipt.receiptDigest, 'string', String(raw));
+  }
+  assert.equal(verify(null).decision, Decision.REJECT);
+});
+
+test('a malformed checks seam refuses instead of throwing or skipping checks', () => {
+  for (const checks of [null, false, 0, 'checks', {}, [null], [{ name: 'missing-run' }]] as const) {
+    const receipt = verify({ ...buildWorld(), checks });
+    assert.equal(receipt.decision, Decision.REJECT, String(checks));
+    assert.deepEqual(receipt.reasonCodes, ['VERIFIER_INTERNAL_ERROR'], String(checks));
+  }
+});
+
 // --- Receipts and explanation ----------------------------------------------
 
 test('both PASS and REJECT produce receipts with stable digests', () => {

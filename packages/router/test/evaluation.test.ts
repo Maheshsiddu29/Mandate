@@ -122,4 +122,43 @@ describe('route evaluation and selection', () => {
     if (evaluated.status !== 'INVALID_INPUT') return;
     assert.ok(evaluated.errors.some((item) => item.code === 'INPUT_INVALID'));
   });
+
+  it('is total over malformed top-level plain values', () => {
+    const malformed: readonly unknown[] = [null, undefined, false, true, 0, 1, 'request', [], {}, { mandate: null }];
+    for (const raw of malformed) {
+      assert.doesNotThrow(() => evaluateRoutes(raw), `evaluateRoutes(${String(raw)})`);
+      const evaluated = evaluateRoutes(raw);
+      assert.equal(evaluated.status, 'INVALID_INPUT', String(raw));
+      if (evaluated.status === 'INVALID_INPUT') {
+        assert.ok(evaluated.errors.some((error) => error.code === 'INPUT_INVALID'), String(raw));
+      }
+    }
+
+    assert.doesNotThrow(() => route(null, null));
+    assert.equal(route(null, null).status, 'INVALID_INPUT');
+  });
+
+  it('re-parses registry snapshots and refuses malformed registry values without throwing', () => {
+    const valid = request([withFee('route.a', 100n)]);
+    for (const registry of [null, undefined, {}, [], 0, 'registry'] as const) {
+      const raw = { ...valid, registry };
+      assert.doesNotThrow(() => evaluateRoutes(raw), String(registry));
+      const evaluated = evaluateRoutes(raw);
+      assert.equal(evaluated.status, 'INVALID_INPUT', String(registry));
+      if (evaluated.status !== 'INVALID_INPUT') continue;
+      assert.ok(evaluated.errors.some((error) =>
+        error.code === 'INPUT_INVALID' &&
+        error.detail['input'] === 'registry' &&
+        error.detail['cause'] === 'SNAPSHOT_MALFORMED'), String(registry));
+    }
+  });
+
+  it('refuses malformed handoff plain values after a valid evaluation', () => {
+    const valid = request([withFee('route.a', 100n)]);
+    for (const handoff of [null, undefined, false, 0, 'handoff', [], {}] as const) {
+      assert.doesNotThrow(() => route(valid, handoff), String(handoff));
+      const result = route(valid, handoff);
+      assert.equal(result.status, 'INVALID_INPUT', String(handoff));
+    }
+  });
 });

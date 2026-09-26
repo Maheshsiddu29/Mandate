@@ -77,17 +77,26 @@ function canonicalize(violations: readonly Violation[]): Violation[] {
   return [...seen.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([, v]) => v);
 }
 
-export function verify(request: VerifyRequest): VerificationReceipt {
+export function verify(request: unknown): VerificationReceipt;
+export function verify(request: VerifyRequest): VerificationReceipt;
+export function verify(request: unknown): VerificationReceipt {
   const parseViolations: Violation[] = [];
+  // The function is a public runtime boundary. A TypeScript parameter type does
+  // not make null, arrays or other parsed values impossible, so normalize only
+  // plain object-shaped input before reading fields from it.
+  const r: Record<string, unknown> =
+    typeof request === 'object' && request !== null && !Array.isArray(request)
+      ? request as Record<string, unknown>
+      : {};
 
   // Every input is parsed independently, so a malformed candidate does not hide
   // a malformed state and the receipt reports both.
-  const mandate = collect(parseMandate(request.mandate), parseViolations, { input: 'mandate' });
-  const authorization = collect(parseAuthorizationEnvelope(request.authorization), parseViolations, { input: 'authorization' });
-  const candidate = collect(parseCandidate(request.candidate), parseViolations, { input: 'candidate' });
-  const state = collect(parseTrustedState(request.trustedState), parseViolations, { input: 'trustedState' });
-  const clock = collect(parseClock(request.clock), parseViolations, { input: 'clock' });
-  const expectedDomain = collect(parseEip712Domain(request.expectedDomain), parseViolations, { input: 'expectedDomain' });
+  const mandate = collect(parseMandate(r['mandate']), parseViolations, { input: 'mandate' });
+  const authorization = collect(parseAuthorizationEnvelope(r['authorization']), parseViolations, { input: 'authorization' });
+  const candidate = collect(parseCandidate(r['candidate']), parseViolations, { input: 'candidate' });
+  const state = collect(parseTrustedState(r['trustedState']), parseViolations, { input: 'trustedState' });
+  const clock = collect(parseClock(r['clock']), parseViolations, { input: 'clock' });
+  const expectedDomain = collect(parseEip712Domain(r['expectedDomain']), parseViolations, { input: 'expectedDomain' });
 
   // Digests are computed outside the check loop, so this is the one place a
   // defect in the encoders could escape as a thrown error from a function
@@ -137,7 +146,20 @@ export function verify(request: VerifyRequest): VerificationReceipt {
   };
 
   const found: Violation[] = [...parseViolations];
-  for (const check of request.checks ?? CHECKS) {
+  const rawChecks = r['checks'];
+  const checks = rawChecks === undefined
+    ? CHECKS
+    : Array.isArray(rawChecks) && rawChecks.every((check) =>
+      typeof check === 'object' && check !== null &&
+      typeof (check as Record<string, unknown>)['name'] === 'string' &&
+      typeof (check as Record<string, unknown>)['run'] === 'function')
+      ? rawChecks as unknown as readonly Check[]
+      : null;
+  if (checks === null) {
+    found.push(violation('VERIFIER_INTERNAL_ERROR', { stage: 'checks', input: 'checks' }));
+    return finish(digests, found);
+  }
+  for (const check of checks) {
     // A check that threw would be a bug in this package, but a bug here must not
     // become a PASS. Convert it to a fail-closed violation rather than letting
     // it escape or be swallowed.

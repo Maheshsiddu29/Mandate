@@ -137,7 +137,7 @@ export function parseRepresentationId(raw: unknown): Result<RepresentationId, Re
   if (typeof raw === 'object' && raw !== null) {
     const r = raw as Record<string, unknown>;
     for (const k of Object.keys(r)) {
-      if (!['chainNamespace', 'chainReference', 'assetNamespace', 'contractAddress'].includes(k)) {
+      if (!['chainNamespace', 'chainReference', 'chain', 'assetNamespace', 'contractAddress', 'value'].includes(k)) {
         return err('REPRESENTATION_ID_MALFORMED');
       }
     }
@@ -151,7 +151,13 @@ export function parseRepresentationId(raw: unknown): Result<RepresentationId, Re
     }
     const address = parseContractAddress(r['contractAddress']);
     if (!address.ok) return address;
-    return buildId(ChainNamespace.EIP155, chainReference, AssetNamespace.ERC20, address.value);
+    const built = buildId(ChainNamespace.EIP155, chainReference, AssetNamespace.ERC20, address.value);
+    if (!built.ok) return built;
+    // Parsed identifiers carry two derived fields. Accepting a parsed snapshot
+    // is safe only when callers cannot contradict those derivations.
+    if (r['chain'] !== undefined && r['chain'] !== built.value.chain) return err('REPRESENTATION_ID_MALFORMED');
+    if (r['value'] !== undefined && r['value'] !== built.value.value) return err('REPRESENTATION_ID_MALFORMED');
+    return built;
   }
 
   if (typeof raw !== 'string') return err('REPRESENTATION_ID_MALFORMED');

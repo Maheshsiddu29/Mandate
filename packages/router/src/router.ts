@@ -25,6 +25,7 @@ import {
   deriveRequirements,
   evaluateRepresentation,
   listRepresentations,
+  openRegistry,
   registrySnapshotDigest,
   type Registry,
   type RepresentationDecision,
@@ -47,7 +48,8 @@ import {
 export interface RouteRequest {
   readonly mandate: unknown;
   readonly authorization: unknown;
-  readonly registry: Registry;
+  /** Parsed again from its snapshot at this public boundary; indexes are never trusted. */
+  readonly registry: Registry | unknown;
   readonly trustedMarketState: unknown;
   readonly requestedQuantity: unknown;
   readonly routes: unknown;
@@ -122,15 +124,28 @@ export type RoutingEvaluationResult =
  * offered the already-closed admissible set without a second ranking
  * implementation. The ranking here is the only ranking in the system.
  */
-export function evaluateRoutes(request: RouteRequest, verifier: Verifier = verify): RoutingEvaluationResult {
-  const mandate = parseMandate(request.mandate);
-  const authorization = parseAuthorizationEnvelope(request.authorization);
-  const trustedState = parseTrustedState(request.trustedMarketState);
-  const clock = parseClock(request.clock);
-  const domain = parseEip712Domain(request.expectedDomain);
-  const requestedQuantity = parseAmount(request.requestedQuantity);
-  const quotes = parseProviderRouteSet(request.routes);
-  const costs = parseTrustedRouteCosts(request.trustedCosts);
+export function evaluateRoutes(request: RouteRequest | unknown, verifier: Verifier = verify): RoutingEvaluationResult {
+  const r: Record<string, unknown> =
+    typeof request === 'object' && request !== null && !Array.isArray(request)
+      ? request as Record<string, unknown>
+      : {};
+  const mandate = parseMandate(r['mandate']);
+  const authorization = parseAuthorizationEnvelope(r['authorization']);
+  const trustedState = parseTrustedState(r['trustedMarketState']);
+  const clock = parseClock(r['clock']);
+  const domain = parseEip712Domain(r['expectedDomain']);
+  const requestedQuantity = parseAmount(r['requestedQuantity']);
+  const quotes = parseProviderRouteSet(r['routes']);
+  const costs = parseTrustedRouteCosts(r['trustedCosts']);
+  // Re-open the snapshot rather than trusting caller-supplied Map indexes. This
+  // both totalizes malformed registry inputs and leaves one strict parser as the
+  // only path to a registry used for a decision.
+  const rawRegistry = r['registry'];
+  const registry = openRegistry(
+    typeof rawRegistry === 'object' && rawRegistry !== null && !Array.isArray(rawRegistry)
+      ? (rawRegistry as Record<string, unknown>)['snapshot']
+      : undefined,
+  );
   const inputErrors: RouteExclusion[] = [];
   if (!mandate.ok) inputErrors.push(inputError('mandate', mandate.error));
   if (!authorization.ok) inputErrors.push(inputError('authorization', authorization.error));
@@ -140,7 +155,8 @@ export function evaluateRoutes(request: RouteRequest, verifier: Verifier = verif
   if (!requestedQuantity.ok) inputErrors.push(inputError('requestedQuantity', requestedQuantity.error));
   if (!quotes.ok) inputErrors.push(quotes.error);
   if (!costs.ok) inputErrors.push(costs.error);
-  if (inputErrors.length > 0 || !mandate.ok || !authorization.ok || !trustedState.ok || !clock.ok || !domain.ok || !requestedQuantity.ok || !quotes.ok || !costs.ok) {
+  if (!registry.ok) inputErrors.push(inputError('registry', registry.error));
+  if (inputErrors.length > 0 || !mandate.ok || !authorization.ok || !trustedState.ok || !clock.ok || !domain.ok || !requestedQuantity.ok || !quotes.ok || !costs.ok || !registry.ok) {
     return { status: 'INVALID_INPUT', errors: inputErrors };
   }
 
@@ -155,7 +171,7 @@ export function evaluateRoutes(request: RouteRequest, verifier: Verifier = verif
   // on the candidate covered it incidentally. Removing that digest equality
   // (ADR 0017) removed the incidental cover, so an undeclared snapshot is now an
   // unestablished binding, and unestablished fails closed.
-  const snapshotDigest = registrySnapshotDigest(request.registry.snapshot);
+  const snapshotDigest = registrySnapshotDigest(registry.value.snapshot);
   const declared = trustedState.value.registrySnapshotDigest;
   if (declared === null) {
     return {
@@ -172,10 +188,10 @@ export function evaluateRoutes(request: RouteRequest, verifier: Verifier = verif
 
   const requirements = deriveRequirements(mandate.value, { nowUnixSeconds: clock.value.nowUnixSeconds });
   if (!requirements.ok) return { status: 'INVALID_INPUT', errors: [inputError('requirements', requirements.error)] };
-  const discovered = listRepresentations(request.registry, requirements.value.canonicalAsset);
+  const discovered = listRepresentations(registry.value, requirements.value.canonicalAsset);
   const decisions = new Map<string, RepresentationDecision>();
   for (const representation of discovered) {
-    decisions.set(representation.representationId.value, evaluateRepresentation(request.registry, requirements.value, representation.representationId.value));
+    decisions.set(representation.representationId.value, evaluateRepresentation(registry.value, requirements.value, representation.representationId.value));
   }
 
   const outcomes: RouteOutcome[] = [];
@@ -238,7 +254,7 @@ export function evaluateRoutes(request: RouteRequest, verifier: Verifier = verif
       context: {
         mandate: mandate.value,
         authorization: authorization.value,
-        registry: request.registry,
+        registry: registry.value,
         trustedState: trustedState.value,
         clock: clock.value,
         expectedDomain: domain.value,
@@ -260,7 +276,7 @@ export function evaluateRoutes(request: RouteRequest, verifier: Verifier = verif
 export function selectEvaluated(
   evaluation: RoutingEvaluation,
   index: number,
-  handoff: HandoffInputs,
+  handoff: HandoffInputs | unknown,
   verifier: Verifier = verify,
 ): RoutingResult {
   const { context, admissible, outcomes } = evaluation;
@@ -322,12 +338,13 @@ export type ResolvedHandoff =
  * Phase 6 gate closes it, and until then the orchestrator's clock is a named
  * member of the trusted computing base.
  */
-export function resolveHandoff(handoff: HandoffInputs | undefined, context: RoutingContext): ResolvedHandoff {
-  if (handoff === undefined || handoff === null) {
+export function resolveHandoff(handoff: HandoffInputs | unknown, context: RoutingContext): ResolvedHandoff {
+  if (typeof handoff !== 'object' || handoff === null || Array.isArray(handoff)) {
     return { ok: false, errors: [{ code: 'HANDOFF_STATE_MISSING', detail: { input: 'handoff' } }] };
   }
-  const state = parseTrustedState(handoff.trustedMarketState);
-  const clock = parseClock(handoff.clock);
+  const h = handoff as Record<string, unknown>;
+  const state = parseTrustedState(h['trustedMarketState']);
+  const clock = parseClock(h['clock']);
   const errors: RouteExclusion[] = [];
   if (!state.ok) errors.push(inputError('handoff.trustedMarketState', state.error));
   if (!clock.ok) errors.push(inputError('handoff.clock', clock.error));
@@ -380,7 +397,7 @@ export function resolveHandoff(handoff: HandoffInputs | undefined, context: Rout
  * re-verify it. This is the only selection policy in the system; anything
  * advisory reuses these two stages rather than re-implementing either.
  */
-export function route(request: RouteRequest, handoff: HandoffInputs, verifier: Verifier = verify): RoutingResult {
+export function route(request: RouteRequest | unknown, handoff: HandoffInputs | unknown, verifier: Verifier = verify): RoutingResult {
   const evaluated = evaluateRoutes(request, verifier);
   if (evaluated.status === 'INVALID_INPUT') return evaluated;
   return selectEvaluated(evaluated.evaluation, 0, handoff, verifier);

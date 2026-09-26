@@ -113,6 +113,14 @@ test('the structured and string forms agree', () => {
   assert.deepEqual(fromString.value, fromObject.value);
 });
 
+test('a parsed representation id is accepted only with consistent derived fields', () => {
+  const parsed = parseRepresentationId(`eip155:42161/erc20:${A}`);
+  assert.ok(parsed.ok);
+  assert.deepEqual(parseRepresentationId(parsed.value), parsed);
+  assert.equal(parseRepresentationId({ ...parsed.value, chain: 'eip155:1' }).ok, false);
+  assert.equal(parseRepresentationId({ ...parsed.value, value: `eip155:1/erc20:${A}` }).ok, false);
+});
+
 test('changing the contract address changes representation identity', () => {
   const a = parseRepresentationId(`eip155:42161/erc20:${A}`);
   const b = parseRepresentationId(`eip155:42161/erc20:${B}`);
@@ -248,6 +256,14 @@ test('two records for one representation reject the snapshot', () => {
   const r = openRegistry(snapshot([repInput(A), repInput(A, { issuer: verified('issuer.fixture.beta') })]));
   assert.equal(r.ok, false);
   assert.equal(r.ok === false ? r.error : '', 'SNAPSHOT_MALFORMED');
+});
+
+test('an opened registry can be re-opened from its parsed snapshot', () => {
+  const first = openRegistry(snapshot([repInput(A)]));
+  assert.ok(first.ok);
+  const second = openRegistry(first.value.snapshot);
+  assert.ok(second.ok);
+  assert.deepEqual([...second.value.byRepresentationId.keys()], [...first.value.byRepresentationId.keys()]);
 });
 
 test('an unknown snapshot field rejects rather than being ignored', () => {
