@@ -1,0 +1,18 @@
+{
+  "label": "LOCAL FIXTURE ONLY. A local development chain (anvil, chain 31337). The two token addresses are where anvil's first development account's first two deployments land (nonces 0 and 1); deploy labelled fixture tokens there before running the script. Not a Robinhood Chain configuration and not live liquidity.",
+  "chainId": 31337,
+  "markets": [
+    {
+      "representation": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+      "fundingToken": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+      "canonicalAsset": { "assetClass": "equity", "idScheme": "isin", "value": "US0378331005" },
+      "issuer": "issuer.fixture",
+      "venue": "venue.fixture",
+      "quantityUnit": "TOKEN",
+      "settlementUnit": "USD",
+      "synthetic": false,
+      "fixturePrice": "200000000",
+      "fixtureFeeBps": 30
+    }
+  ]
+}
