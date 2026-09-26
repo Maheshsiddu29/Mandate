@@ -518,7 +518,7 @@ Run: `npm run contracts:test` (regenerates the corpus ABI, then `forge test`).
 | `Fuzz.t.sol` | 15 × 1,024 runs | Principal/agent economics, exact rational arithmetic, quantities, prices, decimal scales, exact fill, time, replay, post-signature mutations, signatures, recipient, representation and chain |
 | `invariant/GateInvariants.t.sol` | 12 invariants × 256 runs × depth 64, plus a deterministic non-vacuity test | Below |
 | `Differential.t.sol` | 4 | §11 |
-| `MaxNotional.t.sol` | 13 + 2 fuzz × 1,024 runs | Phase 6R.1 M-1 on the real fixture path: the audit PoCs, declared precision 0–38 with every signature valid, one atom either side at the principal's precision, decimal-conversion boundaries, huge-quantity/tiny-price and tiny-quantity/huge-price, 512-bit intermediates, randomized precision combinations on both sides. Since 6R.1a: every declared × principal precision pair (39 × 39) on each side through the real venue; the product rule against the exact oracle at full operand width and at every one of the 39³ decimal triples; and replays of the inputs that overflowed the 6R.1 oracle |
+| `MaxNotional.t.sol` | 14 + 2 fuzz × 1,024 runs | Phase 6R.1 M-1 on the real fixture path: the audit PoCs, declared precision 0–38 with every signature valid, one atom either side at the principal's precision, decimal-conversion boundaries, huge-quantity/tiny-price and tiny-quantity/huge-price, 512-bit intermediates, randomized precision combinations on both sides. Since 6R.1a: every declared × principal precision pair (39 × 39) on each side through the real venue; the product rule against the exact oracle at full operand width and at every one of the 39³ decimal triples; replays of the inputs that overflowed the 6R.1 oracle; and, on the WIDE market, a true gross beyond every uint256 bound refused with the unrepresentable product as the only refusing condition, beside a representable control that settles |
 | `ExactMath.t.sol` | 1 + 2 fuzz × 1,024 runs | The exact 512-bit test oracle (`utils/ExactMath.sol`) against plain arithmetic where it cannot overflow, hand-computed extremes, and the defining property of the floor and ceiling it reports |
 | `Profile.t.sol` | 1 | The worst-case executable attempt — maximal identifiers, full sets, 4,096 non-zero route bytes — settles; calldata size pinned jointly with `corpus.test.ts`; intrinsic and execution gas logged (§13) |
 | `DeployScript.t.sol` | 10 | §13: the script deploys only the gate, whose own CREATEs are the venue and adapter; exact typed-price conversion; the gate's refusal of an unrepresentable price; the deployment-manifest `verify`, including adapter or venue code substituted after deployment, a config the gate was not built from, and the gate's runtime code without its market table |
@@ -537,7 +537,7 @@ Invariants, each checked after every call of every run:
 | INV-ONCHAIN-7 | Unsupported token, adapter or venue combinations never settle |
 | INV-ONCHAIN-8 *(added)* | The principal's balances move by exactly the reported measured amounts, and nothing else |
 | INV-ONCHAIN-9 *(added)* | The gate never holds funds or grants an allowance |
-| INV-ONCHAIN-AUTH-1 | Every settlement's *true* gross — quantity × the venue's settlement price, compared with the signed bound at its signed precision by the handler's own cross-multiplication — satisfies signed `maxNotional`, whatever precision the agent declared |
+| INV-ONCHAIN-AUTH-1 | Every settlement's *true* gross — quantity × the venue's settlement price, compared with the signed bound at its signed precision by exact 512-bit comparison (`ExactMath`) — satisfies signed `maxNotional`, whatever precision the agent declared, including where that product cannot be represented at the bound's precision at all |
 | INV-ONCHAIN-AUTH-2 | Every settlement satisfies exact quantity |
 | INV-ONCHAIN-AUTH-3/4 | Every BUY/SELL satisfies its measured signed economic bound |
 | INV-ONCHAIN-AUTH-5 | A correctly signing malicious agent cannot settle a generated static principal-policy violation |
@@ -550,9 +550,22 @@ replays and random chain time on the scripted adapter, and — since 6R.1 — th
 real `FixtureVenue` / `FixtureVenueAdapter` market on both sides, with the agent
 choosing quantity, declared notional precision and rounding while the
 principal's bound is placed at the agent's coarse declared value (the M-1 shape)
-or one side of the true product. The deterministic non-vacuity test asserts the
-three audit PoC shapes are attempted and refused on the real path and that BUY
-and SELL settle there.
+or one side of the true product. Since 6R.1a it also trades on the WIDE market
+(a 1-decimal token against 0-decimal funding at 1 USD) at quantities near 10^40
+tokens, with the bound at uint256 max at 10..38 decimals: the true gross exceeds
+the bound only by making quantity × price at that precision exceed 2^256, so the
+gate's `productRepresentable == false` refusal is the only thing that stops it;
+controls just inside the bound settle. The deterministic non-vacuity test asserts
+the three audit PoC shapes and three WIDE overflow shapes are attempted and
+refused on the real path, and that BUY and SELL settle there, controls included.
+
+**Discrimination of the maxNotional rule (6R.1a).** Run against the invariant
+alone, with the failure cache cleared, each of these production mutants breaks
+`INV-ONCHAIN-AUTH-1`: the product check removed; the product's floor used
+instead of its ceiling; an unrepresentable product accepted (the fuzzer shrinks
+it to one `executeWideOverflow` call — before 6R.1a no invariant or test
+assertion caught this mutant); and an off-by-one bound. The last two are also
+caught by `test_m1_unrepresentableProductIsTheOnlyRefusal`.
 
 **The suites are discriminating, not only green.** During development each was
 run against deliberately broken gates: inclusive expiry, reordered checks,

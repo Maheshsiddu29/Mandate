@@ -36,6 +36,12 @@ import {CodecHarness} from "./CodecHarness.sol";
 /// | NVDA     | fNVDA  | FixtureVenueAdapter             | NVDA  | issuer.alpha      | venue.fixture  | no        |
 /// | SYNTH    | sAAPL  | FixtureVenueAdapter             | AAPL  | issuer.synthetic  | venue.fixture  | yes       |
 /// | SCRIPTED | xAAPL  | ScriptedAdapter (etched, test)  | AAPL  | issuer.alpha      | venue.scripted | no        |
+/// | WIDE     | wAAPL  | FixtureVenueAdapter             | AAPL  | issuer.alpha      | venue.fixture  | no        |
+///
+/// WIDE is the large-width market (Phase 6R.1a): a 1-decimal token against a
+/// 0-decimal funding token at 1 USD, no fee. Quantities near 10^40 tokens are
+/// fillable there while quantity × price at a 38-decimal bound exceeds 2^256, so
+/// the gate's unrepresentable-product refusal is reachable on the real path.
 ///
 /// The gate creates every market's `FixtureVenue` and `FixtureVenueAdapter`
 /// itself (Phase 6R.1a); tests read them back with `marketOf`/`fixtureVenueOf`.
@@ -70,6 +76,9 @@ abstract contract GateTestBase is Test {
     MockERC20 internal nvda;
     MockERC20 internal synth;
     MockERC20 internal scriptedToken;
+    /// @dev WIDE market: 1-decimal representation, 0-decimal funding, 1 USD.
+    MockERC20 internal wide;
+    MockERC20 internal funding0;
 
     FixtureVenue internal aaplVenue;
     FixtureVenue internal nvdaVenue;
@@ -77,7 +86,13 @@ abstract contract GateTestBase is Test {
     FixtureVenueAdapter internal aaplAdapter;
     FixtureVenueAdapter internal nvdaAdapter;
     FixtureVenueAdapter internal synthAdapter;
+    FixtureVenue internal wideVenue;
+    FixtureVenueAdapter internal wideAdapter;
     ScriptedAdapter internal scripted;
+
+    /// @dev Half the uint256 range per holder, so venue and principal balances of
+    /// one WIDE token together stay below the token's total-supply limit.
+    uint256 internal constant WIDE_HOLDING = 2 ** 254;
 
     function setUp() public virtual {
         vm.chainId(CHAIN);
@@ -92,6 +107,8 @@ abstract contract GateTestBase is Test {
         nvda = new MockERC20("Fixture NVIDIA Stock Token", "fNVDA", 18);
         synth = new MockERC20("Fixture Synthetic Apple", "sAAPL", 18);
         scriptedToken = new MockERC20("Fixture Scripted Apple", "xAAPL", 18);
+        wide = new MockERC20("Fixture Wide Apple", "wAAPL", 1);
+        funding0 = new MockERC20("Fixture Whole USD", "fUSD0", 0);
 
         gate = new MandateExecutionGate(_marketConfigs());
         aaplVenue = _venueOf(gate, address(aapl));
@@ -101,11 +118,17 @@ abstract contract GateTestBase is Test {
         nvdaAdapter = _adapterOf(gate, address(nvda));
         synthAdapter = _adapterOf(gate, address(synth));
         scripted = _scriptAdapter(gate, address(scriptedToken));
+        wideVenue = _venueOf(gate, address(wide));
+        wideAdapter = _adapterOf(gate, address(wide));
 
         _stock(address(aaplVenue), aapl);
         _stock(address(nvdaVenue), nvda);
         _stock(address(synthVenue), synth);
         _stock(address(scripted), scriptedToken);
+        wide.mint(address(wideVenue), WIDE_HOLDING);
+        funding0.mint(address(wideVenue), WIDE_HOLDING);
+        wide.mint(principal, WIDE_HOLDING);
+        funding0.mint(principal, WIDE_HOLDING);
 
         funding.mint(principal, 1_000_000e6);
         aapl.mint(principal, 1_000e18);
@@ -119,6 +142,8 @@ abstract contract GateTestBase is Test {
         nvda.approve(address(gate), type(uint256).max);
         synth.approve(address(gate), type(uint256).max);
         scriptedToken.approve(address(gate), type(uint256).max);
+        wide.approve(address(gate), type(uint256).max);
+        funding0.approve(address(gate), type(uint256).max);
         vm.stopPrank();
     }
 
@@ -163,11 +188,16 @@ abstract contract GateTestBase is Test {
     }
 
     function _marketConfigs() internal view returns (MarketConfig[] memory markets) {
-        markets = new MarketConfig[](4);
+        markets = new MarketConfig[](5);
         markets[0] = _market(address(aapl), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
         markets[1] = _market(address(nvda), _nvdaAsset(), "issuer.alpha", "venue.fixture", false);
         markets[2] = _market(address(synth), _aaplAsset(), "issuer.synthetic", "venue.fixture", true);
         markets[3] = _market(address(scriptedToken), _aaplAsset(), "issuer.alpha", "venue.scripted", false);
+        markets[4] = _market(address(wide), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
+        markets[4].fundingToken = address(funding0);
+        markets[4].fixturePrice.decimals = 0;
+        markets[4].fixturePrice.atoms = 1;
+        markets[4].fixtureFeeBps = 0;
     }
 
     function _usd(uint256 atoms) internal pure returns (Amount memory) {

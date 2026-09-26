@@ -12,11 +12,24 @@ contract GateInvariantsTest is StdInvariant, GateTestBase {
     uint256 internal fundingAtStart;
     uint256 internal tokensAtStart;
     uint256 internal fixtureTokensAtStart;
+    uint256 internal wideTokensAtStart;
+    uint256 internal wideFundingAtStart;
 
     function setUp() public override {
         super.setUp();
         handler = new GateHandler(
-            gate, harness, scripted, funding, scriptedToken, aapl, aaplVenue, aaplAdapter, principal, agent
+            gate,
+            harness,
+            scripted,
+            funding,
+            scriptedToken,
+            aapl,
+            aaplVenue,
+            aaplAdapter,
+            wide,
+            funding0,
+            principal,
+            agent
         );
         // The principal's mistake the over-pull behaviour exploits: a direct,
         // standing allowance to an adapter. The gate's debit bound must still hold.
@@ -27,6 +40,8 @@ contract GateInvariantsTest is StdInvariant, GateTestBase {
         fundingAtStart = funding.balanceOf(principal);
         tokensAtStart = scriptedToken.balanceOf(principal);
         fixtureTokensAtStart = aapl.balanceOf(principal);
+        wideTokensAtStart = wide.balanceOf(principal);
+        wideFundingAtStart = funding0.balanceOf(principal);
         targetContract(address(handler));
         targetSelector(FuzzSelector({addr: address(handler), selectors: handler.selectors()}));
     }
@@ -87,6 +102,11 @@ contract GateInvariantsTest is StdInvariant, GateTestBase {
             aapl.balanceOf(principal),
             fixtureTokensAtStart + handler.fixtureTokenCredits() - handler.fixtureTokenDebits()
         );
+        assertEq(wide.balanceOf(principal), wideTokensAtStart + handler.wideTokenCredits() - handler.wideTokenDebits());
+        assertEq(
+            funding0.balanceOf(principal),
+            wideFundingAtStart - handler.wideFundingDebits() + handler.wideFundingCredits()
+        );
     }
 
     /// INV-ONCHAIN-9 (added): the gate never holds funds or grants an allowance.
@@ -102,11 +122,18 @@ contract GateInvariantsTest is StdInvariant, GateTestBase {
         assertEq(aapl.balanceOf(address(aaplAdapter)), 0);
         assertEq(funding.allowance(address(aaplAdapter), address(aaplVenue)), 0);
         assertEq(aapl.allowance(address(aaplAdapter), address(aaplVenue)), 0);
+        assertEq(wide.balanceOf(address(gate)), 0);
+        assertEq(funding0.balanceOf(address(gate)), 0);
+        assertEq(wide.balanceOf(address(wideAdapter)), 0);
+        assertEq(funding0.balanceOf(address(wideAdapter)), 0);
+        assertEq(wide.allowance(address(wideAdapter), address(wideVenue)), 0);
+        assertEq(funding0.allowance(address(wideAdapter), address(wideVenue)), 0);
     }
 
     /// INV-ONCHAIN-AUTH-1: every successful execution's *true* gross — quantity
     /// times the venue's settlement price — stayed at or below the principal-signed
-    /// maxNotional at its signed precision, whatever precision the agent declared.
+    /// maxNotional at its signed precision, whatever precision the agent declared,
+    /// including where that product cannot be represented at all (WIDE market).
     function invariant_onchainAuth1_maxNotionalAlwaysHolds() public view {
         assertEq(handler.maxNotionalViolations(), 0);
     }
@@ -159,11 +186,21 @@ contract GateInvariantsTest is StdInvariant, GateTestBase {
         handler.executeFixturePrecision(504_950e12, 0, 2, 2, false, true);
         assertEq(handler.fixtureBuySettled(), 1);
         assertEq(handler.fixtureSellSettled(), 1);
+        // The WIDE market: the unrepresentable product is attempted and refused on
+        // both sides at the extreme and an interior precision; controls settle.
+        handler.executeWideOverflow(38, false, false);
+        handler.executeWideOverflow(38, true, false);
+        handler.executeWideOverflow(17, false, false);
+        assertEq(handler.wideOverflowAttempts(), 3);
+        assertEq(handler.wideOverflowRefusals(), 3);
+        handler.executeWideOverflow(38, false, true);
+        handler.executeWideOverflow(38, true, true);
+        assertEq(handler.wideControlSettled(), 2);
         // A second round finds every authorization consumed.
         for (uint256 i = 0; i < handler.POOL(); ++i) {
             handler.execute(i, 0, 0, T0);
         }
-        assertEq(handler.settled(), handler.POOL() + 2);
+        assertEq(handler.settled(), handler.POOL() + 4);
 
         invariant_onchain1_2_atMostOneSettlementPerAuthorization();
         invariant_onchain3_settlementsCarryTheirSignedCommitment();

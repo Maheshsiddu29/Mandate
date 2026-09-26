@@ -470,4 +470,60 @@ contract MaxNotionalTest is GateTestBase {
         }
         assertEq(checked, 39 * 39 * 39);
     }
+
+    // ------------------------------------------------------------------
+    // The unrepresentable product as the only refusal (6R.1a)
+    // ------------------------------------------------------------------
+
+    /// @dev `quantity` wAAPL (1 decimal) on the WIDE market (1 USD, 0-decimal
+    /// funding, no fee) with the notional declared at 0 decimals as the floor.
+    function _wide(uint8 side, uint256 quantity, Amount memory maxNotional)
+        internal
+        returns (bool ok, bytes memory reason, uint256 declared)
+    {
+        Mandate memory m = side == SIDE_BUY ? _mandate() : _sellMandate();
+        m.nonce = uint64(++nonce);
+        m.maxNotional = maxNotional;
+        m.economicLimit = side == SIDE_BUY ? _usdAt(type(uint256).max, 0) : _usdAt(0, 0);
+        Candidate memory c = _candidateFor(address(wide), side);
+        c.quantity = Amount({unit: "TOKEN", decimals: 1, atoms: quantity});
+        c.executionPrice.decimals = 0;
+        c.executionPrice.atoms = 1;
+        declared = quantity / 10;
+        c.notional = _usdAt(declared, 0);
+        c.feeTotal = _usdAt(0, 0);
+        ExecutionTerms memory t = _terms();
+        t.fundingLimit = side == SIDE_BUY ? wideVenue.quoteBuy(quantity) : wideVenue.quoteSell(quantity);
+        (ok, reason) = _try(m, c, t);
+    }
+
+    /// @notice The bound is uint256 max at 38 decimals, V = 1,157,920,892,373,161,954,235,709,850,086,879,078,532.699…
+    /// USD. Buying V + 0.0003… USD worth (the quantity below, 0.7 of a token past
+    /// V's integer part) makes quantity × price at 38 decimals exceed 2^256, so
+    /// no uint256 bound can hold it: `productRepresentable == false` is the only
+    /// condition refusing. The declared notional, its floor at 0 decimals, is
+    /// within the bound; everything else is honest and fillable. A control one
+    /// tenth of a token lower, whose product is representable and within the
+    /// bound, settles — the two differ in nothing but representability.
+    function test_m1_unrepresentableProductIsTheOnlyRefusal() public {
+        uint256 overflowing = 11_579_208_923_731_619_542_357_098_500_868_790_785_327;
+        uint256 control = overflowing - 1;
+        Amount memory bound_ = _usdAt(type(uint256).max, 38);
+        for (uint8 side = SIDE_BUY; side <= SIDE_SELL; ++side) {
+            // Preconditions, by the exact oracle: over, but only through representability.
+            (bool representable,,) = ExactMath.productAt(overflowing, 1, 1, 0, 38);
+            assertFalse(representable, "the product must be unrepresentable at 38 decimals");
+            assertTrue(ExactMath.productExceeds(overflowing, 1, 1, 0, type(uint256).max, 38));
+            (bool ok, bytes memory reason, uint256 declared) = _wide(side, overflowing, bound_);
+            assertFalse(ExactMath.gtScaled(declared, 0, type(uint256).max, 38), "declared must be within");
+            assertFalse(ok, "settled with a true gross beyond every uint256 bound");
+            assertEq(reason, _err(MandateExecutionGate.MaxNotionalExceeded.selector));
+
+            (representable,,) = ExactMath.productAt(control, 1, 1, 0, 38);
+            assertTrue(representable);
+            assertFalse(ExactMath.productExceeds(control, 1, 1, 0, type(uint256).max, 38));
+            (ok,,) = _wide(side, control, bound_);
+            assertTrue(ok, "the representable control must settle");
+        }
+    }
 }
