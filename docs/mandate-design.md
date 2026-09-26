@@ -1397,9 +1397,14 @@ everything else in the transaction from taking effect.
 
 ### 14.3 The execution gate
 
-**IMPLEMENTED, Phase 6, with one deliberate departure from this DRAFT.** See
+**IMPLEMENTED, Phase 6 and hardened in Phase 6R, with one deliberate departure
+from this DRAFT.** See
 [execution-gate.md](execution-gate.md) and
-[ADR 0019](adr/0019-onchain-execution-gate.md). The EVM cannot introspect the
+[ADR 0019](adr/0019-onchain-execution-gate.md). Phase 6R independently enforces
+the static principal-authority overlap: immutable fixture price, exact
+quantity×price notional, signed `maxNotional`, declared side-specific economics
+and exact FILL_OR_KILL quantity. It rejects real-market configuration until an
+inclusion-time state source can be authenticated. The EVM cannot introspect the
 other calls in a transaction, so a read-only gate *beside* the action would bind
 nothing; the gate is therefore the executor — it performs the action itself, so
 its position relative to the action is structural. The property the DRAFT's
@@ -1496,16 +1501,19 @@ dependence on mutable external references.
 These are the properties that define Mandate. A change that breaks one is a
 change to the product, not an implementation detail.
 
-**Phase 6 status.** **INV-13 is established for the gate path**: the gate
+**Phase 6R status.** **INV-13 is established for the fixture gate path**: the gate
 re-derives the mandate and candidate digests and requires an agent signature over
-an execution commitment that binds them to every execution term, so a mutated
-transaction cannot settle. **INV-10's safety-critical time is now chain time** for
+an execution commitment that binds them to every execution term, then
+independently proves that the static candidate is inside the principal's signed
+authority; a correctly signing malicious agent cannot widen it. **INV-10's
+safety-critical time is now chain time** for
 execution: validity window and deadline are checked against `block.timestamp`.
 **INV-12's final replay authority is onchain**: the mandate digest is consumed
 atomically with the settlement, one authorization settles at most once, and a
 reverted execution consumes nothing. INV-1's economic half is enforced on
 *measured* balance deltas. None of the invariants below changed; the gate
-enforces the subset the chain can observe, and the rest stay offchain
+enforces the subset the chain can observe. Dynamic real-market state remains
+offchain and real-market configuration is prohibited
 ([execution-gate.md §11](execution-gate.md#11-differential-testing-and-the-onchainoffchain-split)).
 
 **Phase 5R.3 status.** Four rounds of adversarial review have been applied on top

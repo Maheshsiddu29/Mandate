@@ -1,6 +1,6 @@
 # The onchain execution gate
 
-> **Status: Phase 6, implemented and tested locally. Not deployed.** The contract
+> **Status: Phase 6R, implemented and tested locally. Not deployed.** The contract
 > is `contracts/src/MandateExecutionGate.sol`; the offchain half is
 > `packages/execution-gate`; the decision is
 > [ADR 0019](adr/0019-onchain-execution-gate.md). The only supported execution
@@ -12,8 +12,10 @@ grant to agents.**
 
 The property this phase delivers:
 
-> A transaction that materially differs from what Mandate authorized and verified
-> offchain cannot settle through the Mandate execution path.
+> For the fixture-supported path, no execution materially different from the
+> principal's signed mandate and the agent's bound execution authorization can
+> settle through the gate. Authentication of the agent is never treated as
+> principal authorization.
 
 ## Contents
 
@@ -47,7 +49,11 @@ the chain can observe, atomically with the action:
 - this authorization has not settled before;
 - the candidate, the mandate and the gate's pinned market facts agree on who,
   what, where, which side and which units;
-- the principal's measured cash flow is inside the signed economic bound.
+- the candidate notional is the exact quantity × immutable fixture price result,
+  does not exceed signed `maxNotional`, and declared fees stay inside the signed
+  side-appropriate economic limit;
+- exact candidate quantity settles, and the principal's measured cash flow is
+  inside the signed economic bound.
 
 It does **not** resolve assets, interpret Robinhood metadata, discover routes,
 consult a model or re-run the kernel verifier. Those stay offchain (§11).
@@ -76,10 +82,11 @@ MandateExecutionGate.execute(mandate, principalSig, candidate, terms, agentSig)
   7  notBefore ≤ block.timestamp < expiresAt, block.timestamp ≤ deadline
   8  executionCommitmentOf[mandateDigest] == 0                        MandateAlreadyConsumed
   9  candidate/mandate/market binding (agent, side, asset, chain, venue, issuer,
-     synthetic, units, quantity), recipient == principal, signed bound
+     synthetic, units, quantity), immutable fixture price, quantity×price notional,
+     maxNotional, declared all-in economics, recipient == principal, signed bound
  10  executionCommitmentOf[mandateDigest] := commitment               ← effects
  11  transferFrom(principal → adapter, input); adapter.execute(order) ← interactions
- 12  measured debit ≤ limit, measured credit ≥ minimum                DebitExceedsLimit / CreditBelowMinimum
+ 12  exact representation quantity and measured funding bound         DebitNotExact / CreditNotExact / economic errors
  13  emit MandateExecuted(...)
 ════════════════════════════════════════════════════════════════════════════════
 OFFCHAIN
@@ -104,6 +111,7 @@ action, "the gate's position relative to the action" is structural.
 | --- | --- | --- |
 | `MandateExecutionGate` | `contracts/src/MandateExecutionGate.sol` | The gate. Immutable. |
 | `MandateCodec` | `contracts/src/libraries/MandateCodec.sol` | MCE v2 / Candidate V3 re-encoding and kernel-decoder validation |
+| `GateArithmetic` | `contracts/src/libraries/GateArithmetic.sol` | Exact 512-bit-aware decimal comparisons and kernel-equivalent notional bounds |
 | `MandateTypes` | `contracts/src/MandateTypes.sol` | Wire structs and frozen enum codes |
 | `IMandateExecutionAdapter` | `contracts/src/interfaces/` | The one call shape the gate makes |
 | `FixtureVenue`, `FixtureVenueAdapter` | `contracts/src/fixture/` | **Labelled settlement fixture** and its adapter (§5) |
@@ -169,7 +177,7 @@ invariant action.
 | target / adapter | the market's adapter; never caller-supplied |
 | recipient | agent-signed and required to be the principal |
 | side | `candidate.side == mandate.side` |
-| quantity or spend/proceeds | candidate quantity in token atoms; agent's `fundingLimit` inside the signed bound |
+| quantity, notional, spend/proceeds | exact candidate quantity; exact quantity × immutable fixture price; candidate notional ≤ signed `maxNotional`; agent's `fundingLimit` inside the signed side-specific bound |
 | funding asset | the market's funding token; its settlement unit must be the mandate's economic-limit unit |
 
 Signature acceptance is the kernel's: exactly 65 bytes, `v ∈ {27, 28}`, low `s`
@@ -221,8 +229,8 @@ side (ADR 0014).
 
 | Side | Signed bound | Onchain rule |
 | --- | --- | --- |
-| BUY | `MAX_TOTAL_DEBIT` | `fundingLimit ≤ floor(bound → funding atoms)`; measured debit ≤ `fundingLimit`; measured credit ≥ quantity |
-| SELL | `MIN_TOTAL_CREDIT` | `fundingLimit ≥ ceil(bound → funding atoms)`; measured credit ≥ `fundingLimit`; measured debit ≤ quantity |
+| BUY | gross `maxNotional`; `MAX_TOTAL_DEBIT` | declared notional ≤ `maxNotional`; declared notional + fee ≤ debit limit; `fundingLimit ≤ floor(limit → funding atoms)`; measured debit ≤ `fundingLimit`; measured representation credit **equals** quantity |
+| SELL | gross `maxNotional`; `MIN_TOTAL_CREDIT` | declared notional ≤ `maxNotional`; declared notional − fee ≥ credit floor; `fundingLimit ≥ ceil(limit → funding atoms)`; measured funding credit ≥ `fundingLimit`; measured representation debit **equals** quantity |
 
 - **Units.** The candidate's quantity must be in the market's quantity unit
   (`TOKEN`) at the token's decimals — a `SHARE` is not a `TOKEN` under an
@@ -239,12 +247,17 @@ side (ADR 0014).
   because no credit can reach it (`econ-005`, `econ-006`). Token decimals above
   the kernel's 38 are refused at construction. Decimals are pinned at
   construction and re-read at execution; a change is `TokenDecimalsChanged`.
-- **Fees.** Fees are inside the measured debit (BUY) or outside the measured
-  credit (SELL), so the signed all-in bound covers them without the gate knowing
-  any fee schedule. `testFuzz_fixtureVenue_feesAreInsideTheSignedDebitBound`
-  fuzzes price and fee.
-- **`maxNotional` and deviation** are gross-exposure and price constraints the
-  chain cannot observe separately from fees; they remain offchain (§11).
+- **Notional.** The gate independently reproduces the kernel's exact rational
+  floor/ceil band for `quantity × executionPrice`, compares decimal scales with
+  512-bit intermediates, and refuses overflow. It never trusts the declared
+  notional merely because the agent signed it.
+- **Fixture price.** Every `FIXTURE` market pins a typed, non-zero price at
+  construction. Candidate prices may use another decimal scale only when the
+  rational value is exactly equal. This closes the zero-price/max-notional
+  bypass without pretending to solve real-market price freshness.
+- **Fees.** Candidate notional plus BUY fees or minus SELL fees is checked
+  against the principal-signed limit before settlement. Measured balance deltas
+  then enforce the realized result independently.
 - **Fee-on-transfer and other non-standard tokens** are excluded by the curated
   market table. If one were listed anyway: on the input side the principal is
   still debited at most the transferred amount (`feeOnTransferInput…`); on the
@@ -263,7 +276,8 @@ transferFrom(principal → adapter, inputAmount)
 adapter.execute(order)
 actualDebit  = max(inputBefore − input.balanceOf(principal), 0)
 actualCredit = max(output.balanceOf(recipient) − outputBefore, 0)
-require actualDebit ≤ inputAmount and actualCredit ≥ minOutput
+BUY:  require actualDebit ≤ inputAmount and actualCredit == candidate quantity
+SELL: require actualDebit == candidate quantity and actualCredit ≥ minOutput
 ```
 
 The adapter returns nothing and the gate reads nothing it could report. An
@@ -274,6 +288,11 @@ allowance is refused (`settle-005`); one that under-delivers by one atom is
 refused (`settle-001`). Deltas are net across the whole interaction, which is the
 point: whatever happened in between, the principal ends inside the bound.
 Balances going the favourable way count as zero debit, never as a negative one.
+Strict equality implements ADR 0011 FILL_OR_KILL. An unsolicited balance change
+during the call can cause denial of service by making the delta too large, but
+cannot make a materially different quantity settle. Balance deltas prove the
+principal's result, not that the named venue supplied it; a test deliberately
+settles from unrelated scripted-adapter inventory to preserve that distinction.
 
 ## 8. Approvals
 
@@ -286,8 +305,10 @@ Balances going the favourable way count as zero debit, never as a negative one.
   **Revoking the allowance is the Phase 6 revocation mechanism**: it stops every
   signed execution immediately (`test_revokingTheAllowanceStopsEverySignedExecution`).
 - **Gate → anyone.** None. The gate pushes the exact input to the adapter with
-  `transferFrom(principal → adapter)`; it never approves, and never holds funds
-  (INV-ONCHAIN-9).
+  `transferFrom(principal → adapter)` and never approves. "The gate holds no
+  funds" means the supported execution path intentionally retains none; anyone
+  can still donate tokens directly to any address, and the gate does not sweep
+  such unrelated donations.
 - **Adapter → venue.** `FixtureVenueAdapter` uses `forceApprove` for exactly the
   order's input (handling tokens that require a reset to zero) and resets to zero
   in the same call. No standing allowance survives an execution
@@ -356,6 +377,11 @@ the result through the kernel's own `applyTransition(RECONCILE)`.
 
 This closes V-59 for the gate path: the observation is derived from chain state,
 not merely validated. Reading the chain is the caller's job; the rule is pure.
+The `confirmation` value passed to that rule is not cryptographic proof. The
+chain reader is a trust boundary and must establish canonical block status from
+the configured RPC/finality policy, bind transaction hash and log index, and
+only then construct evidence. A caller-supplied string `FINALIZED` alone proves
+nothing.
 
 ## 10. Tests and invariants
 
@@ -363,12 +389,12 @@ Run: `npm run contracts:test` (regenerates the corpus ABI, then `forge test`).
 
 | Suite | Tests | What it covers |
 | --- | --- | --- |
-| `MandateExecutionGate.t.sol` | 48 | Construction, both sides on the fixture venue, every refusal, exact time boundaries, replay, conversion |
-| `Adversarial.t.sol` | 24 | Lying, under-delivering, redirecting, over-pulling, reverting, gas-burning and re-entering adapters; callback and fee-on-transfer tokens; allowance failure and revocation; fixture adapter restrictions |
+| `MandateExecutionGate.t.sol` | reported by the final Phase 6R validation | Construction, principal authority, both sides, exact time boundaries, replay/reorg model, calldata canonicality, executable profile |
+| `Adversarial.t.sol` | reported by the final Phase 6R validation | Lying, exact-fill violations, redirecting, over-pulling, large return/revert data, gas burn, re-entry, token return variants, approval cleanup and provenance limits |
 | `MandateCodec.t.sol` | 12 | Identifier and set rules, validity rules, domain tags, injectivity, commitment of every numeric field |
-| `Fuzz.t.sol` | 13 × 1,024 runs | Amounts, quantities, refunds, fees and prices, bound conversion at every scale, time windows, nonces, post-signature mutation of every committed field, random signature bytes, recipients, tokens, chains |
-| `invariant/GateInvariants.t.sol` | 8 invariants × 256 runs × depth 64, plus a deterministic non-vacuity test | Below |
-| `Differential.t.sol` | 3 | §11 |
+| `Fuzz.t.sol` | 15 × 1,024 runs | Principal/agent economics, exact rational arithmetic, quantities, prices, decimal scales, exact fill, time, replay, post-signature mutations, signatures, recipient, representation and chain |
+| `invariant/GateInvariants.t.sol` | 12 invariants × 256 runs × depth 64, plus a deterministic non-vacuity test | Below |
+| `Differential.t.sol` | 4 | §11 |
 | `DeployScript.t.sol` | 3 | §13 |
 
 Invariants, each checked after every call of every run:
@@ -384,6 +410,10 @@ Invariants, each checked after every call of every run:
 | INV-ONCHAIN-7 | Unsupported token, adapter or venue combinations never settle |
 | INV-ONCHAIN-8 *(added)* | The principal's balances move by exactly the reported measured amounts, and nothing else |
 | INV-ONCHAIN-9 *(added)* | The gate never holds funds or grants an allowance |
+| INV-ONCHAIN-AUTH-1 | Every settlement satisfies signed `maxNotional` |
+| INV-ONCHAIN-AUTH-2 | Every settlement satisfies exact quantity |
+| INV-ONCHAIN-AUTH-3/4 | Every BUY/SELL satisfies its measured signed economic bound |
+| INV-ONCHAIN-AUTH-5 | A correctly signing malicious agent cannot settle a generated static principal-policy violation |
 
 INV-ONCHAIN-6 holds without qualification here: every external action on the
 supported path is inside the reverting transaction. The handler exercises honest,
@@ -407,7 +437,7 @@ generate-gate-corpus.ts` from the kernel and the reference model; nothing is
 typed twice. `Differential.t.sol` deploys the same world at the same addresses and
 replays every entry.
 
-- **222 execution attempts in 215 vectors** — every hand-written refusal family,
+- **240 execution attempts in 233 vectors** — every hand-written refusal family,
   boundary and multi-attempt sequence, plus 120 seeded mutations. For each, the
   two implementations agree on settlement, execution commitment, mandate and
   candidate digests (checked through storage and the event), debit and credit —
@@ -421,6 +451,10 @@ replays every entry.
   `verifyAuthorization` itself, so agreement is with the kernel's rule, not a copy.
 - A TypeScript test asserts every runtime refusal the gate can make appears in the
   corpus, and that the committed corpus equals what the generator produces.
+- A separate authority layer sends **16 actual-kernel REJECT** cases with valid
+  principal and authorized-agent signatures to Solidity; none settles. These
+  cover economics, arithmetic, immutable fixture price, identity, side, asset,
+  issuer, chain, venue, synthetic policy, representation mapping and quantity unit.
 
 The readable corpus is committed; its ABI form is written by the same generator
 run to `contracts/generated/` (not committed — it is megabytes of ABI padding) and
@@ -439,10 +473,11 @@ read by the harness.
 | Canonical asset, issuer, chain, venue, side | ✅ against trusted state | ✅ against pinned market facts and the signed mandate |
 | Synthetic policy | ✅ registry tri-state | ✅ pinned market flag |
 | Token address | ✅ via registry | ✅ derived from `representationId` |
-| Economic limit (all-in) | ✅ declared notional + fees | ✅ **measured** balance deltas |
-| `maxNotional` | ✅ | ❌ not observable separately from fees |
-| Notional consistency (qty × price) | ✅ | ❌ |
-| Price deviation, price freshness | ✅ at handoff | ❌ not re-asserted |
+| Economic limit (all-in) | ✅ declared notional + fees | ✅ declared economics and **measured** balance deltas |
+| `maxNotional` | ✅ | ✅ exact scaled comparison |
+| Notional consistency (qty × price) | ✅ | ✅ kernel-equivalent floor/ceil arithmetic |
+| Fixture price | trusted fixture state | ✅ immutable exact scaled value |
+| Real-market price deviation, price freshness | ✅ at handoff | ❌ not re-asserted; real markets prohibited |
 | Halt status, operational state | ✅ at handoff | ❌ not re-asserted |
 | Corporate-action epoch and freshness | ✅ at handoff | ❌ committed in `candidateDigest`, not re-asserted |
 | Registry snapshot binding | ✅ | ❌ committed in `candidateDigest`, not compared (no onchain registry root) |
@@ -490,13 +525,49 @@ policy and never lives in the gate.
   **No Robinhood Chain testnet config is committed**: the repository holds no
   verified testnet Stock Token or funding-token addresses, and a testnet
   deployment needs separate authorization and that evidence first.
-- Target facts: Robinhood Chain testnet is chain 46630 and mainnet 4663
-  ([robinhood-integration.md](robinhood-integration.md)). The contracts compile
-  for the `cancun` EVM target (OpenZeppelin 5.6 uses `MCOPY`); confirming the
-  target chain's ArbOS supports Cancun opcodes is a deployment precondition.
+- Every market is explicitly classified. Phase 6R accepts `FIXTURE` only;
+  `REAL_MARKET` construction reverts `RealMarketStateSourceRequired` until an
+  authenticated inclusion-time state source exists.
+- The executable profile is at most 16 issuers, 16 chains, 16 venues, 4,096
+  route bytes and 32 constructor markets. Worst-case measured calldata is 17,156
+  bytes with 172,784 intrinsic calldata gas; a local maximum-profile execution
+  used 1,673,113 gas. The Nitro node default is 95,000 transaction-data bytes,
+  so calldata retains more than 80% headroom.
+- Fixture deployments require non-upgradeable representation tokens, funding
+  tokens, adapters and venue targets. A deployment review must record address,
+  chain, runtime codehash, proxy status and implementation/codehash. The
+  constructor rejects code-less dependencies but does not mistake an immutable
+  address for immutable code; upgradeable dependencies are deployment-prohibited.
+- Target facts: Robinhood documents chain IDs 46630/4663 and describes the
+  chain as Arbitrum Nitro ([network](https://docs.robinhood.com/chain/connecting/),
+  [node](https://docs.robinhood.com/chain/run-a-full-node/)). The same node guide
+  currently reports ArbOS 61; Nitro's own MCOPY upgrade test establishes MCOPY
+  support in post-ArbOS-11 versions. The contracts compile for `cancun` because
+  OpenZeppelin 5.6 uses `MCOPY`. Reconfirming the target chain's current ArbOS
+  version remains a deployment-time check, not an assumption frozen in source.
 - The gate is immutable. A changed market fact, adapter or fix means a new
   deployment at a new address, and therefore a new EIP-712 domain: signatures for
   the old gate cannot be replayed on the new one.
+
+### Vetted-token policy
+
+| Behaviour | Classification | Reason |
+| --- | --- | --- |
+| Standard boolean-return ERC-20 | **SUPPORTED** | SafeERC20 and balance-delta tests cover it |
+| Empty-return legacy ERC-20 | **SUPPORTED, review required** | SafeERC20 accepts empty success data; explicitly tested |
+| Malformed return data | **FAILS CLOSED** | SafeERC20 reverts; consumption and transfers roll back |
+| Fee-on-transfer input | **SUPPORTED only when deployment review accepts its economics** | Net principal debit remains bounded; adapter may receive less |
+| Fee-on-transfer output | **FAILS CLOSED** | Exact output delta is not met |
+| Callback token | **FAILS CLOSED against gate re-entry** | `nonReentrant`; callback test settles only the outer authorization |
+| Rebasing token | **UNSUPPORTED / DEPLOYMENT-PROHIBITED** | In-call/exogenous balance movement makes deltas ambiguous |
+| Token lying about `balanceOf` | **UNSUPPORTED / DEPLOYMENT-PROHIBITED** | Delta verification cannot establish truth from a dishonest oracle |
+| Mint/burn during execution | **UNSUPPORTED / DEPLOYMENT-PROHIBITED** unless semantics are exhaustively reviewed | Can manufacture or erase apparent deltas; strict equality may only provide DoS, but provenance is not proven |
+| Upgradeable token | **UNSUPPORTED / DEPLOYMENT-PROHIBITED** | Immutable address does not pin behavior |
+| Representation == funding token | **DEPLOYMENT-PROHIBITED** | Constructor rejects it; two balance legs would be ambiguous |
+
+All token, adapter and venue code is trusted deployment surface. Balance deltas
+prove only the balances reported by those token contracts. They do not prove
+legal/economic equivalence or venue provenance.
 
 ## 14. Slither findings
 
@@ -506,7 +577,7 @@ detector classes**, all in `contracts/src`. Disposition:
 
 | ID | Detector | Where | Disposition |
 | --- | --- | --- | --- |
-| S-1 | `arbitrary-send-erc20` (High) | `_settle`: `safeTransferFrom(principal, …)` | **False positive, suppressed with reason.** `principal` is not arbitrary: `_authorize`, which always precedes `_settle` and reverts on failure, has verified the principal's EIP-712 signature over this mandate digest under this gate's domain, and bounded the amount by the signed mandate. Tested by every signature and bound test |
+| S-1 | `arbitrary-send-erc20` (High) | `_settle`: `safeTransferFrom(principal, …)` | **False positive after Phase 6R remediation.** `_authorize` verifies the principal signature and independently bounds candidate quantity/notional against immutable fixture price, signed `maxNotional`, declared economics and the side-specific funding limit before deriving `inputAmount` |
 | S-2 | `reentrancy-balance` ×2 | `_settle` before/after balances | **By design, suppressed with reason.** Pre-call balances are meant to be pre-call: settlement is the net delta across the interaction. Gate re-entry is blocked by `nonReentrant` (tested) and consumption precedes the call |
 | S-3 | `unused-return` ×2 | `FixtureVenueAdapter`: venue `buy`/`sell` | **Intentional, suppressed with reason.** The adapter measures its own balance rather than trusting the venue's report |
 | S-4 | `unused-return` | `_signedBy`: `ECDSA.tryRecover` third value | **Intentional, suppressed with reason.** It only describes why recovery failed; the error enum decides |
@@ -515,26 +586,33 @@ detector classes**, all in `contracts/src`. Disposition:
 | S-7 | `calls-loop` ×2 | constructor `decimals()` per market | **Accepted, suppressed with reason.** Constructor only, over a deployer-chosen list; a reverting token correctly fails deployment |
 | S-8 | `cyclomatic-complexity` | `_checkBinding` | **Accepted, suppressed with reason.** A flat list of independent checks in interface order |
 | S-9 | `naming-convention` ×10 | immutables in `UPPER_CASE` | **Style disagreement, detector excluded.** forge-lint requires `SCREAMING_SNAKE_CASE` immutables; the two tools conflict and the Solidity style guide sides with forge-lint |
+| S-10 | `unused-return` | `GateArithmetic.notionalBounds`: low limb of `Math.mul512` | **Intentional, suppressed with reason.** Only the high limb determines whether the quotient fits `uint256`; the following `mulDiv` and `mulmod` independently consume the full product for quotient and remainder |
 
-After remediation: **0 results.** `fail_on: low` then makes any *new* Low, Medium
-or High finding fail CI; this was verified by adding a deliberately unsafe
-contract, which failed the run, and removing it. Every suppression is an inline
-`slither-disable-next-line` beside a comment giving the reason, so the reasoning
-travels with the code. forge-lint reports nothing in `contracts/src`; test doubles
-are excluded from linting because they deliberately do what lints forbid.
+The fresh Phase 6R run initially found two `uninitialized-local` diagnostics for
+Solidity-zeroed memory structs and S-10. The structs are now explicitly
+initialized and S-10 is narrowly documented at the ignored return. The final
+normal run analyzed **20 contracts with 101 detectors and reported 0 results**.
+An independent `--show-ignored-findings` run reported **11 reviewed results**:
+S-1 (1), S-2 (2), S-3/S-4/S-10 (4), S-6 (1), S-7 (2), and S-8 (1).
+`fail_on: low` makes any *new* Low, Medium or High finding fail CI; this was
+verified by adding a deliberately unsafe contract, which failed the run, and
+removing it. Every suppression is an inline `slither-disable-next-line` beside a
+comment giving the reason, so the reasoning travels with the code. forge-lint
+reports nothing in `contracts/src`; test doubles are excluded from linting
+because they deliberately do what lints forbid.
 
 ## 15. Threat model
 
 | Threat | Control | Evidence |
 | --- | --- | --- |
-| Malicious agent | Every agent choice is signed, then bounded by the principal's mandate and the pinned market | `bind-1xx`, fuzz, INV-3/4/5 |
+| Malicious agent | Authentication is not authority: every static candidate choice in scope is independently bounded by the principal mandate and immutable fixture market | `authority-*` actual-kernel vectors, fuzz, INV-ONCHAIN-AUTH-1..5 |
 | Compromised agent key | Same bounds: the key can execute only what the principal's mandate permits, once, on supported markets | as above; revocation via allowance (§8) |
 | Replay | Mandate digest consumed atomically | INV-1/2/6, `replay-*` |
 | Cross-chain replay | `WrongChain`, domain `chainId`, CAIP-2 allowlist | `chain-001`, `sig-003`, `sig-010`, fuzz |
 | Cross-contract replay | Domain `verifyingContract` | `sig-002`, `sig-009` |
 | Malicious adapter | Measured deltas; bounded input; no allowance; `nonReentrant` | `Adversarial.t.sol`, INV-8 |
 | Malicious venue | Behind the adapter; the same deltas | `settle-*`, fixture tests |
-| Malicious ERC-20 | Curated markets; re-entry blocked; decimals re-checked; FoT fails closed on output | `test_callbackToken…`, `test_feeOnTransfer…`, `settle-010/011` |
+| Malicious ERC-20 | Deployment allowlist; code and decimals checked; re-entry blocked; output FoT fails closed; malformed return fails closed; lying balances/rebasing/upgradeable tokens prohibited | adversarial token tests, `settle-010/011` |
 | Reentrancy | CEI + `nonReentrant` | reentry tests |
 | Calldata substitution | Execution commitment signed by the agent | `bind-0xx`, fuzz |
 | Recipient substitution | Recipient must be the principal; delivery measured at the principal | `bind-118`, `settle-003` |
@@ -552,14 +630,14 @@ are excluded from linting because they deliberately do what lints forbid.
 
 No CRITICAL or HIGH finding is open. What remains, stated plainly:
 
-1. **Dynamic state is not re-asserted at execution.** Price deviation, freshness,
-   halt, corporate-action epoch, operational state and registry snapshot are
-   decided offchain at handoff. Between handoff and inclusion only the agent's
-   deadline and the mandate's expiry bound the window. The principal's cash flow
-   stays inside the signed bound regardless; the *instrument's* state does not.
-   A pending ERC-8056 multiplier change crossing during flight is the concrete
-   case (design §13.5). Re-asserting it onchain means interpreting Robinhood
-   metadata in Solidity, which this phase deliberately does not do.
+1. **Dynamic state is not re-asserted at execution.** The fixture price is now
+   immutable, but real-market reference price/freshness, halt, operational state,
+   corporate-action epoch, multiplier and registry currentness remain handoff
+   facts. A price move, halt, corporate action or multiplier change after fresh
+   verification but before inclusion can invalidate a real-market decision.
+   Severity is **HIGH for any real-market path**, therefore `REAL_MARKET` is
+   structurally rejected. It is **not a fixture-path High** because the labelled
+   fixture has no live market state and makes no such guarantee.
 2. **Pinned market facts can go stale.** Issuer, venue or synthetic status
    changes need a new gate.
 3. **The funding-unit assumption** (§6) is declared, not verified.
@@ -604,4 +682,4 @@ Recorded so they are decided on purpose later:
 - stablecoin funding and conversion (Phase 7);
 - a persistent replay store and reconciliation service (only the pure rule and
   the chain facts are built);
-- partial fills beyond what the measured bounds already permit.
+- partial fills (strict FILL_OR_KILL is the only supported semantics).

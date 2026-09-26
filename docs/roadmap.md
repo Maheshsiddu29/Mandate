@@ -3,7 +3,7 @@
 Phased engineering plan: what each phase delivers, how it is known to be done,
 and what it depends on.
 
-> **Status: Phase 6 implemented locally, awaiting review.** Phase 7 and beyond are
+> **Status: Phase 6R implemented locally, awaiting independent review.** Phase 7 and beyond are
 > planned, not started. Nothing has been deployed.
 > Rationale for the phase ordering is in
 > [mandate-design.md §25](mandate-design.md#25-phased-engineering-roadmap);
@@ -346,7 +346,7 @@ Solidity is the expensive mistake.
 
 ## Phase 6 — On-chain execution gate and settlement
 
-**Implemented and tested locally; not deployed; awaiting review.** Semantics,
+**Phase 6R implemented and tested locally; not deployed; awaiting independent review.** Semantics,
 threat model and residual risks are in [execution-gate.md](execution-gate.md);
 the decision is [ADR 0019](adr/0019-onchain-execution-gate.md).
 
@@ -357,6 +357,10 @@ the decision is [ADR 0019](adr/0019-onchain-execution-gate.md).
   agent's `ExecutionAuthorization` under the ADR 0001 domain, enforces chain time,
   consumes the mandate digest atomically, binds candidate, mandate and pinned
   market facts, and settles on the principal's measured balance deltas;
+- Phase 6R independently enforces immutable fixture price, quantity × price
+  notional, signed `maxNotional`, declared side-specific economics and exact
+  quantity; it rejects all `REAL_MARKET` configurations pending authenticated
+  inclusion-time state;
 - one supported execution path against a **labelled settlement fixture** — the
   repository evidences no executable Robinhood venue (§5 of the gate document);
 - `@mandate/execution-gate`: wire form, execution commitment, a reference model
@@ -374,11 +378,11 @@ the decision is [ADR 0019](adr/0019-onchain-execution-gate.md).
 | A transaction mutated after verification is rejected by the gate | **Met** — every committed field, by vector, fuzz and invariant |
 | The gate is read-only and side-effect free | **Superseded** by ADR 0019: the EVM cannot bind an action it does not perform, so the gate is the executor; the protected property — nothing unverified settles — holds |
 | All failure demonstrations produce their expected codes | **Met for the gate's own refusals** (demonstration 10); 1–9 remain kernel refusals |
-| The offchain verifier and onchain gate agree on a shared corpus | **Met** — 222 attempts, 139 mandate and 188 candidate encodings |
+| The offchain verifier and onchain gate agree on a shared corpus | **Met** — 240 attempts, 139 mandate and 188 candidate encodings, including 16 actual-kernel malicious-agent rejects |
 | What was demonstrated is stated precisely | See execution-gate.md §5 and §16 |
 
 **Not delivered, deliberately:** deployment of any kind, a real venue adapter,
-onchain re-assertion of price, epoch or registry snapshot, a persistent replay
+onchain re-assertion of real-market price, halt, multiplier, epoch or registry snapshot, a persistent replay
 store, and funding (Phase 7).
 
 **Depends on:** Phase 5R.3.
@@ -446,7 +450,8 @@ the design document before it belongs in code.
 | 5R | Pressure-test remediation (F-1…F-16) | 5 | ✅ complete |
 | 5R.1 | Post-remediation audit remediation (N-1…N-10) | 5R | ✅ complete |
 | 5R.2–5R.3 | Replay evidence, public boundaries, encoder domains | 5R.1 | ✅ complete |
-| 6 | On-chain execution gate and settlement | 5R.3 | ✅ implemented locally, not deployed; awaiting review |
+| 6 | On-chain execution gate and settlement fixture | 5R.3 | historical baseline, locally implemented; remediated by 6R |
+| 6R | Principal-authority closure and execution-gate hardening | 6 | ✅ implemented locally, not deployed; awaiting independent review |
 | 7 | Stablecoin funding adapters | 6 | planned, flexible |
 | 8 | Demo product and web experience | 6 | planned |
 | 9+ | Cross-chain network, broader asset classes | 8 | future |

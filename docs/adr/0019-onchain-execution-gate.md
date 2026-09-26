@@ -9,6 +9,27 @@ implemented, with one deliberate departure recorded below)
 [ADR 0017](0017-layered-candidate-state-commitments.md),
 [ADR 0018](0018-observed-execution-outcomes.md)
 
+## Phase 6R security amendment
+
+The independent Phase 6 audit found that the accepted design authenticated an
+authorized agent but did not independently prove that the agent's candidate was
+within all static principal authority the gate claimed to enforce. Phase 6R
+closes that gap without changing MCE v2, Candidate V3, or Phases 1–5:
+
+- the gate independently verifies exact quantity × price notional arithmetic,
+  signed `maxNotional`, and declared BUY/SELL fee-inclusive economics;
+- the only supported `FIXTURE` market pins its engineered price immutably, so an
+  agent cannot choose a zero or distorted price to evade `maxNotional`;
+- representation quantity is strict FILL_OR_KILL on both sides;
+- real-market configurations are rejected until they have an authenticated,
+  inclusion-time state source;
+- the executable profile is bounded independently onchain; and
+- actual-kernel REJECT vectors signed by the correct agent must not settle.
+
+The complete authority classification is
+[phase-6r-principal-authority.md](../phase-6r-principal-authority.md). This is an
+amendment to the implementation decision, not a rewrite of the historical audit.
+
 ## Context
 
 Phases 1–5R.3 decide offchain whether an execution is permitted. Nothing
@@ -78,13 +99,17 @@ This is not registry resolution: nothing is looked up, ranked or interpreted. It
 is the onchain analogue of "addresses come from the registry" (INV-7) for a gate
 that has no registry.
 
-### 5. Settlement is measured, not reported
+### 5. Principal authority and settlement are independently established
 
-The gate transfers exactly the bound input from the principal to the adapter,
-calls the adapter, and settles on the principal's measured balance deltas:
-debit ≤ the agent's limit ≤ the signed bound; credit ≥ the required output. It
-reads nothing the adapter returns. The gate never holds funds and never grants an
-allowance.
+Before transferring anything, the gate establishes that the candidate price is
+the immutable fixture price, quantity × price brackets the declared notional by
+the kernel's exact integer rule, declared notional is within signed
+`maxNotional`, and fees preserve the side-specific signed economic limit. It
+then transfers the bound input, calls the adapter, and settles on measured
+balance deltas: BUY representation credit and SELL representation debit equal
+the exact candidate quantity, while funding debit/credit respects the signed
+bound. It reads nothing the adapter returns. The supported path intentionally
+leaves no funds or allowance in the gate.
 
 ### 6. Replay is keyed on the mandate digest and consumed atomically
 
@@ -128,10 +153,11 @@ is bounded by what they signed, measured on chain.
 - The gate re-implements the kernel's MCE encoder and decoder rules in Solidity.
   Divergence is the risk design §10.5 names; `corpus/gate-v1` and a
   mutation-tested differential harness exist to catch it.
-- Dynamic state — price deviation, freshness, halt, corporate-action epoch,
-  operational status, registry snapshot — is still decided offchain at handoff and
-  is not re-asserted at execution. The window between handoff and inclusion is
-  bounded only by the agent's deadline and the mandate's expiry.
+- Dynamic real-market state — reference-price freshness/deviation, halt,
+  corporate-action epoch, multiplier, operational status and registry snapshot
+  — is still decided offchain at handoff and is not re-asserted at execution.
+  Therefore Phase 6R rejects every `REAL_MARKET` configuration. A later path
+  needs an authoritative onchain source or narrowly scoped fresh attestation.
 - Pinned registry facts can go stale; a changed fact needs a new gate deployment.
 - An executor gate is a larger contract than an assertion would have been. It is
   kept immutable and single-purpose to compensate.

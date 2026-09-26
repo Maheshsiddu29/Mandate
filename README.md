@@ -3,7 +3,7 @@
 **Intent-aware execution infrastructure for AI agents transacting in tokenized
 financial assets.**
 
-> **Status: Phase 6 implemented locally and awaiting review — an onchain execution
+> **Status: Phase 6R implemented locally and awaiting independent review — an onchain execution
 > gate, tested against a labelled settlement fixture and not deployed.** The
 > sections below describe Phases 1–5R.3; the gate is summarized under
 > [The execution gate](#the-execution-gate) and specified in
@@ -181,17 +181,20 @@ npm run check      # offline TypeScript tests plus fixtures, replays, boundaries
 ### The execution gate
 
 `contracts/src/MandateExecutionGate.sol` is the onchain half: **a transaction
-that materially differs from what Mandate authorized and verified offchain cannot
-settle through it.** It re-derives the mandate and candidate digests, checks the
+that materially differs from the principal's signed mandate and the authorized
+agent's bound execution cannot settle through the fixture path.** It re-derives the mandate and candidate digests, checks the
 principal's existing signature and the agent's signed execution commitment under
 one EIP-712 domain, uses chain time, consumes the mandate digest atomically, binds
 the candidate to immutable market facts, and settles on the principal's
-*measured* balance deltas against the signed economic bound. Every trader and
+candidate notional arithmetic, signed `maxNotional`, immutable fixture price and
+declared economics, then settles exact quantity and *measured* balance deltas
+against the signed economic bound. Every trader and
 every agent uses the same gate; there are no modes.
 
-The only supported execution path runs against a **labelled settlement fixture**,
+The only supported execution path runs against a **labelled fixed-price settlement fixture**,
 because the repository evidences no executable Robinhood venue. Nothing has been
-deployed and no transaction has been sent.
+deployed and no transaction has been sent. `REAL_MARKET` configuration is
+rejected until inclusion-time market state can be authenticated.
 
 ```bash
 git submodule update --init          # forge-std
@@ -216,6 +219,8 @@ grant to agents.**
 | [docs/registry-reason-codes.md](docs/registry-reason-codes.md) | The 21 registry reason codes, and the kernel codes registry decisions reuse. Generated. |
 | [docs/replay-semantics.md](docs/replay-semantics.md) | How a mandate is consumed, and the one obligation the kernel cannot enforce for an integrator. |
 | [docs/execution-gate.md](docs/execution-gate.md) | Phase 6: the onchain execution gate — commitment hierarchy, replay, settlement, differential testing, Slither findings, threat model and residual risks. |
+| [docs/phase-6r-principal-authority.md](docs/phase-6r-principal-authority.md) | Phase 6R principal-authority matrix and real-market stop condition. |
+| [docs/phase-6r-report.md](docs/phase-6r-report.md) | Phase 6R remediation, validation evidence, deployment policy and remaining risk. |
 | [docs/robinhood-integration.md](docs/robinhood-integration.md) | Verified endpoints, schemas, issuer semantics, price/multiplier rules, timestamps and real-data limitations. |
 | [docs/mainnet-replay.md](docs/mainnet-replay.md) | Recorded-mainnet replay methodology, synthetic labelling and validation report. |
 | [docs/routing.md](docs/routing.md) | Candidate model, provider boundary, ranking, costs, limits and selection receipts. |
