@@ -31,6 +31,11 @@ uint8 constant SYNTHETIC_ALLOWED = 2;
 uint8 constant HALT_FORBID_WHEN_HALTED = 1;
 uint8 constant HALT_ALLOW_WHEN_HALTED = 2;
 
+/// @dev Phase 6R deploys only labelled fixtures. A real market requires an
+/// authenticated inclusion-time state source and is rejected by this gate.
+uint8 constant MARKET_FIXTURE = 1;
+uint8 constant MARKET_REAL = 2;
+
 struct CanonicalAsset {
     string assetClass;
     string idScheme;
@@ -133,6 +138,11 @@ struct MarketConfig {
     string settlementUnit;
     /// @dev Registry synthetic status, pinned. Must be established, never unknown.
     bool synthetic;
+    /// @dev Must be `MARKET_FIXTURE` in Phase 6R.
+    uint8 classification;
+    /// @dev Immutable price of the engineered fixture. Real markets require an
+    /// authenticated inclusion-time state source and cannot use this field.
+    Price fixturePrice;
 }
 
 /// @notice The reduced, immutable market record the gate checks against.
@@ -143,9 +153,12 @@ struct Market {
     uint8 representationDecimals;
     uint8 fundingDecimals;
     bool synthetic;
+    uint8 classification;
     bytes32 canonicalAssetHash;
     bytes32 issuerHash;
     bytes32 venueHash;
     bytes32 quantityUnitHash;
     bytes32 settlementUnitHash;
+    uint8 fixturePriceDecimals;
+    uint256 fixturePriceAtoms;
 }

@@ -28,10 +28,11 @@
     }
   },
   "counts": {
-    "vectors": 215,
-    "attempts": 222,
-    "settledAttempts": 76,
-    "revertedAttempts": 146,
+    "vectors": 233,
+    "attempts": 240,
+    "settledAttempts": 65,
+    "revertedAttempts": 175,
+    "maliciousAgentKernelRejectAttempts": 16,
     "mandateEncodings": 139,
     "candidateEncodings": 188
   },
@@ -982,21 +983,21 @@
       ]
     },
     {
-      "id": "valid-buy-007",
-      "family": "valid",
-      "description": "The adapter over-delivers: more output is never a violation.",
+      "id": "fill-buy-001",
+      "family": "exact-fill",
+      "description": "The adapter over-delivers one representation atom; strict FILL_OR_KILL refuses.",
       "attempts": [
         {
           "chainId": "46630",
           "timestamp": "1800000000",
           "expected": {
-            "settled": true,
-            "revertData": "0x",
-            "mandateDigest": "0xf43d1067183d09604020a2ff3a07afaca94e76cbaeb9a7dbdc9ea66e62f99414",
-            "candidateDigest": "0x632d17890802db7b400ca1c75d0e7383594a9a64cc2fe6d9b00ca693f059550b",
-            "executionCommitment": "0x3d4df6042b340e9d8d30b71a5477c761a14f8b82253b53e2d284b818076e5116",
-            "debit": "2006000000",
-            "credit": "10000000000000000001"
+            "settled": false,
+            "revertData": "0x2c8843be0000000000000000000000000000000000000000000000008ac7230489e800010000000000000000000000000000000000000000000000008ac7230489e80000",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
           },
           "script": {
             "mode": 0,
@@ -7835,7 +7836,7 @@
           "timestamp": "1800000000",
           "expected": {
             "settled": false,
-            "revertData": "0xc6a19f17ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "revertData": "0xfa06116c",
             "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
             "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
             "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -8062,6 +8063,2012 @@
       ]
     },
     {
+      "id": "authority-001",
+      "family": "malicious-agent",
+      "description": "Correct agent signature over notional one atom above principal maxNotional.",
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          },
+          "script": {
+            "mode": 0,
+            "deliver": "10000000000000000000",
+            "refund": "4000000",
+            "deliverElsewhere": false,
+            "extraPull": "0"
+          },
+          "input": {
+            "mandate": {
+              "version": "2",
+              "mandateId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+              "nonce": "1",
+              "principal": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "side": "1",
+              "maxNotional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "1999999999999999999999"
+              },
+              "economicLimit": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2010000000000000000000"
+              },
+              "maxDeviationBps": "40",
+              "syntheticPolicy": "1",
+              "allowedIssuers": [
+                "issuer.alpha"
+              ],
+              "allowedChains": [
+                "eip155:46630"
+              ],
+              "allowedVenues": [
+                "venue.other",
+                "venue.fixture"
+              ],
+              "requiredCorporateActionEpoch": "1",
+              "maxPriceAgeSeconds": "60",
+              "maxCorporateActionAgeSeconds": "3600",
+              "haltPolicy": "1",
+              "createdAtUnixSeconds": "1799999900",
+              "notBeforeUnixSeconds": "1799999940",
+              "expiresAtUnixSeconds": "1800003600"
+            },
+            "candidate": {
+              "version": "3",
+              "representationId": "eip155:46630/erc20:0x000000000000000000000000000000000000aa01",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "issuer": "issuer.alpha",
+              "chain": "eip155:46630",
+              "venue": "venue.fixture",
+              "side": "1",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "quantity": {
+                "unit": "TOKEN",
+                "decimals": 18,
+                "atoms": "10000000000000000000"
+              },
+              "executionPrice": {
+                "numeratorUnit": "USD",
+                "denominatorUnit": "TOKEN",
+                "decimals": 18,
+                "atoms": "200000000000000000000"
+              },
+              "notional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "feeTotal": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "6000000000000000000"
+              },
+              "evaluationStateId": "state.fixture.0001",
+              "evaluationStateDigest": "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+              "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+              "corporateActionEpoch": "1"
+            },
+            "terms": {
+              "recipient": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "fundingLimit": "2010000000",
+              "deadline": "1800000300",
+              "executionData": "0x"
+            },
+            "principalSignature": "0x47c449e7d79bb3c7c2193e278876e393449029b561a12b512e6bdc11ccefaf07455bec16df098355d6679c5dff6c7765a9a6f67560accda323242d12d260e11c1c",
+            "agentSignature": "0x298116f509a364ead8664aaf08c44ac24671239796c129c4771f8abedc788ae30b4cfc1a454cab7eb0508ddd1f4601a66bc7e6ec6dbbb1ed5c972eda596370f21b"
+          }
+        }
+      ]
+    },
+    {
+      "id": "authority-002",
+      "family": "malicious-agent",
+      "description": "Correct agent signature over a one-atom quantity-price-notional inconsistency.",
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x6fe60cfa00000000000000000000000000000000000000000000006c6b935b8bbd40000100000000000000000000000000000000000000000000006c6b935b8bbd40000000000000000000000000000000000000000000000000006c6b935b8bbd400000",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          },
+          "script": {
+            "mode": 0,
+            "deliver": "10000000000000000000",
+            "refund": "4000000",
+            "deliverElsewhere": false,
+            "extraPull": "0"
+          },
+          "input": {
+            "mandate": {
+              "version": "2",
+              "mandateId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+              "nonce": "1",
+              "principal": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "side": "1",
+              "maxNotional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "economicLimit": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2010000000000000000000"
+              },
+              "maxDeviationBps": "40",
+              "syntheticPolicy": "1",
+              "allowedIssuers": [
+                "issuer.alpha"
+              ],
+              "allowedChains": [
+                "eip155:46630"
+              ],
+              "allowedVenues": [
+                "venue.other",
+                "venue.fixture"
+              ],
+              "requiredCorporateActionEpoch": "1",
+              "maxPriceAgeSeconds": "60",
+              "maxCorporateActionAgeSeconds": "3600",
+              "haltPolicy": "1",
+              "createdAtUnixSeconds": "1799999900",
+              "notBeforeUnixSeconds": "1799999940",
+              "expiresAtUnixSeconds": "1800003600"
+            },
+            "candidate": {
+              "version": "3",
+              "representationId": "eip155:46630/erc20:0x000000000000000000000000000000000000aa01",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "issuer": "issuer.alpha",
+              "chain": "eip155:46630",
+              "venue": "venue.fixture",
+              "side": "1",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "quantity": {
+                "unit": "TOKEN",
+                "decimals": 18,
+                "atoms": "10000000000000000000"
+              },
+              "executionPrice": {
+                "numeratorUnit": "USD",
+                "denominatorUnit": "TOKEN",
+                "decimals": 18,
+                "atoms": "200000000000000000000"
+              },
+              "notional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000001"
+              },
+              "feeTotal": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "6000000000000000000"
+              },
+              "evaluationStateId": "state.fixture.0001",
+              "evaluationStateDigest": "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+              "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+              "corporateActionEpoch": "1"
+            },
+            "terms": {
+              "recipient": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "fundingLimit": "2010000000",
+              "deadline": "1800000300",
+              "executionData": "0x"
+            },
+            "principalSignature": "0xf4fad2a8c870cce1cf9ca5a473b635e029224bd0a898b67ef88994a38f84086a2fabde0f64e822cf5f21d518dd4480270adf828fc12195615fb16654d2f45a811b",
+            "agentSignature": "0xb22345ec300f238ba3e6f0e805d5329cb42ab5d36d709731760321b9339bae50487c54ef78894669988222e3c53cbef85a4308d611b00115543b4f7085e6e88f1c"
+          }
+        }
+      ]
+    },
+    {
+      "id": "authority-003",
+      "family": "malicious-agent",
+      "description": "Candidate economic fields use a unit outside the immutable USD market.",
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x726c25a4",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          },
+          "script": {
+            "mode": 0,
+            "deliver": "10000000000000000000",
+            "refund": "4000000",
+            "deliverElsewhere": false,
+            "extraPull": "0"
+          },
+          "input": {
+            "mandate": {
+              "version": "2",
+              "mandateId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+              "nonce": "1",
+              "principal": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "side": "1",
+              "maxNotional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "economicLimit": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2010000000000000000000"
+              },
+              "maxDeviationBps": "40",
+              "syntheticPolicy": "1",
+              "allowedIssuers": [
+                "issuer.alpha"
+              ],
+              "allowedChains": [
+                "eip155:46630"
+              ],
+              "allowedVenues": [
+                "venue.other",
+                "venue.fixture"
+              ],
+              "requiredCorporateActionEpoch": "1",
+              "maxPriceAgeSeconds": "60",
+              "maxCorporateActionAgeSeconds": "3600",
+              "haltPolicy": "1",
+              "createdAtUnixSeconds": "1799999900",
+              "notBeforeUnixSeconds": "1799999940",
+              "expiresAtUnixSeconds": "1800003600"
+            },
+            "candidate": {
+              "version": "3",
+              "representationId": "eip155:46630/erc20:0x000000000000000000000000000000000000aa01",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "issuer": "issuer.alpha",
+              "chain": "eip155:46630",
+              "venue": "venue.fixture",
+              "side": "1",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "quantity": {
+                "unit": "TOKEN",
+                "decimals": 18,
+                "atoms": "10000000000000000000"
+              },
+              "executionPrice": {
+                "numeratorUnit": "EUR",
+                "denominatorUnit": "TOKEN",
+                "decimals": 18,
+                "atoms": "200000000000000000000"
+              },
+              "notional": {
+                "unit": "EUR",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "feeTotal": {
+                "unit": "EUR",
+                "decimals": 18,
+                "atoms": "6000000000000000000"
+              },
+              "evaluationStateId": "state.fixture.0001",
+              "evaluationStateDigest": "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+              "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+              "corporateActionEpoch": "1"
+            },
+            "terms": {
+              "recipient": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "fundingLimit": "2010000000",
+              "deadline": "1800000300",
+              "executionData": "0x"
+            },
+            "principalSignature": "0xf4fad2a8c870cce1cf9ca5a473b635e029224bd0a898b67ef88994a38f84086a2fabde0f64e822cf5f21d518dd4480270adf828fc12195615fb16654d2f45a811b",
+            "agentSignature": "0x74d6cbe99d3bcf8acb243aaec8a97964bcbca43536bddeb853c15c49382995d85510db5c33e770d37dfa7fd8322e428bc2f1057544b973e98584375cc3f197fb1b"
+          }
+        }
+      ]
+    },
+    {
+      "id": "authority-004",
+      "family": "malicious-agent",
+      "description": "Quantity and price product cannot be represented in uint256 notional atoms.",
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x993784d4",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          },
+          "script": {
+            "mode": 0,
+            "deliver": "10000000000000000000",
+            "refund": "4000000",
+            "deliverElsewhere": false,
+            "extraPull": "0"
+          },
+          "input": {
+            "mandate": {
+              "version": "2",
+              "mandateId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+              "nonce": "1",
+              "principal": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "side": "1",
+              "maxNotional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "economicLimit": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2010000000000000000000"
+              },
+              "maxDeviationBps": "40",
+              "syntheticPolicy": "1",
+              "allowedIssuers": [
+                "issuer.alpha"
+              ],
+              "allowedChains": [
+                "eip155:46630"
+              ],
+              "allowedVenues": [
+                "venue.other",
+                "venue.fixture"
+              ],
+              "requiredCorporateActionEpoch": "1",
+              "maxPriceAgeSeconds": "60",
+              "maxCorporateActionAgeSeconds": "3600",
+              "haltPolicy": "1",
+              "createdAtUnixSeconds": "1799999900",
+              "notBeforeUnixSeconds": "1799999940",
+              "expiresAtUnixSeconds": "1800003600"
+            },
+            "candidate": {
+              "version": "3",
+              "representationId": "eip155:46630/erc20:0x000000000000000000000000000000000000aa01",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "issuer": "issuer.alpha",
+              "chain": "eip155:46630",
+              "venue": "venue.fixture",
+              "side": "1",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "quantity": {
+                "unit": "TOKEN",
+                "decimals": 18,
+                "atoms": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+              },
+              "executionPrice": {
+                "numeratorUnit": "USD",
+                "denominatorUnit": "TOKEN",
+                "decimals": 18,
+                "atoms": "200000000000000000000"
+              },
+              "notional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+              },
+              "feeTotal": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "6000000000000000000"
+              },
+              "evaluationStateId": "state.fixture.0001",
+              "evaluationStateDigest": "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+              "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+              "corporateActionEpoch": "1"
+            },
+            "terms": {
+              "recipient": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "fundingLimit": "2010000000",
+              "deadline": "1800000300",
+              "executionData": "0x"
+            },
+            "principalSignature": "0xf4fad2a8c870cce1cf9ca5a473b635e029224bd0a898b67ef88994a38f84086a2fabde0f64e822cf5f21d518dd4480270adf828fc12195615fb16654d2f45a811b",
+            "agentSignature": "0xa8a5c64d3a880f526d6268d86f281ed846f9baf8cbf73c49262303d70d64f4f31afebe2d43525213f95c2530e36a4020e1b30733ca5db5b5e123120c68ed15701b"
+          }
+        }
+      ]
+    },
+    {
+      "id": "authority-005",
+      "family": "malicious-agent",
+      "description": "A representable max notional plus one fee atom overflows the kernel declared BUY total.",
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x6bd64638",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          },
+          "script": {
+            "mode": 0,
+            "deliver": "10000000000000000000",
+            "refund": "4000000",
+            "deliverElsewhere": false,
+            "extraPull": "0"
+          },
+          "input": {
+            "mandate": {
+              "version": "2",
+              "mandateId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+              "nonce": "1",
+              "principal": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "side": "1",
+              "maxNotional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+              },
+              "economicLimit": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+              },
+              "maxDeviationBps": "40",
+              "syntheticPolicy": "1",
+              "allowedIssuers": [
+                "issuer.alpha"
+              ],
+              "allowedChains": [
+                "eip155:46630"
+              ],
+              "allowedVenues": [
+                "venue.other",
+                "venue.fixture"
+              ],
+              "requiredCorporateActionEpoch": "1",
+              "maxPriceAgeSeconds": "60",
+              "maxCorporateActionAgeSeconds": "3600",
+              "haltPolicy": "1",
+              "createdAtUnixSeconds": "1799999900",
+              "notBeforeUnixSeconds": "1799999940",
+              "expiresAtUnixSeconds": "1800003600"
+            },
+            "candidate": {
+              "version": "3",
+              "representationId": "eip155:46630/erc20:0x000000000000000000000000000000000000aa01",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "issuer": "issuer.alpha",
+              "chain": "eip155:46630",
+              "venue": "venue.fixture",
+              "side": "1",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "quantity": {
+                "unit": "TOKEN",
+                "decimals": 18,
+                "atoms": "578960446186580977117854925043439539266349923328202820197287920039565648199"
+              },
+              "executionPrice": {
+                "numeratorUnit": "USD",
+                "denominatorUnit": "TOKEN",
+                "decimals": 18,
+                "atoms": "200000000000000000000"
+              },
+              "notional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "115792089237316195423570985008687907853269984665640564039457584007913129639800"
+              },
+              "feeTotal": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "136"
+              },
+              "evaluationStateId": "state.fixture.0001",
+              "evaluationStateDigest": "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+              "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+              "corporateActionEpoch": "1"
+            },
+            "terms": {
+              "recipient": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "fundingLimit": "2010000000",
+              "deadline": "1800000300",
+              "executionData": "0x"
+            },
+            "principalSignature": "0xb53ff435b4c75dd60472b4b64934619271e5b8be4d9550a2db89c8ff9d14bc9c197fba6a66e62b0d48a3f29e49d7b842656df3ffdb27012c78749eafa57654581c",
+            "agentSignature": "0xa7b57c7b65c8d0b07c863a0b6dcdae559df2981e9777dc7ec6feadc8db501e8e5dfdc98856948b7c9e7b51678f4db9126655bdb8c84ec1efe3ee87b42fca71cc1c"
+          }
+        }
+      ]
+    },
+    {
+      "id": "authority-006",
+      "family": "malicious-agent",
+      "description": "Declared BUY notional plus fees exceeds the signed MAX_TOTAL_DEBIT.",
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0xe6c8b4ae",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          },
+          "script": {
+            "mode": 0,
+            "deliver": "10000000000000000000",
+            "refund": "4000000",
+            "deliverElsewhere": false,
+            "extraPull": "0"
+          },
+          "input": {
+            "mandate": {
+              "version": "2",
+              "mandateId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+              "nonce": "1",
+              "principal": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "side": "1",
+              "maxNotional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "economicLimit": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2010000000000000000000"
+              },
+              "maxDeviationBps": "40",
+              "syntheticPolicy": "1",
+              "allowedIssuers": [
+                "issuer.alpha"
+              ],
+              "allowedChains": [
+                "eip155:46630"
+              ],
+              "allowedVenues": [
+                "venue.other",
+                "venue.fixture"
+              ],
+              "requiredCorporateActionEpoch": "1",
+              "maxPriceAgeSeconds": "60",
+              "maxCorporateActionAgeSeconds": "3600",
+              "haltPolicy": "1",
+              "createdAtUnixSeconds": "1799999900",
+              "notBeforeUnixSeconds": "1799999940",
+              "expiresAtUnixSeconds": "1800003600"
+            },
+            "candidate": {
+              "version": "3",
+              "representationId": "eip155:46630/erc20:0x000000000000000000000000000000000000aa01",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "issuer": "issuer.alpha",
+              "chain": "eip155:46630",
+              "venue": "venue.fixture",
+              "side": "1",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "quantity": {
+                "unit": "TOKEN",
+                "decimals": 18,
+                "atoms": "10000000000000000000"
+              },
+              "executionPrice": {
+                "numeratorUnit": "USD",
+                "denominatorUnit": "TOKEN",
+                "decimals": 18,
+                "atoms": "200000000000000000000"
+              },
+              "notional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "feeTotal": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "10000000000000000001"
+              },
+              "evaluationStateId": "state.fixture.0001",
+              "evaluationStateDigest": "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+              "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+              "corporateActionEpoch": "1"
+            },
+            "terms": {
+              "recipient": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "fundingLimit": "2010000000",
+              "deadline": "1800000300",
+              "executionData": "0x"
+            },
+            "principalSignature": "0xf4fad2a8c870cce1cf9ca5a473b635e029224bd0a898b67ef88994a38f84086a2fabde0f64e822cf5f21d518dd4480270adf828fc12195615fb16654d2f45a811b",
+            "agentSignature": "0x57996c488706d80e76501ad665151247f03d8f6223a5267706ff65fbe3d476a27d2b6033cd427592c3a284a1b55e563f5cdad3d2afc8190d6fdc01d526c05b421c"
+          }
+        }
+      ]
+    },
+    {
+      "id": "authority-007",
+      "family": "malicious-agent",
+      "description": "Declared SELL fees equal the notional, leaving no positive credit.",
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0xe9e9aab3",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          },
+          "script": {
+            "mode": 0,
+            "deliver": "1994000000",
+            "refund": "0",
+            "deliverElsewhere": false,
+            "extraPull": "0"
+          },
+          "input": {
+            "mandate": {
+              "version": "2",
+              "mandateId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+              "nonce": "1",
+              "principal": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "side": "2",
+              "maxNotional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "economicLimit": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "1990000000000000000000"
+              },
+              "maxDeviationBps": "40",
+              "syntheticPolicy": "1",
+              "allowedIssuers": [
+                "issuer.alpha"
+              ],
+              "allowedChains": [
+                "eip155:46630"
+              ],
+              "allowedVenues": [
+                "venue.other",
+                "venue.fixture"
+              ],
+              "requiredCorporateActionEpoch": "1",
+              "maxPriceAgeSeconds": "60",
+              "maxCorporateActionAgeSeconds": "3600",
+              "haltPolicy": "1",
+              "createdAtUnixSeconds": "1799999900",
+              "notBeforeUnixSeconds": "1799999940",
+              "expiresAtUnixSeconds": "1800003600"
+            },
+            "candidate": {
+              "version": "3",
+              "representationId": "eip155:46630/erc20:0x000000000000000000000000000000000000aa01",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "issuer": "issuer.alpha",
+              "chain": "eip155:46630",
+              "venue": "venue.fixture",
+              "side": "2",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "quantity": {
+                "unit": "TOKEN",
+                "decimals": 18,
+                "atoms": "10000000000000000000"
+              },
+              "executionPrice": {
+                "numeratorUnit": "USD",
+                "denominatorUnit": "TOKEN",
+                "decimals": 18,
+                "atoms": "200000000000000000000"
+              },
+              "notional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "feeTotal": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "evaluationStateId": "state.fixture.0001",
+              "evaluationStateDigest": "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+              "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+              "corporateActionEpoch": "1"
+            },
+            "terms": {
+              "recipient": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "fundingLimit": "1990000000",
+              "deadline": "1800000300",
+              "executionData": "0x"
+            },
+            "principalSignature": "0xd6e9afea652aa379e90da5efc0a8d582512e9eec748672f76e7fce92657fd0d81bc0453fbd0740ec14f4bec8dee9425b492138b0191e4f4f892864bc003a78521c",
+            "agentSignature": "0x6875becc2f6c5639fe44b9f5b978c57b321a3e8ce75eafe58723ce3735888fca666716d037a731d5e1e35bf7e4897e1a37c46d3f4757af95d946017e05813a731b"
+          }
+        }
+      ]
+    },
+    {
+      "id": "authority-008",
+      "family": "malicious-agent",
+      "description": "Agent signs a self-consistent price and notional that differ from the immutable fixture price.",
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x16442046",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          },
+          "script": {
+            "mode": 0,
+            "deliver": "10000000000000000000",
+            "refund": "4000000",
+            "deliverElsewhere": false,
+            "extraPull": "0"
+          },
+          "input": {
+            "mandate": {
+              "version": "2",
+              "mandateId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+              "nonce": "1",
+              "principal": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "side": "1",
+              "maxNotional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "economicLimit": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2010000000000000000000"
+              },
+              "maxDeviationBps": "40",
+              "syntheticPolicy": "1",
+              "allowedIssuers": [
+                "issuer.alpha"
+              ],
+              "allowedChains": [
+                "eip155:46630"
+              ],
+              "allowedVenues": [
+                "venue.other",
+                "venue.fixture"
+              ],
+              "requiredCorporateActionEpoch": "1",
+              "maxPriceAgeSeconds": "60",
+              "maxCorporateActionAgeSeconds": "3600",
+              "haltPolicy": "1",
+              "createdAtUnixSeconds": "1799999900",
+              "notBeforeUnixSeconds": "1799999940",
+              "expiresAtUnixSeconds": "1800003600"
+            },
+            "candidate": {
+              "version": "3",
+              "representationId": "eip155:46630/erc20:0x000000000000000000000000000000000000aa01",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "issuer": "issuer.alpha",
+              "chain": "eip155:46630",
+              "venue": "venue.fixture",
+              "side": "1",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "quantity": {
+                "unit": "TOKEN",
+                "decimals": 18,
+                "atoms": "10000000000000000000"
+              },
+              "executionPrice": {
+                "numeratorUnit": "USD",
+                "denominatorUnit": "TOKEN",
+                "decimals": 18,
+                "atoms": "100000000000000000000"
+              },
+              "notional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "1000000000000000000000"
+              },
+              "feeTotal": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "3000000000000000000"
+              },
+              "evaluationStateId": "state.fixture.0001",
+              "evaluationStateDigest": "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+              "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+              "corporateActionEpoch": "1"
+            },
+            "terms": {
+              "recipient": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "fundingLimit": "2010000000",
+              "deadline": "1800000300",
+              "executionData": "0x"
+            },
+            "principalSignature": "0xf4fad2a8c870cce1cf9ca5a473b635e029224bd0a898b67ef88994a38f84086a2fabde0f64e822cf5f21d518dd4480270adf828fc12195615fb16654d2f45a811b",
+            "agentSignature": "0x460556a38522f6f8be7e3621694045462786df615695a3eecb44e419c4f8afef7bb5cec06020bd6e372cbdcf0a7ee08ea736f81f87e7e6fb50df773d24530e481b"
+          }
+        }
+      ]
+    },
+    {
+      "id": "authority-009",
+      "family": "malicious-agent",
+      "description": "Correct agent signs a candidate for the wrong canonical asset.",
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x88b00311",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          },
+          "script": {
+            "mode": 0,
+            "deliver": "10000000000000000000",
+            "refund": "4000000",
+            "deliverElsewhere": false,
+            "extraPull": "0"
+          },
+          "input": {
+            "mandate": {
+              "version": "2",
+              "mandateId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+              "nonce": "1",
+              "principal": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "side": "1",
+              "maxNotional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "economicLimit": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2010000000000000000000"
+              },
+              "maxDeviationBps": "40",
+              "syntheticPolicy": "1",
+              "allowedIssuers": [
+                "issuer.alpha"
+              ],
+              "allowedChains": [
+                "eip155:46630"
+              ],
+              "allowedVenues": [
+                "venue.other",
+                "venue.fixture"
+              ],
+              "requiredCorporateActionEpoch": "1",
+              "maxPriceAgeSeconds": "60",
+              "maxCorporateActionAgeSeconds": "3600",
+              "haltPolicy": "1",
+              "createdAtUnixSeconds": "1799999900",
+              "notBeforeUnixSeconds": "1799999940",
+              "expiresAtUnixSeconds": "1800003600"
+            },
+            "candidate": {
+              "version": "3",
+              "representationId": "eip155:46630/erc20:0x000000000000000000000000000000000000aa01",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US67066G1040"
+              },
+              "issuer": "issuer.alpha",
+              "chain": "eip155:46630",
+              "venue": "venue.fixture",
+              "side": "1",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "quantity": {
+                "unit": "TOKEN",
+                "decimals": 18,
+                "atoms": "10000000000000000000"
+              },
+              "executionPrice": {
+                "numeratorUnit": "USD",
+                "denominatorUnit": "TOKEN",
+                "decimals": 18,
+                "atoms": "200000000000000000000"
+              },
+              "notional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "feeTotal": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "6000000000000000000"
+              },
+              "evaluationStateId": "state.fixture.0001",
+              "evaluationStateDigest": "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+              "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+              "corporateActionEpoch": "1"
+            },
+            "terms": {
+              "recipient": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "fundingLimit": "2010000000",
+              "deadline": "1800000300",
+              "executionData": "0x"
+            },
+            "principalSignature": "0xf4fad2a8c870cce1cf9ca5a473b635e029224bd0a898b67ef88994a38f84086a2fabde0f64e822cf5f21d518dd4480270adf828fc12195615fb16654d2f45a811b",
+            "agentSignature": "0x2b1d5ba6bd41c1b81e9ac5b05e177a812882a8c6e8593cdfe535f70af4c0ed6d010514184614ccdfaa193199369c06942bafcfd35b367dc3280bb9296831dfcd1c"
+          }
+        }
+      ]
+    },
+    {
+      "id": "authority-010",
+      "family": "malicious-agent",
+      "description": "Correct agent signs a token substitution whose pinned asset differs from the mandate.",
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0xe6021e8a",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          },
+          "script": {
+            "mode": 0,
+            "deliver": "10000000000000000000",
+            "refund": "4000000",
+            "deliverElsewhere": false,
+            "extraPull": "0"
+          },
+          "input": {
+            "mandate": {
+              "version": "2",
+              "mandateId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+              "nonce": "1",
+              "principal": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "side": "1",
+              "maxNotional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "economicLimit": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2010000000000000000000"
+              },
+              "maxDeviationBps": "40",
+              "syntheticPolicy": "1",
+              "allowedIssuers": [
+                "issuer.alpha"
+              ],
+              "allowedChains": [
+                "eip155:46630"
+              ],
+              "allowedVenues": [
+                "venue.other",
+                "venue.fixture"
+              ],
+              "requiredCorporateActionEpoch": "1",
+              "maxPriceAgeSeconds": "60",
+              "maxCorporateActionAgeSeconds": "3600",
+              "haltPolicy": "1",
+              "createdAtUnixSeconds": "1799999900",
+              "notBeforeUnixSeconds": "1799999940",
+              "expiresAtUnixSeconds": "1800003600"
+            },
+            "candidate": {
+              "version": "3",
+              "representationId": "eip155:46630/erc20:0x000000000000000000000000000000000000aa02",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "issuer": "issuer.alpha",
+              "chain": "eip155:46630",
+              "venue": "venue.fixture",
+              "side": "1",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "quantity": {
+                "unit": "TOKEN",
+                "decimals": 18,
+                "atoms": "10000000000000000000"
+              },
+              "executionPrice": {
+                "numeratorUnit": "USD",
+                "denominatorUnit": "TOKEN",
+                "decimals": 18,
+                "atoms": "200000000000000000000"
+              },
+              "notional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "feeTotal": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "6000000000000000000"
+              },
+              "evaluationStateId": "state.fixture.0001",
+              "evaluationStateDigest": "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+              "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+              "corporateActionEpoch": "1"
+            },
+            "terms": {
+              "recipient": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "fundingLimit": "2010000000",
+              "deadline": "1800000300",
+              "executionData": "0x"
+            },
+            "principalSignature": "0xf4fad2a8c870cce1cf9ca5a473b635e029224bd0a898b67ef88994a38f84086a2fabde0f64e822cf5f21d518dd4480270adf828fc12195615fb16654d2f45a811b",
+            "agentSignature": "0x92c53488b121e1ccac6b52b785357cd8335e40169902f365e321a62bbd49f55731f17532874fc9fa4a9a3590fb591a42916017e9c4f49000939a6cfc7e70e3eb1b"
+          }
+        }
+      ]
+    },
+    {
+      "id": "authority-011",
+      "family": "malicious-agent",
+      "description": "Correct agent signs a candidate naming the wrong issuer.",
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x9ca28d13",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          },
+          "script": {
+            "mode": 0,
+            "deliver": "10000000000000000000",
+            "refund": "4000000",
+            "deliverElsewhere": false,
+            "extraPull": "0"
+          },
+          "input": {
+            "mandate": {
+              "version": "2",
+              "mandateId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+              "nonce": "1",
+              "principal": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "side": "1",
+              "maxNotional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "economicLimit": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2010000000000000000000"
+              },
+              "maxDeviationBps": "40",
+              "syntheticPolicy": "1",
+              "allowedIssuers": [
+                "issuer.alpha"
+              ],
+              "allowedChains": [
+                "eip155:46630"
+              ],
+              "allowedVenues": [
+                "venue.other",
+                "venue.fixture"
+              ],
+              "requiredCorporateActionEpoch": "1",
+              "maxPriceAgeSeconds": "60",
+              "maxCorporateActionAgeSeconds": "3600",
+              "haltPolicy": "1",
+              "createdAtUnixSeconds": "1799999900",
+              "notBeforeUnixSeconds": "1799999940",
+              "expiresAtUnixSeconds": "1800003600"
+            },
+            "candidate": {
+              "version": "3",
+              "representationId": "eip155:46630/erc20:0x000000000000000000000000000000000000aa01",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "issuer": "issuer.omega",
+              "chain": "eip155:46630",
+              "venue": "venue.fixture",
+              "side": "1",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "quantity": {
+                "unit": "TOKEN",
+                "decimals": 18,
+                "atoms": "10000000000000000000"
+              },
+              "executionPrice": {
+                "numeratorUnit": "USD",
+                "denominatorUnit": "TOKEN",
+                "decimals": 18,
+                "atoms": "200000000000000000000"
+              },
+              "notional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "feeTotal": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "6000000000000000000"
+              },
+              "evaluationStateId": "state.fixture.0001",
+              "evaluationStateDigest": "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+              "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+              "corporateActionEpoch": "1"
+            },
+            "terms": {
+              "recipient": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "fundingLimit": "2010000000",
+              "deadline": "1800000300",
+              "executionData": "0x"
+            },
+            "principalSignature": "0xf4fad2a8c870cce1cf9ca5a473b635e029224bd0a898b67ef88994a38f84086a2fabde0f64e822cf5f21d518dd4480270adf828fc12195615fb16654d2f45a811b",
+            "agentSignature": "0xd0ba58fa4e22a697c0f850c31ef2b579c099ebe172e67d628b4a214f2745e344065e3ad72d3d3cb1133045c28ee12fbb6d0c9335374b4d31994289d81fd6ef091c"
+          }
+        }
+      ]
+    },
+    {
+      "id": "authority-012",
+      "family": "malicious-agent",
+      "description": "Correct agent signs a candidate naming the wrong chain.",
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0xa6226dc5",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          },
+          "script": {
+            "mode": 0,
+            "deliver": "10000000000000000000",
+            "refund": "4000000",
+            "deliverElsewhere": false,
+            "extraPull": "0"
+          },
+          "input": {
+            "mandate": {
+              "version": "2",
+              "mandateId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+              "nonce": "1",
+              "principal": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "side": "1",
+              "maxNotional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "economicLimit": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2010000000000000000000"
+              },
+              "maxDeviationBps": "40",
+              "syntheticPolicy": "1",
+              "allowedIssuers": [
+                "issuer.alpha"
+              ],
+              "allowedChains": [
+                "eip155:46630"
+              ],
+              "allowedVenues": [
+                "venue.other",
+                "venue.fixture"
+              ],
+              "requiredCorporateActionEpoch": "1",
+              "maxPriceAgeSeconds": "60",
+              "maxCorporateActionAgeSeconds": "3600",
+              "haltPolicy": "1",
+              "createdAtUnixSeconds": "1799999900",
+              "notBeforeUnixSeconds": "1799999940",
+              "expiresAtUnixSeconds": "1800003600"
+            },
+            "candidate": {
+              "version": "3",
+              "representationId": "eip155:46630/erc20:0x000000000000000000000000000000000000aa01",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "issuer": "issuer.alpha",
+              "chain": "eip155:1",
+              "venue": "venue.fixture",
+              "side": "1",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "quantity": {
+                "unit": "TOKEN",
+                "decimals": 18,
+                "atoms": "10000000000000000000"
+              },
+              "executionPrice": {
+                "numeratorUnit": "USD",
+                "denominatorUnit": "TOKEN",
+                "decimals": 18,
+                "atoms": "200000000000000000000"
+              },
+              "notional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "feeTotal": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "6000000000000000000"
+              },
+              "evaluationStateId": "state.fixture.0001",
+              "evaluationStateDigest": "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+              "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+              "corporateActionEpoch": "1"
+            },
+            "terms": {
+              "recipient": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "fundingLimit": "2010000000",
+              "deadline": "1800000300",
+              "executionData": "0x"
+            },
+            "principalSignature": "0xf4fad2a8c870cce1cf9ca5a473b635e029224bd0a898b67ef88994a38f84086a2fabde0f64e822cf5f21d518dd4480270adf828fc12195615fb16654d2f45a811b",
+            "agentSignature": "0xb3755005024336600d316d0280f70f3dea4c345cdb484aea15cdfdf18d26948054e380cb7c56f786fef61af8d718e037dc0fc7e56a91b5a1c4e7e539c72e729f1c"
+          }
+        }
+      ]
+    },
+    {
+      "id": "authority-013",
+      "family": "malicious-agent",
+      "description": "Correct agent signs a candidate naming a venue the principal did not allow.",
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0xde7e3cb2",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          },
+          "script": {
+            "mode": 0,
+            "deliver": "10000000000000000000",
+            "refund": "4000000",
+            "deliverElsewhere": false,
+            "extraPull": "0"
+          },
+          "input": {
+            "mandate": {
+              "version": "2",
+              "mandateId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+              "nonce": "1",
+              "principal": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "side": "1",
+              "maxNotional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "economicLimit": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2010000000000000000000"
+              },
+              "maxDeviationBps": "40",
+              "syntheticPolicy": "1",
+              "allowedIssuers": [
+                "issuer.alpha"
+              ],
+              "allowedChains": [
+                "eip155:46630"
+              ],
+              "allowedVenues": [
+                "venue.fixture"
+              ],
+              "requiredCorporateActionEpoch": "1",
+              "maxPriceAgeSeconds": "60",
+              "maxCorporateActionAgeSeconds": "3600",
+              "haltPolicy": "1",
+              "createdAtUnixSeconds": "1799999900",
+              "notBeforeUnixSeconds": "1799999940",
+              "expiresAtUnixSeconds": "1800003600"
+            },
+            "candidate": {
+              "version": "3",
+              "representationId": "eip155:46630/erc20:0x000000000000000000000000000000000000aa01",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "issuer": "issuer.alpha",
+              "chain": "eip155:46630",
+              "venue": "venue.other",
+              "side": "1",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "quantity": {
+                "unit": "TOKEN",
+                "decimals": 18,
+                "atoms": "10000000000000000000"
+              },
+              "executionPrice": {
+                "numeratorUnit": "USD",
+                "denominatorUnit": "TOKEN",
+                "decimals": 18,
+                "atoms": "200000000000000000000"
+              },
+              "notional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "feeTotal": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "6000000000000000000"
+              },
+              "evaluationStateId": "state.fixture.0001",
+              "evaluationStateDigest": "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+              "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+              "corporateActionEpoch": "1"
+            },
+            "terms": {
+              "recipient": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "fundingLimit": "2010000000",
+              "deadline": "1800000300",
+              "executionData": "0x"
+            },
+            "principalSignature": "0x1541550e8c3770ef7c0a9f2692c7d1dbc51bf9d03dc477f6904a78592befaa172da78a82c5f94a56f24665aeb5aae166b65cecbd0133235a0d3fc761f729b57d1b",
+            "agentSignature": "0x78ddfdc6123a190b170380dc538eb54bae8cc85574ec4afa6e19e3c90a5a003809a30865db2e0cf5d9f74a85a529ac9df9e590491a84afa365b846acaa453f501b"
+          }
+        }
+      ]
+    },
+    {
+      "id": "authority-014",
+      "family": "malicious-agent",
+      "description": "Correct agent selects a synthetic representation forbidden by the mandate.",
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0xf48df8c2",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          },
+          "script": {
+            "mode": 0,
+            "deliver": "10000000000000000000",
+            "refund": "4000000",
+            "deliverElsewhere": false,
+            "extraPull": "0"
+          },
+          "input": {
+            "mandate": {
+              "version": "2",
+              "mandateId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+              "nonce": "1",
+              "principal": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "side": "1",
+              "maxNotional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "economicLimit": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2010000000000000000000"
+              },
+              "maxDeviationBps": "40",
+              "syntheticPolicy": "1",
+              "allowedIssuers": [
+                "issuer.alpha",
+                "issuer.synthetic"
+              ],
+              "allowedChains": [
+                "eip155:46630"
+              ],
+              "allowedVenues": [
+                "venue.other",
+                "venue.fixture"
+              ],
+              "requiredCorporateActionEpoch": "1",
+              "maxPriceAgeSeconds": "60",
+              "maxCorporateActionAgeSeconds": "3600",
+              "haltPolicy": "1",
+              "createdAtUnixSeconds": "1799999900",
+              "notBeforeUnixSeconds": "1799999940",
+              "expiresAtUnixSeconds": "1800003600"
+            },
+            "candidate": {
+              "version": "3",
+              "representationId": "eip155:46630/erc20:0x000000000000000000000000000000000000aa03",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "issuer": "issuer.synthetic",
+              "chain": "eip155:46630",
+              "venue": "venue.fixture",
+              "side": "1",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "quantity": {
+                "unit": "TOKEN",
+                "decimals": 18,
+                "atoms": "10000000000000000000"
+              },
+              "executionPrice": {
+                "numeratorUnit": "USD",
+                "denominatorUnit": "TOKEN",
+                "decimals": 18,
+                "atoms": "200000000000000000000"
+              },
+              "notional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "feeTotal": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "6000000000000000000"
+              },
+              "evaluationStateId": "state.fixture.0001",
+              "evaluationStateDigest": "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+              "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+              "corporateActionEpoch": "1"
+            },
+            "terms": {
+              "recipient": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "fundingLimit": "2010000000",
+              "deadline": "1800000300",
+              "executionData": "0x"
+            },
+            "principalSignature": "0x1151c1297d57ef7dafa72a8c0d91cd66de4ba2becae045dec6016499fbf2493116c061eae7a8bf43a9e844042fb5118a6448fdb40ac365bd673e38dd730a0a1a1b",
+            "agentSignature": "0xa6c5645db6d4281a2ed04b55c7408e4c25b07e207e211ac14046026fd94ebe690a96b80d3537c2746294403d7acf9eb5de610d79a7c42a524d48a1a5607436441c"
+          }
+        }
+      ]
+    },
+    {
+      "id": "authority-015",
+      "family": "malicious-agent",
+      "description": "Correct agent signs the opposite side from the principal mandate.",
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0xf5aa8e93",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          },
+          "script": {
+            "mode": 0,
+            "deliver": "10000000000000000000",
+            "refund": "4000000",
+            "deliverElsewhere": false,
+            "extraPull": "0"
+          },
+          "input": {
+            "mandate": {
+              "version": "2",
+              "mandateId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+              "nonce": "1",
+              "principal": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "side": "1",
+              "maxNotional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "economicLimit": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2010000000000000000000"
+              },
+              "maxDeviationBps": "40",
+              "syntheticPolicy": "1",
+              "allowedIssuers": [
+                "issuer.alpha"
+              ],
+              "allowedChains": [
+                "eip155:46630"
+              ],
+              "allowedVenues": [
+                "venue.other",
+                "venue.fixture"
+              ],
+              "requiredCorporateActionEpoch": "1",
+              "maxPriceAgeSeconds": "60",
+              "maxCorporateActionAgeSeconds": "3600",
+              "haltPolicy": "1",
+              "createdAtUnixSeconds": "1799999900",
+              "notBeforeUnixSeconds": "1799999940",
+              "expiresAtUnixSeconds": "1800003600"
+            },
+            "candidate": {
+              "version": "3",
+              "representationId": "eip155:46630/erc20:0x000000000000000000000000000000000000aa01",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "issuer": "issuer.alpha",
+              "chain": "eip155:46630",
+              "venue": "venue.fixture",
+              "side": "2",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "quantity": {
+                "unit": "TOKEN",
+                "decimals": 18,
+                "atoms": "10000000000000000000"
+              },
+              "executionPrice": {
+                "numeratorUnit": "USD",
+                "denominatorUnit": "TOKEN",
+                "decimals": 18,
+                "atoms": "200000000000000000000"
+              },
+              "notional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "feeTotal": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "6000000000000000000"
+              },
+              "evaluationStateId": "state.fixture.0001",
+              "evaluationStateDigest": "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+              "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+              "corporateActionEpoch": "1"
+            },
+            "terms": {
+              "recipient": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "fundingLimit": "2010000000",
+              "deadline": "1800000300",
+              "executionData": "0x"
+            },
+            "principalSignature": "0xf4fad2a8c870cce1cf9ca5a473b635e029224bd0a898b67ef88994a38f84086a2fabde0f64e822cf5f21d518dd4480270adf828fc12195615fb16654d2f45a811b",
+            "agentSignature": "0x2b6bbde4242379f8058c5d4415c4c8a59c9914b7d117023e8905fcf3d82fdfb7705433876001f73122db1de7056fda5364c0a9a872a4ded49d557829204e63141c"
+          }
+        }
+      ]
+    },
+    {
+      "id": "authority-016",
+      "family": "malicious-agent",
+      "description": "Correct agent signs a quantity unit inconsistent with the pinned representation.",
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0x18279b24",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          },
+          "script": {
+            "mode": 0,
+            "deliver": "10000000000000000000",
+            "refund": "4000000",
+            "deliverElsewhere": false,
+            "extraPull": "0"
+          },
+          "input": {
+            "mandate": {
+              "version": "2",
+              "mandateId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+              "nonce": "1",
+              "principal": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "side": "1",
+              "maxNotional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "economicLimit": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2010000000000000000000"
+              },
+              "maxDeviationBps": "40",
+              "syntheticPolicy": "1",
+              "allowedIssuers": [
+                "issuer.alpha"
+              ],
+              "allowedChains": [
+                "eip155:46630"
+              ],
+              "allowedVenues": [
+                "venue.other",
+                "venue.fixture"
+              ],
+              "requiredCorporateActionEpoch": "1",
+              "maxPriceAgeSeconds": "60",
+              "maxCorporateActionAgeSeconds": "3600",
+              "haltPolicy": "1",
+              "createdAtUnixSeconds": "1799999900",
+              "notBeforeUnixSeconds": "1799999940",
+              "expiresAtUnixSeconds": "1800003600"
+            },
+            "candidate": {
+              "version": "3",
+              "representationId": "eip155:46630/erc20:0x000000000000000000000000000000000000aa01",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "issuer": "issuer.alpha",
+              "chain": "eip155:46630",
+              "venue": "venue.fixture",
+              "side": "1",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "quantity": {
+                "unit": "SHARE",
+                "decimals": 18,
+                "atoms": "10000000000000000000"
+              },
+              "executionPrice": {
+                "numeratorUnit": "USD",
+                "denominatorUnit": "TOKEN",
+                "decimals": 18,
+                "atoms": "200000000000000000000"
+              },
+              "notional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "feeTotal": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "6000000000000000000"
+              },
+              "evaluationStateId": "state.fixture.0001",
+              "evaluationStateDigest": "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+              "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+              "corporateActionEpoch": "1"
+            },
+            "terms": {
+              "recipient": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "fundingLimit": "2010000000",
+              "deadline": "1800000300",
+              "executionData": "0x"
+            },
+            "principalSignature": "0xf4fad2a8c870cce1cf9ca5a473b635e029224bd0a898b67ef88994a38f84086a2fabde0f64e822cf5f21d518dd4480270adf828fc12195615fb16654d2f45a811b",
+            "agentSignature": "0x8ab31dd4182a140ebb9d1519e4d98345c9e7775f2ab09998090f1dea061622285e87f4d097afc76204a0ecac4a172f8da9907c8105ed03f2d61190e58de61f041b"
+          }
+        }
+      ]
+    },
+    {
+      "id": "profile-001",
+      "family": "execution-profile",
+      "description": "Route data one byte above the Phase 6 executable profile.",
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0xd637de0c",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          },
+          "script": {
+            "mode": 0,
+            "deliver": "10000000000000000000",
+            "refund": "4000000",
+            "deliverElsewhere": false,
+            "extraPull": "0"
+          },
+          "input": {
+            "mandate": {
+              "version": "2",
+              "mandateId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+              "nonce": "1",
+              "principal": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "side": "1",
+              "maxNotional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "economicLimit": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2010000000000000000000"
+              },
+              "maxDeviationBps": "40",
+              "syntheticPolicy": "1",
+              "allowedIssuers": [
+                "issuer.alpha"
+              ],
+              "allowedChains": [
+                "eip155:46630"
+              ],
+              "allowedVenues": [
+                "venue.other",
+                "venue.fixture"
+              ],
+              "requiredCorporateActionEpoch": "1",
+              "maxPriceAgeSeconds": "60",
+              "maxCorporateActionAgeSeconds": "3600",
+              "haltPolicy": "1",
+              "createdAtUnixSeconds": "1799999900",
+              "notBeforeUnixSeconds": "1799999940",
+              "expiresAtUnixSeconds": "1800003600"
+            },
+            "candidate": {
+              "version": "3",
+              "representationId": "eip155:46630/erc20:0x000000000000000000000000000000000000aa01",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "issuer": "issuer.alpha",
+              "chain": "eip155:46630",
+              "venue": "venue.fixture",
+              "side": "1",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "quantity": {
+                "unit": "TOKEN",
+                "decimals": 18,
+                "atoms": "10000000000000000000"
+              },
+              "executionPrice": {
+                "numeratorUnit": "USD",
+                "denominatorUnit": "TOKEN",
+                "decimals": 18,
+                "atoms": "200000000000000000000"
+              },
+              "notional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "feeTotal": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "6000000000000000000"
+              },
+              "evaluationStateId": "state.fixture.0001",
+              "evaluationStateDigest": "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+              "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+              "corporateActionEpoch": "1"
+            },
+            "terms": {
+              "recipient": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "fundingLimit": "2010000000",
+              "deadline": "1800000300",
+              "executionData": "0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+            },
+            "principalSignature": "0xf4fad2a8c870cce1cf9ca5a473b635e029224bd0a898b67ef88994a38f84086a2fabde0f64e822cf5f21d518dd4480270adf828fc12195615fb16654d2f45a811b",
+            "agentSignature": "0x9c5b6e9cae27cb519080246a76d61a23d6464ac51630d8a7dfa56c2f0cf8f74566a006bcef8bc8e2b885356a6e4ac071e571219038f17e2963297abacb9f64e41c"
+          }
+        }
+      ]
+    },
+    {
       "id": "settle-001",
       "family": "under-delivery",
       "description": "The adapter delivers one atom less than the quantity.",
@@ -8071,7 +10078,7 @@
           "timestamp": "1800000000",
           "expected": {
             "settled": false,
-            "revertData": "0xb43048390000000000000000000000000000000000000000000000008ac7230489e7ffff0000000000000000000000000000000000000000000000008ac7230489e80000",
+            "revertData": "0x2c8843be0000000000000000000000000000000000000000000000008ac7230489e7ffff0000000000000000000000000000000000000000000000008ac7230489e80000",
             "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
             "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
             "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -8189,7 +10196,7 @@
           "timestamp": "1800000000",
           "expected": {
             "settled": false,
-            "revertData": "0xb430483900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008ac7230489e80000",
+            "revertData": "0x2c8843be00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008ac7230489e80000",
             "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
             "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
             "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -8307,7 +10314,7 @@
           "timestamp": "1800000000",
           "expected": {
             "settled": false,
-            "revertData": "0xb430483900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008ac7230489e80000",
+            "revertData": "0x2c8843be00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008ac7230489e80000",
             "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
             "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
             "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -9360,6 +11367,124 @@
       ]
     },
     {
+      "id": "settle-012",
+      "family": "exact-fill",
+      "description": "SELL refunds one representation atom despite delivering adequate proceeds.",
+      "attempts": [
+        {
+          "chainId": "46630",
+          "timestamp": "1800000000",
+          "expected": {
+            "settled": false,
+            "revertData": "0xb431ba600000000000000000000000000000000000000000000000008ac7230489e7ffff0000000000000000000000000000000000000000000000008ac7230489e80000",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
+          },
+          "script": {
+            "mode": 0,
+            "deliver": "1994000000",
+            "refund": "1",
+            "deliverElsewhere": false,
+            "extraPull": "0"
+          },
+          "input": {
+            "mandate": {
+              "version": "2",
+              "mandateId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+              "nonce": "1",
+              "principal": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "side": "2",
+              "maxNotional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "economicLimit": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "1990000000000000000000"
+              },
+              "maxDeviationBps": "40",
+              "syntheticPolicy": "1",
+              "allowedIssuers": [
+                "issuer.alpha"
+              ],
+              "allowedChains": [
+                "eip155:46630"
+              ],
+              "allowedVenues": [
+                "venue.other",
+                "venue.fixture"
+              ],
+              "requiredCorporateActionEpoch": "1",
+              "maxPriceAgeSeconds": "60",
+              "maxCorporateActionAgeSeconds": "3600",
+              "haltPolicy": "1",
+              "createdAtUnixSeconds": "1799999900",
+              "notBeforeUnixSeconds": "1799999940",
+              "expiresAtUnixSeconds": "1800003600"
+            },
+            "candidate": {
+              "version": "3",
+              "representationId": "eip155:46630/erc20:0x000000000000000000000000000000000000aa01",
+              "canonicalAsset": {
+                "assetClass": "equity",
+                "idScheme": "isin",
+                "value": "US0378331005"
+              },
+              "issuer": "issuer.alpha",
+              "chain": "eip155:46630",
+              "venue": "venue.fixture",
+              "side": "2",
+              "agent": "0x63fac9201494f0bd17b9892b9fae4d52fe3bd377",
+              "quantity": {
+                "unit": "TOKEN",
+                "decimals": 18,
+                "atoms": "10000000000000000000"
+              },
+              "executionPrice": {
+                "numeratorUnit": "USD",
+                "denominatorUnit": "TOKEN",
+                "decimals": 18,
+                "atoms": "200000000000000000000"
+              },
+              "notional": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "2000000000000000000000"
+              },
+              "feeTotal": {
+                "unit": "USD",
+                "decimals": 18,
+                "atoms": "6000000000000000000"
+              },
+              "evaluationStateId": "state.fixture.0001",
+              "evaluationStateDigest": "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+              "registrySnapshotDigest": "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+              "corporateActionEpoch": "1"
+            },
+            "terms": {
+              "recipient": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+              "fundingLimit": "1990000000",
+              "deadline": "1800000300",
+              "executionData": "0x"
+            },
+            "principalSignature": "0xd6e9afea652aa379e90da5efc0a8d582512e9eec748672f76e7fce92657fd0d81bc0453fbd0740ec14f4bec8dee9425b492138b0191e4f4f892864bc003a78521c",
+            "agentSignature": "0xa3e4a306ba199a83d3f5bc7c7412db096ba71ab4b84334c29097bf458b5c780826d04ea0f425b4273d1b69c09f99f2b69174e46085c7fa5bf744a3fcb336206f1b"
+          }
+        }
+      ]
+    },
+    {
       "id": "replay-001",
       "family": "replay",
       "description": "The identical attempt twice: the second is refused.",
@@ -10056,7 +12181,7 @@
           "timestamp": "1800000000",
           "expected": {
             "settled": false,
-            "revertData": "0xb43048390000000000000000000000000000000000000000000000008ac7230489e7ffff0000000000000000000000000000000000000000000000008ac7230489e80000",
+            "revertData": "0x2c8843be0000000000000000000000000000000000000000000000008ac7230489e7ffff0000000000000000000000000000000000000000000000008ac7230489e80000",
             "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
             "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
             "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -12259,13 +14384,13 @@
           "chainId": "46630",
           "timestamp": "1799999954",
           "expected": {
-            "settled": true,
-            "revertData": "0x",
-            "mandateDigest": "0xf43d1067183d09604020a2ff3a07afaca94e76cbaeb9a7dbdc9ea66e62f99414",
-            "candidateDigest": "0xc49c7d20e2a774081f35f8c38f036aa843d3dae9e43941d2251dbad3e451d765",
-            "executionCommitment": "0x4c2c24e32702edb5b6267c1f668ebd945492cfe952b9f7b1941005d0577d8a96",
-            "debit": "142618040",
-            "credit": "44327173710208444353"
+            "settled": false,
+            "revertData": "0x6fe60cfa00000000000000000000000000000000000000000000006c6b935b8bbd4000000000000000000000000000000000000000000000000001e0989f46ccf1af0ec80000000000000000000000000000000000000000000001e0989f46ccf1af0ec8",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
           }
         }
       ]
@@ -12283,13 +14408,13 @@
           "chainId": "46630",
           "timestamp": "1800000000",
           "expected": {
-            "settled": true,
-            "revertData": "0x",
-            "mandateDigest": "0x3701048d605e31f5736a8cd9d8cfb4cb941a263a595fdc60f125da8abccda1b7",
-            "candidateDigest": "0x67648ae4b32282b5a86b70eef034349a512edfe9ec02e304d64d035e2d82f62f",
-            "executionCommitment": "0x175d322385bd5a0e10a5c991e9538c05db40fee6954c1c1fcc090aba0c4fae97",
-            "debit": "33093669871239604003",
-            "credit": "1990337177"
+            "settled": false,
+            "revertData": "0x6fe60cfa00000000000000000000000000000000000000000000006c6b935b8bbd400000000000000000000000000000000000000000000000000166cd62ba05e0c29358000000000000000000000000000000000000000000000166cd62ba05e0c29358",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
           }
         }
       ]
@@ -12555,13 +14680,13 @@
           "chainId": "46630",
           "timestamp": "1800000000",
           "expected": {
-            "settled": true,
-            "revertData": "0x",
-            "mandateDigest": "0xf43d1067183d09604020a2ff3a07afaca94e76cbaeb9a7dbdc9ea66e62f99414",
-            "candidateDigest": "0xa5f0ec29202a416f4a9d4060f6a9e822bd1288aa8e65968f4faf220e8b99abf5",
-            "executionCommitment": "0x464bb21822b9818601f7850c09c62f3fb25076bf838c06bd654d08aeb2d44395",
-            "debit": "1635092306",
-            "credit": "1"
+            "settled": false,
+            "revertData": "0x6fe60cfa00000000000000000000000000000000000000000000006c6b935b8bbd40000000000000000000000000000000000000000000000000000000000000000000c800000000000000000000000000000000000000000000000000000000000000c8",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
           }
         }
       ]
@@ -12704,7 +14829,7 @@
           "timestamp": "1800000000",
           "expected": {
             "settled": false,
-            "revertData": "0xb430483900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008ac7230489e80000",
+            "revertData": "0x2c8843be00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008ac7230489e80000",
             "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
             "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
             "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -13047,13 +15172,13 @@
           "chainId": "46630",
           "timestamp": "1800000000",
           "expected": {
-            "settled": true,
-            "revertData": "0x",
-            "mandateDigest": "0x3701048d605e31f5736a8cd9d8cfb4cb941a263a595fdc60f125da8abccda1b7",
-            "candidateDigest": "0x34de838259b9428ca86e4e41ef929b264c212c37473eb174f978580c93fa1814",
-            "executionCommitment": "0xa36114071696602ec48e6e0de6d15f52fa39ab97b60391c344c32f5cc3502fb9",
-            "debit": "62263350787014480880",
-            "credit": "1990945696"
+            "settled": false,
+            "revertData": "0x6fe60cfa00000000000000000000000000000000000000000000006c6b935b8bbd4000000000000000000000000000000000000000000000000002a30f839b15734993800000000000000000000000000000000000000000000002a30f839b1573499380",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
           }
         }
       ]
@@ -13169,7 +15294,7 @@
           "timestamp": "1800000000",
           "expected": {
             "settled": false,
-            "revertData": "0xb430483900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008ac7230489e80000",
+            "revertData": "0x2c8843be00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008ac7230489e80000",
             "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
             "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
             "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -13192,13 +15317,13 @@
           "chainId": "46630",
           "timestamp": "1800000000",
           "expected": {
-            "settled": true,
-            "revertData": "0x",
-            "mandateDigest": "0xf43d1067183d09604020a2ff3a07afaca94e76cbaeb9a7dbdc9ea66e62f99414",
-            "candidateDigest": "0x8203692751ac613dd1cfb95d33c466d63d0b75512432368ac397eba5ace39b89",
-            "executionCommitment": "0x177c82be12609ff446443f4ebc5893f9fe0f30c6fa1c7556fabb6ef5e455f299",
-            "debit": "1590370064",
-            "credit": "628248184408084814225156"
+            "settled": false,
+            "revertData": "0x6fe60cfa00000000000000000000000000000000000000000000006c6b935b8bbd40000000000000000000000000000000000000000000000067ef5876c5a2f1c7663b2000000000000000000000000000000000000000000067ef5876c5a2f1c7663b20",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
           }
         }
       ]
@@ -13266,13 +15391,13 @@
           "chainId": "46630",
           "timestamp": "1800000000",
           "expected": {
-            "settled": true,
-            "revertData": "0x",
-            "mandateDigest": "0xf43d1067183d09604020a2ff3a07afaca94e76cbaeb9a7dbdc9ea66e62f99414",
-            "candidateDigest": "0x8be95c30d587523ba0bf271dd31e8fa5e1d1b047bf0a3d92e2f6b9b3ad8be994",
-            "executionCommitment": "0x6da49eda4aa6f6b1d3e862e72379d56963407be6cf8367409ad9c304dab9ec20",
-            "debit": "144106480",
-            "credit": "8810528125564381011"
+            "settled": false,
+            "revertData": "0x6fe60cfa00000000000000000000000000000000000000000000006c6b935b8bbd40000000000000000000000000000000000000000000000000005f8620c20122a0b8d800000000000000000000000000000000000000000000005f8620c20122a0b8d8",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
           }
         }
       ]
@@ -13729,13 +15854,13 @@
           "chainId": "46630",
           "timestamp": "1800000000",
           "expected": {
-            "settled": true,
-            "revertData": "0x",
-            "mandateDigest": "0x54458679d17cda28746ea5aebddb11ed5962b037b749d3c8b23861b8dfc53098",
-            "candidateDigest": "0xa80a68530b4d2df1792a0b6caa506831a760419f9b9136e43c840b7d013be8f8",
-            "executionCommitment": "0x94b9229decd35ed483830b1bdde8c4af5eb6ed62217d590b1c242021d6afad99",
-            "debit": "10000000000000000000",
-            "credit": "1990695375"
+            "settled": false,
+            "revertData": "0x2b4aafbf",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
           }
         }
       ]
@@ -14074,13 +16199,13 @@
           "chainId": "46630",
           "timestamp": "1800000156",
           "expected": {
-            "settled": true,
-            "revertData": "0x",
-            "mandateDigest": "0xf43d1067183d09604020a2ff3a07afaca94e76cbaeb9a7dbdc9ea66e62f99414",
-            "candidateDigest": "0x287502ebe49e6e2340b5ace2703a531431c25be67dc9a031fb2997df2b8d45f0",
-            "executionCommitment": "0x90d66476d87b22d5a3dfca684aa7d1583f376743d985433e24b57a40915e8b5e",
-            "debit": "875988630",
-            "credit": "19729772583295729055"
+            "settled": false,
+            "revertData": "0x6fe60cfa00000000000000000000000000000000000000000000006c6b935b8bbd4000000000000000000000000000000000000000000000000000d5e91e9656a49824380000000000000000000000000000000000000000000000d5e91e9656a4982438",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
           }
         }
       ]
@@ -14832,13 +16957,13 @@
           "chainId": "46630",
           "timestamp": "1800000000",
           "expected": {
-            "settled": true,
-            "revertData": "0x",
-            "mandateDigest": "0xf43d1067183d09604020a2ff3a07afaca94e76cbaeb9a7dbdc9ea66e62f99414",
-            "candidateDigest": "0xed4293aa37f20e4f5a9ee86727aeadad429a1df6134b885c1090b3bd81360219",
-            "executionCommitment": "0x1c83c2f09766c4600b5ade8f5330f3f6e4928cd5fa4ec32efbff21cebe38007a",
-            "debit": "1910447727",
-            "credit": "59024115483014118049"
+            "settled": false,
+            "revertData": "0x6fe60cfa00000000000000000000000000000000000000000000006c6b935b8bbd40000000000000000000000000000000000000000000000000027ff0d47dba1a11cdc800000000000000000000000000000000000000000000027ff0d47dba1a11cdc8",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
           }
         }
       ]
@@ -14857,13 +16982,13 @@
           "chainId": "46630",
           "timestamp": "1800000000",
           "expected": {
-            "settled": true,
-            "revertData": "0x",
-            "mandateDigest": "0x23a5f027d3cb9d26effbf056b0a6d393219dea7a62cead7ab77621cd3cac80b6",
-            "candidateDigest": "0x5435d5aca91f4a855d19ec62e1cad0ee4a7340af77ef6005cce8dc0162cdd433",
-            "executionCommitment": "0x28b7f62e91ee7c3293c5690985dbed367431e11142732eb692a651fb8f066fb6",
-            "debit": "75065409",
-            "credit": "80474138206122691493"
+            "settled": false,
+            "revertData": "0x6fe60cfa00000000000000000000000000000000000000000000006c6b935b8bbd400000000000000000000000000000000000000000000000000368809a51a466cb18e8000000000000000000000000000000000000000000000368809a51a466cb18e8",
+            "mandateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "candidateDigest": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "executionCommitment": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "debit": "0",
+            "credit": "0"
           }
         }
       ]
@@ -14964,6 +17089,206 @@
             "credit": "2550702879"
           }
         }
+      ]
+    }
+  ],
+  "authorityVectors": [
+    {
+      "id": "authority-001",
+      "responsibility": "ONCHAIN_ENFORCED",
+      "kernelDecision": "REJECT",
+      "kernelReasonCodes": [
+        "MAX_NOTIONAL_EXCEEDED"
+      ],
+      "gateSettled": false,
+      "expectedGateErrors": [
+        "0x2b4aafbf"
+      ]
+    },
+    {
+      "id": "authority-002",
+      "responsibility": "ONCHAIN_ENFORCED",
+      "kernelDecision": "REJECT",
+      "kernelReasonCodes": [
+        "MAX_NOTIONAL_EXCEEDED",
+        "NOTIONAL_INCONSISTENT"
+      ],
+      "gateSettled": false,
+      "expectedGateErrors": [
+        "0x6fe60cfa"
+      ]
+    },
+    {
+      "id": "authority-003",
+      "responsibility": "ONCHAIN_ENFORCED",
+      "kernelDecision": "REJECT",
+      "kernelReasonCodes": [
+        "UNIT_MISMATCH"
+      ],
+      "gateSettled": false,
+      "expectedGateErrors": [
+        "0x726c25a4"
+      ]
+    },
+    {
+      "id": "authority-004",
+      "responsibility": "ONCHAIN_ENFORCED",
+      "kernelDecision": "REJECT",
+      "kernelReasonCodes": [
+        "MAX_NOTIONAL_EXCEEDED",
+        "VALUE_OUT_OF_RANGE"
+      ],
+      "gateSettled": false,
+      "expectedGateErrors": [
+        "0x993784d4"
+      ]
+    },
+    {
+      "id": "authority-005",
+      "responsibility": "ONCHAIN_ENFORCED",
+      "kernelDecision": "REJECT",
+      "kernelReasonCodes": [
+        "VALUE_OUT_OF_RANGE"
+      ],
+      "gateSettled": false,
+      "expectedGateErrors": [
+        "0x6bd64638"
+      ]
+    },
+    {
+      "id": "authority-006",
+      "responsibility": "ONCHAIN_ENFORCED",
+      "kernelDecision": "REJECT",
+      "kernelReasonCodes": [
+        "TOTAL_DEBIT_EXCEEDED"
+      ],
+      "gateSettled": false,
+      "expectedGateErrors": [
+        "0xe6c8b4ae"
+      ]
+    },
+    {
+      "id": "authority-007",
+      "responsibility": "ONCHAIN_ENFORCED",
+      "kernelDecision": "REJECT",
+      "kernelReasonCodes": [
+        "FEES_EXCEED_NOTIONAL"
+      ],
+      "gateSettled": false,
+      "expectedGateErrors": [
+        "0xe9e9aab3"
+      ]
+    },
+    {
+      "id": "authority-008",
+      "responsibility": "ONCHAIN_ENFORCED",
+      "kernelDecision": "REJECT",
+      "kernelReasonCodes": [
+        "PRICE_DEVIATION_EXCEEDED"
+      ],
+      "gateSettled": false,
+      "expectedGateErrors": [
+        "0x16442046"
+      ]
+    },
+    {
+      "id": "authority-009",
+      "responsibility": "ONCHAIN_ENFORCED",
+      "kernelDecision": "REJECT",
+      "kernelReasonCodes": [
+        "CANONICAL_ASSET_MISMATCH"
+      ],
+      "gateSettled": false,
+      "expectedGateErrors": [
+        "0x88b00311"
+      ]
+    },
+    {
+      "id": "authority-010",
+      "responsibility": "ONCHAIN_ENFORCED",
+      "kernelDecision": "REJECT",
+      "kernelReasonCodes": [
+        "REPRESENTATION_ASSET_MISMATCH",
+        "MARKET_STATE_UNKNOWN",
+        "CORPORATE_ACTION_STATE_UNKNOWN"
+      ],
+      "gateSettled": false,
+      "expectedGateErrors": [
+        "0xe6021e8a"
+      ]
+    },
+    {
+      "id": "authority-011",
+      "responsibility": "ONCHAIN_ENFORCED",
+      "kernelDecision": "REJECT",
+      "kernelReasonCodes": [
+        "REPRESENTATION_ATTRIBUTES_MISMATCH"
+      ],
+      "gateSettled": false,
+      "expectedGateErrors": [
+        "0x9ca28d13"
+      ]
+    },
+    {
+      "id": "authority-012",
+      "responsibility": "ONCHAIN_ENFORCED",
+      "kernelDecision": "REJECT",
+      "kernelReasonCodes": [
+        "CHAIN_NOT_ALLOWED",
+        "REPRESENTATION_ATTRIBUTES_MISMATCH",
+        "REPRESENTATION_CHAIN_INCONSISTENT"
+      ],
+      "gateSettled": false,
+      "expectedGateErrors": [
+        "0xa6226dc5"
+      ]
+    },
+    {
+      "id": "authority-013",
+      "responsibility": "ONCHAIN_ENFORCED",
+      "kernelDecision": "REJECT",
+      "kernelReasonCodes": [
+        "VENUE_NOT_ALLOWED"
+      ],
+      "gateSettled": false,
+      "expectedGateErrors": [
+        "0xde7e3cb2"
+      ]
+    },
+    {
+      "id": "authority-014",
+      "responsibility": "ONCHAIN_ENFORCED",
+      "kernelDecision": "REJECT",
+      "kernelReasonCodes": [
+        "SYNTHETIC_NOT_ALLOWED"
+      ],
+      "gateSettled": false,
+      "expectedGateErrors": [
+        "0xf48df8c2"
+      ]
+    },
+    {
+      "id": "authority-015",
+      "responsibility": "ONCHAIN_ENFORCED",
+      "kernelDecision": "REJECT",
+      "kernelReasonCodes": [
+        "SIDE_MISMATCH"
+      ],
+      "gateSettled": false,
+      "expectedGateErrors": [
+        "0xf5aa8e93"
+      ]
+    },
+    {
+      "id": "authority-016",
+      "responsibility": "ONCHAIN_ENFORCED",
+      "kernelDecision": "REJECT",
+      "kernelReasonCodes": [
+        "UNIT_MISMATCH"
+      ],
+      "gateSettled": false,
+      "expectedGateErrors": [
+        "0x18279b24"
       ]
     }
   ],

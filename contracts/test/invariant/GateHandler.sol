@@ -32,6 +32,9 @@ contract GateHandler is GateTestBase {
     uint256 public tamperedSuccesses;
     uint256 public unsupportedSuccesses;
     uint256 public replaySuccesses;
+    uint256 public maliciousAgentSuccesses;
+    uint256 public maxNotionalViolations;
+    uint256 public exactFillViolations;
     uint256 public calls;
     uint256 public settled;
 
@@ -59,11 +62,12 @@ contract GateHandler is GateTestBase {
     }
 
     function selectors() external pure returns (bytes4[] memory s) {
-        s = new bytes4[](4);
+        s = new bytes4[](5);
         s[0] = this.execute.selector;
         s[1] = this.executeTampered.selector;
         s[2] = this.executeUnsupported.selector;
         s[3] = this.replayLast.selector;
+        s[4] = this.executeMalicious.selector;
     }
 
     function digestCount() external view returns (uint256) {
@@ -153,12 +157,15 @@ contract GateHandler is GateTestBase {
             buyDebits += debit;
             buyCredits += credit;
             if (debit > BUY_BOUND) buyBoundViolations += 1;
+            if (credit != c.quantity.atoms) exactFillViolations += 1;
         } else {
             sellDebits += debit;
             sellCredits += credit;
             if (credit < SELL_FLOOR) sellFloorViolations += 1;
             if (debit > c.quantity.atoms) sellDebitViolations += 1;
+            if (debit != c.quantity.atoms) exactFillViolations += 1;
         }
+        if (c.notional.atoms > m.maxNotional.atoms) maxNotionalViolations += 1;
     }
 
     /// Signs honestly, then changes one committed field. Must never settle.
@@ -197,6 +204,39 @@ contract GateHandler is GateTestBase {
         _script(0, i, t, c.quantity.atoms);
         (bool ok,,) = _submit(m, _signMandate(m), c, t, _signExecution(m, c, t));
         if (ok) unsupportedSuccesses += 1;
+    }
+
+    /// Fully and correctly re-signed by the authorized agent after constructing
+    /// a kernel-invalid static policy violation. None may settle.
+    function executeMalicious(uint256 index, uint256 attack) external {
+        uint256 i = index % POOL;
+        Mandate memory m = _poolMandate(i);
+        Candidate memory c = _scriptedCandidate(i % 2 == 0 ? SIDE_BUY : SIDE_SELL);
+        ExecutionTerms memory t = _poolTerms(i, i % 2 == 0 ? 0 : type(uint256).max);
+        uint256 kind = attack % 8;
+        if (kind == 0) {
+            c.quantity.atoms *= 2;
+            c.notional.atoms *= 2;
+        } else if (kind == 1) {
+            c.notional.atoms += 1;
+        } else if (kind == 2) {
+            c.issuer = "issuer.omega";
+        } else if (kind == 3) {
+            c.feeTotal.atoms = i % 2 == 0 ? 11e18 : c.notional.atoms;
+        } else if (kind == 4) {
+            c.side = c.side == SIDE_BUY ? SIDE_SELL : SIDE_BUY;
+        } else if (kind == 5) {
+            c.venue = "venue.fixture";
+        } else if (kind == 6) {
+            t.recipient = address(0xdead);
+        } else {
+            c.executionPrice.atoms = 100e18;
+            c.notional.atoms = 1_000e18;
+            c.feeTotal.atoms = 3e18;
+        }
+        _script(0, i, t, c.quantity.atoms);
+        (bool ok,,) = _submit(m, _signMandate(m), c, t, _signExecution(m, c, t));
+        if (ok) maliciousAgentSuccesses += 1;
     }
 
     /// Byte-identical resubmission of the last settled execution.

@@ -14,6 +14,45 @@ contract FuzzTest is GateTestBase {
     uint256 internal constant PRINCIPAL_FUNDING = 1_000_000e6;
     uint256 internal constant PRINCIPAL_TOKENS = 1_000e18;
 
+    function testFuzz_notionalArithmetic_matchesExactRationalBounds(
+        uint256 quantity,
+        uint256 price,
+        uint8 quantityDecimals,
+        uint8 priceDecimals,
+        uint8 targetDecimals
+    ) public view {
+        quantity = bound(quantity, 0, 1e18);
+        price = bound(price, 0, 1e18);
+        quantityDecimals = uint8(bound(quantityDecimals, 0, 18));
+        priceDecimals = uint8(bound(priceDecimals, 0, 18));
+        targetDecimals = uint8(bound(targetDecimals, 0, 18));
+        uint256 numerator = quantity * price * 10 ** uint256(targetDecimals);
+        uint256 denominator = 10 ** uint256(uint16(quantityDecimals) + uint16(priceDecimals));
+        uint256 expectedFloor = numerator / denominator;
+        uint256 expectedCeil = expectedFloor + (numerator % denominator == 0 ? 0 : 1);
+        (bool representable, uint256 floorAtoms, uint256 ceilAtoms) =
+            harness.notionalBounds(quantity, quantityDecimals, price, priceDecimals, targetDecimals);
+        assertTrue(representable);
+        assertEq(floorAtoms, expectedFloor);
+        assertEq(ceilAtoms, expectedCeil);
+    }
+
+    function testFuzz_amountComparison_matchesExactCrossMultiplication(
+        uint256 a,
+        uint256 b,
+        uint8 aDecimals,
+        uint8 bDecimals
+    ) public view {
+        a = bound(a, 0, 1e30);
+        b = bound(b, 0, 1e30);
+        aDecimals = uint8(bound(aDecimals, 0, 38));
+        bDecimals = uint8(bound(bDecimals, 0, 38));
+        uint256 left = a * 10 ** uint256(bDecimals);
+        uint256 right = b * 10 ** uint256(aDecimals);
+        int8 expected = left < right ? int8(-1) : left > right ? int8(1) : int8(0);
+        assertEq(harness.compareAmounts(a, aDecimals, b, bDecimals), expected);
+    }
+
     /// @dev Signs and submits; returns (ok, revertData, debit, credit).
     function _try(Mandate memory m, Candidate memory c, ExecutionTerms memory t)
         internal
@@ -43,10 +82,10 @@ contract FuzzTest is GateTestBase {
         uint256 deliver,
         uint256 refund
     ) public {
-        limitAtoms = bound(limitAtoms, 0, 1e30);
+        limitAtoms = bound(limitAtoms, 0, 1e24);
         fundingLimit = bound(fundingLimit, 0, PRINCIPAL_FUNDING);
-        quantity = bound(quantity, 1, 1e24);
-        deliver = bound(deliver, 0, 1e24);
+        quantity = bound(quantity, 1, 1e21);
+        deliver = bound(deliver, 0, 1e21);
         refund = bound(refund, 0, 2 * PRINCIPAL_FUNDING);
 
         Mandate memory m = _mandate();
@@ -54,6 +93,9 @@ contract FuzzTest is GateTestBase {
         m.economicLimit.atoms = limitAtoms;
         Candidate memory c = _scriptedCandidate(SIDE_BUY);
         c.quantity.atoms = quantity;
+        c.executionPrice.atoms = 200e18;
+        c.notional.atoms = quantity * 200;
+        c.feeTotal.atoms = 0;
         ExecutionTerms memory t = _terms();
         t.fundingLimit = fundingLimit;
         _scriptHonest(deliver, refund);
@@ -61,17 +103,17 @@ contract FuzzTest is GateTestBase {
         uint256 signedBound = limitAtoms / 1e12; // 18 -> 6 decimals, rounded down
         (bool ok, bytes memory reason, uint256 debit, uint256 credit) = _try(m, c, t);
 
-        if (fundingLimit > signedBound) {
+        if (c.notional.atoms > limitAtoms) {
+            assertEq(reason, _err(MandateExecutionGate.MaxNotionalExceeded.selector));
+        } else if (fundingLimit > signedBound) {
             assertEq(
                 reason,
                 abi.encodeWithSelector(
                     MandateExecutionGate.FundingLimitExceedsMandate.selector, fundingLimit, signedBound
                 )
             );
-        } else if (deliver < quantity) {
-            assertEq(
-                reason, abi.encodeWithSelector(MandateExecutionGate.CreditBelowMinimum.selector, deliver, quantity)
-            );
+        } else if (deliver != quantity) {
+            assertEq(reason, abi.encodeWithSelector(MandateExecutionGate.CreditNotExact.selector, deliver, quantity));
         } else {
             assertTrue(ok);
             assertEq(debit, refund >= fundingLimit ? 0 : fundingLimit - refund);
@@ -88,7 +130,7 @@ contract FuzzTest is GateTestBase {
         uint256 deliver,
         uint256 refund
     ) public {
-        limitAtoms = bound(limitAtoms, 0, 1e30);
+        limitAtoms = bound(limitAtoms, 0, 1e21);
         // The scripted adapter holds 1e15 funding atoms; stay inside its inventory.
         fundingLimit = bound(fundingLimit, 0, 1e14);
         quantity = bound(quantity, 1, PRINCIPAL_TOKENS);
@@ -96,10 +138,13 @@ contract FuzzTest is GateTestBase {
         refund = bound(refund, 0, quantity);
 
         Mandate memory m = _sellMandate();
-        m.maxNotional.atoms = limitAtoms;
+        m.maxNotional.atoms = type(uint128).max;
         m.economicLimit.atoms = limitAtoms;
         Candidate memory c = _scriptedCandidate(SIDE_SELL);
         c.quantity.atoms = quantity;
+        c.executionPrice.atoms = 200e18;
+        c.notional.atoms = quantity * 200;
+        c.feeTotal.atoms = 0;
         ExecutionTerms memory t = _sellTerms();
         t.fundingLimit = fundingLimit;
         _scriptHonest(deliver, refund);
@@ -107,12 +152,18 @@ contract FuzzTest is GateTestBase {
         uint256 signedFloor = limitAtoms / 1e12 + (limitAtoms % 1e12 == 0 ? 0 : 1); // rounded up
         (bool ok, bytes memory reason, uint256 debit, uint256 credit) = _try(m, c, t);
 
-        if (fundingLimit < signedFloor) {
+        if (c.notional.atoms < limitAtoms) {
+            assertEq(reason, _err(MandateExecutionGate.DeclaredTotalCreditBelowMinimum.selector));
+        } else if (fundingLimit < signedFloor) {
             assertEq(
                 reason,
                 abi.encodeWithSelector(
                     MandateExecutionGate.FundingLimitBelowMandate.selector, fundingLimit, signedFloor
                 )
+            );
+        } else if (refund != 0) {
+            assertEq(
+                reason, abi.encodeWithSelector(MandateExecutionGate.DebitNotExact.selector, quantity - refund, quantity)
             );
         } else if (deliver < fundingLimit) {
             assertEq(
@@ -120,8 +171,7 @@ contract FuzzTest is GateTestBase {
             );
         } else {
             assertTrue(ok);
-            assertEq(debit, quantity - refund);
-            assertLe(debit, quantity, "SELL debited more than the candidate quantity");
+            assertEq(debit, quantity);
             assertGe(credit, signedFloor, "SELL credited less than the signed MIN_TOTAL_CREDIT");
         }
         assertEq(_consumed(m), ok);
@@ -145,6 +195,8 @@ contract FuzzTest is GateTestBase {
         FixtureVenueAdapter adapter = new FixtureVenueAdapter(predicted, venue);
         MarketConfig[] memory markets = new MarketConfig[](1);
         markets[0] = _market(address(aapl), address(adapter), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
+        markets[0].fixturePrice.decimals = 6;
+        markets[0].fixturePrice.atoms = price;
         gate = new MandateExecutionGate(markets);
         assertEq(address(gate), predicted);
         aapl.mint(address(venue), quantity);
@@ -156,17 +208,24 @@ contract FuzzTest is GateTestBase {
         m.economicLimit.atoms = limitUsd * 1e18;
         Candidate memory c = _candidate();
         c.quantity.atoms = quantity;
+        c.executionPrice.decimals = 6;
+        c.executionPrice.atoms = price;
+        uint256 gross = (quantity * price + 1e18 - 1) / 1e18;
+        c.notional.decimals = 6;
+        c.notional.atoms = gross;
+        c.feeTotal.decimals = 6;
         ExecutionTerms memory t = _terms();
         t.fundingLimit = limitUsd * 1e6; // the agent spends up to the whole bound
 
         uint256 cost = venue.quoteBuy(quantity);
+        c.feeTotal.atoms = cost - gross;
         (bool ok, bytes memory reason, uint256 debit, uint256 credit) = _try(m, c, t);
         if (t.fundingLimit > PRINCIPAL_FUNDING) {
             assertFalse(ok);
+        } else if (gross > t.fundingLimit) {
+            assertEq(reason, _err(MandateExecutionGate.MaxNotionalExceeded.selector));
         } else if (cost > t.fundingLimit) {
-            assertEq(
-                reason, abi.encodeWithSelector(FixtureVenue.FixtureCostExceedsMaximum.selector, cost, t.fundingLimit)
-            );
+            assertEq(reason, _err(MandateExecutionGate.DeclaredTotalDebitExceeded.selector));
         } else {
             assertTrue(ok);
             assertEq(debit, cost);
@@ -183,7 +242,7 @@ contract FuzzTest is GateTestBase {
         fromDecimals = uint8(bound(fromDecimals, 0, 38));
         atoms = bound(atoms, 0, type(uint128).max);
         Mandate memory m = _mandate();
-        m.maxNotional = _usd(0);
+        m.maxNotional = _usd(type(uint128).max);
         m.maxNotional.decimals = fromDecimals;
         m.economicLimit.decimals = fromDecimals;
         m.economicLimit.atoms = atoms;
@@ -193,7 +252,13 @@ contract FuzzTest is GateTestBase {
         ExecutionTerms memory t = _terms();
         t.fundingLimit = fundingLimit;
         Candidate memory c = _scriptedCandidate(SIDE_BUY);
-        _scriptHonest(c.quantity.atoms, 0);
+        c.quantity.atoms = 1;
+        c.executionPrice.atoms = 200e18;
+        c.notional.decimals = 0;
+        c.notional.atoms = 0;
+        c.feeTotal.decimals = 0;
+        c.feeTotal.atoms = 0;
+        _scriptHonest(1, 0);
         (bool ok, bytes memory reason,,) = _try(m, c, t);
         if (fundingLimit > signedBound) {
             assertEq(

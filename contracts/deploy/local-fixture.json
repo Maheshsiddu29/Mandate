@@ -11,6 +11,8 @@
       "quantityUnit": "TOKEN",
       "settlementUnit": "USD",
       "synthetic": false,
+      "classification": "FIXTURE",
+      "fixturePriceDecimals": 6,
       "fixturePrice": "200000000",
       "fixtureFeeBps": 30
     }

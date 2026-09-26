@@ -17,6 +17,7 @@ const utf8 = new TextEncoder();
 
 export const GATE_ERRORS = {
   WrongChain: [],
+  ExecutionProfileExceeded: [],
   UnsupportedMandateVersion: [],
   MalformedMandate: [],
   PrincipalSignatureInvalid: [],
@@ -41,14 +42,26 @@ export const GATE_ERRORS = {
   QuantityUnitMismatch: [],
   ZeroQuantity: [],
   SettlementUnitMismatch: [],
+  EconomicUnitMismatch: [],
+  FixturePriceMismatch: [],
+  NotionalOutOfRange: [],
+  NotionalInconsistent: ['uint256', 'uint256', 'uint256'],
+  MaxNotionalExceeded: [],
+  DeclaredEconomicValueOutOfRange: [],
+  DeclaredTotalDebitExceeded: [],
+  DeclaredFeesExceedNotional: [],
+  DeclaredTotalCreditBelowMinimum: [],
   RecipientNotPrincipal: [],
   FundingLimitExceedsMandate: ['uint256', 'uint256'],
   FundingLimitBelowMandate: ['uint256', 'uint256'],
   TokenDecimalsChanged: ['address'],
   DebitExceedsLimit: ['uint256', 'uint256'],
   CreditBelowMinimum: ['uint256', 'uint256'],
+  DebitNotExact: ['uint256', 'uint256'],
+  CreditNotExact: ['uint256', 'uint256'],
   // Constructor-only.
   InvalidMarket: [],
+  RealMarketStateSourceRequired: [],
 } as const satisfies Record<string, readonly ('uint256' | 'address')[]>;
 
 export type GateErrorName = keyof typeof GATE_ERRORS;

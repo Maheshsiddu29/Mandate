@@ -10,6 +10,7 @@ import {
     Candidate,
     ExecutionTerms,
     HALT_FORBID_WHEN_HALTED,
+    MARKET_FIXTURE,
     Mandate,
     MarketConfig,
     Price,
@@ -144,6 +145,7 @@ abstract contract GateTestBase is Test {
         string memory venue,
         bool synthetic_
     ) internal view returns (MarketConfig memory) {
+        uint256 fixturePrice = token == address(nvda) ? NVDA_PRICE : AAPL_PRICE;
         return MarketConfig({
             representation: token,
             fundingToken: address(funding),
@@ -153,7 +155,9 @@ abstract contract GateTestBase is Test {
             venue: venue,
             quantityUnit: "TOKEN",
             settlementUnit: "USD",
-            synthetic: synthetic_
+            synthetic: synthetic_,
+            classification: MARKET_FIXTURE,
+            fixturePrice: Price({numeratorUnit: "USD", denominatorUnit: "TOKEN", decimals: 6, atoms: fixturePrice})
         });
     }
 

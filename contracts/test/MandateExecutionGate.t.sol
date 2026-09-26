@@ -5,11 +5,15 @@ import {Vm} from "forge-std/Test.sol";
 
 import {MandateExecutionGate} from "../src/MandateExecutionGate.sol";
 import {
+    Amount,
     Candidate,
     ExecutionTerms,
     Mandate,
     Market,
     MarketConfig,
+    MARKET_REAL,
+    Price,
+    SIDE_BUY,
     SIDE_SELL,
     SYNTHETIC_ALLOWED
 } from "../src/MandateTypes.sol";
@@ -42,6 +46,8 @@ contract MandateExecutionGateTest is GateTestBase {
         assertEq(m.adapter, address(aaplAdapter));
         assertEq(m.representationDecimals, 18);
         assertEq(m.fundingDecimals, 6);
+        assertEq(m.fixturePriceDecimals, 6);
+        assertEq(m.fixturePriceAtoms, AAPL_PRICE);
         assertFalse(m.synthetic);
     }
 
@@ -94,6 +100,32 @@ contract MandateExecutionGateTest is GateTestBase {
         }
     }
 
+    function test_construction_refusesMalformedFixturePrice() public {
+        MarketConfig memory market =
+            _market(address(aapl), address(aaplAdapter), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
+        market.fixturePrice.atoms = 0;
+        vm.expectRevert(MandateExecutionGate.InvalidMarket.selector);
+        new MandateExecutionGate(_one(market));
+        market.fixturePrice.atoms = AAPL_PRICE;
+        market.fixturePrice.numeratorUnit = "EUR";
+        vm.expectRevert(MandateExecutionGate.InvalidMarket.selector);
+        new MandateExecutionGate(_one(market));
+    }
+
+    function test_profile_marketCountExactAndAboveBoundary() public {
+        uint256 maximum = gate.MAX_MARKETS();
+        MarketConfig[] memory markets = new MarketConfig[](maximum);
+        for (uint256 i = 0; i < maximum; ++i) {
+            MockERC20 token = new MockERC20("Fixture", "FX", 18);
+            markets[i] =
+                _market(address(token), address(aaplAdapter), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
+        }
+        MandateExecutionGate maximumGate = new MandateExecutionGate(markets);
+        assertTrue(address(maximumGate) != address(0));
+        vm.expectRevert(MandateExecutionGate.InvalidMarket.selector);
+        new MandateExecutionGate(new MarketConfig[](maximum + 1));
+    }
+
     function test_construction_refusesDuplicateRepresentations() public {
         MarketConfig[] memory markets = new MarketConfig[](2);
         markets[0] = _market(address(aapl), address(aaplAdapter), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
@@ -108,6 +140,25 @@ contract MandateExecutionGateTest is GateTestBase {
         new MandateExecutionGate(
             _one(_market(address(wide), address(aaplAdapter), _aaplAsset(), "issuer.alpha", "venue.fixture", false))
         );
+    }
+
+    function test_construction_refusesRealMarketWithoutAuthenticatedStateSource() public {
+        MarketConfig memory market =
+            _market(address(aapl), address(aaplAdapter), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
+        market.classification = MARKET_REAL;
+        vm.expectRevert(MandateExecutionGate.RealMarketStateSourceRequired.selector);
+        new MandateExecutionGate(_one(market));
+    }
+
+    function test_construction_refusesTokenAddressesWithoutCode() public {
+        MarketConfig memory market =
+            _market(address(0x1111), address(aaplAdapter), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
+        vm.expectRevert(MandateExecutionGate.InvalidMarket.selector);
+        new MandateExecutionGate(_one(market));
+        market = _market(address(aapl), address(aaplAdapter), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
+        market.fundingToken = address(0x2222);
+        vm.expectRevert(MandateExecutionGate.InvalidMarket.selector);
+        new MandateExecutionGate(_one(market));
     }
 
     // ------------------------------------------------------------------
@@ -167,6 +218,14 @@ contract MandateExecutionGateTest is GateTestBase {
         assertEq(funding.allowance(address(aaplAdapter), address(aaplVenue)), 0);
         assertEq(funding.balanceOf(address(aaplAdapter)), 0);
         assertEq(aapl.balanceOf(address(aaplAdapter)), 0);
+    }
+
+    function test_unrelatedDirectDonationDoesNotBecomeExecutionDerivedFunds() public {
+        funding.mint(address(gate), 1);
+        uint256 donated = funding.balanceOf(address(gate));
+        _execute(_mandate(), _candidate(), _terms());
+        assertEq(funding.balanceOf(address(gate)), donated);
+        assertEq(aapl.balanceOf(address(gate)), 0);
     }
 
     function test_anyoneMaySubmitAFullySignedExecution_theOutcomeIsFixed() public {
@@ -266,6 +325,35 @@ contract MandateExecutionGateTest is GateTestBase {
         gate.execute(m, ps, c, t, ps);
     }
 
+    function test_refuses_agentSignaturePresentedAsPrincipalSignature() public {
+        (Mandate memory m, Candidate memory c, ExecutionTerms memory t) = (_mandate(), _candidate(), _terms());
+        bytes memory agentAuthorization = _signExecution(m, c, t);
+        vm.expectRevert(MandateExecutionGate.PrincipalSignatureInvalid.selector);
+        gate.execute(m, agentAuthorization, c, t, agentAuthorization);
+    }
+
+    function test_sameAddressAsPrincipalAndAgentStillRequiresDistinctTypedSignatures() public {
+        Mandate memory m = _mandate();
+        m.agent = principal;
+        Candidate memory c = _candidate();
+        c.agent = principal;
+        ExecutionTerms memory t = _terms();
+        bytes memory principalAuthorization = _signMandate(m);
+        vm.expectRevert(MandateExecutionGate.AgentSignatureInvalid.selector);
+        gate.execute(m, principalAuthorization, c, t, principalAuthorization);
+    }
+
+    function test_oldExecutionAuthorizationCannotBindANewMandate() public {
+        Mandate memory oldMandate = _mandate();
+        Candidate memory c = _candidate();
+        ExecutionTerms memory t = _terms();
+        bytes memory oldAuthorization = _signExecution(oldMandate, c, t);
+        Mandate memory newMandate = _mandate();
+        newMandate.nonce = 2;
+        vm.expectRevert(MandateExecutionGate.AgentSignatureInvalid.selector);
+        gate.execute(newMandate, _signMandate(newMandate), c, t, oldAuthorization);
+    }
+
     // ------------------------------------------------------------------
     // Chain time: exact boundaries
     // ------------------------------------------------------------------
@@ -300,6 +388,23 @@ contract MandateExecutionGateTest is GateTestBase {
         _expectRevert(_mandate(), _candidate(), _terms(), _err(MandateExecutionGate.ExecutionDeadlinePassed.selector));
     }
 
+    function test_time_deadlineBeforeNotBeforeCanNeverExecute() public {
+        Mandate memory m = _mandate();
+        m.notBeforeUnixSeconds = int64(int256(T0 + 10));
+        ExecutionTerms memory t = _terms();
+        t.deadline = uint64(T0 + 9);
+        _expectRevert(m, _candidate(), t, _err(MandateExecutionGate.MandateNotYetActive.selector));
+        vm.warp(T0 + 10);
+        _expectRevert(m, _candidate(), t, _err(MandateExecutionGate.ExecutionDeadlinePassed.selector));
+    }
+
+    function test_time_agentDeadlineLaterThanMandateExpiryCannotExtendMandate() public {
+        ExecutionTerms memory t = _terms();
+        t.deadline = uint64(T0 + 10_000);
+        vm.warp(T0 + 3_600);
+        _expectRevert(_mandate(), _candidate(), t, _err(MandateExecutionGate.MandateExpired.selector));
+    }
+
     // ------------------------------------------------------------------
     // Replay
     // ------------------------------------------------------------------
@@ -313,6 +418,20 @@ contract MandateExecutionGateTest is GateTestBase {
         gate.execute(m, ps, c, t, as_);
         vm.expectRevert(MandateExecutionGate.MandateAlreadyConsumed.selector);
         gate.execute(m, ps, c, t, as_);
+    }
+
+    function test_permissionlessRelay_copySettlesFirstAndIntendedRelayRevertsSafely() public {
+        Mandate memory m = _mandate();
+        Candidate memory c = _candidate();
+        ExecutionTerms memory t = _terms();
+        bytes memory ps = _signMandate(m);
+        bytes memory as_ = _signExecution(m, c, t);
+        vm.prank(stranger);
+        gate.execute(m, ps, c, t, as_);
+        vm.prank(agent);
+        vm.expectRevert(MandateExecutionGate.MandateAlreadyConsumed.selector);
+        gate.execute(m, ps, c, t, as_);
+        assertEq(aapl.balanceOf(stranger), 0);
     }
 
     function test_replay_aDifferentlySignedExecutionOfAConsumedMandateRefuses() public {
@@ -343,6 +462,18 @@ contract MandateExecutionGateTest is GateTestBase {
         _execute(a, _candidate(), _terms());
         _execute(b, _candidate(), _terms());
         assertTrue(harness.mandateDigest(a) != harness.mandateDigest(b));
+    }
+
+    function test_replay_reorgRemovesConsumptionAndTheCanonicalExecutionCanSettle() public {
+        Mandate memory m = _mandate();
+        Candidate memory c = _candidate();
+        ExecutionTerms memory t = _terms();
+        uint256 beforeBlock = vm.snapshotState();
+        _execute(m, c, t);
+        assertTrue(gate.executionCommitmentOf(harness.mandateDigest(m)) != bytes32(0));
+        assertTrue(vm.revertToState(beforeBlock));
+        assertEq(gate.executionCommitmentOf(harness.mandateDigest(m)), bytes32(0));
+        _execute(m, c, t);
     }
 
     // ------------------------------------------------------------------
@@ -453,6 +584,223 @@ contract MandateExecutionGateTest is GateTestBase {
         m.maxNotional.unit = "EUR";
         m.economicLimit.unit = "EUR";
         _expectRevert(m, _candidate(), _terms(), _err(MandateExecutionGate.SettlementUnitMismatch.selector));
+    }
+
+    function test_authority_maxNotional_belowAndExactSettle() public {
+        Mandate memory belowMandate = _mandate();
+        Candidate memory below = _scriptedCandidate(SIDE_BUY);
+        below.quantity.atoms = 5e18;
+        below.notional.atoms = 1_000e18;
+        below.feeTotal.atoms = 3e18;
+        ExecutionTerms memory belowTerms = _terms();
+        _scriptHonest(5e18, belowTerms.fundingLimit - 1_003e6);
+        _execute(belowMandate, below, belowTerms);
+
+        Mandate memory exactMandate = _mandate();
+        exactMandate.nonce = 2;
+        _scriptHonest(10e18, _terms().fundingLimit - 2_006e6);
+        _execute(exactMandate, _scriptedCandidate(SIDE_BUY), _terms());
+    }
+
+    function test_authority_validMaliciousAgentCannotExceedMaxNotional_buyOrSell() public {
+        for (uint8 side = SIDE_BUY; side <= SIDE_SELL; ++side) {
+            Mandate memory m = side == SIDE_BUY ? _mandate() : _sellMandate();
+            Candidate memory c = _scriptedCandidate(side);
+            m.maxNotional.atoms = c.notional.atoms - 1;
+            ExecutionTerms memory t = side == SIDE_BUY ? _terms() : _sellTerms();
+            _expectRevert(m, c, t, _err(MandateExecutionGate.MaxNotionalExceeded.selector));
+        }
+    }
+
+    function test_authority_maxNotionalComparesDifferentScalesExactly() public {
+        Mandate memory m = _mandate();
+        m.maxNotional = Amount({unit: "USD", decimals: 2, atoms: 200_000});
+        m.economicLimit = Amount({unit: "USD", decimals: 2, atoms: 201_000});
+        Candidate memory c = _scriptedCandidate(SIDE_BUY);
+        _scriptHonest(c.quantity.atoms, 4e6);
+        _execute(m, c, _terms());
+
+        m.nonce = 2;
+        m.maxNotional.atoms = 199_999;
+        _expectRevert(m, c, _terms(), _err(MandateExecutionGate.MaxNotionalExceeded.selector));
+    }
+
+    function test_authority_notionalAlternateScaleAndOneAtomMismatch() public {
+        Candidate memory c = _scriptedCandidate(SIDE_BUY);
+        c.notional = Amount({unit: "USD", decimals: 6, atoms: 2_000e6});
+        c.feeTotal = Amount({unit: "USD", decimals: 6, atoms: 6e6});
+        _scriptHonest(c.quantity.atoms, 4e6);
+        _execute(_mandate(), c, _terms());
+
+        Mandate memory m = _mandate();
+        m.nonce = 2;
+        c.notional.atoms += 1;
+        _expectRevert(
+            m,
+            c,
+            _terms(),
+            abi.encodeWithSelector(MandateExecutionGate.NotionalInconsistent.selector, 2_000e6 + 1, 2_000e6, 2_000e6)
+        );
+    }
+
+    function test_authority_notionalArithmeticRejectsOverflow() public {
+        Candidate memory c = _scriptedCandidate(SIDE_BUY);
+        c.quantity.atoms = type(uint256).max;
+        c.executionPrice.decimals = 18;
+        c.executionPrice.atoms = 200e18;
+        c.notional.decimals = 18;
+        c.notional.atoms = type(uint256).max;
+        _expectRevert(_mandate(), c, _terms(), _err(MandateExecutionGate.NotionalOutOfRange.selector));
+    }
+
+    function test_authority_wrongEconomicUnitsRefuse() public {
+        Candidate memory c = _scriptedCandidate(SIDE_BUY);
+        c.notional.unit = "EUR";
+        c.feeTotal.unit = "EUR";
+        c.executionPrice.numeratorUnit = "EUR";
+        _expectRevert(_mandate(), c, _terms(), _err(MandateExecutionGate.EconomicUnitMismatch.selector));
+    }
+
+    function test_authority_fixturePriceIsImmutableAcrossEquivalentScales() public {
+        Candidate memory c = _scriptedCandidate(SIDE_BUY);
+        c.executionPrice = Price({numeratorUnit: "USD", denominatorUnit: "TOKEN", decimals: 6, atoms: 200e6});
+        _scriptHonest(c.quantity.atoms, 4e6);
+        _execute(_mandate(), c, _terms());
+
+        Mandate memory m = _mandate();
+        m.nonce = 2;
+        c.executionPrice.atoms = 199e6;
+        c.notional.atoms = 1_990e18;
+        _expectRevert(m, c, _terms(), _err(MandateExecutionGate.FixturePriceMismatch.selector));
+    }
+
+    function test_authority_zeroAgentPriceCannotEvadeMaxNotional() public {
+        Candidate memory c = _scriptedCandidate(SIDE_BUY);
+        c.quantity.atoms = type(uint128).max;
+        c.executionPrice.atoms = 0;
+        c.notional.atoms = 0;
+        c.feeTotal.atoms = 0;
+        _expectRevert(_mandate(), c, _terms(), _err(MandateExecutionGate.FixturePriceMismatch.selector));
+    }
+
+    function test_calldataTrailingBytesDoNotChangeTheDecodedAuthorizedAction() public {
+        Mandate memory m = _mandate();
+        Candidate memory c = _candidate();
+        ExecutionTerms memory t = _terms();
+        bytes memory callData = abi.encodeCall(gate.execute, (m, _signMandate(m), c, t, _signExecution(m, c, t)));
+        callData = bytes.concat(callData, hex"deadbeef");
+        (bool ok, bytes memory returned) = address(gate).call(callData);
+        assertTrue(ok);
+        (, uint256 debit, uint256 credit) = abi.decode(returned, (bytes32, uint256, uint256));
+        assertEq(debit, 2_006e6);
+        assertEq(credit, 10e18);
+    }
+
+    function test_calldataTruncationAndMalformedTopLevelOffsetFailBeforeConsumption() public {
+        Mandate memory m = _mandate();
+        Candidate memory c = _candidate();
+        ExecutionTerms memory t = _terms();
+        bytes memory callData = abi.encodeCall(gate.execute, (m, _signMandate(m), c, t, _signExecution(m, c, t)));
+        // Remove padding plus one signature byte; removing padding alone is a
+        // semantically equivalent ABI representation and remains acceptable.
+        bytes memory truncated = new bytes(callData.length - 32);
+        for (uint256 i = 0; i < truncated.length; ++i) {
+            truncated[i] = callData[i];
+        }
+        (bool ok,) = address(gate).call(truncated);
+        assertFalse(ok);
+        assertEq(gate.executionCommitmentOf(harness.mandateDigest(m)), bytes32(0));
+
+        assembly ("memory-safe") {
+            mstore(add(callData, 0x24), not(0))
+        }
+        (ok,) = address(gate).call(callData);
+        assertFalse(ok);
+        assertEq(gate.executionCommitmentOf(harness.mandateDigest(m)), bytes32(0));
+    }
+
+    function test_authority_declaredBuyDebitAndSellCreditAreIndependentlyBounded() public {
+        Candidate memory buy = _scriptedCandidate(SIDE_BUY);
+        buy.feeTotal.atoms = 10e18 + 1;
+        _expectRevert(_mandate(), buy, _terms(), _err(MandateExecutionGate.DeclaredTotalDebitExceeded.selector));
+
+        Candidate memory sell = _scriptedCandidate(SIDE_SELL);
+        sell.feeTotal.atoms = 10e18 + 1;
+        _expectRevert(
+            _sellMandate(), sell, _sellTerms(), _err(MandateExecutionGate.DeclaredTotalCreditBelowMinimum.selector)
+        );
+
+        sell.feeTotal.atoms = sell.notional.atoms;
+        _expectRevert(
+            _sellMandate(), sell, _sellTerms(), _err(MandateExecutionGate.DeclaredFeesExceedNotional.selector)
+        );
+    }
+
+    function test_profile_routeDataBelowAndAtLimitExecute_aboveRefuses() public {
+        for (uint256 size = gate.MAX_EXECUTION_DATA_BYTES() - 1; size <= gate.MAX_EXECUTION_DATA_BYTES(); ++size) {
+            Mandate memory m = _mandate();
+            m.nonce = uint64(size);
+            Candidate memory c = _scriptedCandidate(SIDE_BUY);
+            ExecutionTerms memory t = _terms();
+            t.executionData = new bytes(size);
+            _scriptHonest(c.quantity.atoms, 4e6);
+            _execute(m, c, t);
+        }
+
+        ExecutionTerms memory tooLarge = _terms();
+        tooLarge.executionData = new bytes(gate.MAX_EXECUTION_DATA_BYTES() + 1);
+        _expectRevert(
+            _mandate(),
+            _scriptedCandidate(SIDE_BUY),
+            tooLarge,
+            _err(MandateExecutionGate.ExecutionProfileExceeded.selector)
+        );
+    }
+
+    function test_profile_setAboveLimitRefuses() public {
+        Mandate memory m = _mandate();
+        m.allowedIssuers = new string[](gate.MAX_PROFILE_SET_SIZE() + 1);
+        for (uint256 i = 0; i < m.allowedIssuers.length; ++i) {
+            bytes memory value = new bytes(i + 1);
+            for (uint256 j = 0; j < value.length; ++j) {
+                value[j] = "A";
+            }
+            m.allowedIssuers[i] = string(value);
+        }
+        _expectRevert(m, _candidate(), _terms(), _err(MandateExecutionGate.ExecutionProfileExceeded.selector));
+    }
+
+    function test_profile_maximumExecutableInputSettlesAndMeasuresGas() public {
+        Mandate memory m = _mandate();
+        string[] memory values = new string[](gate.MAX_PROFILE_SET_SIZE());
+        values[0] = "issuer.alpha";
+        for (uint256 i = 1; i < values.length; ++i) {
+            values[i] = string.concat("issuer.extra", i < 10 ? "0" : "", vm.toString(i));
+        }
+        m.allowedIssuers = values;
+
+        values = new string[](gate.MAX_PROFILE_SET_SIZE());
+        values[0] = CHAIN_ID_STRING;
+        for (uint256 i = 1; i < values.length; ++i) {
+            values[i] = string.concat("eip155:500", i < 10 ? "0" : "", vm.toString(i));
+        }
+        m.allowedChains = values;
+
+        values = new string[](gate.MAX_PROFILE_SET_SIZE());
+        values[0] = "venue.fixture";
+        values[1] = "venue.scripted";
+        for (uint256 i = 2; i < values.length; ++i) {
+            values[i] = string.concat("venue.zzextra", i < 10 ? "0" : "", vm.toString(i));
+        }
+        m.allowedVenues = values;
+
+        ExecutionTerms memory t = _terms();
+        t.executionData = new bytes(gate.MAX_EXECUTION_DATA_BYTES());
+        Candidate memory c = _scriptedCandidate(SIDE_BUY);
+        _scriptHonest(c.quantity.atoms, 4e6);
+        uint256 beforeGas = gasleft();
+        _execute(m, c, t);
+        emit log_named_uint("max-profile execute gas", beforeGas - gasleft());
     }
 
     function test_refuses_recipientOtherThanThePrincipal() public {

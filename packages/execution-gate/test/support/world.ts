@@ -85,6 +85,8 @@ function market(representation: string, fundingToken: string, representationDeci
     quantityUnit: 'TOKEN',
     settlementUnit: 'USD',
     synthetic: false,
+    classification: 'FIXTURE',
+    fixturePrice: { numeratorUnit: 'USD', denominatorUnit: 'TOKEN', decimals: 18, atoms: 200n * 10n ** 18n },
     ...overrides,
   };
 }
@@ -94,7 +96,10 @@ export const DEPLOYMENT: GateDeployment = {
   gate: ADDR.gate,
   markets: [
     market(ADDR.aapl, ADDR.funding6, 18, 6),
-    market(ADDR.nvda, ADDR.funding6, 18, 6, { canonicalAsset: NVDA }),
+    market(ADDR.nvda, ADDR.funding6, 18, 6, {
+      canonicalAsset: NVDA,
+      fixturePrice: { numeratorUnit: 'USD', denominatorUnit: 'TOKEN', decimals: 18, atoms: 100n * 10n ** 18n },
+    }),
     market(ADDR.synth, ADDR.funding6, 18, 6, { issuer: 'issuer.synthetic', synthetic: true }),
     market(ADDR.eightDecimal, ADDR.funding18, 8, 18, { venue: 'venue.other' }),
   ],

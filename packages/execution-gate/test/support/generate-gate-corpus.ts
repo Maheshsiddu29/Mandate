@@ -27,7 +27,15 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { candidateDigest, mandateDigest, parseCandidate, parseMandate } from '@mandate/kernel';
+import {
+  AuthorizationScheme,
+  Decision,
+  candidateDigest,
+  mandateDigest,
+  parseCandidate,
+  parseMandate,
+  verify,
+} from '@mandate/kernel';
 import {
   UINT256_MAX,
   caip2,
@@ -46,6 +54,7 @@ import {
   ADDR,
   AGENT_KEY,
   CHAIN_ID,
+  DEPLOYMENT,
   DOMAIN,
   NVDA,
   STRANGER,
@@ -156,7 +165,7 @@ function handWritten(): VectorSpec[] {
     one('valid-buy-006', 'valid', 'Synthetic exposure explicitly permitted by the mandate.', e(
       withCandidate(withMandate(buy, { syntheticPolicy: 2n, allowedIssuers: ['issuer.alpha', 'issuer.synthetic'] }), { representationId: representationIdFor(CHAIN_ID, ADDR.synth), issuer: 'issuer.synthetic' }),
     )),
-    one('valid-buy-007', 'valid', 'The adapter over-delivers: more output is never a violation.', e(buy, { script: honest(QTY + 1n, BUY_REFUND) })),
+    one('fill-buy-001', 'exact-fill', 'The adapter over-delivers one representation atom; strict FILL_OR_KILL refuses.', e(buy, { script: honest(QTY + 1n, BUY_REFUND) })),
     one('valid-buy-008', 'valid', 'The adapter returns garbage claiming an enormous fill; the gate reads nothing it returns.', e(buy, { script: { ...buyOk(), mode: ScriptMode.RETURN_GARBAGE } })),
     one('valid-buy-009', 'valid', 'Non-empty route data, committed by the agent.', e(withTerms(buy, { executionData: '0xc0ffee' }))),
 
@@ -228,6 +237,52 @@ function handWritten(): VectorSpec[] {
     one('econ-004', 'proceeds-bound', 'Sub-atom minimum rounds up: 1989.9999991 USD requires 1990.000000 USDC.', { unsigned: withTerms(withMandate(sell, { economicLimit: { unit: 'USD', decimals: 18, atoms: 1_990n * E18 - 900_000_000_000n } }), { fundingLimit: 1_990n * E6 - 1n }), script: sellOk() }),
     one('econ-005', 'proceeds-bound', 'A MIN_TOTAL_CREDIT too large for uint256 in funding atoms: unreachable, refused.', { unsigned: withTerms(withMandate(sell, { economicLimit: { unit: 'USD', decimals: 0, atoms: UINT256_MAX } }), { fundingLimit: UINT256_MAX }), script: sellOk() }),
     one('econ-006', 'spend-bound', 'A MAX_TOTAL_DEBIT too large for uint256 saturates: any representable limit is within it.', e(withMandate(buy, { maxNotional: { unit: 'USD', decimals: 0, atoms: UINT256_MAX }, economicLimit: { unit: 'USD', decimals: 0, atoms: UINT256_MAX } }))),
+    one('authority-001', 'malicious-agent', 'Correct agent signature over notional one atom above principal maxNotional.', e(withMandate(buy, { maxNotional: { unit: 'USD', decimals: 18, atoms: 2_000n * E18 - 1n } }))),
+    one('authority-002', 'malicious-agent', 'Correct agent signature over a one-atom quantity-price-notional inconsistency.', e(withCandidate(buy, { notional: { unit: 'USD', decimals: 18, atoms: 2_000n * E18 + 1n } }))),
+    one('authority-003', 'malicious-agent', 'Candidate economic fields use a unit outside the immutable USD market.', e(withCandidate(buy, {
+      executionPrice: { numeratorUnit: 'EUR', denominatorUnit: 'TOKEN', decimals: 18, atoms: 200n * E18 },
+      notional: { unit: 'EUR', decimals: 18, atoms: 2_000n * E18 },
+      feeTotal: { unit: 'EUR', decimals: 18, atoms: 6n * E18 },
+    }))),
+    one('authority-004', 'malicious-agent', 'Quantity and price product cannot be represented in uint256 notional atoms.', e(withCandidate(buy, {
+      quantity: { unit: 'TOKEN', decimals: 18, atoms: UINT256_MAX },
+      executionPrice: { numeratorUnit: 'USD', denominatorUnit: 'TOKEN', decimals: 18, atoms: 200n * E18 },
+      notional: { unit: 'USD', decimals: 18, atoms: UINT256_MAX },
+    }))),
+    one('authority-005', 'malicious-agent', 'A representable max notional plus one fee atom overflows the kernel declared BUY total.', e(withCandidate(withMandate(buy, {
+      maxNotional: { unit: 'USD', decimals: 18, atoms: UINT256_MAX },
+      economicLimit: { unit: 'USD', decimals: 18, atoms: UINT256_MAX },
+    }), {
+      quantity: { unit: 'TOKEN', decimals: 18, atoms: UINT256_MAX / 200n },
+      executionPrice: { numeratorUnit: 'USD', denominatorUnit: 'TOKEN', decimals: 18, atoms: 200n * E18 },
+      notional: { unit: 'USD', decimals: 18, atoms: (UINT256_MAX / 200n) * 200n },
+      feeTotal: { unit: 'USD', decimals: 18, atoms: UINT256_MAX - ((UINT256_MAX / 200n) * 200n) + 1n },
+    }))),
+    one('authority-006', 'malicious-agent', 'Declared BUY notional plus fees exceeds the signed MAX_TOTAL_DEBIT.', e(withCandidate(buy, { feeTotal: { unit: 'USD', decimals: 18, atoms: 10n * E18 + 1n } }))),
+    one('authority-007', 'malicious-agent', 'Declared SELL fees equal the notional, leaving no positive credit.', { unsigned: withCandidate(sell, { feeTotal: { unit: 'USD', decimals: 18, atoms: 2_000n * E18 } }), script: sellOk() }),
+    one('authority-008', 'malicious-agent', 'Agent signs a self-consistent price and notional that differ from the immutable fixture price.', e(withCandidate(buy, {
+      executionPrice: { numeratorUnit: 'USD', denominatorUnit: 'TOKEN', decimals: 18, atoms: 100n * E18 },
+      notional: { unit: 'USD', decimals: 18, atoms: 1_000n * E18 },
+      feeTotal: { unit: 'USD', decimals: 18, atoms: 3n * E18 },
+    }))),
+    one('authority-009', 'malicious-agent', 'Correct agent signs a candidate for the wrong canonical asset.', e(withCandidate(buy, { canonicalAsset: NVDA }))),
+    one('authority-010', 'malicious-agent', 'Correct agent signs a token substitution whose pinned asset differs from the mandate.', e(withCandidate(buy, { representationId: representationIdFor(CHAIN_ID, ADDR.nvda) }))),
+    one('authority-011', 'malicious-agent', 'Correct agent signs a candidate naming the wrong issuer.', e(withCandidate(buy, { issuer: 'issuer.omega' }))),
+    one('authority-012', 'malicious-agent', 'Correct agent signs a candidate naming the wrong chain.', e(withCandidate(buy, { chain: 'eip155:1' }))),
+    one('authority-013', 'malicious-agent', 'Correct agent signs a candidate naming a venue the principal did not allow.', e(
+      withCandidate(withMandate(buy, { allowedVenues: ['venue.fixture'] }), { venue: 'venue.other' }),
+    )),
+    one('authority-014', 'malicious-agent', 'Correct agent selects a synthetic representation forbidden by the mandate.', e(
+      withCandidate(withMandate(buy, { allowedIssuers: ['issuer.alpha', 'issuer.synthetic'] }), {
+        representationId: representationIdFor(CHAIN_ID, ADDR.synth),
+        issuer: 'issuer.synthetic',
+      }),
+    )),
+    one('authority-015', 'malicious-agent', 'Correct agent signs the opposite side from the principal mandate.', e(withCandidate(buy, { side: 2n }))),
+    one('authority-016', 'malicious-agent', 'Correct agent signs a quantity unit inconsistent with the pinned representation.', e(withCandidate(buy, {
+      quantity: { unit: 'SHARE', decimals: 18, atoms: QTY },
+    }))),
+    one('profile-001', 'execution-profile', 'Route data one byte above the Phase 6 executable profile.', e(withTerms(buy, { executionData: '0x' + '00'.repeat(4_097) }))),
 
     // --- settlement deltas -------------------------------------------------------
     one('settle-001', 'under-delivery', 'The adapter delivers one atom less than the quantity.', e(buy, { script: honest(QTY - 1n, BUY_REFUND) })),
@@ -241,6 +296,7 @@ function handWritten(): VectorSpec[] {
     one('settle-009', 'exact-allowance', 'An exact per-mandate allowance, consumed exactly.', e(buy, { script: honest(QTY, 0n) }), (s) => s.map((t) => (t.token === ADDR.funding6 ? { ...t, gateAllowance: 2_010n * E6 } : t))),
     one('settle-010', 'unsupported-token-behaviour', 'The funding token\'s decimals changed after the gate pinned them.', e(buy), (s) => s.map((t) => (t.token === ADDR.funding6 ? { ...t, decimals: 18 } : t))),
     one('settle-011', 'unsupported-token-behaviour', 'The representation\'s decimals changed after the gate pinned them.', e(buy), (s) => s.map((t) => (t.token === ADDR.aapl ? { ...t, decimals: 6 } : t))),
+    one('settle-012', 'exact-fill', 'SELL refunds one representation atom despite delivering adequate proceeds.', { unsigned: sell, script: honest(SELL_PROCEEDS, 1n) }),
 
     // --- replay -----------------------------------------------------------------
     { id: 'replay-001', family: 'replay', description: 'The identical attempt twice: the second is refused.', attempts: [e(buy), e(buy)] },
@@ -471,6 +527,67 @@ interface BuiltVector {
   readonly mutations?: readonly string[];
 }
 
+function kernelReasons(vector: BuiltVector): readonly string[] {
+  const first = vector.attempts[0];
+  if (first === undefined) throw new Error(`${vector.id}: authority vector has no attempt`);
+  const attempt = first.sim.attempt;
+  const decodedMandate = decodeGateMandate(attempt.mandate);
+  const decodedCandidate = decodeGateCandidate(attempt.candidate);
+  if (!decodedMandate.ok || !decodedCandidate.ok) throw new Error(`${vector.id}: authority vector is not parseable`);
+  const mandate = decodedMandate.value.mandate;
+  const candidate = decodedCandidate.value.candidate;
+  const market = DEPLOYMENT.markets.find((m) => representationIdFor(CHAIN_ID, m.representation) === candidate.representationId);
+  if (market === undefined) throw new Error(`${vector.id}: authority vector has no fixture market`);
+  const provenance = { trustClass: 'VERIFIED', sourceId: 'fixture.authority', observedAtUnixSeconds: T0 };
+  const receipt = verify({
+    mandate,
+    authorization: {
+      scheme: AuthorizationScheme.EIP712_SECP256K1,
+      signer: mandate.principal,
+      signature: attempt.principalSignature,
+      domain: DOMAIN,
+    },
+    candidate,
+    trustedState: {
+      version: 2,
+      stateId: 'state.fixture.current',
+      registrySnapshotDigest: candidate.registrySnapshotDigest,
+      representations: [{
+        provenance,
+        value: {
+          representationId: candidate.representationId,
+          canonicalAsset: market.canonicalAsset,
+          issuer: market.issuer,
+          chain: caip2(CHAIN_ID),
+          instrumentType: 'fixture.token',
+          synthetic: market.synthetic ? 'YES' : 'NO',
+          operationalState: 'ACTIVE',
+        },
+      }],
+      market: {
+        provenance,
+        value: {
+          canonicalAsset: market.canonicalAsset,
+          referencePrice: baseCandidate().executionPrice,
+          haltStatus: 'TRADING',
+        },
+      },
+      corporateAction: {
+        provenance,
+        value: { canonicalAsset: market.canonicalAsset, epoch: mandate.requiredCorporateActionEpoch },
+      },
+      replay: {
+        provenance,
+        value: { mandateDigest: decodedMandate.value.digest, status: 'UNUSED' },
+      },
+    },
+    clock: { nowUnixSeconds: T0 },
+    expectedDomain: DOMAIN,
+  });
+  if (receipt.decision !== Decision.REJECT) throw new Error(`${vector.id}: actual kernel unexpectedly passed`);
+  return receipt.reasonCodes;
+}
+
 function build(spec: VectorSpec): BuiltVector {
   const setup = spec.setup === undefined ? defaultSetup() : spec.setup(defaultSetup());
   const sims: SimAttempt[] = spec.attempts.map((a) => {
@@ -513,6 +630,8 @@ export function generateGateCorpus(): GateCorpus {
     mutations: s.mutations,
   }));
   const vectors = [...hand, ...seeded];
+  const authorityVectors = hand.filter((v) => v.family === 'malicious-agent');
+  const authorityEvidence = authorityVectors.map((v) => ({ vector: v, kernelReasonCodes: kernelReasons(v) }));
   const fromCorpora = corpusInputs();
   const validation = seededValidation(SEEDED_VALIDATION_COUNT);
   const mandateEncodings = [...fromCorpora.mandates, ...validation.mandates];
@@ -528,7 +647,15 @@ export function generateGateCorpus(): GateCorpus {
     encoding: 'MCE v2 mandate, Candidate V3, EIP-712 {Mandate, 1, chainId, gate} (docs/execution-gate.md)',
     note: 'Integers are decimal strings. The Solidity harness replays the ABI form of these same entries, written by the same generator run to contracts/generated/gate-v1.abi.json (not committed). Tokens are labelled fixtures and the adapter is ScriptedAdapter: this corpus exercises the gate decision, not a venue.',
     world: toJson({ chainId: CHAIN_ID, gate: ADDR.gate, adapter: ADDR.adapter, domain: DOMAIN, tokens: defaultSetup().map((t) => t.token), seeds: { vectors: '0x6d616e64', validation: '0x76616c69' } }),
-    counts: { vectors: vectors.length, attempts, settledAttempts: settled, revertedAttempts: attempts - settled, mandateEncodings: mandateEncodings.length, candidateEncodings: candidateEncodings.length },
+    counts: {
+      vectors: vectors.length,
+      attempts,
+      settledAttempts: settled,
+      revertedAttempts: attempts - settled,
+      maliciousAgentKernelRejectAttempts: authorityVectors.length,
+      mandateEncodings: mandateEncodings.length,
+      candidateEncodings: candidateEncodings.length,
+    },
     vectors: vectors.map((v) => toJson({
       id: v.id,
       family: v.family,
@@ -542,12 +669,21 @@ export function generateGateCorpus(): GateCorpus {
         ...(v.family === 'seeded-mutation' ? {} : { script: a.sim.script, input: a.sim.attempt }),
       })),
     })),
+    authorityVectors: authorityEvidence.map(({ vector, kernelReasonCodes }) => ({
+      id: vector.id,
+      responsibility: 'ONCHAIN_ENFORCED',
+      kernelDecision: 'REJECT',
+      kernelReasonCodes,
+      gateSettled: vector.attempts.some((a) => a.expected.settled),
+      expectedGateErrors: vector.attempts.map((a) => a.expected.revertData.slice(0, 10)),
+    })),
     mandateEncodings: mandateEncodings.map((m) => ({ id: m.id, source: m.source, validity: m.validity, digest: m.digest })),
     candidateEncodings: candidateEncodings.map((c) => ({ id: c.id, source: c.source, valid: c.valid, digest: c.digest })),
   };
   const abi = {
     corpusVersion: GATE_CORPUS_VERSION,
     vectors: vectors.map((v) => abiEncode(GATE_VECTOR, { id: v.id, setup: v.setup, attempts: v.attempts.map(attemptAbiValue) })),
+    authorityVectors: authorityVectors.map((v) => abiEncode(GATE_VECTOR, { id: v.id, setup: v.setup, attempts: v.attempts.map(attemptAbiValue) })),
     mandateEncodings: mandateEncodings.map((m) => abiEncode(MANDATE_ENCODING, m)),
     candidateEncodings: candidateEncodings.map((c) => abiEncode(CANDIDATE_ENCODING, c)),
   };

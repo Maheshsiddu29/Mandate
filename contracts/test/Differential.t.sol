@@ -4,7 +4,15 @@ pragma solidity 0.8.37;
 import {Test, Vm} from "forge-std/Test.sol";
 
 import {MandateExecutionGate} from "../src/MandateExecutionGate.sol";
-import {CanonicalAsset, Candidate, ExecutionTerms, Mandate, MarketConfig} from "../src/MandateTypes.sol";
+import {
+    CanonicalAsset,
+    Candidate,
+    ExecutionTerms,
+    Mandate,
+    MarketConfig,
+    MARKET_FIXTURE,
+    Price
+} from "../src/MandateTypes.sol";
 import {MandateCodec} from "../src/libraries/MandateCodec.sol";
 import {MockERC20} from "./mocks/MockTokens.sol";
 import {ScriptedAdapter} from "./mocks/ScriptedAdapter.sol";
@@ -156,6 +164,7 @@ contract DifferentialTest is Test {
         string memory venue,
         bool synthetic
     ) internal pure returns (MarketConfig memory) {
+        uint256 fixturePrice = token == NVDA ? 100e18 : 200e18;
         return MarketConfig({
             representation: token,
             fundingToken: funding,
@@ -165,7 +174,9 @@ contract DifferentialTest is Test {
             venue: venue,
             quantityUnit: "TOKEN",
             settlementUnit: "USD",
-            synthetic: synthetic
+            synthetic: synthetic,
+            classification: MARKET_FIXTURE,
+            fixturePrice: Price({numeratorUnit: "USD", denominatorUnit: "TOKEN", decimals: 18, atoms: fixturePrice})
         });
     }
 
@@ -189,6 +200,21 @@ contract DifferentialTest is Test {
         emit log_named_uint("vectors", blobs.length);
         emit log_named_uint("settled attempts agreed", settled);
         emit log_named_uint("reverted attempts agreed", reverted);
+    }
+
+    function test_differential_actualKernelRejectAuthorityVectors() public {
+        bytes[] memory blobs = _section(".authorityVectors");
+        assertGt(blobs.length, 0, "empty authority corpus");
+        uint256 reverted;
+        for (uint256 i = 0; i < blobs.length; ++i) {
+            GateVector memory v = abi.decode(blobs[i], (GateVector));
+            uint256 snapshot = vm.snapshotState();
+            (uint256 settled, uint256 refused) = _replay(v);
+            assertEq(settled, 0, string.concat(v.id, ": kernel REJECT settled"));
+            reverted += refused;
+            vm.revertToState(snapshot);
+        }
+        emit log_named_uint("malicious-agent/kernel-reject attempts", reverted);
     }
 
     function _replay(GateVector memory v) internal returns (uint256 settled, uint256 reverted) {

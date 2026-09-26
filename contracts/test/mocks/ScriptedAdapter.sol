@@ -19,7 +19,9 @@ contract ScriptedAdapter is IMandateExecutionAdapter {
         RETURN_GARBAGE,
         REENTER,
         BURN_GAS,
-        PULL_FROM_PRINCIPAL
+        PULL_FROM_PRINCIPAL,
+        LARGE_RETURN,
+        LARGE_REVERT
     }
 
     struct Script {
@@ -84,6 +86,20 @@ contract ScriptedAdapter is IMandateExecutionAdapter {
             IERC20(order.outputToken).transfer(s.deliverTo == address(0) ? order.recipient : s.deliverTo, s.deliver);
         }
         if (s.refund != 0) IERC20(order.inputToken).transfer(order.refundTo, s.refund);
+
+        if (s.mode == Mode.LARGE_REVERT) {
+            bytes memory data = new bytes(65_536);
+            assembly ("memory-safe") {
+                revert(add(data, 0x20), mload(data))
+            }
+        }
+
+        if (s.mode == Mode.LARGE_RETURN) {
+            bytes memory data = new bytes(65_536);
+            assembly ("memory-safe") {
+                return(add(data, 0x20), mload(data))
+            }
+        }
 
         if (s.mode == Mode.RETURN_GARBAGE) {
             // Claims a gigantic fill in return data the gate never reads.

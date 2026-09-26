@@ -13,9 +13,11 @@ import {
     Mandate,
     Market,
     MarketConfig,
+    MARKET_FIXTURE,
     SIDE_BUY,
     SYNTHETIC_FORBIDDEN
 } from "./MandateTypes.sol";
+import {GateArithmetic} from "./libraries/GateArithmetic.sol";
 import {ExecutionOrder, IMandateExecutionAdapter} from "./interfaces/IMandateExecutionAdapter.sol";
 import {MandateCodec} from "./libraries/MandateCodec.sol";
 
@@ -53,6 +55,10 @@ import {MandateCodec} from "./libraries/MandateCodec.sol";
 /// only offchain, and the residual risks.
 contract MandateExecutionGate is ReentrancyGuard {
     using SafeERC20 for IERC20;
+
+    uint256 public constant MAX_PROFILE_SET_SIZE = 16;
+    uint256 public constant MAX_EXECUTION_DATA_BYTES = 4_096;
+    uint256 public constant MAX_MARKETS = 32;
 
     // ------------------------------------------------------------------
     // EIP-712
@@ -133,6 +139,8 @@ contract MandateExecutionGate is ReentrancyGuard {
     // ------------------------------------------------------------------
 
     error InvalidMarket();
+    error RealMarketStateSourceRequired();
+    error ExecutionProfileExceeded();
     error WrongChain();
     error UnsupportedMandateVersion();
     error MalformedMandate();
@@ -158,12 +166,23 @@ contract MandateExecutionGate is ReentrancyGuard {
     error QuantityUnitMismatch();
     error ZeroQuantity();
     error SettlementUnitMismatch();
+    error EconomicUnitMismatch();
+    error FixturePriceMismatch();
+    error NotionalOutOfRange();
+    error NotionalInconsistent(uint256 declared, uint256 floorAtoms, uint256 ceilAtoms);
+    error MaxNotionalExceeded();
+    error DeclaredEconomicValueOutOfRange();
+    error DeclaredTotalDebitExceeded();
+    error DeclaredFeesExceedNotional();
+    error DeclaredTotalCreditBelowMinimum();
     error RecipientNotPrincipal();
     error FundingLimitExceedsMandate(uint256 fundingLimit, uint256 mandateBound);
     error FundingLimitBelowMandate(uint256 fundingLimit, uint256 mandateBound);
     error TokenDecimalsChanged(address token);
     error DebitExceedsLimit(uint256 actualDebit, uint256 limit);
     error CreditBelowMinimum(uint256 actualCredit, uint256 minimum);
+    error DebitNotExact(uint256 actualDebit, uint256 expected);
+    error CreditNotExact(uint256 actualCredit, uint256 expected);
 
     // ------------------------------------------------------------------
     // Construction
@@ -171,7 +190,7 @@ contract MandateExecutionGate is ReentrancyGuard {
 
     /// @param markets The complete, permanent set of supported markets.
     constructor(MarketConfig[] memory markets) {
-        if (markets.length == 0) revert InvalidMarket();
+        if (markets.length == 0 || markets.length > MAX_MARKETS) revert InvalidMarket();
         CHAIN_ID = block.chainid;
         _CHAIN_HASH = keccak256(bytes(MandateCodec.caip2(block.chainid)));
         _DOMAIN_SEPARATOR =
@@ -185,8 +204,10 @@ contract MandateExecutionGate is ReentrancyGuard {
     function _addMarket(MarketConfig memory config) private {
         if (
             config.representation == address(0) || config.fundingToken == address(0)
-                || config.representation == config.fundingToken || config.adapter.code.length == 0
+                || config.representation == config.fundingToken || config.representation.code.length == 0
+                || config.fundingToken.code.length == 0 || config.adapter.code.length == 0
         ) revert InvalidMarket();
+        if (config.classification != MARKET_FIXTURE) revert RealMarketStateSourceRequired();
         if (
             !MandateCodec.isIdentifierBytes(bytes(config.canonicalAsset.assetClass))
                 || !MandateCodec.isIdentifierBytes(bytes(config.canonicalAsset.idScheme))
@@ -195,6 +216,13 @@ contract MandateExecutionGate is ReentrancyGuard {
                 || !MandateCodec.isIdentifierBytes(bytes(config.venue))
                 || !MandateCodec.isIdentifierBytes(bytes(config.quantityUnit))
                 || !MandateCodec.isIdentifierBytes(bytes(config.settlementUnit))
+                || !MandateCodec.isIdentifierBytes(bytes(config.fixturePrice.numeratorUnit))
+                || !MandateCodec.isIdentifierBytes(bytes(config.fixturePrice.denominatorUnit))
+        ) revert InvalidMarket();
+        if (
+            keccak256(bytes(config.fixturePrice.numeratorUnit)) != keccak256(bytes(config.settlementUnit))
+                || keccak256(bytes(config.fixturePrice.denominatorUnit)) != keccak256(bytes(config.quantityUnit))
+                || config.fixturePrice.decimals > MandateCodec.MAX_DECIMALS || config.fixturePrice.atoms == 0
         ) revert InvalidMarket();
 
         // Constructor only, over a deployer-chosen market list: a token whose
@@ -214,19 +242,21 @@ contract MandateExecutionGate is ReentrancyGuard {
         bytes32 key = keccak256(bytes(representationId));
         if (_markets[key].representation != address(0)) revert InvalidMarket();
 
-        _markets[key] = Market({
-            representation: config.representation,
-            fundingToken: config.fundingToken,
-            adapter: config.adapter,
-            representationDecimals: representationDecimals,
-            fundingDecimals: fundingDecimals,
-            synthetic: config.synthetic,
-            canonicalAssetHash: MandateCodec.assetHashMemory(config.canonicalAsset),
-            issuerHash: keccak256(bytes(config.issuer)),
-            venueHash: keccak256(bytes(config.venue)),
-            quantityUnitHash: keccak256(bytes(config.quantityUnit)),
-            settlementUnitHash: keccak256(bytes(config.settlementUnit))
-        });
+        Market storage market = _markets[key];
+        market.representation = config.representation;
+        market.fundingToken = config.fundingToken;
+        market.adapter = config.adapter;
+        market.representationDecimals = representationDecimals;
+        market.fundingDecimals = fundingDecimals;
+        market.synthetic = config.synthetic;
+        market.classification = config.classification;
+        market.canonicalAssetHash = MandateCodec.assetHashMemory(config.canonicalAsset);
+        market.issuerHash = keccak256(bytes(config.issuer));
+        market.venueHash = keccak256(bytes(config.venue));
+        market.quantityUnitHash = keccak256(bytes(config.quantityUnit));
+        market.settlementUnitHash = keccak256(bytes(config.settlementUnit));
+        market.fixturePriceDecimals = config.fixturePrice.decimals;
+        market.fixturePriceAtoms = config.fixturePrice.atoms;
         emit MarketSupported(key, config.representation, config.fundingToken, config.adapter, representationId);
     }
 
@@ -245,6 +275,7 @@ contract MandateExecutionGate is ReentrancyGuard {
         address outputToken;
         uint256 inputAmount;
         uint256 minOutput;
+        uint256 exactQuantity;
     }
 
     /// @notice Execute one supported action under one principal-signed mandate
@@ -296,12 +327,17 @@ contract MandateExecutionGate is ReentrancyGuard {
         MandateCodec.Validity validity = MandateCodec.validateMandate(mandate);
         if (validity == MandateCodec.Validity.UNSUPPORTED_VERSION) revert UnsupportedMandateVersion();
         if (validity != MandateCodec.Validity.VALID) revert MalformedMandate();
+        if (
+            mandate.allowedIssuers.length > MAX_PROFILE_SET_SIZE || mandate.allowedChains.length > MAX_PROFILE_SET_SIZE
+                || mandate.allowedVenues.length > MAX_PROFILE_SET_SIZE
+        ) revert ExecutionProfileExceeded();
         plan.mandateDigest = MandateCodec.mandateDigest(mandate);
 
         bytes32 mandateStruct = keccak256(abi.encode(MANDATE_AUTHORIZATION_TYPEHASH, plan.mandateDigest));
         if (!_signedBy(mandateStruct, principalSignature, mandate.principal)) revert PrincipalSignatureInvalid();
 
         if (!MandateCodec.isValidCandidate(candidate)) revert MalformedCandidate();
+        if (terms.executionData.length > MAX_EXECUTION_DATA_BYTES) revert ExecutionProfileExceeded();
         plan.candidateDigest = MandateCodec.candidateDigest(candidate);
 
         plan.market = _markets[keccak256(bytes(candidate.representationId))];
@@ -323,7 +359,82 @@ contract MandateExecutionGate is ReentrancyGuard {
         _checkTime(mandate, terms);
         if (_executions[plan.mandateDigest] != bytes32(0)) revert MandateAlreadyConsumed();
         _checkBinding(mandate, candidate, plan.market);
+        _checkEconomics(mandate, candidate, plan.market);
         _plan(plan, mandate, candidate, terms);
+    }
+
+    /// @dev Exact overlap with the kernel's static notional and declared
+    /// economic checks. The candidate is agent-authored, so its arithmetic is
+    /// independently established before any quantity can become an input amount.
+    function _checkEconomics(Mandate calldata mandate, Candidate calldata candidate, Market memory market)
+        private
+        pure
+    {
+        bytes32 settlementUnitHash = market.settlementUnitHash;
+        if (
+            keccak256(bytes(candidate.notional.unit)) != settlementUnitHash
+                || keccak256(bytes(candidate.feeTotal.unit)) != settlementUnitHash
+                || keccak256(bytes(candidate.executionPrice.numeratorUnit)) != settlementUnitHash
+                || keccak256(bytes(candidate.executionPrice.denominatorUnit)) != market.quantityUnitHash
+        ) revert EconomicUnitMismatch();
+        if (
+            GateArithmetic.compare(
+                    candidate.executionPrice.atoms,
+                    candidate.executionPrice.decimals,
+                    market.fixturePriceAtoms,
+                    market.fixturePriceDecimals
+                ) != 0
+        ) revert FixturePriceMismatch();
+
+        (bool representable, uint256 floorAtoms, uint256 ceilAtoms) = GateArithmetic.notionalBounds(
+            candidate.quantity.atoms,
+            candidate.quantity.decimals,
+            candidate.executionPrice.atoms,
+            candidate.executionPrice.decimals,
+            candidate.notional.decimals
+        );
+        if (!representable) revert NotionalOutOfRange();
+        if (candidate.notional.atoms < floorAtoms || candidate.notional.atoms > ceilAtoms) {
+            revert NotionalInconsistent(candidate.notional.atoms, floorAtoms, ceilAtoms);
+        }
+        if (
+            GateArithmetic.compare(
+                    candidate.notional.atoms,
+                    candidate.notional.decimals,
+                    mandate.maxNotional.atoms,
+                    mandate.maxNotional.decimals
+                ) > 0
+        ) revert MaxNotionalExceeded();
+
+        if (mandate.side == SIDE_BUY) {
+            (bool sumRepresentable, bool within) = GateArithmetic.sumWithinLimit(
+                candidate.notional.atoms,
+                candidate.notional.decimals,
+                candidate.feeTotal.atoms,
+                candidate.feeTotal.decimals,
+                mandate.economicLimit.atoms,
+                mandate.economicLimit.decimals
+            );
+            if (!sumRepresentable) revert DeclaredEconomicValueOutOfRange();
+            if (!within) revert DeclaredTotalDebitExceeded();
+        } else {
+            if (
+                GateArithmetic.compare(
+                        candidate.feeTotal.atoms,
+                        candidate.feeTotal.decimals,
+                        candidate.notional.atoms,
+                        candidate.notional.decimals
+                    ) >= 0
+            ) revert DeclaredFeesExceedNotional();
+            if (!GateArithmetic.differenceMeetsLimit(
+                    candidate.notional.atoms,
+                    candidate.notional.decimals,
+                    candidate.feeTotal.atoms,
+                    candidate.feeTotal.decimals,
+                    mandate.economicLimit.atoms,
+                    mandate.economicLimit.decimals
+                )) revert DeclaredTotalCreditBelowMinimum();
+        }
     }
 
     /// @dev Chain time is the only clock. The window matches the kernel's
@@ -391,6 +502,7 @@ contract MandateExecutionGate is ReentrancyGuard {
 
         Market memory market = plan.market;
         uint256 quantity = candidate.quantity.atoms;
+        plan.exactQuantity = quantity;
         plan.side = mandate.side;
         if (mandate.side == SIDE_BUY) {
             // MAX_TOTAL_DEBIT: round the bound down. A bound beyond uint256 is
@@ -467,12 +579,19 @@ contract MandateExecutionGate is ReentrancyGuard {
         actualDebit = inputBefore > inputAfter ? inputBefore - inputAfter : 0;
         actualCredit = outputAfter > outputBefore ? outputAfter - outputBefore : 0;
 
-        // BUY: debit <= fundingLimit <= signed MAX_TOTAL_DEBIT; credit >= quantity.
-        // SELL: debit <= quantity; credit >= fundingLimit >= signed MIN_TOTAL_CREDIT.
-        // slither-disable-next-line reentrancy-balance
-        if (actualDebit > plan.inputAmount) revert DebitExceedsLimit(actualDebit, plan.inputAmount);
-        // slither-disable-next-line reentrancy-balance
-        if (actualCredit < plan.minOutput) revert CreditBelowMinimum(actualCredit, plan.minOutput);
+        if (plan.side == SIDE_BUY) {
+            // slither-disable-next-line reentrancy-balance
+            if (actualDebit > plan.inputAmount) revert DebitExceedsLimit(actualDebit, plan.inputAmount);
+            // Strict FILL_OR_KILL: unsolicited extra output fails closed too.
+            // slither-disable-next-line reentrancy-balance
+            if (actualCredit != plan.exactQuantity) revert CreditNotExact(actualCredit, plan.exactQuantity);
+        } else {
+            // Strict FILL_OR_KILL: every candidate representation atom is sold.
+            // slither-disable-next-line reentrancy-balance
+            if (actualDebit != plan.exactQuantity) revert DebitNotExact(actualDebit, plan.exactQuantity);
+            // slither-disable-next-line reentrancy-balance
+            if (actualCredit < plan.minOutput) revert CreditBelowMinimum(actualCredit, plan.minOutput);
+        }
     }
 
     /// @dev ECDSA recovery with the kernel's acceptance rule: exactly 65 bytes,

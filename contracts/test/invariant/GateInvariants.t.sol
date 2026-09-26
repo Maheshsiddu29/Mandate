@@ -89,6 +89,29 @@ contract GateInvariantsTest is StdInvariant, GateTestBase {
         assertEq(scriptedToken.allowance(address(gate), address(scripted)), 0);
     }
 
+    /// INV-ONCHAIN-AUTH-1: every successful execution stayed at or below
+    /// principal-signed maxNotional.
+    function invariant_onchainAuth1_maxNotionalAlwaysHolds() public view {
+        assertEq(handler.maxNotionalViolations(), 0);
+    }
+
+    /// INV-ONCHAIN-AUTH-2: successful BUY credit and SELL debit are exact.
+    function invariant_onchainAuth2_exactFillAlwaysHolds() public view {
+        assertEq(handler.exactFillViolations(), 0);
+    }
+
+    /// INV-ONCHAIN-AUTH-3/4 are the two measured principal economic legs.
+    function invariant_onchainAuth3_4_twoSidedEconomicsHold() public view {
+        assertEq(handler.buyBoundViolations(), 0);
+        assertEq(handler.sellFloorViolations(), 0);
+    }
+
+    /// INV-ONCHAIN-AUTH-5: a valid signature from the authorized agent cannot
+    /// make any generated static principal-policy violation settle.
+    function invariant_onchainAuth5_maliciousAuthorizedAgentCannotWidenAuthority() public view {
+        assertEq(handler.maliciousAgentSuccesses(), 0);
+    }
+
     /// Non-vacuity, deterministically: the handler reaches settlement on both
     /// sides, and every hostile action it has is refused, with every invariant
     /// holding afterwards. A per-run guard would be flaky — a random 64-call run
@@ -106,6 +129,9 @@ contract GateInvariantsTest is StdInvariant, GateTestBase {
         }
         handler.executeUnsupported(0, address(0xbad), false);
         handler.executeUnsupported(1, address(0), true);
+        for (uint256 attack = 0; attack < 8; ++attack) {
+            handler.executeMalicious(attack, attack);
+        }
         // A second round finds every authorization consumed.
         for (uint256 i = 0; i < handler.POOL(); ++i) {
             handler.execute(i, 0, 0, T0);
@@ -120,5 +146,9 @@ contract GateInvariantsTest is StdInvariant, GateTestBase {
         invariant_onchain7_unsupportedNeverExecutes();
         invariant_onchain8_principalLedgerConserved();
         invariant_onchain9_gateHoldsNothing();
+        invariant_onchainAuth1_maxNotionalAlwaysHolds();
+        invariant_onchainAuth2_exactFillAlwaysHolds();
+        invariant_onchainAuth3_4_twoSidedEconomicsHold();
+        invariant_onchainAuth5_maliciousAuthorizedAgentCannotWidenAuthority();
     }
 }

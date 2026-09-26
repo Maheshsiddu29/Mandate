@@ -67,3 +67,63 @@ contract HookToken is MockERC20 {
         }
     }
 }
+
+/// @notice Legacy ERC-20 shape whose mutating methods return no value. SafeERC20
+/// must accept it, while all balance and allowance observations remain standard.
+contract NoReturnERC20 {
+    uint8 public immutable decimals;
+    mapping(address account => uint256) public balanceOf;
+    mapping(address owner => mapping(address spender => uint256)) public allowance;
+
+    constructor(uint8 decimals_) {
+        decimals = decimals_;
+    }
+
+    function mint(address to, uint256 value) external {
+        balanceOf[to] += value;
+    }
+
+    function approve(address spender, uint256 value) external {
+        allowance[msg.sender][spender] = value;
+    }
+
+    function transfer(address to, uint256 value) external virtual {
+        require(balanceOf[msg.sender] >= value, "balance");
+        balanceOf[msg.sender] -= value;
+        balanceOf[to] += value;
+    }
+
+    function transferFrom(address from, address to, uint256 value) external virtual {
+        require(balanceOf[from] >= value, "balance");
+        require(allowance[from][msg.sender] >= value, "allowance");
+        allowance[from][msg.sender] -= value;
+        balanceOf[from] -= value;
+        balanceOf[to] += value;
+    }
+}
+
+/// @notice Returns one byte from transferFrom, which is neither an accepted
+/// boolean nor the explicitly supported empty-return legacy shape.
+contract MalformedReturnERC20 is NoReturnERC20 {
+    constructor(uint8 decimals_) NoReturnERC20(decimals_) {}
+
+    function transferFrom(address, address, uint256) external pure override {
+        assembly ("memory-safe") {
+            mstore(0, 1)
+            return(0x1f, 1)
+        }
+    }
+}
+
+/// @notice Standard token except that an explicit approval reset to zero
+/// reverts, exercising the fixture adapter's atomic cleanup failure path.
+contract FailZeroApproveToken is MockERC20 {
+    error ZeroApprovalRefused();
+
+    constructor(uint8 decimals_) MockERC20("Fail Zero Approval", "FZA", decimals_) {}
+
+    function approve(address spender, uint256 value) public override returns (bool) {
+        if (value == 0) revert ZeroApprovalRefused();
+        return super.approve(spender, value);
+    }
+}

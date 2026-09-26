@@ -4,7 +4,7 @@ pragma solidity 0.8.37;
 import {Script, console2} from "forge-std/Script.sol";
 
 import {MandateExecutionGate} from "../src/MandateExecutionGate.sol";
-import {CanonicalAsset, MarketConfig} from "../src/MandateTypes.sol";
+import {CanonicalAsset, MarketConfig, Price, MARKET_FIXTURE} from "../src/MandateTypes.sol";
 import {FixtureVenue} from "../src/fixture/FixtureVenue.sol";
 import {FixtureVenueAdapter} from "../src/fixture/FixtureVenueAdapter.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -30,6 +30,7 @@ contract DeployMandateGate is Script {
     error ConfiguredForAnotherChain(uint256 configured, uint256 connected);
     error MainnetRefused(uint256 chainId);
     error GateAddressMispredicted(address predicted, address deployed);
+    error FixtureClassificationRequired();
 
     struct Deployment {
         MandateExecutionGate gate;
@@ -94,6 +95,9 @@ contract DeployMandateGate is Script {
 
     function _market(string memory json, uint256 i, address adapter) internal pure returns (MarketConfig memory) {
         string memory p = string.concat(".markets[", vm.toString(i), "]");
+        if (keccak256(bytes(vm.parseJsonString(json, string.concat(p, ".classification")))) != keccak256("FIXTURE")) {
+            revert FixtureClassificationRequired();
+        }
         return MarketConfig({
             representation: vm.parseJsonAddress(json, string.concat(p, ".representation")),
             fundingToken: vm.parseJsonAddress(json, string.concat(p, ".fundingToken")),
@@ -107,7 +111,14 @@ contract DeployMandateGate is Script {
             venue: vm.parseJsonString(json, string.concat(p, ".venue")),
             quantityUnit: vm.parseJsonString(json, string.concat(p, ".quantityUnit")),
             settlementUnit: vm.parseJsonString(json, string.concat(p, ".settlementUnit")),
-            synthetic: vm.parseJsonBool(json, string.concat(p, ".synthetic"))
+            synthetic: vm.parseJsonBool(json, string.concat(p, ".synthetic")),
+            classification: MARKET_FIXTURE,
+            fixturePrice: Price({
+                numeratorUnit: vm.parseJsonString(json, string.concat(p, ".settlementUnit")),
+                denominatorUnit: vm.parseJsonString(json, string.concat(p, ".quantityUnit")),
+                decimals: uint8(vm.parseJsonUint(json, string.concat(p, ".fixturePriceDecimals"))),
+                atoms: vm.parseJsonUint(json, string.concat(p, ".fixturePrice"))
+            })
         });
     }
 }

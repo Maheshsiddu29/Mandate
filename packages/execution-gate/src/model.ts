@@ -28,12 +28,16 @@ import { keccak_256 } from '@noble/hashes/sha3.js';
 import {
   AuthorizationScheme,
   PARTY_KIND_EIP155_ADDRESS,
+  addAmounts,
   bytesToHex,
   canonicalAssetIdEquals,
+  compareAmounts,
   decodeCandidate,
   decodeMandate,
   hexToBytes,
   keccak256,
+  notionalBounds,
+  subtractAmounts,
   verifyAuthorization,
   type Bytes32,
   type CanonicalMandate,
@@ -55,6 +59,9 @@ import {
 /** Kernel limits the gate re-imposes (`MandateCodec.sol`). */
 const IDENTIFIER_MAX_LENGTH = 128;
 const MAX_SET_SIZE = 1024;
+export const MAX_PROFILE_SET_SIZE = 16;
+export const MAX_EXECUTION_DATA_BYTES = 4_096;
+export const MAX_MARKETS = 32;
 
 /** Solidity `MarketConfig`, plus the decimals the constructor pins. */
 export interface GateMarket {
@@ -69,6 +76,14 @@ export interface GateMarket {
   readonly quantityUnit: string;
   readonly settlementUnit: string;
   readonly synthetic: boolean;
+  readonly classification: 'FIXTURE';
+  /** Immutable engineered fixture price; real markets need attested state. */
+  readonly fixturePrice: {
+    readonly numeratorUnit: string;
+    readonly denominatorUnit: string;
+    readonly decimals: number;
+    readonly atoms: bigint;
+  };
 }
 
 /** One deployed gate: its chain, its address and its immutable markets. */
@@ -113,12 +128,25 @@ export interface ExecutionPlan {
   readonly inputAmount: bigint;
   /** The least output the recipient must receive. */
   readonly minOutput: bigint;
+  /** Candidate quantity, enforced exactly on the representation leg. */
+  readonly exactQuantity: bigint;
 }
 
 export type Decision<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly rejection: GateRejection };
 
 const HALF_N = secp256k1.Point.Fn.ORDER / 2n;
 const N = secp256k1.Point.Fn.ORDER;
+
+/** Pre-signing executable-profile check for callers that build gate attempts. */
+export function validateExecutionProfile(mandate: GateMandate, terms: GateTerms): Decision<true> {
+  if (
+    mandate.allowedIssuers.length > MAX_PROFILE_SET_SIZE ||
+    mandate.allowedChains.length > MAX_PROFILE_SET_SIZE ||
+    mandate.allowedVenues.length > MAX_PROFILE_SET_SIZE ||
+    (terms.executionData.length - 2) / 2 > MAX_EXECUTION_DATA_BYTES
+  ) return reject('ExecutionProfileExceeded');
+  return { ok: true, value: true };
+}
 
 /**
  * Recover an EIP-712 signer under the kernel's acceptance rule: exactly 65
@@ -202,6 +230,11 @@ export function authorizeExecution(deployment: GateDeployment, attempt: GateAtte
   const md = decodeGateMandate(attempt.mandate);
   if (!md.ok) return md;
   const { mandate, digest: mandateDigest } = md.value;
+  if (
+    mandate.allowedIssuers.length > MAX_PROFILE_SET_SIZE ||
+    mandate.allowedChains.length > MAX_PROFILE_SET_SIZE ||
+    mandate.allowedVenues.length > MAX_PROFILE_SET_SIZE
+  ) return reject('ExecutionProfileExceeded');
 
   const principalCheck = verifyAuthorization(
     {
@@ -218,6 +251,9 @@ export function authorizeExecution(deployment: GateDeployment, attempt: GateAtte
   const cd = decodeGateCandidate(attempt.candidate);
   if (!cd.ok) return cd;
   const { candidate, digest: candidateDigest } = cd.value;
+  if ((attempt.terms.executionData.length - 2) / 2 > MAX_EXECUTION_DATA_BYTES) {
+    return reject('ExecutionProfileExceeded');
+  }
 
   const market = deployment.markets.find(
     (m) => representationIdFor(deployment.chainId, m.representation) === candidate.representationId,
@@ -238,6 +274,9 @@ export function authorizeExecution(deployment: GateDeployment, attempt: GateAtte
 
   const binding = checkBinding(deployment, mandate, candidate, market);
   if (binding !== undefined) return { ok: false, rejection: binding };
+
+  const economics = checkEconomics(mandate, candidate, market);
+  if (economics !== undefined) return { ok: false, rejection: economics };
 
   return plan(mandate, candidate, market, attempt.terms, chain, { mandateDigest, candidateDigest, commitment });
 }
@@ -271,6 +310,66 @@ function checkBinding(
   }
   if (candidate.quantity.atoms === 0n) return fail('ZeroQuantity');
   if (mandate.economicLimit.unit !== market.settlementUnit) return fail('SettlementUnitMismatch');
+  return undefined;
+}
+
+function checkEconomics(
+  mandate: CanonicalMandate,
+  candidate: ExecutionCandidate,
+  market: GateMarket,
+): GateRejection | undefined {
+  const fail = (error: GateRejection['error'], ...args: bigint[]): GateRejection => ({ error, args });
+  if (
+    candidate.notional.unit !== market.settlementUnit ||
+    candidate.feeTotal.unit !== market.settlementUnit ||
+    candidate.executionPrice.numeratorUnit !== market.settlementUnit ||
+    candidate.executionPrice.denominatorUnit !== market.quantityUnit
+  ) return fail('EconomicUnitMismatch');
+  const priceScale = Math.max(candidate.executionPrice.decimals, market.fixturePrice.decimals);
+  const candidatePrice = candidate.executionPrice.atoms * 10n ** BigInt(priceScale - candidate.executionPrice.decimals);
+  const pinnedPrice = market.fixturePrice.atoms * 10n ** BigInt(priceScale - market.fixturePrice.decimals);
+  if (candidatePrice !== pinnedPrice) return fail('FixturePriceMismatch');
+
+  const bounds = notionalBounds(
+    candidate.quantity,
+    candidate.executionPrice,
+    candidate.notional.unit,
+    candidate.notional.decimals,
+  );
+  if (!bounds.ok) return fail('NotionalOutOfRange');
+  if (candidate.notional.atoms < bounds.value.floorAtoms || candidate.notional.atoms > bounds.value.ceilAtoms) {
+    return fail(
+      'NotionalInconsistent',
+      candidate.notional.atoms,
+      bounds.value.floorAtoms,
+      bounds.value.ceilAtoms,
+    );
+  }
+
+  const max = compareAmounts(candidate.notional, mandate.maxNotional);
+  if (!max.ok) return fail('EconomicUnitMismatch');
+  if (max.value > 0) return fail('MaxNotionalExceeded');
+
+  if (mandate.side === 'BUY') {
+    const debit = addAmounts(candidate.notional, candidate.feeTotal);
+    if (!debit.ok) {
+      return fail(debit.error === 'VALUE_OUT_OF_RANGE' ? 'DeclaredEconomicValueOutOfRange' : 'EconomicUnitMismatch');
+    }
+    const within = compareAmounts(debit.value, mandate.economicLimit);
+    if (!within.ok) return fail('EconomicUnitMismatch');
+    if (within.value > 0) return fail('DeclaredTotalDebitExceeded');
+  } else {
+    const fees = compareAmounts(candidate.feeTotal, candidate.notional);
+    if (!fees.ok) return fail('EconomicUnitMismatch');
+    if (fees.value >= 0) return fail('DeclaredFeesExceedNotional');
+    const credit = subtractAmounts(candidate.notional, candidate.feeTotal);
+    if (!credit.ok) {
+      return fail(credit.error === 'VALUE_OUT_OF_RANGE' ? 'DeclaredEconomicValueOutOfRange' : 'EconomicUnitMismatch');
+    }
+    const within = compareAmounts(credit.value, mandate.economicLimit);
+    if (!within.ok) return fail('EconomicUnitMismatch');
+    if (within.value < 0) return fail('DeclaredTotalCreditBelowMinimum');
+  }
   return undefined;
 }
 
@@ -330,6 +429,7 @@ function plan(
       outputToken,
       inputAmount,
       minOutput,
+      exactQuantity: quantity,
     },
   };
 }
@@ -359,7 +459,12 @@ export interface Settlement {
 export function settleExecution(plan: ExecutionPlan, measured: MeasuredBalances): Decision<Settlement> {
   const actualDebit = measured.inputBefore > measured.inputAfter ? measured.inputBefore - measured.inputAfter : 0n;
   const actualCredit = measured.outputAfter > measured.outputBefore ? measured.outputAfter - measured.outputBefore : 0n;
-  if (actualDebit > plan.inputAmount) return reject('DebitExceedsLimit', actualDebit, plan.inputAmount);
-  if (actualCredit < plan.minOutput) return reject('CreditBelowMinimum', actualCredit, plan.minOutput);
+  if (plan.side === 'BUY') {
+    if (actualDebit > plan.inputAmount) return reject('DebitExceedsLimit', actualDebit, plan.inputAmount);
+    if (actualCredit !== plan.exactQuantity) return reject('CreditNotExact', actualCredit, plan.exactQuantity);
+  } else {
+    if (actualDebit !== plan.exactQuantity) return reject('DebitNotExact', actualDebit, plan.exactQuantity);
+    if (actualCredit < plan.minOutput) return reject('CreditBelowMinimum', actualCredit, plan.minOutput);
+  }
   return { ok: true, value: { actualDebit, actualCredit } };
 }

@@ -3,7 +3,16 @@ import { describe, it } from 'node:test';
 
 import { verifyAuthorization, AuthorizationScheme, type Bytes32 } from '@mandate/kernel';
 import { signHash } from '../../kernel/test/support/signing.ts';
-import { authorizeExecution, recoverSigner, settleExecution, gateRevertData, type ExecutionPlan } from '../src/index.ts';
+import {
+  authorizeExecution,
+  gateRevertData,
+  MAX_EXECUTION_DATA_BYTES,
+  MAX_PROFILE_SET_SIZE,
+  recoverSigner,
+  settleExecution,
+  validateExecutionProfile,
+  type ExecutionPlan,
+} from '../src/index.ts';
 import {
   ADDR,
   AGENT,
@@ -29,6 +38,24 @@ function plan(result: ReturnType<typeof authorizeExecution>): ExecutionPlan {
 }
 
 describe('reference model: authorization', () => {
+  it('can reject an oversized executable profile before either party signs', () => {
+    const u = baseBuy();
+    const exact = Array.from({ length: MAX_PROFILE_SET_SIZE }, (_, i) => `issuer.${i.toString().padStart(2, '0')}`);
+    assert.ok(validateExecutionProfile({ ...u.mandate, allowedIssuers: exact }, {
+      ...u.terms,
+      executionData: '0x' + '00'.repeat(MAX_EXECUTION_DATA_BYTES),
+    }).ok);
+    const tooMany = validateExecutionProfile({ ...u.mandate, allowedIssuers: [...exact, 'issuer.16'] }, u.terms);
+    assert.ok(!tooMany.ok);
+    assert.equal(tooMany.rejection.error, 'ExecutionProfileExceeded');
+    const tooLong = validateExecutionProfile(u.mandate, {
+      ...u.terms,
+      executionData: '0x' + '00'.repeat(MAX_EXECUTION_DATA_BYTES + 1),
+    });
+    assert.ok(!tooLong.ok);
+    assert.equal(tooLong.rejection.error, 'ExecutionProfileExceeded');
+  });
+
   it('plans a BUY as funding in, representation out, bounded by the agent-signed limit', () => {
     const p = plan(authorizeExecution(DEPLOYMENT, sign(baseBuy()), ctx()));
     assert.equal(p.side, 'BUY');
@@ -114,7 +141,7 @@ describe('reference model: signature acceptance', () => {
 describe('reference model: settlement on measured balances', () => {
   const p = plan(authorizeExecution(DEPLOYMENT, sign(baseBuy()), ctx()));
 
-  it('settles when debit <= limit and credit >= quantity', () => {
+  it('settles when debit <= limit and credit equals the candidate quantity', () => {
     const r = settleExecution(p, { inputBefore: 5_000_000_000n, inputAfter: 5_000_000_000n - 2_006_000_000n, outputBefore: 0n, outputAfter: 10n * 10n ** 18n });
     assert.ok(r.ok);
     assert.equal(r.value.actualDebit, 2_006_000_000n);
@@ -126,7 +153,7 @@ describe('reference model: settlement on measured balances', () => {
     assert.equal(over.rejection.error, 'DebitExceedsLimit');
     const under = settleExecution(p, { inputBefore: 5_000_000_000n, inputAfter: 5_000_000_000n, outputBefore: 0n, outputAfter: 10n * 10n ** 18n - 1n });
     assert.ok(!under.ok);
-    assert.equal(under.rejection.error, 'CreditBelowMinimum');
+    assert.equal(under.rejection.error, 'CreditNotExact');
   });
 
   it('treats a balance that went the favourable way as zero debit, not as a negative one', () => {
@@ -137,7 +164,7 @@ describe('reference model: settlement on measured balances', () => {
 
   it('never consults anything an adapter reports: the plan has no field for it', () => {
     assert.deepEqual(Object.keys(p).sort(), [
-      'agent', 'candidateDigest', 'executionCommitment', 'inputAmount', 'inputToken', 'mandateDigest', 'market', 'minOutput', 'outputToken', 'principal', 'recipient', 'side',
+      'agent', 'candidateDigest', 'exactQuantity', 'executionCommitment', 'inputAmount', 'inputToken', 'mandateDigest', 'market', 'minOutput', 'outputToken', 'principal', 'recipient', 'side',
     ]);
     void STRANGER;
   });

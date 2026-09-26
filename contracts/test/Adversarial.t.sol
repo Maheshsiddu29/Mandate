@@ -9,7 +9,13 @@ import {Candidate, ExecutionTerms, Mandate, MarketConfig, SIDE_BUY, SIDE_SELL} f
 import {ExecutionOrder} from "../src/interfaces/IMandateExecutionAdapter.sol";
 import {FixtureVenue} from "../src/fixture/FixtureVenue.sol";
 import {FixtureVenueAdapter} from "../src/fixture/FixtureVenueAdapter.sol";
-import {FeeOnTransferToken, HookToken} from "./mocks/MockTokens.sol";
+import {
+    FailZeroApproveToken,
+    FeeOnTransferToken,
+    HookToken,
+    MalformedReturnERC20,
+    NoReturnERC20
+} from "./mocks/MockTokens.sol";
 import {ScriptedAdapter} from "./mocks/ScriptedAdapter.sol";
 import {GateTestBase} from "./utils/GateTestBase.sol";
 
@@ -57,17 +63,34 @@ contract AdversarialTest is GateTestBase {
         assertEq(credit, QTY);
     }
 
+    function test_unrelatedAdapterInventoryCanSatisfyDeltas_butDoesNotProveVenueProvenance() public {
+        (Mandate memory m, Candidate memory c, ExecutionTerms memory t) = _buy();
+        // The scripted adapter's inventory was minted directly to it, not
+        // obtained from a venue. Settlement proves the principal's outcome,
+        // deliberately not the provenance of the inventory.
+        _scriptHonest(QTY, 4e6);
+        (,, uint256 credit) = _execute(m, c, t);
+        assertEq(credit, QTY);
+    }
+
     function test_underDeliveryByOneAtomRefuses() public {
         (Mandate memory m, Candidate memory c, ExecutionTerms memory t) = _buy();
         _scriptHonest(QTY - 1, 0);
-        _expectRevert(m, c, t, abi.encodeWithSelector(MandateExecutionGate.CreditBelowMinimum.selector, QTY - 1, QTY));
+        _expectRevert(m, c, t, abi.encodeWithSelector(MandateExecutionGate.CreditNotExact.selector, QTY - 1, QTY));
+        _assertUnconsumed(m);
+    }
+
+    function test_buyOverDeliveryRefusesExactFill() public {
+        (Mandate memory m, Candidate memory c, ExecutionTerms memory t) = _buy();
+        _scriptHonest(QTY + 1, 0);
+        _expectRevert(m, c, t, abi.encodeWithSelector(MandateExecutionGate.CreditNotExact.selector, QTY + 1, QTY));
         _assertUnconsumed(m);
     }
 
     function test_adapterClaimingAHugeFillWhileDeliveringNothingRefuses() public {
         (Mandate memory m, Candidate memory c, ExecutionTerms memory t) = _buy();
         _scripted(ScriptedAdapter.Mode.RETURN_GARBAGE, 0, 0, address(0), 0);
-        _expectRevert(m, c, t, abi.encodeWithSelector(MandateExecutionGate.CreditBelowMinimum.selector, 0, QTY));
+        _expectRevert(m, c, t, abi.encodeWithSelector(MandateExecutionGate.CreditNotExact.selector, 0, QTY));
         _assertUnconsumed(m);
     }
 
@@ -81,7 +104,7 @@ contract AdversarialTest is GateTestBase {
     function test_recipientSubstitutionByTheAdapterRefuses() public {
         (Mandate memory m, Candidate memory c, ExecutionTerms memory t) = _buy();
         _scripted(ScriptedAdapter.Mode.SCRIPTED, QTY, 0, stranger, 0);
-        _expectRevert(m, c, t, abi.encodeWithSelector(MandateExecutionGate.CreditBelowMinimum.selector, 0, QTY));
+        _expectRevert(m, c, t, abi.encodeWithSelector(MandateExecutionGate.CreditNotExact.selector, 0, QTY));
         assertEq(scriptedToken.balanceOf(stranger), 0);
         _assertUnconsumed(m);
     }
@@ -116,14 +139,24 @@ contract AdversarialTest is GateTestBase {
         );
     }
 
-    function test_sellPartialFillWithAdequateProceedsSettles_debitNeverExceedsQuantity() public {
+    function test_sellPartialFillWithAdequateProceedsRefusesExactFill() public {
         Mandate memory m = _sellMandate();
         Candidate memory c = _scriptedCandidate(SIDE_SELL);
         ExecutionTerms memory t = _sellTerms();
         _scriptHonest(1_990e6, 1e18); // refunds 1 token: sells 9 for the full floor
-        (, uint256 debit, uint256 credit) = _execute(m, c, t);
-        assertEq(debit, QTY - 1e18);
-        assertEq(credit, 1_990e6);
+        _expectRevert(m, c, t, abi.encodeWithSelector(MandateExecutionGate.DebitNotExact.selector, QTY - 1e18, QTY));
+        _assertUnconsumed(m);
+    }
+
+    function test_sellOverDebitRefusesExactFill() public {
+        Mandate memory m = _sellMandate();
+        Candidate memory c = _scriptedCandidate(SIDE_SELL);
+        ExecutionTerms memory t = _sellTerms();
+        vm.prank(principal);
+        scriptedToken.approve(address(scripted), 1);
+        _scripted(ScriptedAdapter.Mode.PULL_FROM_PRINCIPAL, 1_990e6, 0, address(0), 1);
+        _expectRevert(m, c, t, abi.encodeWithSelector(MandateExecutionGate.DebitNotExact.selector, QTY + 1, QTY));
+        _assertUnconsumed(m);
     }
 
     // ------------------------------------------------------------------
@@ -139,6 +172,27 @@ contract AdversarialTest is GateTestBase {
         _scriptHonest(QTY, 0);
         _execute(m, c, t);
         assertEq(fundingBefore - funding.balanceOf(principal), 2_010e6);
+    }
+
+    function test_largeAdapterReturnDataIsIgnoredAfterExactSettlement() public {
+        (Mandate memory m, Candidate memory c, ExecutionTerms memory t) = _buy();
+        _scripted(ScriptedAdapter.Mode.LARGE_RETURN, QTY, 0, address(0), 0);
+        (,, uint256 credit) = _execute(m, c, t);
+        assertEq(credit, QTY);
+    }
+
+    function test_largeAdapterRevertDataRevertsAtomically() public {
+        (Mandate memory m, Candidate memory c, ExecutionTerms memory t) = _buy();
+        uint256 fundingBefore = funding.balanceOf(principal);
+        uint256 representationBefore = scriptedToken.balanceOf(principal);
+        _scripted(ScriptedAdapter.Mode.LARGE_REVERT, QTY, 0, address(0), 0);
+        bytes memory ps = _signMandate(m);
+        bytes memory as_ = _signExecution(m, c, t);
+        (bool ok,) = address(gate).call{gas: 10_000_000}(abi.encodeCall(gate.execute, (m, ps, c, t, as_)));
+        assertFalse(ok);
+        assertEq(funding.balanceOf(principal), fundingBefore);
+        assertEq(scriptedToken.balanceOf(principal), representationBefore);
+        _assertUnconsumed(m);
     }
 
     function test_adapterBurningAllGasRevertsAtomically() public {
@@ -324,7 +378,7 @@ contract AdversarialTest is GateTestBase {
         c.venue = "venue.scripted";
         ExecutionTerms memory t = _terms();
         (bytes memory ps, bytes memory as_) = _signFor(g, m, c, t);
-        vm.expectRevert(abi.encodeWithSelector(MandateExecutionGate.CreditBelowMinimum.selector, 9.9e18, QTY));
+        vm.expectRevert(abi.encodeWithSelector(MandateExecutionGate.CreditNotExact.selector, 9.9e18, QTY));
         g.execute(m, ps, c, t, as_);
     }
 
@@ -350,6 +404,79 @@ contract AdversarialTest is GateTestBase {
         // 2010 out, 99 back after the refund's 1% tax.
         assertEq(debit, 2_010e6 - 99e6);
         assertLe(debit, t.fundingLimit);
+    }
+
+    function test_noReturnFundingTokenIsExplicitlySupported() public {
+        NoReturnERC20 legacy = new NoReturnERC20(6);
+        ScriptedAdapter adapter = new ScriptedAdapter();
+        MandateExecutionGate g = _gateFor(address(scriptedToken), address(legacy), address(adapter));
+        legacy.mint(principal, 10_000e6);
+        scriptedToken.mint(address(adapter), QTY);
+        vm.prank(principal);
+        (bool approved,) =
+            address(legacy).call(abi.encodeWithSignature("approve(address,uint256)", address(g), type(uint256).max));
+        assertTrue(approved);
+        adapter.setScript(
+            ScriptedAdapter.Script(ScriptedAdapter.Mode.SCRIPTED, QTY, 0, address(0), address(0), "", false, 0)
+        );
+        Mandate memory m = _mandate();
+        Candidate memory c = _scriptedCandidate(SIDE_BUY);
+        ExecutionTerms memory t = _terms();
+        (bytes memory ps, bytes memory as_) = _signFor(g, m, c, t);
+        (,, uint256 credit) = g.execute(m, ps, c, t, as_);
+        assertEq(credit, QTY);
+    }
+
+    function test_malformedTokenReturnDataFailsClosedAndConsumesNothing() public {
+        MalformedReturnERC20 malformed = new MalformedReturnERC20(6);
+        ScriptedAdapter adapter = new ScriptedAdapter();
+        MandateExecutionGate g = _gateFor(address(scriptedToken), address(malformed), address(adapter));
+        malformed.mint(principal, 10_000e6);
+        vm.prank(principal);
+        (bool approved,) =
+            address(malformed).call(abi.encodeWithSignature("approve(address,uint256)", address(g), type(uint256).max));
+        assertTrue(approved);
+        Mandate memory m = _mandate();
+        Candidate memory c = _scriptedCandidate(SIDE_BUY);
+        ExecutionTerms memory t = _terms();
+        (bytes memory ps, bytes memory as_) = _signFor(g, m, c, t);
+        (bool ok,) = address(g).call(abi.encodeCall(g.execute, (m, ps, c, t, as_)));
+        assertFalse(ok);
+        assertEq(g.executionCommitmentOf(harness.mandateDigest(m)), bytes32(0));
+        assertEq(malformed.balanceOf(principal), 10_000e6);
+    }
+
+    function test_failedFixtureApprovalResetRevertsEverythingAtomically() public {
+        FailZeroApproveToken resetFailing = new FailZeroApproveToken(6);
+        FixtureVenue venue = new FixtureVenue(scriptedToken, resetFailing, AAPL_PRICE, FEE_BPS);
+        address predictedGate = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
+        FixtureVenueAdapter adapter = new FixtureVenueAdapter(predictedGate, venue);
+        MarketConfig[] memory markets = new MarketConfig[](1);
+        markets[0] =
+            _market(address(scriptedToken), address(adapter), _aaplAsset(), "issuer.alpha", "venue.fixture", false);
+        markets[0].fundingToken = address(resetFailing);
+        MandateExecutionGate g = new MandateExecutionGate(markets);
+        assertEq(address(g), predictedGate);
+
+        resetFailing.mint(principal, 10_000e6);
+        resetFailing.mint(address(venue), 10_000e6);
+        scriptedToken.mint(address(venue), QTY);
+        vm.prank(principal);
+        resetFailing.approve(address(g), type(uint256).max);
+
+        Mandate memory m = _mandate();
+        Candidate memory c = _candidateFor(address(scriptedToken), SIDE_BUY);
+        ExecutionTerms memory t = _terms();
+        (bytes memory ps, bytes memory as_) = _signFor(g, m, c, t);
+        uint256 fundingBefore = resetFailing.balanceOf(principal);
+        uint256 tokensBefore = scriptedToken.balanceOf(principal);
+        vm.expectRevert(FailZeroApproveToken.ZeroApprovalRefused.selector);
+        g.execute(m, ps, c, t, as_);
+        assertEq(resetFailing.balanceOf(principal), fundingBefore);
+        assertEq(scriptedToken.balanceOf(principal), tokensBefore);
+        assertEq(resetFailing.balanceOf(address(adapter)), 0);
+        assertEq(resetFailing.allowance(address(adapter), address(venue)), 0);
+        assertEq(g.executionCommitmentOf(harness.mandateDigest(m)), bytes32(0));
     }
 
     // ------------------------------------------------------------------

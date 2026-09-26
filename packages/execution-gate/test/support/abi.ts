@@ -163,6 +163,19 @@ export function abiEncode(t: AbiType, value: unknown): string {
   return hex;
 }
 
+/** Solidity function-argument encoding for the fields of one tuple. */
+export function abiEncodeArguments(t: AbiType, value: unknown): string {
+  if (t.kind !== 'tuple' || typeof value !== 'object' || value === null) throw new Error('expected tuple arguments');
+  const record = value as Record<string, unknown>;
+  const body = encodeSequence(
+    t.fields.map(([, field]) => field),
+    t.fields.map(([name]) => record[name]),
+  );
+  let hex = '0x';
+  for (const b of body) hex += b.toString(16).padStart(2, '0');
+  return hex;
+}
+
 // --- The gate's structs ------------------------------------------------------
 
 export const ASSET = tuple(['assetClass', string], ['idScheme', string], ['value', string]);
