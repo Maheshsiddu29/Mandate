@@ -666,16 +666,18 @@ detector classes**, all in `contracts/src`. Disposition:
 
 | ID | Detector | Where | Disposition |
 | --- | --- | --- | --- |
-| S-1 | `arbitrary-send-erc20` (High) | `_settle`: `safeTransferFrom(principal, …)` | **False positive after Phase 6R remediation.** `_authorize` verifies the principal signature and independently bounds candidate quantity/notional against immutable fixture price, signed `maxNotional`, declared economics and the side-specific funding limit before deriving `inputAmount` |
+| S-1 | `arbitrary-send-erc20` (High) | `_settle`: `safeTransferFrom(principal, adapter, inputAmount)` | **False positive; re-reviewed against the code in Phase 6R.1.** *From:* `principal` is `mandate.principal`, and `_authorize` has recovered the principal's EIP-712 signature over that mandate's MCE v2 digest under this gate's domain (chain ID and address) and checked the digest unconsumed. *To:* the adapter pinned for the market at construction, never caller-supplied. *Token:* the market's pinned funding token (BUY) or representation (SELL). *Amount:* on **BUY** it is the agent's `fundingLimit`, required `≤ floor(signed MAX_TOTAL_DEBIT → funding atoms)`; `maxNotional` does not bound this transfer, the signed economic limit does, and the measured debit is re-checked after the adapter refunds. On **SELL** it is the candidate quantity at the pinned token decimals, whose true product with the immutable fixture price must be `≤` signed `maxNotional` at the principal's precision (`_checkMaxNotional`) and which must be debited exactly. Before 6R.1 that SELL bound compared only the agent's declared notional, so the amount pulled could exceed `maxNotional / price` by up to one unit of the agent's chosen precision (M-1); the Phase 6R wording overstated what was enforced |
 | S-2 | `reentrancy-balance` ×2 | `_settle` before/after balances | **By design, suppressed with reason.** Pre-call balances are meant to be pre-call: settlement is the net delta across the interaction. Gate re-entry is blocked by `nonReentrant` (tested) and consumption precedes the call |
 | S-3 | `unused-return` ×2 | `FixtureVenueAdapter`: venue `buy`/`sell` | **Intentional, suppressed with reason.** The adapter measures its own balance rather than trusting the venue's report |
 | S-4 | `unused-return` | `_signedBy`: `ECDSA.tryRecover` third value | **Intentional, suppressed with reason.** It only describes why recovery failed; the error enum decides |
 | S-5 | `missing-zero-check` | `FixtureVenueAdapter` constructor | **Fixed.** Zero gate or venue now reverts `InvalidConfig` |
 | S-6 | `timestamp` | `_checkTime` | **Intended, suppressed with reason.** Chain time is the Phase 6 authority (INV-10); see §12 |
-| S-7 | `calls-loop` ×2 | constructor `decimals()` per market | **Accepted, suppressed with reason.** Constructor only, over a deployer-chosen list; a reverting token correctly fails deployment |
+| S-7 | `calls-loop` ×3 | constructor `decimals()` ×2 and `fixtureSettlement` per market | **Accepted, suppressed with reason.** Constructor only, over a deployer-chosen list; a reverting token or adapter correctly fails deployment. The third call (6R.1) is the fixture venue price check (§6) |
 | S-8 | `cyclomatic-complexity` | `_checkBinding` | **Accepted, suppressed with reason.** A flat list of independent checks in interface order |
 | S-9 | `naming-convention` ×10 | immutables in `UPPER_CASE` | **Style disagreement, detector excluded.** forge-lint requires `SCREAMING_SNAKE_CASE` immutables; the two tools conflict and the Solidity style guide sides with forge-lint |
 | S-10 | `unused-return` | `GateArithmetic.notionalBounds`: low limb of `Math.mul512` | **Intentional, suppressed with reason.** Only the high limb determines whether the quotient fits `uint256`; the following `mulDiv` and `mulmod` independently consume the full product for quotient and remainder |
+| S-11 | `unused-return` | `_checkMaxNotional`: floor of `notionalBounds` | **Intentional, suppressed with reason (6R.1).** The rounded-up product alone is the exact criterion against an integer bound; the floor carries no further information |
+| S-12 | `cyclomatic-complexity` | `_checkEconomics` (12) | **Fixed (6R.1).** The M-1 check first pushed it over the threshold; the `maxNotional` rule now lives in `_checkMaxNotional`, which also keeps it reviewable on its own |
 
 The fresh Phase 6R run initially found two `uninitialized-local` diagnostics for
 Solidity-zeroed memory structs and S-10. The structs are now explicitly
@@ -685,7 +687,14 @@ An independent `--show-ignored-findings` run reported **11 reviewed results**:
 S-1 (1), S-2 (2), S-3/S-4/S-10 (4), S-6 (1), S-7 (2), and S-8 (1).
 `fail_on: low` makes any *new* Low, Medium or High finding fail CI; this was
 verified by adding a deliberately unsafe contract, which failed the run, and
-removing it. Every suppression is an inline `slither-disable-next-line` beside a
+removing it.
+
+**Phase 6R.1 run.** The M-1 fix first produced two new results, S-11 and S-12,
+dispositioned above. The final normal run analyzed **21 contracts with 101
+detectors and reported 0 results** (exit 0). `--show-ignored-findings` reports
+**13 reviewed results**: S-1 (1), S-2 (2), S-3/S-4/S-10/S-11 (5), S-6 (1),
+S-7 (3) and S-8 (1). Removing the S-11 suppression makes the normal run fail
+(exit 255), so the gate still fails closed on a new finding. Every suppression is an inline `slither-disable-next-line` beside a
 comment giving the reason, so the reasoning travels with the code. forge-lint
 reports nothing in `contracts/src`; test doubles are excluded from linting
 because they deliberately do what lints forbid.

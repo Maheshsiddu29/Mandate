@@ -417,28 +417,7 @@ contract MandateExecutionGate is ReentrancyGuard {
         if (candidate.notional.atoms < floorAtoms || candidate.notional.atoms > ceilAtoms) {
             revert NotionalInconsistent(candidate.notional.atoms, floorAtoms, ceilAtoms);
         }
-        if (
-            GateArithmetic.compare(
-                    candidate.notional.atoms,
-                    candidate.notional.decimals,
-                    mandate.maxNotional.atoms,
-                    mandate.maxNotional.decimals
-                ) > 0
-        ) revert MaxNotionalExceeded();
-        // The declared notional's precision is the agent's choice, and at a
-        // coarse one it can sit almost a whole unit below the true product
-        // (M-1). The principal's bound is on the true product: render quantity
-        // x the immutable fixture price at the principal's own precision,
-        // rounded up. The ceiling exceeds the integer bound exactly when the
-        // product does; a product beyond uint256 at that scale exceeds any bound.
-        (bool productRepresentable,, uint256 productCeil) = GateArithmetic.notionalBounds(
-            candidate.quantity.atoms,
-            candidate.quantity.decimals,
-            market.fixturePriceAtoms,
-            market.fixturePriceDecimals,
-            mandate.maxNotional.decimals
-        );
-        if (!productRepresentable || productCeil > mandate.maxNotional.atoms) revert MaxNotionalExceeded();
+        _checkMaxNotional(mandate, candidate, market);
 
         if (mandate.side == SIDE_BUY) {
             (bool sumRepresentable, bool within) = GateArithmetic.sumWithinLimit(
@@ -469,6 +448,38 @@ contract MandateExecutionGate is ReentrancyGuard {
                     mandate.economicLimit.decimals
                 )) revert DeclaredTotalCreditBelowMinimum();
         }
+    }
+
+    /// @dev Principal `maxNotional` bounds the true gross, not the agent's rendering
+    /// of it (Phase 6R.1, M-1). The declared notional is compared first, as
+    /// before; then quantity x the immutable fixture price is rendered at the
+    /// principal's own precision and rounded up. The declared notional's
+    /// precision is the agent's choice, and at a coarse one it can sit almost a
+    /// whole unit below the true product, so only the product comparison binds.
+    /// The ceiling exceeds the integer bound exactly when the product does; a
+    /// product beyond uint256 at that scale exceeds any bound.
+    function _checkMaxNotional(Mandate calldata mandate, Candidate calldata candidate, Market memory market)
+        private
+        pure
+    {
+        if (
+            GateArithmetic.compare(
+                    candidate.notional.atoms,
+                    candidate.notional.decimals,
+                    mandate.maxNotional.atoms,
+                    mandate.maxNotional.decimals
+                ) > 0
+        ) revert MaxNotionalExceeded();
+        // The floor is not needed: the ceiling alone is the exact criterion.
+        // slither-disable-next-line unused-return
+        (bool productRepresentable,, uint256 productCeil) = GateArithmetic.notionalBounds(
+            candidate.quantity.atoms,
+            candidate.quantity.decimals,
+            market.fixturePriceAtoms,
+            market.fixturePriceDecimals,
+            mandate.maxNotional.decimals
+        );
+        if (!productRepresentable || productCeil > mandate.maxNotional.atoms) revert MaxNotionalExceeded();
     }
 
     /// @dev Chain time is the only clock. The window matches the kernel's
