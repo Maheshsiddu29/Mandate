@@ -45,11 +45,13 @@ library MandateCodec {
     uint16 internal constant CANDIDATE_SCHEMA_VERSION = 3;
 
     /// @dev `DomainTag` values from the kernel codec. ASCII, no length prefix.
-    bytes internal constant MANDATE_TAG = "MANDATE.MANDATE.V2";
-    bytes internal constant CANDIDATE_TAG = "MANDATE.CANDIDATE.V3";
+    bytes18 internal constant MANDATE_TAG = "MANDATE.MANDATE.V2";
+    bytes20 internal constant CANDIDATE_TAG = "MANDATE.CANDIDATE.V3";
 
-    /// @dev The only party scheme the gate can express.
-    bytes internal constant PARTY_KIND_EIP155_ADDRESS = "eip155-address";
+    /// @dev The first 20 bytes of every encoded party, the only party scheme the
+    /// gate can express: `u16 14 ‖ "eip155-address" ‖ u16 42 ‖ "0x"`. The 40
+    /// lowercase hex digits of the address follow (`_putParty`).
+    bytes20 private constant PARTY_HEAD = hex"000e6569703135352d61646472657373002a3078";
 
     enum Validity {
         VALID,
@@ -257,53 +259,96 @@ library MandateCodec {
     // Encoding
     // ------------------------------------------------------------------
 
+    // Each encoder computes its exact output length, allocates one buffer and
+    // writes every field into it in order. Every `_put*` takes the write
+    // pointer and returns it advanced past what it wrote; `_seal` requires the
+    // final pointer to be exactly the buffer's end, so a length computation and
+    // a writer that ever disagreed would revert rather than hash other bytes.
+    // Field order, widths and string framing are MCE v2 / Candidate V3 as the
+    // kernel writes them (`codec.ts`); `ReferenceMandateCodec` in the tests is
+    // the previous, concatenating implementation, and the two are compared
+    // byte for byte.
+
+    /// @dev MCE v2 bytes outside the asset, the unit strings and the sets
+    /// (sized by `_assetBytes`, their lengths and `_setBytes`): tag 18, version
+    /// 2, id 32, nonce 8, two parties 120, side 1, two amounts (unit prefix 2,
+    /// decimals 1, atoms 32) 70, deviation 2, synthetic policy 1, tail
+    /// 8 + 4 + 4 + 1 + 3 × 8 = 41.
+    uint256 private constant MANDATE_FIXED_BYTES = 295;
+    /// @dev Candidate V3 bytes outside the asset (`_assetBytes`) and the
+    /// identifier strings' own bytes: tag 20, version 2, length prefixes of the
+    /// representation, issuer, chain, venue and evaluation-state identifiers
+    /// 10, side 1, party 60, quantity (prefix, decimals, atoms) 35, price (two
+    /// prefixes, decimals, atoms) 37, notional 35, fee 35, two digests 64,
+    /// epoch 8.
+    uint256 private constant CANDIDATE_FIXED_BYTES = 307;
+    /// @dev An encoded party: `PARTY_HEAD` and 40 hex digits.
+    uint256 private constant PARTY_BYTES = 60;
+
     /// @notice MCE v2 bytes of `m`. Callers must validate first.
-    function encodeMandate(Mandate calldata m) internal pure returns (bytes memory) {
-        bytes memory head = abi.encodePacked(MANDATE_TAG, m.version, m.mandateId, m.nonce);
-        bytes memory parties = bytes.concat(encodeParty(m.principal), encodeParty(m.agent));
-        bytes memory economics = abi.encodePacked(
-            m.side, encodeAmount(m.maxNotional), encodeAmount(m.economicLimit), m.maxDeviationBps, m.syntheticPolicy
+    function encodeMandate(Mandate calldata m) internal pure returns (bytes memory out) {
+        uint256 p;
+        (out, p) = _alloc(
+            MANDATE_FIXED_BYTES + _assetBytes(m.canonicalAsset) + bytes(m.maxNotional.unit).length
+                + bytes(m.economicLimit.unit).length + _setBytes(m.allowedIssuers) + _setBytes(m.allowedChains)
+                + _setBytes(m.allowedVenues)
         );
-        bytes memory sets = bytes.concat(
-            encodeIdentifierSet(m.allowedIssuers),
-            encodeIdentifierSet(m.allowedChains),
-            encodeIdentifierSet(m.allowedVenues)
-        );
-        bytes memory tail = abi.encodePacked(
-            m.requiredCorporateActionEpoch,
-            m.maxPriceAgeSeconds,
-            m.maxCorporateActionAgeSeconds,
-            m.haltPolicy,
-            m.createdAtUnixSeconds,
-            m.notBeforeUnixSeconds,
-            m.expiresAtUnixSeconds
-        );
-        return bytes.concat(head, parties, encodeAsset(m.canonicalAsset), economics, sets, tail);
+        p = _putUint(p, uint144(MANDATE_TAG), 18);
+        p = _putUint(p, m.version, 2);
+        p = _putUint(p, uint256(m.mandateId), 32);
+        p = _putUint(p, m.nonce, 8);
+        p = _putParty(p, m.principal);
+        p = _putParty(p, m.agent);
+        p = _putAsset(p, m.canonicalAsset);
+        p = _putUint(p, m.side, 1);
+        p = _putAmount(p, m.maxNotional);
+        p = _putAmount(p, m.economicLimit);
+        p = _putUint(p, m.maxDeviationBps, 2);
+        p = _putUint(p, m.syntheticPolicy, 1);
+        p = _putSet(p, m.allowedIssuers);
+        p = _putSet(p, m.allowedChains);
+        p = _putSet(p, m.allowedVenues);
+        p = _putUint(p, m.requiredCorporateActionEpoch, 8);
+        p = _putUint(p, m.maxPriceAgeSeconds, 4);
+        p = _putUint(p, m.maxCorporateActionAgeSeconds, 4);
+        p = _putUint(p, m.haltPolicy, 1);
+        // Signed fields: big-endian two's complement, as `abi.encodePacked(int64)`.
+        p = _putUint(p, uint64(m.createdAtUnixSeconds), 8);
+        p = _putUint(p, uint64(m.notBeforeUnixSeconds), 8);
+        p = _putUint(p, uint64(m.expiresAtUnixSeconds), 8);
+        _seal(out, p);
     }
 
     /// @notice Candidate V3 bytes of `c`. Callers must validate first.
-    function encodeCandidate(Candidate calldata c) internal pure returns (bytes memory) {
-        bytes memory head = bytes.concat(
-            abi.encodePacked(CANDIDATE_TAG, c.version),
-            encodeString(c.representationId),
-            encodeAsset(c.canonicalAsset),
-            encodeString(c.issuer),
-            encodeString(c.chain),
-            encodeString(c.venue)
+    function encodeCandidate(Candidate calldata c) internal pure returns (bytes memory out) {
+        uint256 p;
+        (out, p) = _alloc(
+            CANDIDATE_FIXED_BYTES + bytes(c.representationId).length + _assetBytes(c.canonicalAsset)
+                + bytes(c.issuer).length + bytes(c.chain).length + bytes(c.venue).length + bytes(c.quantity.unit).length
+                + bytes(c.executionPrice.numeratorUnit).length + bytes(c.executionPrice.denominatorUnit).length
+                + bytes(c.notional.unit).length + bytes(c.feeTotal.unit).length + bytes(c.evaluationStateId).length
         );
-        bytes memory economics = bytes.concat(
-            abi.encodePacked(c.side),
-            encodeParty(c.agent),
-            encodeAmount(c.quantity),
-            encodePrice(c.executionPrice),
-            encodeAmount(c.notional),
-            encodeAmount(c.feeTotal)
-        );
-        bytes memory provenance = bytes.concat(
-            encodeString(c.evaluationStateId),
-            abi.encodePacked(c.evaluationStateDigest, c.registrySnapshotDigest, c.corporateActionEpoch)
-        );
-        return bytes.concat(head, economics, provenance);
+        p = _putUint(p, uint160(CANDIDATE_TAG), 20);
+        p = _putUint(p, c.version, 2);
+        p = _putString(p, c.representationId);
+        p = _putAsset(p, c.canonicalAsset);
+        p = _putString(p, c.issuer);
+        p = _putString(p, c.chain);
+        p = _putString(p, c.venue);
+        p = _putUint(p, c.side, 1);
+        p = _putParty(p, c.agent);
+        p = _putAmount(p, c.quantity);
+        p = _putString(p, c.executionPrice.numeratorUnit);
+        p = _putString(p, c.executionPrice.denominatorUnit);
+        p = _putUint(p, c.executionPrice.decimals, 1);
+        p = _putUint(p, c.executionPrice.atoms, 32);
+        p = _putAmount(p, c.notional);
+        p = _putAmount(p, c.feeTotal);
+        p = _putString(p, c.evaluationStateId);
+        p = _putUint(p, uint256(c.evaluationStateDigest), 32);
+        p = _putUint(p, uint256(c.registrySnapshotDigest), 32);
+        p = _putUint(p, c.corporateActionEpoch, 8);
+        _seal(out, p);
     }
 
     function mandateDigest(Mandate calldata m) internal pure returns (bytes32) {
@@ -315,9 +360,10 @@ library MandateCodec {
     }
 
     /// @dev `u16` byte length, then the bytes. Callers have bounded the length.
-    function encodeString(string calldata s) internal pure returns (bytes memory) {
-        // forge-lint: disable-next-line(unsafe-typecast)
-        return abi.encodePacked(uint16(bytes(s).length), s);
+    function encodeString(string calldata s) internal pure returns (bytes memory out) {
+        uint256 p;
+        (out, p) = _alloc(2 + bytes(s).length);
+        _seal(out, _putString(p, s));
     }
 
     function encodeStringMemory(string memory s) internal pure returns (bytes memory) {
@@ -326,14 +372,10 @@ library MandateCodec {
     }
 
     /// @dev `{kind: "eip155-address", value: lowercase 0x-hex}` as two strings.
-    function encodeParty(address party) internal pure returns (bytes memory) {
-        return bytes.concat(
-            encodeStringMemory(string(PARTY_KIND_EIP155_ADDRESS)), encodeStringMemory(Strings.toHexString(party))
-        );
-    }
-
-    function encodeAsset(CanonicalAsset calldata a) internal pure returns (bytes memory) {
-        return bytes.concat(encodeString(a.assetClass), encodeString(a.idScheme), encodeString(a.value));
+    function encodeParty(address party) internal pure returns (bytes memory out) {
+        uint256 p;
+        (out, p) = _alloc(PARTY_BYTES);
+        _seal(out, _putParty(p, party));
     }
 
     function encodeAssetMemory(CanonicalAsset memory a) internal pure returns (bytes memory) {
@@ -341,23 +383,144 @@ library MandateCodec {
             bytes.concat(encodeStringMemory(a.assetClass), encodeStringMemory(a.idScheme), encodeStringMemory(a.value));
     }
 
-    function encodeAmount(Amount calldata a) internal pure returns (bytes memory) {
-        return bytes.concat(encodeString(a.unit), abi.encodePacked(a.decimals, a.atoms));
-    }
-
-    function encodePrice(Price calldata p) internal pure returns (bytes memory) {
-        return bytes.concat(
-            encodeString(p.numeratorUnit), encodeString(p.denominatorUnit), abi.encodePacked(p.decimals, p.atoms)
-        );
-    }
-
     /// @dev `u16` count, then each element, in the order given (already
     /// validated as strictly ascending).
     function encodeIdentifierSet(string[] calldata values) internal pure returns (bytes memory out) {
-        // forge-lint: disable-next-line(unsafe-typecast)
-        out = abi.encodePacked(uint16(values.length));
+        uint256 p;
+        (out, p) = _alloc(_setBytes(values));
+        _seal(out, _putSet(p, values));
+    }
+
+    // ------------------------------------------------------------------
+    // Single-buffer writer
+    // ------------------------------------------------------------------
+
+    /// @dev A `bytes` of length `len` and the pointer to its first data byte.
+    ///
+    /// Memory layout: `[out, out + 32)` holds `len`; `[p, p + len)` is the data.
+    /// The reservation also covers the word after the data: writers store whole
+    /// 32-byte words at pointers below the data's end, so they write up to 31
+    /// bytes past it, and every such byte is inside this allocation. The data
+    /// bytes are all written before `_seal`; nothing is assumed zero.
+    function _alloc(uint256 len) private pure returns (bytes memory out, uint256 p) {
+        assembly ("memory-safe") {
+            out := mload(0x40)
+            mstore(out, len)
+            p := add(out, 0x20)
+            // Data plus one spare word, rounded up to a whole word.
+            mstore(0x40, and(add(add(p, len), 0x3f), not(0x1f)))
+        }
+    }
+
+    /// @dev Requires the writers to have filled `out` exactly, then clears the
+    /// spare word after the data, so the buffer ends in zero padding like any
+    /// other Solidity `bytes`. Never fails on any input: a failure means the
+    /// length computation and the writers disagree, which is a bug.
+    function _seal(bytes memory out, uint256 p) private pure {
+        uint256 end;
+        assembly ("memory-safe") {
+            end := add(add(out, 0x20), mload(out))
+            // Inside the reservation made by `_alloc` (the spare word).
+            mstore(end, 0)
+        }
+        assert(p == end);
+    }
+
+    /// @dev The low `size` bytes of `value`, big-endian (1 <= size <= 32). Higher
+    /// bytes are dropped, as `abi.encodePacked(uintN(value))` would drop them.
+    function _putUint(uint256 p, uint256 value, uint256 size) private pure returns (uint256) {
+        assembly ("memory-safe") {
+            // One word store: `size` bytes of value, then 32 - size zero bytes
+            // that the next writer overwrites (or `_seal` clears). `p + size`
+            // is at most the data's end, so the store stays in the reservation.
+            mstore(p, shl(sub(256, shl(3, size)), value))
+        }
+        return p + size;
+    }
+
+    /// @dev `u16` length (its low 16 bits, as the `uint16` cast of the previous
+    /// encoder), then the string's bytes copied straight from calldata.
+    function _putString(uint256 p, string calldata s) private pure returns (uint256) {
+        uint256 len = bytes(s).length;
+        assembly ("memory-safe") {
+            mstore(p, shl(240, len))
+            // Exactly `len` bytes from the decoder-checked calldata range of `s`
+            // into `[p + 2, p + 2 + len)`, inside the data.
+            calldatacopy(add(p, 2), s.offset, len)
+        }
+        return p + 2 + len;
+    }
+
+    /// @dev `PARTY_HEAD`, then the address as 40 lowercase hex digits.
+    function _putParty(uint256 p, address party) private pure returns (uint256) {
+        uint256 a = uint160(party);
+        // Digits of the high 16 address bytes fill one word; digits of the low
+        // 4 bytes are the low 8 lanes of the other, moved to its top.
+        uint256 high = _hexDigits(a >> 32);
+        uint256 low = _hexDigits(a & 0xffffffff) << 192;
+        bytes20 head = PARTY_HEAD;
+        assembly ("memory-safe") {
+            // Three stores in increasing address order; each overwrites the
+            // previous one's zero tail. The last ends 24 bytes past `p + 60`,
+            // inside the reservation, and those bytes are overwritten next.
+            mstore(p, head)
+            mstore(add(p, 20), high)
+            mstore(add(p, 52), low)
+        }
+        return p + PARTY_BYTES;
+    }
+
+    function _putAsset(uint256 p, CanonicalAsset calldata a) private pure returns (uint256) {
+        p = _putString(p, a.assetClass);
+        p = _putString(p, a.idScheme);
+        return _putString(p, a.value);
+    }
+
+    function _putAmount(uint256 p, Amount calldata a) private pure returns (uint256) {
+        p = _putString(p, a.unit);
+        p = _putUint(p, a.decimals, 1);
+        return _putUint(p, a.atoms, 32);
+    }
+
+    function _putSet(uint256 p, string[] calldata values) private pure returns (uint256) {
+        p = _putUint(p, values.length, 2);
         for (uint256 i = 0; i < values.length; ++i) {
-            out = bytes.concat(out, encodeString(values[i]));
+            p = _putString(p, values[i]);
+        }
+        return p;
+    }
+
+    /// @dev Encoded size of a canonical asset: three prefixed strings.
+    function _assetBytes(CanonicalAsset calldata a) private pure returns (uint256) {
+        return 6 + bytes(a.assetClass).length + bytes(a.idScheme).length + bytes(a.value).length;
+    }
+
+    /// @dev Encoded size of an identifier set: its count and prefixed entries.
+    function _setBytes(string[] calldata values) private pure returns (uint256 size) {
+        size = 2 + 2 * values.length;
+        for (uint256 i = 0; i < values.length; ++i) {
+            size += bytes(values[i]).length;
+        }
+    }
+
+    /// @dev The low 16 bytes of `value` as 32 lowercase hex digits, one per
+    /// byte, most significant first (`Strings.toHexString`'s digits).
+    ///
+    /// Spreading: each step moves the upper half of every lane into the next
+    /// lane up and masks, doubling the lane width, until each 4-bit nibble sits
+    /// alone in the low half of its own byte, in the original order. Digits:
+    /// a nibble `n` becomes `n + 0x30` ('0'..'9'), plus 0x27 more when `n > 9`
+    /// ('a'..'f'); `(n + 6) >> 4` is exactly that `n > 9` bit. Lanes hold at most
+    /// 0x66, so nothing carries between them.
+    function _hexDigits(uint256 value) private pure returns (uint256 digits) {
+        unchecked {
+            uint256 x = value & type(uint128).max;
+            x = (x | (x << 64)) & 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff;
+            x = (x | (x << 32)) & 0x00000000ffffffff00000000ffffffff00000000ffffffff00000000ffffffff;
+            x = (x | (x << 16)) & 0x0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff;
+            x = (x | (x << 8)) & 0x00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff;
+            x = (x | (x << 4)) & 0x0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f;
+            digits = x + 0x30 * LANES + (((x + 0x06 * LANES) >> 4) & LANES) * 0x27;
         }
     }
 
@@ -368,7 +531,9 @@ library MandateCodec {
     /// @notice Hash of an asset's MCE encoding. Length prefixes make it
     /// unambiguous, so equal hashes mean equal `(assetClass, idScheme, value)`.
     function assetHash(CanonicalAsset calldata a) internal pure returns (bytes32) {
-        return keccak256(encodeAsset(a));
+        (bytes memory out, uint256 p) = _alloc(_assetBytes(a));
+        _seal(out, _putAsset(p, a));
+        return keccak256(out);
     }
 
     function assetHashMemory(CanonicalAsset memory a) internal pure returns (bytes32) {
