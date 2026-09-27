@@ -166,7 +166,7 @@ contract IdentifierEquivalenceTest is Test {
         }
         bytes memory physical = bytes.concat(s, garbage, garbage);
         if (h.memoryValidatorWithTail(physical, s.length) != verdict) {
-            _mismatch("dirty memory tail", 2, s, abi.encode(garbage));
+            _mismatch("dirty memory tail", 4, s, abi.encode(garbage));
         }
         assembly ("memory-safe") {
             mstore(0x40, fmp)

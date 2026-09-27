@@ -98,51 +98,104 @@ library MandateCodec {
         return true;
     }
 
-    /// @dev Bit `c` is set iff byte `c` is in the kernel identifier charset
-    /// `A-Z a-z 0-9 . _ - : /` (67 values, all below 0x80).
-    uint256 private constant IDENTIFIER_CHARSET = 0x7fffffe87fffffe07ffe00000000000;
     /// @dev Bit `c` is set iff byte `c` is a separator `. _ - : /`, which may
     /// not open or close an identifier.
     uint256 private constant IDENTIFIER_SEPARATORS = 0x800000000400e00000000000;
 
-    /// @notice Kernel `parseIdentifier`: 1..128 bytes of the charset, neither
-    /// end a separator.
-    /// @dev Reads the identifier a word at a time and classifies each byte by
-    /// one shift of a 256-bit charset mask. A calldata slice converts to
-    /// `bytes32` zero-padded on the right, and only the slice's own bytes are
-    /// classified, so nothing past the identifier's length is ever inspected.
+    /// @dev SWAR constants: a byte repeated in each of a word's 32 lanes.
+    uint256 private constant LANES = type(uint256).max / 0xff; // 0x0101…01
+    uint256 private constant LANE_HIGH_BITS = 0x80 * LANES;
+    uint256 private constant LANE_LOW_BITS = 0x7f * LANES;
+
+    /// @notice Kernel `parseIdentifier`: 1..128 bytes of `A-Z a-z 0-9 . _ - : /`,
+    /// neither end a separator.
+    /// @dev Classifies 32 bytes per step (`_outsideCharset`). The identifier's
+    /// last word is read whole, so its lanes past the logical end hold whatever
+    /// follows in calldata — ABI padding the decoder never checks, the next
+    /// argument, or zeros past the end of calldata. Those lanes are discarded
+    /// by `_leadingLanes` *after* classification; lanes never carry into one
+    /// another, so they cannot affect the kept lanes either.
     function isIdentifier(string calldata s) internal pure returns (bool) {
-        bytes calldata b = bytes(s);
-        uint256 n = b.length;
+        uint256 n = bytes(s).length;
         if (n == 0 || n > IDENTIFIER_MAX_LENGTH) return false;
-        if (_isSeparator(uint8(b[0])) || _isSeparator(uint8(b[n - 1]))) return false;
+        uint256 start;
+        uint256 first;
+        uint256 last;
+        uint256 outside;
+        assembly ("memory-safe") {
+            // Reads only: `start` is the calldata offset the ABI decoder
+            // bounds-checked for `n` bytes; every load below starts inside
+            // [start, start + n). A load's bytes past calldatasize read as zero.
+            start := s.offset
+            first := byte(0, calldataload(start))
+            last := byte(0, calldataload(add(start, sub(n, 1))))
+        }
+        if (_isSeparator(first) || _isSeparator(last)) return false;
         unchecked {
-            // n <= 128, so no index below can overflow.
+            // n <= 128: at most four words, and no index below can overflow.
             for (uint256 i = 0; i < n; i += 32) {
-                uint256 len = n - i < 32 ? n - i : 32;
-                uint256 word = uint256(bytes32(b[i:i + len]));
-                for (uint256 j = 0; j < len; ++j) {
-                    if ((IDENTIFIER_CHARSET >> ((word >> (248 - 8 * j)) & 0xff)) & 1 == 0) return false;
+                uint256 word;
+                assembly ("memory-safe") {
+                    word := calldataload(add(start, i))
                 }
+                outside |= _outsideCharset(word) & _leadingLanes(n - i);
             }
         }
-        return true;
+        return outside == 0;
     }
 
     /// @notice `isIdentifier` for a string already in memory (constructor input).
+    /// @dev The same word classification over `mload`. The last load may cover
+    /// up to 31 bytes past `b`'s data — other allocations or unallocated memory,
+    /// never assumed zero — which `_leadingLanes` discards.
     function isIdentifierBytes(bytes memory b) internal pure returns (bool) {
         uint256 n = b.length;
         if (n == 0 || n > IDENTIFIER_MAX_LENGTH) return false;
         if (_isSeparator(uint8(b[0])) || _isSeparator(uint8(b[n - 1]))) return false;
+        uint256 outside;
         unchecked {
-            for (uint256 i = 0; i < n; ++i) {
-                if ((IDENTIFIER_CHARSET >> uint8(b[i])) & 1 == 0) return false;
+            for (uint256 i = 0; i < n; i += 32) {
+                uint256 word;
+                assembly ("memory-safe") {
+                    // Read only; `b + 32 + i` is inside `b`'s data because i < n.
+                    word := mload(add(add(b, 32), i))
+                }
+                outside |= _outsideCharset(word) & _leadingLanes(n - i);
             }
         }
-        return true;
+        return outside == 0;
     }
 
-    function _isSeparator(uint8 ch) private pure returns (bool) {
+    /// @dev Bit 7 of each byte lane of the result is set iff that byte of `word`
+    /// is outside the identifier charset; every other bit is zero.
+    ///
+    /// Each lane is tested on its low 7 bits `v` (0..0x7f) against the charset's
+    /// four ranges `[0x2d,0x3a]` (`- . / 0-9 :`), `[0x41,0x5a]`, `[0x5f,0x5f]` and
+    /// `[0x61,0x7a]`: `v + (0x80 - lo)` has bit 7 set iff `v >= lo`, and
+    /// `v + (0x7f - hi)` has bit 7 set iff `v > hi`. Every addend is at most
+    /// 0x53, so no lane sum exceeds 0xd2: nothing carries into the next lane or
+    /// out of the word, and each lane's verdict depends on that byte alone. A
+    /// set high bit (a byte >= 0x80) is outside the charset whatever `v` is.
+    function _outsideCharset(uint256 word) private pure returns (uint256) {
+        unchecked {
+            uint256 v = word & LANE_LOW_BITS;
+            uint256 inRange = ((v + 0x53 * LANES) & ~(v + 0x45 * LANES)) // [0x2d, 0x3a]
+                | ((v + 0x3f * LANES) & ~(v + 0x25 * LANES)) // [0x41, 0x5a]
+                | ((v + 0x21 * LANES) & ~(v + 0x20 * LANES)) // [0x5f, 0x5f]
+                | ((v + 0x1f * LANES) & ~(v + 0x05 * LANES)); // [0x61, 0x7a]
+            return ~(inRange & ~word) & LANE_HIGH_BITS;
+        }
+    }
+
+    /// @dev A mask of the first `count` byte lanes (big-endian), all 32 when
+    /// `count >= 32`: `max >> 8 * count` is zero once the shift reaches 256.
+    function _leadingLanes(uint256 count) private pure returns (uint256) {
+        unchecked {
+            return ~(type(uint256).max >> (8 * count));
+        }
+    }
+
+    function _isSeparator(uint256 ch) private pure returns (bool) {
         return (IDENTIFIER_SEPARATORS >> ch) & 1 != 0;
     }
 
@@ -172,10 +225,11 @@ library MandateCodec {
     }
 
     /// @notice Kernel `compareIdentifierBytes`: length first, then bytes.
-    /// @dev Equal-length operands are compared a 32-byte word at a time. Both
-    /// words of a pair cover the same byte range and a short final slice pads
-    /// both with zeros, so the first differing word orders exactly as the first
-    /// differing byte would, and bytes past the operands never participate.
+    /// @dev Equal-length operands are compared a 32-byte word at a time as
+    /// big-endian integers, which orders them exactly as their first differing
+    /// byte does. Both words of a pair cover the same byte range; lanes past the
+    /// operands' common length hold whatever follows each in calldata and are
+    /// cleared from both before comparing.
     /// @return -1, 0 or 1.
     function compareEncoded(bytes calldata a, bytes calldata b) internal pure returns (int256) {
         uint256 n = a.length;
@@ -183,9 +237,16 @@ library MandateCodec {
         unchecked {
             // i < n <= calldata size, so no index below can overflow.
             for (uint256 i = 0; i < n; i += 32) {
-                uint256 end = n - i < 32 ? n : i + 32;
-                bytes32 x = bytes32(a[i:end]);
-                bytes32 y = bytes32(b[i:end]);
+                uint256 x;
+                uint256 y;
+                assembly ("memory-safe") {
+                    // Reads only, each starting inside its decoder-checked operand.
+                    x := calldataload(add(a.offset, i))
+                    y := calldataload(add(b.offset, i))
+                }
+                uint256 keep = _leadingLanes(n - i);
+                x &= keep;
+                y &= keep;
                 if (x != y) return x < y ? int256(-1) : int256(1);
             }
         }
