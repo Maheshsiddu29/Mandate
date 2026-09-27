@@ -17,6 +17,7 @@ import {MandateCodec} from "../src/libraries/MandateCodec.sol";
 import {MockERC20} from "./mocks/MockTokens.sol";
 import {ScriptedAdapter} from "./mocks/ScriptedAdapter.sol";
 import {CodecHarness} from "./utils/CodecHarness.sol";
+import {EncodingHarness} from "./utils/EncodingHarness.sol";
 
 /// @notice TypeScript ↔ Solidity differential test over `corpus/gate-v1`.
 ///
@@ -118,11 +119,15 @@ contract DifferentialTest is Test {
     MandateExecutionGate internal gate;
     address[4] internal adapters;
     CodecHarness internal harness;
+    /// @dev Phase 6R.2B: every corpus mandate and candidate is also encoded by
+    /// the pre-optimization encoder, and the bytes must be identical.
+    EncodingHarness internal encodings;
 
     function setUp() public {
         vm.chainId(CHAIN);
         principal = vm.addr(PRINCIPAL_KEY);
         harness = new CodecHarness();
+        encodings = new EncodingHarness();
 
         _token(FUNDING6, "Fixture USD Coin", "fUSDC", 6);
         _token(FUNDING18, "Fixture USD 18", "fUSD18", 18);
@@ -264,6 +269,7 @@ contract DifferentialTest is Test {
 
     function _attempt(string memory id, uint256 index, Attempt memory a) internal returns (bool) {
         string memory label = string.concat(id, "#", vm.toString(index));
+        _assertEncodingsAgree(label, a.mandate, a.candidate);
         vm.chainId(a.chainId);
         vm.warp(a.timestamp);
         // The script applies to the adapter of the market the candidate names; an
@@ -329,15 +335,27 @@ contract DifferentialTest is Test {
     // Encoding and structural-validation vectors
     // ------------------------------------------------------------------
 
+    /// @dev Production and pre-optimization encoders produce the same bytes —
+    /// not just the same digest — for this mandate and candidate, valid or not.
+    function _assertEncodingsAgree(string memory label, Mandate memory m, Candidate memory c) internal view {
+        (bytes memory referenceMandate, bytes memory mandateBytes) = encodings.mandate(m);
+        assertEq(mandateBytes, referenceMandate, string.concat(label, ": MCE v2 bytes"));
+        (bytes memory referenceCandidate, bytes memory candidateBytes) = encodings.candidate(c);
+        assertEq(candidateBytes, referenceCandidate, string.concat(label, ": Candidate V3 bytes"));
+    }
+
     function test_differential_mandateEncodings() public view {
         bytes[] memory blobs = _section(".mandateEncodings");
         assertGt(blobs.length, 0, "empty mandate encodings");
         for (uint256 i = 0; i < blobs.length; ++i) {
             MandateEncoding memory e = abi.decode(blobs[i], (MandateEncoding));
+            (bytes memory referenceBytes, bytes memory encoded) = encodings.mandate(e.mandate);
+            assertEq(encoded, referenceBytes, string.concat(e.id, ": MCE v2 bytes"));
             MandateCodec.Validity validity = harness.validateMandate(e.mandate);
             assertEq(uint8(validity), e.validity, string.concat(e.id, ": validity"));
             if (validity == MandateCodec.Validity.VALID) {
                 assertEq(harness.mandateDigest(e.mandate), e.digest, string.concat(e.id, ": digest"));
+                assertEq(keccak256(referenceBytes), e.digest, string.concat(e.id, ": reference digest"));
             }
         }
     }
@@ -347,9 +365,14 @@ contract DifferentialTest is Test {
         assertGt(blobs.length, 0, "empty candidate encodings");
         for (uint256 i = 0; i < blobs.length; ++i) {
             CandidateEncoding memory e = abi.decode(blobs[i], (CandidateEncoding));
+            (bytes memory referenceBytes, bytes memory encoded) = encodings.candidate(e.candidate);
+            assertEq(encoded, referenceBytes, string.concat(e.id, ": Candidate V3 bytes"));
             bool valid = harness.isValidCandidate(e.candidate);
             assertEq(valid, e.valid, string.concat(e.id, ": validity"));
-            if (valid) assertEq(harness.candidateDigest(e.candidate), e.digest, string.concat(e.id, ": digest"));
+            if (valid) {
+                assertEq(harness.candidateDigest(e.candidate), e.digest, string.concat(e.id, ": digest"));
+                assertEq(keccak256(referenceBytes), e.digest, string.concat(e.id, ": reference digest"));
+            }
         }
     }
 }
