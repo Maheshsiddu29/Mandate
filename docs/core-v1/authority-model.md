@@ -132,11 +132,11 @@ both.
 | --- | --- | --- |
 | Set | `parent ∩ child` | `child ⊆ parent` |
 | Boolean right | `parent ∧ child` | `child ⇒ parent` |
-| Max bound (a ceiling) | `min(parent, child)` | `child ≤ parent` |
-| Min bound (a floor) | `max(parent, child)` | `child ≥ parent` |
+| Max bound (a ceiling) | `min(parent, child)` | restated, and `child ≤ parent` |
+| Min bound (a floor) | `max(parent, child)` | restated, and `child ≥ parent` |
 | Validity window | intersection | `child.notBefore ≥ parent.notBefore ∧ child.expiresAt ≤ parent.expiresAt` |
 | State invariants | union (all must hold) | every parent invariant present in the child with parameters no weaker |
-| State policy | tighter age bound; intersection of admitted sources | same, per state kind |
+| State policy | tighter age bound; intersection of admitted sources | restated, and no weaker, per state kind |
 | Delegation depth | `min(parent − 1, child)` | `child ≤ parent − 1` |
 | Ledger dimension | **not meet-reduced** — enforced separately at every node on the lineage that grants it | for a dimension the parent grants, the child's limit ≤ the parent's, same measure |
 
@@ -155,9 +155,25 @@ constrain the same thing in the same measure: same set vocabulary, same bound
 identifier and polarity, same dimension identifier, scope, quantity kind and
 unit, with decimals rescaled exactly. A child term with no comparable parent
 term is an **added** constraint and is always permitted — it can only tighten.
-A parent term absent from the child is **inherited**, not removed, because the
-meet and the path rule both still see it. There is therefore no way to express
-"remove a required invariant" in a child grant.
+A parent term absent from the child is never removed: at action time the meet
+and the path rule enforce every ancestor's terms whatever the child says. There
+is therefore no way to express "remove a required invariant" in a child grant.
+
+**Restatement at registration.** Absence has two different readings, and the
+model must not depend on a reader choosing the right one. For sets and rights
+absence already narrows (closed world: not granted). For per-action bounds,
+state invariants and state policy, a grant document that omits a parent's term
+reads to anyone inspecting it as "no such limit". So a delegation must
+**restate** every parent bound, invariant and state-policy term, equal or
+tighter, and is refused at registration if it omits one
+(`DELEGATION_DROPS_BOUND`, `DELEGATION_DROPS_INVARIANT`,
+`DELEGATION_DROPS_STATE_POLICY`). Every grant is then self-describing: its own
+terms are its effective terms, and the action-time meet is an independent
+defence rather than the only one. Ledger dimensions are the exception: they
+need not be restated, because the path rule charges the parent's own leg and
+the parent's ledger entry is the constraint
+([examples.md §D](examples.md#d-hierarchical-delegation) is where the
+contradiction between "inherited" and "refused if dropped" surfaced).
 
 A child term that constrains the same identifier in an incomparable measure
 (parent caps `capital` in USDG, child caps `capital` in USD) is refused at
@@ -217,7 +233,8 @@ reservation it would block.
 
 - `g.parent` is registered, its lineage is valid at registration time, and it
   holds `DELEGATE` with depth ≥ 1;
-- `g` is ⊆ its parent by every rule in §4's right-hand column;
+- `g` is ⊆ its parent by every rule in §4's right-hand column, restating every
+  parent bound, invariant and state-policy term;
 - `g.validity` is inside the parent's;
 - every ledger dimension in `g` either matches a parent dimension in measure
   with a limit ≤ the parent's, or is new (an added constraint);
@@ -225,8 +242,9 @@ reservation it would block.
 
 Rejections: `DELEGATION_WIDENS_SET`, `DELEGATION_WIDENS_RIGHT`,
 `DELEGATION_WIDENS_BOUND`, `DELEGATION_WIDENS_WINDOW`,
-`DELEGATION_WIDENS_LIMIT`, `DELEGATION_DROPS_INVARIANT`,
-`DELEGATION_WEAKENS_INVARIANT`, `DELEGATION_WEAKENS_STATE_POLICY`,
+`DELEGATION_WIDENS_LIMIT`, `DELEGATION_DROPS_BOUND`,
+`DELEGATION_DROPS_INVARIANT`, `DELEGATION_WEAKENS_INVARIANT`,
+`DELEGATION_DROPS_STATE_POLICY`, `DELEGATION_WEAKENS_STATE_POLICY`,
 `DELEGATION_DEPTH_EXCEEDED`, `DELEGATION_TERM_INCOMPARABLE`, each naming the
 term. All violations are reported, not only the first.
 

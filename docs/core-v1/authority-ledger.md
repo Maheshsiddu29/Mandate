@@ -108,6 +108,16 @@ BTC receives contributions whose exposure asset the registry states is
 canonical BTC
 ([action-state-model.md §2](action-state-model.md#2-identifiers)).
 
+**Scope attributes are resolved or the action rejects (SCOPE-1).** A
+contribution must carry every scope attribute its kind defines — an exposure
+asset for `NOTIONAL` and `POSITION_SIZE`, a collateral asset for `MARGIN` — as a
+resolved `ResourceId`. If the registry cannot state an instrument's exposure
+asset, the domain module rejects with `EXPOSURE_ASSET_UNRESOLVED`; it never
+emits the contribution without the attribute. Otherwise an order on a venue
+whose instrument the registry does not map would match no asset-scoped
+dimension and escape the BTC limit entirely
+([examples.md §B](examples.md#b-cross-venue-pending-exposure)).
+
 **No unbounded consumption (LEDGER-5).** A domain module marks a contribution
 `required` when the action moves principal resources out of the principal's
 direct control — capital deployed, collateral posted, debt drawn. A required
