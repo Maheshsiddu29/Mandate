@@ -22,9 +22,9 @@ Read it before proposing architectural changes. If a change contradicts it,
 either the change is wrong or the document needs updating first — resolve which
 before writing code.
 
-The repository is in **Phase 7A** — the Mandate Core v1 specification
-([docs/core-v1](docs/core-v1/README.md)): specification only, no code, awaiting
-review — with **Phase 6 frozen at `dc98df5`**; nothing in Phase 7 may modify
+The repository has **Phase 7A frozen** — the Mandate Core v1 specification
+([docs/core-v1](docs/core-v1/README.md)), specification only, no code — and
+**Phase 7B next, not started**, with **Phase 6 frozen at `dc98df5`**; nothing in Phase 7 may modify
 MCE v2, Candidate V3, the gate, its libraries, fixture or replay semantics, or
 any canonical vector. Before it came **Phase 6R.2B** (secure gas optimization:
 word-level identifier validation and a single-buffer encoder, externally

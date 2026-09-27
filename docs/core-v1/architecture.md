@@ -1,6 +1,6 @@
 # Mandate Core v1 — Architecture
 
-> **Status: Phase 7A specification, DRAFT pending review. Nothing in this
+> **Status: Phase 7A specification, FROZEN (after the hardening checkpoint). Nothing in this
 > document is implemented.** It defines the domain-independent layer that
 > future Spot, Perp, Options, Prediction, Lending, Liquidity, Payment, Treasury
 > and Governance modules build on. The frozen Phase 6 execution gate is not

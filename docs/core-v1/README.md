@@ -1,6 +1,6 @@
 # Mandate Core v1
 
-> **Status: Phase 7A specification, DRAFT pending review. Nothing here is
+> **Status: Phase 7A specification, FROZEN (after the hardening checkpoint). Nothing here is
 > implemented.** Phase 6 is frozen as of `dc98df5` and is not modified by
 > anything in this directory. No code accompanies this specification.
 

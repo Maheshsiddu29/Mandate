@@ -4,9 +4,9 @@ Phased engineering plan: what each phase delivers, how it is known to be done,
 and what it depends on.
 
 > **Status: Phase 6 is FROZEN at `dc98df5`. Phase 7A — the Mandate Core v1
-> specification ([core-v1/](core-v1/README.md)) — is current: specification
-> only, no code, awaiting review.** Phase 7B and beyond are planned, not
-> started. Nothing has been deployed.
+> specification ([core-v1/](core-v1/README.md)) — is FROZEN after its hardening
+> checkpoint. Phase 7B is NEXT and not started.** Nothing has been
+> implemented for Phase 7, and nothing has been deployed.
 > Rationale for the phase ordering is in
 > [mandate-design.md §25](mandate-design.md#25-phased-engineering-roadmap);
 > scope boundaries are in
@@ -419,7 +419,7 @@ typed actions and state, reservations and reconciliation, enforcement adapters
 and receipts. It does not implement another trading-specific policy engine and
 does not modify Phase 6. Each sub-phase ends with a report and an approval gate.
 
-### Phase 7A — Mandate Core v1 specification (current)
+### Phase 7A — Mandate Core v1 specification — FROZEN ✓
 
 **Delivers** the specification in [core-v1/](core-v1/README.md): architecture
 and the core equation, the authority and delegation model, action, state,
@@ -432,13 +432,28 @@ and deferred features listed.
 assigned to a phase, and no design-review question has an unclear answer. No
 code.
 
+**Hardening checkpoint (met).** Review accepted the architecture and asked for
+five semantic gaps to be closed before 7B encodes the model. All five are
+closed and frozen in [core-v1/README.md](core-v1/README.md#decisions-frozen),
+decisions 23–28:
+
+- ledger linearizability versus external-state consistency (CORE-CONC-1, state
+  bindings, issue-time revalidation);
+- principal-global invariants across roots (the principal policy);
+- the granted / reserved / consumed / restored / available vocabulary;
+- domain-module semantic version binding (DOM-2);
+- conservative, asymmetric drift correction.
+
+The remaining open questions are implementation choices assigned to 7B–7H.
+
 **Depends on:** Phase 6 (frozen).
 
-### Phase 7B — Core types and generic action/state model
+### Phase 7B — Core types and generic action/state model — NEXT
 
 **Delivers** a Core package with canonical encodings and strict parsers for
 grants, intents, snapshots and quantities; typed economic quantities; the
-authority meet; the domain module interface. No ledger.
+authority meet; `ModuleRef`, `StateBinding`, `PrincipalPolicy` and the
+authority vocabulary as types; the domain module interface. No ledger.
 **Exit:** UNIT-1 and AUTH-2 established by property tests; encodings pinned by
 a corpus; Phase 6 generated artifacts byte-identical.
 
@@ -528,8 +543,8 @@ to the product, and belongs in the design documents before it belongs in code.
 | 6R.1b | Final pre-optimization cleanup | 6R.1a | ✅ implemented locally, not deployed; awaiting independent review |
 | 6R.2A | Gas attribution and architecture benchmark (measurement only) | 6R.1b | ✅ measured locally; recommendation awaiting review; no production change |
 | 6R.2B | Gas optimization, path chosen from the 6R.2A measurements | 6R.2A | ✅ implemented locally; awaiting independent security and gas review; not deployed |
-| 7A | Mandate Core v1 specification | 6 | **current** — specification only, awaiting review |
-| 7B | Core types and generic action/state model | 7A | planned |
+| 7A | Mandate Core v1 specification | 6 | **FROZEN ✓** — specification only, hardened |
+| 7B | Core types and generic action/state model | 7A | **NEXT** — not started |
 | 7C | Global Authority Ledger | 7B | planned |
 | 7D | Invariant and reservation engine | 7C | planned |
 | 7E | PerpPolicy v1 and Venue Signer | 7D | planned; blocked on venue evidence |

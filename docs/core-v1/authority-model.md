@@ -1,6 +1,6 @@
 # Mandate Core v1 — Authority and delegation model
 
-> **Status: Phase 7A specification, DRAFT pending review. Not implemented.**
+> **Status: Phase 7A specification, FROZEN (after the hardening checkpoint). Not implemented.**
 > Hierarchical delegation is specified here so that nothing built in 7B–7H
 > assumes one principal and one agent. Its full implementation is Phase 9.
 

@@ -1907,7 +1907,7 @@ Recorded so they are made on purpose later, not by accident now:
 >
 > **Phase 7A.** The Policy and Identity rows below — portfolio-level authority,
 > delegation chains, revocation — are now specified, not built, as Mandate Core
-> v1 in [core-v1/](core-v1/README.md) (DRAFT). Core grants are standing,
+> v1 in [core-v1/](core-v1/README.md) (frozen specification). Core grants are standing,
 > ledger-bounded authority. The single-use decision of §7.5 still governs the
 > Phase 6 execution artifact, which Core derives once per reservation
 > ([core-v1/architecture.md §7](core-v1/architecture.md#7-relationship-to-frozen-phase-6)).

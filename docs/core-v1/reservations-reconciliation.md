@@ -1,6 +1,6 @@
 # Mandate Core v1 — Reservations and reconciliation
 
-> **Status: Phase 7A specification, DRAFT pending review. Not implemented.**
+> **Status: Phase 7A specification, FROZEN (after the hardening checkpoint). Not implemented.**
 > This generalizes the kernel's replay state machine
 > ([replay-semantics.md](../replay-semantics.md)) from one single-use,
 > atomically settled mandate to arbitrary quantities, partial execution and

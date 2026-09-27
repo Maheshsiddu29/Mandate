@@ -1,6 +1,6 @@
 # Mandate Core v1 — Worked examples
 
-> **Status: Phase 7A specification, DRAFT pending review.** These are paper
+> **Status: Phase 7A specification, FROZEN (after the hardening checkpoint).** These are paper
 > walkthroughs of the specification, not test output. Nothing here was
 > executed. Venue names are placeholders: "venue L" stands for a perp venue
 > such as Lighter, and no claim is made about any real venue's API, collateral

@@ -1,6 +1,6 @@
 # Mandate Core v1 — Action, state, quantity and invariant model
 
-> **Status: Phase 7A specification, DRAFT pending review. Not implemented.**
+> **Status: Phase 7A specification, FROZEN (after the hardening checkpoint). Not implemented.**
 > Field lists here are conceptual: they fix what each envelope must carry and
 > why. Canonical encodings, bounds and parsers are Phase 7B.
 

@@ -1,6 +1,6 @@
 # Mandate Core v1 — Receipts and authority provenance
 
-> **Status: Phase 7A specification, DRAFT pending review. Not implemented.**
+> **Status: Phase 7A specification, FROZEN (after the hardening checkpoint). Not implemented.**
 > Receipts extend the kernel's `VerificationReceipt` and the gate's
 > `MandateExecuted` evidence; neither is changed. Implementation is Phase 7H.
 

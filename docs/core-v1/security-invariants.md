@@ -1,6 +1,6 @@
 # Mandate Core v1 — Security invariants
 
-> **Status: Phase 7A specification, DRAFT pending review. Not implemented, so
+> **Status: Phase 7A specification, FROZEN (after the hardening checkpoint). Not implemented, so
 > nothing below is established.** Each invariant names the mechanism specified
 > to enforce it and the kind of test that must establish it when that mechanism
 > is built. They are written to become property, fuzz, stateful-invariant,

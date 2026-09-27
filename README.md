@@ -4,8 +4,9 @@
 financial assets.**
 
 > **Current: Phase 7A — the Mandate Core v1 specification
-> ([docs/core-v1](docs/core-v1/README.md)), specification only, awaiting
-> review. Phase 6 is frozen at `dc98df5`.**
+> ([docs/core-v1](docs/core-v1/README.md)) — is FROZEN; Phase 7B (Core types
+> and generic action/state model) is next and not started. Phase 6 is frozen
+> at `dc98df5`.**
 >
 > **Status: Phase 6R.2B (secure gas optimization) implemented locally and awaiting independent security and gas review ([report](docs/phase-6r2b-report.md): normal BUY 401,684 → 246,963 execution gas, worst case 6,724,561 → 425,922, no semantic change), after the Phase 6R.2A gas attribution benchmark ([report](docs/phase-6r2a-gas-profile.md)) and Phase 6R.1b — an onchain execution
 > gate, tested against a labelled settlement fixture and not deployed.** The

@@ -1,6 +1,6 @@
 # Mandate Core v1 — Global Authority Ledger
 
-> **Status: Phase 7A specification, DRAFT pending review. Not implemented.**
+> **Status: Phase 7A specification, FROZEN (after the hardening checkpoint). Not implemented.**
 > This document fixes the ledger's semantics so that Phase 7C implements them
 > rather than discovers them. Storage technology is a 7C decision; the
 > properties a store must provide are fixed here.

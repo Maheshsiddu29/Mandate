@@ -1,6 +1,6 @@
 # Mandate Core v1 — Enforcement adapters
 
-> **Status: Phase 7A specification, DRAFT pending review. Not implemented.**
+> **Status: Phase 7A specification, FROZEN (after the hardening checkpoint). Not implemented.**
 > §4.1 describes how the frozen Phase 6 gate becomes the EVM adapter's
 > enforcement point without modification. §4.2 states what Phase 7E must
 > establish about a perp venue before its adapter is specified. §4.3–4.6 are
