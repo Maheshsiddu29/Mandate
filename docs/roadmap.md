@@ -3,8 +3,10 @@
 Phased engineering plan: what each phase delivers, how it is known to be done,
 and what it depends on.
 
-> **Status: Phase 6R.2B (secure gas optimization) implemented locally, awaiting independent security and gas review; Phase 6R.2A (gas attribution — measurement only) and Phase 6R.1b complete locally.** Phase 7 and beyond are
-> planned, not started. Nothing has been deployed.
+> **Status: Phase 6 is FROZEN at `dc98df5`. Phase 7A — the Mandate Core v1
+> specification ([core-v1/](core-v1/README.md)) — is current: specification
+> only, no code, awaiting review.** Phase 7B and beyond are planned, not
+> started. Nothing has been deployed.
 > Rationale for the phase ordering is in
 > [mandate-design.md §25](mandate-design.md#25-phased-engineering-roadmap);
 > scope boundaries are in
@@ -344,7 +346,16 @@ Solidity is the expensive mistake.
 
 ---
 
-## Phase 6 — On-chain execution gate and settlement
+## Phase 6 — On-chain execution gate and settlement — FROZEN ✓
+
+**Frozen at `dc98df5` by the repository owner (2026-09-27).** MCE v2, Candidate
+V3, `MandateCodec`, `MandateExecutionGate`, `GateArithmetic`, the fixture
+execution semantics, the replay and reservation semantics and every canonical
+vector are not modified by any later phase. Phase 7 builds above and alongside
+Phase 6, treating the gate as the enforcement point of one adapter
+([core-v1/architecture.md §7](core-v1/architecture.md#7-relationship-to-frozen-phase-6)).
+The status lines below record each sub-phase as its report stated it at the
+time; they are history and are not rewritten.
 
 **Phase 6R.1b implemented and tested locally; not deployed; awaiting independent review** ([report](phase-6r1b-report.md)).
 **Phase 6R.2A measured where the gate's gas goes and recommends the 6R.2B path; it changed no production code** ([report](phase-6r2a-gas-profile.md)).
@@ -400,51 +411,100 @@ store, and funding (Phase 7).
 
 ---
 
-## Phase 7 — Stablecoin funding and routing adapters
+## Phase 7 — Mandate Core
 
-**Delivers** funding-asset modelling with the same representation care given
-to assets, funding-route discovery, and conversion costs folded into execution
-economics so the deviation bound covers the whole path
-([§19](mandate-design.md#19-stablecoin-funding-as-a-supporting-layer)).
+Phase 7 builds the domain-independent economic control layer specified in
+[core-v1/](core-v1/README.md): authority graphs, a global authority ledger,
+typed actions and state, reservations and reconciliation, enforcement adapters
+and receipts. It does not implement another trading-specific policy engine and
+does not modify Phase 6. Each sub-phase ends with a report and an approval gate.
 
-**Exit criterion:** a fiat-denominated intent executes without the mandate
-naming a funding asset.
+### Phase 7A — Mandate Core v1 specification (current)
 
-**Depends on:** Phase 6. **Position is flexible** — it is a supporting layer,
-scheduled when funding becomes the blocker.
+**Delivers** the specification in [core-v1/](core-v1/README.md): architecture
+and the core equation, the authority and delegation model, action, state,
+quantity and invariant envelopes, global authority ledger semantics,
+reservations and reconciliation, the enforcement-adapter contract, receipts,
+security invariants and worked examples, with frozen decisions, open questions
+and deferred features listed.
+
+**Exit criterion:** the specification is reviewed, each open question is
+assigned to a phase, and no design-review question has an unclear answer. No
+code.
+
+**Depends on:** Phase 6 (frozen).
+
+### Phase 7B — Core types and generic action/state model
+
+**Delivers** a Core package with canonical encodings and strict parsers for
+grants, intents, snapshots and quantities; typed economic quantities; the
+authority meet; the domain module interface. No ledger.
+**Exit:** UNIT-1 and AUTH-2 established by property tests; encodings pinned by
+a corpus; Phase 6 generated artifacts byte-identical.
+
+### Phase 7C — Global Authority Ledger
+
+**Delivers** pure ledger transition rules over an event log, the
+compare-and-swap store contract and a reference store.
+**Exit:** LEDGER-1…6 and CONC-1 established by stateful tests with concurrent
+agents, including the mutation that removes compare-and-swap.
+
+### Phase 7D — Invariant and reservation engine
+
+**Delivers** invariant dispatch, conservative projection, the reservation
+state machine and reconciliation rules.
+**Exit:** RECON-1…5, TIME-1 and REPLAY-1 established by randomized
+reconciliation properties with duplicated, reordered and stale observations.
+
+### Phase 7E — PerpPolicy v1 and Venue Signer
+
+**Delivers** the perp domain module and a Venue Signer adapter.
+**Depends on** first evidencing the venue facts the adapter needs
+([core-v1 open question 3](core-v1/README.md#open-questions)).
+
+### Phase 7F — Cross-domain reconciliation: EVM fixture and perps
+
+**Delivers** the EVM adapter over the frozen gate and one principal ledger
+shared across the EVM fixture and perps.
+**Exit:** examples A–C of [core-v1/examples.md](core-v1/examples.md) run as
+tests.
+
+### Phase 7G — Developer SDK and simulator
+
+### Phase 7H — Receipts and authority provenance
+
+**Exit:** RECEIPT-1…3 established; every decision in a corpus reproduced from
+its receipt.
 
 ---
 
-## Phase 8 — Demo product and web experience
+## Phase 8+ — Validated domain modules
 
-**Delivers** the public demonstration and the site, reusing the prior project's
-design system and scaffolding
-([statelatch-reuse.md §3.4](statelatch-reuse.md#34-web-design-and-demo)):
-token system and typography lifted and re-paletted, route shell and diagram
-components ported, refusal-first demo structure ported.
+Predictions, Lending, Liquidity, Options, Payments, Governance. Each is a
+domain module and, where needed, an adapter. **The test of the abstraction:
+adding one requires no Core change and no Phase 6 change**, as Phase 4 required
+that adding a venue adapter need no verifier change.
 
-**Exit criteria**
+## Phase 9 — Multi-agent delegation
 
-- the demo shows PASS and, prominently, REJECT with visible reasons;
-- live data and engineered data are visibly separated with the seam disclosed;
-- no prior naming, palette prefix or imported metric survives;
-- every claim on the site is true of what was built.
+Full hierarchical delegation and agent-to-agent authority proofs across
+principals.
 
-**Depends on:** Phase 6.
+## Phase 10 — State attestation, freshness and trust adapters
 
----
+## Phase 11 — Audits, benchmarks and production pilots
 
-## Phase 9+ — Cross-chain network and broader asset classes
+### Previously planned, now unscheduled
 
-Out of buildathon scope. Direction is recorded in
-[§22](mandate-design.md#22-future-architecture) and
-[§23](mandate-design.md#23-expansion-beyond-equities), constraining today's
-abstractions so these become additions rather than rewrites.
+The earlier Phase 7 (stablecoin funding and routing adapters, design
+[§19](mandate-design.md#19-stablecoin-funding-as-a-supporting-layer)) and
+Phase 8 (demo product and web experience) are not in the new ordering. They
+are unscheduled pending an owner decision, not cancelled.
 
-The one structural commitment carried into every future phase: **the verifier
-remains the sole authorization authority.** Any capability that would let
-something else permit an execution is a change to the product, and belongs in
-the design document before it belongs in code.
+The one structural commitment carried into every future phase: **only Core
+says yes.** For the EVM path, Core's decision includes the kernel verifier's.
+Any capability that would let something else permit an execution is a change
+to the product, and belongs in the design documents before it belongs in code.
 
 ---
 
@@ -461,13 +521,22 @@ the design document before it belongs in code.
 | 5R | Pressure-test remediation (F-1…F-16) | 5 | ✅ complete |
 | 5R.1 | Post-remediation audit remediation (N-1…N-10) | 5R | ✅ complete |
 | 5R.2–5R.3 | Replay evidence, public boundaries, encoder domains | 5R.1 | ✅ complete |
-| 6 | On-chain execution gate and settlement fixture | 5R.3 | historical baseline, locally implemented; remediated by 6R |
+| 6 | On-chain execution gate and settlement fixture | 5R.3 | **FROZEN ✓ at `dc98df5`**, including 6R–6R.2B below (rows are historical) |
 | 6R | Principal-authority closure and execution-gate hardening | 6 | implemented locally; remediated by 6R.1 |
 | 6R.1 | Exact principal notional enforcement (M-1) | 6R | implemented locally; independently reviewed; remediated by 6R.1a |
 | 6R.1a | Reconciliation coherence and fixture trust closure | 6R.1 | implemented locally; independently reviewed; cleaned up by 6R.1b |
 | 6R.1b | Final pre-optimization cleanup | 6R.1a | ✅ implemented locally, not deployed; awaiting independent review |
 | 6R.2A | Gas attribution and architecture benchmark (measurement only) | 6R.1b | ✅ measured locally; recommendation awaiting review; no production change |
 | 6R.2B | Gas optimization, path chosen from the 6R.2A measurements | 6R.2A | ✅ implemented locally; awaiting independent security and gas review; not deployed |
-| 7 | Stablecoin funding adapters | 6 | planned, flexible |
-| 8 | Demo product and web experience | 6 | planned |
-| 9+ | Cross-chain network, broader asset classes | 8 | future |
+| 7A | Mandate Core v1 specification | 6 | **current** — specification only, awaiting review |
+| 7B | Core types and generic action/state model | 7A | planned |
+| 7C | Global Authority Ledger | 7B | planned |
+| 7D | Invariant and reservation engine | 7C | planned |
+| 7E | PerpPolicy v1 and Venue Signer | 7D | planned; blocked on venue evidence |
+| 7F | Cross-domain reconciliation: EVM fixture and perps | 7E | planned |
+| 7G | Developer SDK and simulator | 7F | planned |
+| 7H | Receipts and authority provenance | 7F | planned |
+| 8+ | Validated domain modules | 7H | future |
+| 9 | Multi-agent delegation, agent-to-agent authority proofs | 8 | future |
+| 10 | State attestation, freshness and trust adapters | 9 | future |
+| 11 | Audits, benchmarks and production pilots | 10 | future |

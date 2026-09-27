@@ -1904,6 +1904,14 @@ Recorded so they are made on purpose later, not by accident now:
 > **Status: FUTURE.** None of this is built, planned for the buildathon, or
 > claimed. It is recorded for one reason: to constrain today's abstractions so
 > that these become additions rather than rewrites.
+>
+> **Phase 7A.** The Policy and Identity rows below — portfolio-level authority,
+> delegation chains, revocation — are now specified, not built, as Mandate Core
+> v1 in [core-v1/](core-v1/README.md) (DRAFT). Core grants are standing,
+> ledger-bounded authority. The single-use decision of §7.5 still governs the
+> Phase 6 execution artifact, which Core derives once per reservation
+> ([core-v1/architecture.md §7](core-v1/architecture.md#7-relationship-to-frozen-phase-6)).
+> §22.2 carries over as "only Core says yes".
 
 ### 22.1 Mandate Network
 
@@ -2072,6 +2080,10 @@ for EVM from the documented ideas is cheaper and safer than translating it.
 > **Status: SPECIFIED** for phase ordering and exit criteria; **DRAFT** for
 > contents beyond Phase 3. Detail and current state are in
 > [roadmap.md](roadmap.md).
+>
+> **Superseded from Phase 7 on.** The table below is the Phase 0 plan. Phase 6
+> is frozen, and the current phase numbering from 7 onward (Mandate Core,
+> 7A–7H) is in [roadmap.md](roadmap.md).
 
 Ordering principle: **build the gate before the thing it gates.** The verifier
 comes first, because everything else is defined by what the verifier requires,

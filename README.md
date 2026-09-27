@@ -3,6 +3,10 @@
 **Intent-aware execution infrastructure for AI agents transacting in tokenized
 financial assets.**
 
+> **Current: Phase 7A — the Mandate Core v1 specification
+> ([docs/core-v1](docs/core-v1/README.md)), specification only, awaiting
+> review. Phase 6 is frozen at `dc98df5`.**
+>
 > **Status: Phase 6R.2B (secure gas optimization) implemented locally and awaiting independent security and gas review ([report](docs/phase-6r2b-report.md): normal BUY 401,684 → 246,963 execution gas, worst case 6,724,561 → 425,922, no semantic change), after the Phase 6R.2A gas attribution benchmark ([report](docs/phase-6r2a-gas-profile.md)) and Phase 6R.1b — an onchain execution
 > gate, tested against a labelled settlement fixture and not deployed.** The
 > sections below describe Phases 1–5R.3; the gate is summarized under
@@ -213,6 +217,7 @@ grant to agents.**
 | **[docs/mandate-design.md](docs/mandate-design.md)** | **Canonical specification.** The complete Mandate design: problem, primitives, lifecycle, verification, routing, corporate actions, settlement, invariants, threat model, scope and roadmap. Start here. |
 | [docs/architecture.md](docs/architecture.md) | System structure, components and their boundaries, data flow, and where each concern is enforced. |
 | [docs/roadmap.md](docs/roadmap.md) | Phased engineering plan, what each phase delivers, and its exit criteria. |
+| [docs/core-v1/README.md](docs/core-v1/README.md) | Phase 7A: the Mandate Core v1 specification — authority graph, global authority ledger, typed actions, state and quantities, reservations and reconciliation, enforcement adapters, receipts, security invariants and worked examples. Specification only. |
 | [docs/statelatch-reuse.md](docs/statelatch-reuse.md) | Assessment of the prior StateLatch / EquityGuard codebase: what is reusable, what must be rebuilt, and what must not be carried over. |
 | [docs/verifier-invariants.md](docs/verifier-invariants.md) | What the kernel guarantees today, how each guarantee is established, and what it explicitly does not guarantee. |
 | [docs/registry-semantics.md](docs/registry-semantics.md) | Canonical asset identity, the representation model, registry trust and provenance, resolution and ambiguity, admissibility, snapshots — and what the registry explicitly does not guarantee. |
