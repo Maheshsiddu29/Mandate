@@ -102,10 +102,11 @@ library MandateCodec {
 
     /// @dev Bit `c` is set iff byte `c` is a separator `. _ - : /`, which may
     /// not open or close an identifier.
-    uint256 private constant IDENTIFIER_SEPARATORS = 0x800000000400e00000000000;
+    uint256 private constant IDENTIFIER_SEPARATORS = (1 << 0x2d) | (1 << 0x2e) | (1 << 0x2f) | (1 << 0x3a)
+        | (1 << 0x5f);
 
     /// @dev SWAR constants: a byte repeated in each of a word's 32 lanes.
-    uint256 private constant LANES = type(uint256).max / 0xff; // 0x0101…01
+    uint256 private constant LANES = 0x0101010101010101010101010101010101010101010101010101010101010101;
     uint256 private constant LANE_HIGH_BITS = 0x80 * LANES;
     uint256 private constant LANE_LOW_BITS = 0x7f * LANES;
 
@@ -117,6 +118,8 @@ library MandateCodec {
     /// argument, or zeros past the end of calldata. Those lanes are discarded
     /// by `_leadingLanes` *after* classification; lanes never carry into one
     /// another, so they cannot affect the kept lanes either.
+    // Reviewed assembly (Phase 6R.2B, docs/phase-6r2b-report.md §assembly review): reads the identifier's first and last byte and its words from calldata (reads only; see the bounds notes in the body).
+    // slither-disable-next-line assembly
     function isIdentifier(string calldata s) internal pure returns (bool) {
         uint256 n = bytes(s).length;
         if (n == 0 || n > IDENTIFIER_MAX_LENGTH) return false;
@@ -150,6 +153,8 @@ library MandateCodec {
     /// @dev The same word classification over `mload`. The last load may cover
     /// up to 31 bytes past `b`'s data — other allocations or unallocated memory,
     /// never assumed zero — which `_leadingLanes` discards.
+    // Reviewed assembly (Phase 6R.2B, docs/phase-6r2b-report.md §assembly review): reads words of a memory string (read only; the final word's lanes past the string are masked).
+    // slither-disable-next-line assembly
     function isIdentifierBytes(bytes memory b) internal pure returns (bool) {
         uint256 n = b.length;
         if (n == 0 || n > IDENTIFIER_MAX_LENGTH) return false;
@@ -233,6 +238,8 @@ library MandateCodec {
     /// operands' common length hold whatever follows each in calldata and are
     /// cleared from both before comparing.
     /// @return -1, 0 or 1.
+    // Reviewed assembly (Phase 6R.2B, docs/phase-6r2b-report.md §assembly review): reads 32-byte words of both operands from calldata (reads only; lanes past the length are cleared).
+    // slither-disable-next-line assembly
     function compareEncoded(bytes calldata a, bytes calldata b) internal pure returns (int256) {
         uint256 n = a.length;
         if (n != b.length) return n < b.length ? int256(-1) : int256(1);
@@ -402,6 +409,8 @@ library MandateCodec {
     /// 32-byte words at pointers below the data's end, so they write up to 31
     /// bytes past it, and every such byte is inside this allocation. The data
     /// bytes are all written before `_seal`; nothing is assumed zero.
+    // Reviewed assembly (Phase 6R.2B, docs/phase-6r2b-report.md §assembly review): allocates one buffer by moving the free-memory pointer past it and one spare word.
+    // slither-disable-next-line assembly
     function _alloc(uint256 len) private pure returns (bytes memory out, uint256 p) {
         assembly ("memory-safe") {
             out := mload(0x40)
@@ -416,6 +425,8 @@ library MandateCodec {
     /// spare word after the data, so the buffer ends in zero padding like any
     /// other Solidity `bytes`. Never fails on any input: a failure means the
     /// length computation and the writers disagree, which is a bug.
+    // Reviewed assembly (Phase 6R.2B, docs/phase-6r2b-report.md §assembly review): zeroes the spare word `_alloc` reserved after the data.
+    // slither-disable-next-line assembly
     function _seal(bytes memory out, uint256 p) private pure {
         uint256 end;
         assembly ("memory-safe") {
@@ -428,6 +439,8 @@ library MandateCodec {
 
     /// @dev The low `size` bytes of `value`, big-endian (1 <= size <= 32). Higher
     /// bytes are dropped, as `abi.encodePacked(uintN(value))` would drop them.
+    // Reviewed assembly (Phase 6R.2B, docs/phase-6r2b-report.md §assembly review): one word store inside the `_alloc` reservation.
+    // slither-disable-next-line assembly
     function _putUint(uint256 p, uint256 value, uint256 size) private pure returns (uint256) {
         assembly ("memory-safe") {
             // One word store: `size` bytes of value, then 32 - size zero bytes
@@ -440,6 +453,8 @@ library MandateCodec {
 
     /// @dev `u16` length (its low 16 bits, as the `uint16` cast of the previous
     /// encoder), then the string's bytes copied straight from calldata.
+    // Reviewed assembly (Phase 6R.2B, docs/phase-6r2b-report.md §assembly review): one word store and one `calldatacopy` of exactly the string's bytes, inside the reservation.
+    // slither-disable-next-line assembly
     function _putString(uint256 p, string calldata s) private pure returns (uint256) {
         uint256 len = bytes(s).length;
         assembly ("memory-safe") {
@@ -452,6 +467,8 @@ library MandateCodec {
     }
 
     /// @dev `PARTY_HEAD`, then the address as 40 lowercase hex digits.
+    // Reviewed assembly (Phase 6R.2B, docs/phase-6r2b-report.md §assembly review): three word stores inside the reservation.
+    // slither-disable-next-line assembly
     function _putParty(uint256 p, address party) private pure returns (uint256) {
         uint256 a = uint160(party);
         // Digits of the high 16 address bytes fill one word; digits of the low
@@ -503,6 +520,11 @@ library MandateCodec {
         }
     }
 
+    /// @dev Masks keeping the low half of every 128-bit and every 64-bit lane,
+    /// for `_hexDigits`. Written as products so no literal carries long zero runs.
+    uint256 private constant SPREAD_64 = uint256(type(uint64).max) * (1 | (1 << 128));
+    uint256 private constant SPREAD_32 = uint256(type(uint32).max) * (1 | (1 << 64) | (1 << 128) | (1 << 192));
+
     /// @dev The low 16 bytes of `value` as 32 lowercase hex digits, one per
     /// byte, most significant first (`Strings.toHexString`'s digits).
     ///
@@ -515,8 +537,8 @@ library MandateCodec {
     function _hexDigits(uint256 value) private pure returns (uint256 digits) {
         unchecked {
             uint256 x = value & type(uint128).max;
-            x = (x | (x << 64)) & 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff;
-            x = (x | (x << 32)) & 0x00000000ffffffff00000000ffffffff00000000ffffffff00000000ffffffff;
+            x = (x | (x << 64)) & SPREAD_64;
+            x = (x | (x << 32)) & SPREAD_32;
             x = (x | (x << 16)) & 0x0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff;
             x = (x | (x << 8)) & 0x00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff;
             x = (x | (x << 4)) & 0x0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f;

@@ -917,6 +917,9 @@ detector classes**, all in `contracts/src`. Disposition:
 | S-10 | `unused-return` | `GateArithmetic.notionalBounds`: low limb of `Math.mul512` | **Intentional, suppressed with reason.** Only the high limb determines whether the quotient fits `uint256`; the following `mulDiv` and `mulmod` independently consume the full product for quotient and remainder |
 | S-11 | `unused-return` | `_checkMaxNotional`: floor of `notionalBounds` | **Intentional, suppressed with reason (6R.1).** The rounded-up product alone is the exact criterion against an integer bound; the floor carries no further information |
 | S-12 | `cyclomatic-complexity` | `_checkEconomics` (12) | **Fixed (6R.1).** The M-1 check first pushed it over the threshold; the `maxNotional` rule now lives in `_checkMaxNotional`, which also keeps it reviewable on its own |
+| S-13 | `assembly` ×8 | `MandateCodec`: `isIdentifier`, `isIdentifierBytes`, `compareEncoded`, `_alloc`, `_seal`, `_putUint`, `_putString`, `_putParty` | **Intended, suppressed with reason (6R.2B).** The word-level identifier readers and the single-buffer encoder. Each block is a few loads or stores whose bounds are documented beside it, reviewed in [phase-6r2b-report.md](phase-6r2b-report.md) (assembly review), differentially tested against the pre-optimization code, and mutation-tested |
+| S-14 | `divide-before-multiply` ×2 (Medium) | `MandateCodec` constants: `LANES = type(uint256).max / 0xff` then `0x80 * LANES` | **Fixed (6R.2B), never a defect.** The division is exact (2²⁵⁶ − 1 = 0xff × 0x0101…01) and constant-folded; `LANES` is now written as its literal |
+| S-15 | `too-many-digits` ×3 | `MandateCodec`: separator mask and two nibble-spreading masks | **Fixed (6R.2B).** The separator mask is spelled as its five bits `(1 << 0x2d) \| …`, the two masks as products; the runtime code is unchanged |
 
 The fresh Phase 6R run initially found two `uninitialized-local` diagnostics for
 Solidity-zeroed memory structs and S-10. The structs are now explicitly
@@ -943,6 +946,12 @@ not flagged. Every suppression is an inline `slither-disable-next-line` beside a
 comment giving the reason, so the reasoning travels with the code. forge-lint
 reports nothing in `contracts/src`; test doubles are excluded from linting
 because they deliberately do what lints forbid.
+
+**Phase 6R.2B run.** The optimized codec first produced 13 results: S-13 (8),
+S-14 (2) and S-15 (3). After the fixes and the S-13 suppressions the normal run
+analyzed **20 contracts with 101 detectors and reported 0 results**;
+`--show-ignored-findings` reports **20 reviewed results**: the 12 of 6R.1a plus
+S-13 (8). No suppression was added for any Low, Medium or High detector.
 
 ## 15. Threat model
 
