@@ -13,8 +13,9 @@
 5. [Lineage validity](#5-lineage-validity)
 6. [Delegation validity](#6-delegation-validity)
 7. [Revocation and expiry](#7-revocation-and-expiry)
-8. [Shape of the authority graph](#8-shape-of-the-authority-graph)
-9. [What is deferred](#9-what-is-deferred)
+8. [Principal policy and principal-global invariants](#8-principal-policy-and-principal-global-invariants)
+9. [Shape of the authority graph](#9-shape-of-the-authority-graph)
+10. [What is deferred](#10-what-is-deferred)
 
 ---
 
@@ -93,11 +94,11 @@ them into one numeric counter is exactly what this taxonomy exists to prevent.
 
 | Kind | Examples | Enforced by |
 | --- | --- | --- |
-| **Set membership** | allowed domains, markets, assets, venues, action types, recipients, enforcement adapters | coverage check per action |
+| **Set membership** | allowed domain modules (each an exact `ModuleRef`), markets, assets, venues, action types, recipients, enforcement adapters | coverage check per action |
 | **Boolean right** | `OPEN_RISK`, `REDUCE_RISK`, `TRANSFER_OUT`, `DELEGATE` | coverage check per action |
 | **Per-action bound** | max order notional, max order leverage, max slippage bps, min credit | coverage check against the action's own parameters |
 | **Temporal** | the grant's validity window; optional per-domain trading windows | lineage validity and coverage |
-| **Ledger dimension** | capital 1,200 USDG; 50 actions; 0.5 BTC position; 5,000 USD committed BTC notional | ledger reservation at every node on the lineage |
+| **Ledger dimension** | capital 1,200 USDG; 50 actions; 0.5 BTC position; 5,000 USD committed BTC notional | ledger reservation at every node on the charging path: the lineage, then the principal policy |
 | **State invariant** | health factor ≥ 1.5; account leverage ≤ 3x; marked BTC exposure ≤ 20,000 USD | invariant evaluation over projected state |
 | **State policy** | admitted sources and maximum age per state kind | state admission |
 
@@ -143,7 +144,7 @@ both.
 **Ledger dimensions are enforced along the path, not merged.** A reservation by
 a leaf places a leg at the leaf and at every ancestor granting the same
 dimension and scope, all or nothing
-([authority-ledger.md §5](authority-ledger.md#5-path-charging)). A child's
+([authority-ledger.md §6](authority-ledger.md#6-charging-paths)). A child's
 limit is a ceiling, not a carve-out: two siblings may each be granted 1,000
 USDG under a parent with 1,200, and the parent's own ledger entry stops them
 consuming 2,000 together ([examples.md §C](examples.md#c-multi-agent-shared-authority)).
@@ -210,15 +211,16 @@ the intent. It is valid at decision time `t` iff, for every node:
    each node's depth obeys §4; the total depth is also bounded by a Core
    constant fixed in 7B, so lineage resolution is bounded work;
 
-and the actor is the leaf's `holder`, and the intent's `principal` equals the
-root's.
+and the actor is the leaf's `holder`, the intent's `principal` equals the
+root's, and the principal has a registered principal policy (§8) at that ledger
+version.
 
 Failure reasons are distinct, because the operational responses differ:
 `AUTHORITY_UNKNOWN` (a node is not in the ledger), `AUTHORITY_SIGNATURE_INVALID`,
 `AUTHORITY_ISSUER_MISMATCH`, `AUTHORITY_PRINCIPAL_MISMATCH`,
 `AUTHORITY_NOT_YET_VALID`, `AUTHORITY_EXPIRED`, `AUTHORITY_REVOKED`,
-`AUTHORITY_DEPTH_EXCEEDED`, `ACTOR_NOT_HOLDER`. The reason identifies the node
-that failed.
+`AUTHORITY_DEPTH_EXCEEDED`, `ACTOR_NOT_HOLDER`, `PRINCIPAL_POLICY_MISSING`.
+The reason identifies the node that failed.
 
 **Where grants live.** Grants are registered to the principal's ledger before
 they can be used; an action cannot introduce a grant inline. Registration runs
@@ -286,13 +288,87 @@ Revocation {
   specified exception (reduce-only, venue-enforced) is an open question, not a
   v1 behaviour.
 
-## 8. Shape of the authority graph
+## 8. Principal policy and principal-global invariants
 
-- **A forest of trees per principal.** Every node has exactly one parent. A
-  principal may have several roots; each root's tree has its own ledger
-  dimensions, and two roots never share a dimension. "Global" authority is
-  therefore always the root of one tree; a principal who wants one cap across
-  everything issues one root and delegates from it.
+A principal with several roots has granted several independent authorities.
+That must not be read as an implicit aggregate grant — Root A allowing 7,000 USD
+of BTC exposure and Root B allowing 5,000 does not mean "the principal allows
+12,000" — and it must not leave the aggregate unbounded by accident either. Core
+v1 therefore separates two things:
+
+| | **Root-local terms** | **Principal-global invariants** |
+| --- | --- | --- |
+| Meaning | authority granted through one delegation tree | constraints over the principal's aggregate economic state, whichever root or path an action uses |
+| Examples | Bot A may consume ≤ 7,000 USD; Bot B ≤ 5,000 USD; SpotAgent trades only AAPL | BTC gross exposure ≤ 10,000 USD; total capital allocated ≤ 100,000 USDG; single-issuer exposure ≤ 15 %; aggregate debt ≤ 20,000 USDC |
+| Carried by | authority grants (§2) | the **principal policy** |
+| Grants authority? | yes | **no** — it only constrains |
+| Composes by | the meet and path charging along one lineage | applying to every action of the principal, as the last node of every charging path |
+
+### 8.1 The principal policy object
+
+**Decision:** principal-global invariants are a distinct canonical Core object,
+the principal policy — not terms of a root grant, and not a super-root.
+
+```text
+PrincipalPolicy {
+  version
+  principal          PartyId
+  sequence           uint64                strictly greater than the current policy's
+  globalDimensions   list<DimensionGrant>  principal-global ledger dimensions
+  globalInvariants   list<InvariantRef>    principal-global state invariants
+  globalStatePolicy  StatePolicy           combined with each lineage's; the tighter bound wins
+  nonce              uint64
+}
+PolicyId  = H("mandate-core/v1/principal-policy", PrincipalPolicy)
+signature = the principal's signature over PolicyId, under a Core signing domain
+            distinct from the grant domain, so neither can stand in for the other
+```
+
+Why not the alternatives:
+
+- **Terms of a root grant** bind only that root's tree. A global limit placed on
+  Root A says nothing about Root B, which is the escape this section closes.
+- **A super-root** that every root descends from would collapse the forest into
+  one tree, force all authority through one node, and — because a root grants —
+  turn a constraint into a grant. The principal policy grants nothing, and no
+  action is ever taken "under" it.
+
+### 8.2 Rules
+
+- **Mandatory and explicit.** The ledger refuses the first root grant of a
+  principal until a principal policy is registered, and lineage validity
+  requires one (`PRINCIPAL_POLICY_MISSING`). The policy may be empty. An empty
+  policy is the principal's explicit statement that its roots are independent;
+  Core never infers an aggregate limit, and never infers an aggregate grant.
+- **Applies to every action (AUTH-GLOBAL-1).** Every decision evaluates
+  lineage-local authority *and* the principal policy: its dimensions are legs on
+  every charging path ([authority-ledger.md §6](authority-ledger.md#6-charging-paths)),
+  its invariants are evaluated over `S ⊕ Pending(L)` — all of the principal's
+  admitted state and every pending reservation, under every root — and its state
+  policy tightens every lineage's. An action cannot escape a principal-global
+  invariant by using a different authority root.
+- **Counts what already exists.** A principal-global dimension introduced by a
+  new policy is initialized, in the same ledger commit, from the ledger's open
+  position lots and active reservations that match it, so adding
+  "BTC ≤ 10,000" while 6,000 is already held starts at 6,000, not 0.
+  Replacing a policy keeps the consumption history of every dimension it keeps
+  (same `dimensionId`, kind, unit and scope): consumption is a fact, not a term.
+- **Replaceable only by the principal, never revoked.** A new signed policy
+  with a higher `sequence` replaces the current one from the ledger version
+  that registers it. Tightening never releases a reservation; if occupancy
+  already exceeds a tightened limit the dimension is `BREACHED` and blocks
+  increases. Loosening is the principal's prerogative and is receipted like
+  every other policy change. Agents cannot register, replace or narrow a policy.
+- **Not future-scheduled in v1.** A policy takes effect at its registration
+  version.
+
+## 9. Shape of the authority graph
+
+- **A forest of trees per principal, under one principal policy.** Every node
+  has exactly one parent. A principal may have several roots. Each root's tree
+  has its own ledger dimensions, and two roots never charge each other's; every
+  tree is charged by the principal policy's principal-global dimensions and
+  checked against its principal-global invariants (§8).
 - **No multi-parent nodes in v1.** A node that draws on two parents' budgets
   makes "child ⊆ parent" ambiguous (which parent?) and makes path charging a
   DAG problem. Deferred.
@@ -312,11 +388,11 @@ Principal (root: MandateId)
 A Perp Agent reservation of 600 USDG capital places legs at R1, P1 and the root
 — whichever of them grant a `capital` dimension — and fails if any leg fails.
 
-## 9. What is deferred
+## 10. What is deferred
 
 | Deferred | Why |
 | --- | --- |
-| Multi-parent nodes, pooled budgets across trees | Ambiguous subset semantics; DAG charging |
+| Multi-parent nodes, pooled budgets across trees | Ambiguous subset semantics; DAG charging. Aggregate *constraints* across trees are the principal policy (§8); aggregate *authority* across trees is not modelled |
 | Threshold or multi-signature issuers | Needs a signature-scheme decision beyond the kernel's single `eip712-secp256k1` |
 | Contract principals (ERC-1271) | The Phase 6 gate does not support them; a Core grant could, but its EVM enforcement could not |
 | Key rotation with continuous identity | Needs an identity layer; v1 uses re-delegation |

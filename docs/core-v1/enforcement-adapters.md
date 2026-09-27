@@ -45,7 +45,10 @@ Conceptual interface; the typed form is Phase 7B/7F:
 ```text
 EnforcementAdapter {
   descriptor() → {
-    adapterId, version, domains
+    ref                     AdapterRef { adapterId, version, adapterDigest }: adapterDigest content-addresses
+                            the descriptor and the observation rule's semantics, bound into every
+                            reservation and receipt under the same rule as a domain module (DOM-2)
+    domains
     enforcementPoint        what refuses an unauthorized action
     credential              what credential it accepts, and who holds it
     agentCredentials        what the agent holds (must not produce artifacts: CRED-1)
@@ -55,10 +58,13 @@ EnforcementAdapter {
     attemptDedup            how several attempts under one reservation are kept within its worst case (EXEC-4)
     revocationPath          how Core revocation reaches the enforcement point, and its latency
   }
-  bind(authorization, intent, admitted state)  → ExecutionBinding          pure
-  issue(binding)                                → EnforcementArtifact     custody; refuses unless the
-                                                                            reservation is ACTIVE at this generation
-                                                                            and t < attemptCeiling
+  bind(authorization, intent, admitted state)  → ExecutionBinding          pure; carries the reservation's
+                                                                            ModuleRef and AdapterRef
+  issue(binding)                                → EnforcementArtifact     custody; refuses unless ADMIT_ATTEMPT
+                                                                            committed: reservation ACTIVE at this
+                                                                            generation, t < attemptCeiling, lineage
+                                                                            valid, issue-time state admission passed
+                                                                            (reservations-reconciliation §10a)
   observe(evidence)                             → Observation | NONE      pure rule over read evidence
   revoke(scope)                                 → enforcement-side revocation request
 }
@@ -106,7 +112,7 @@ What non-bypassability does **not** cover, stated per adapter below:
   ([execution-gate.md §16](../execution-gate.md#16-residual-risks));
 - a venue that misbehaves can do anything its custody of collateral allows;
 - activity by the principal outside Mandate is not governed by it (it appears as
-  ledger drift, [authority-ledger.md §9](authority-ledger.md#9-overrun-drift-and-adjustment)).
+  ledger drift, [authority-ledger.md §11](authority-ledger.md#11-drift)).
 
 ## 4. Adapter catalogue
 
@@ -145,6 +151,15 @@ fresh handoff state); the kernel's replay record for `M_g` is `RESERVE`d; the
 attempt is admitted with `admitAttemptUnderReservation`; the agent signs the
 commitment it returns. Nothing in MCE v2, Candidate V3, the gate or the kernel
 changes.
+
+**Issue-time state on this adapter.** The kernel's mandatory fresh handoff
+verification ([ADR 0016](../adr/0016-pipeline-time-and-handoff-freshness.md)) is
+already an issue-time revalidation of the kernel's state inputs, and it runs
+before any artifact exists. The dependencies that must hold at execution are
+enforced by the gate itself, so they are `ENFORCED_BY_ARTIFACT`: the pinned
+fixture price and market table, chain time, and the measured balance deltas.
+Real-market price, halt and epoch state would not be, which is why
+`REAL_MARKET` remains refused.
 
 **Custody of the principal-side key is the adapter's central open question**,
 because the gate requires `ECDSA recover == mandate.principal` and spends that
@@ -248,9 +263,15 @@ recipient set is the authority term that matters most.
   client-order-id uniqueness), or by one live attempt at a time with the
   previous attempt's non-execution proven before the next is issued.
 - **EXEC-5 — issuance is conditional on the ledger.** `issue` refuses unless
-  the reservation is `ACTIVE` at the authorization's generation and
-  `t < attemptCeiling`. A quarantined, closed or superseded reservation issues
-  nothing.
+  `ADMIT_ATTEMPT` has committed: the reservation is `ACTIVE` at the
+  authorization's generation, `t < attemptCeiling`, the lineage is still valid
+  and issue-time state admission passed. A quarantined, closed or superseded
+  reservation, or a revoked lineage, issues nothing.
+- **EXEC-6 — no artifact outlives the state it depends on.** An artifact's
+  validity ends no later than the expiry of every `BOUNDED_BY_FRESHNESS` state
+  binding of its reservation. Every other execution-time dependency is either
+  enforced by a named artifact field the enforcement point checks, or declared
+  pre-trade only ([action-state-model.md §5.5](action-state-model.md#55-state-bindings-freshness-modes-and-execution-dependence)).
 
 ## 6. Summary
 

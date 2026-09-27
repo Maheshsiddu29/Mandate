@@ -9,7 +9,8 @@
 > examples, not evidenced facts.
 
 Each example ends with the ambiguities it exposed and what changed in the model
-because of them.
+because of them. Examples A–E were written for Phase 7A; F–J were added by the
+Phase 7A hardening checkpoint.
 
 Notation: `available = limit − occupied − reserved-remaining`; limits are
 inclusive (a request equal to what is available passes), matching the gate's
@@ -33,7 +34,7 @@ Its `settle` gave a `CAPITAL` contribution equal to the measured `actualDebit`:
 matches no dimension. Capital occupied: 800.
 
 **Proposal.** Venue L, `BTC-PERP@L`, long 0.03 BTC at limit 100,000.00 USD/BTC,
-leverage 5x, isolated margin. The `perp@1` module returns:
+leverage 5x, isolated margin. The `perp-policy@1` module returns:
 
 | Contribution | Kind | Amount | Scope | Required |
 | --- | --- | ---: | --- | --- |
@@ -209,7 +210,7 @@ margin 400 (0.02 BTC at 5x), which passes and leaves R with 10.
 | Term | Value |
 | --- | --- |
 | window | 2026-10-01T00:00Z → 2027-01-01T00:00Z |
-| domains / adapters | `perp@1`, `evm-spot@1` / `venue-signer-L@1`, `evm-gate@1` |
+| modules / adapters | `perp-policy@1`, `evm-spot@1` (exact `ModuleRef`s) / `venue-signer-L@1`, `evm-gate@1` |
 | markets | `BTC-PERP@L`, `ETH-PERP@L`, `fAAPL@evm` |
 | recipients | I's EVM account, I's venue-L sub-account |
 | rights | `OPEN_RISK`, `REDUCE_RISK`, `DELEGATE`, depth 2 |
@@ -238,7 +239,7 @@ reported:
 | omits `markedExposure` | `DELEGATION_DROPS_INVARIANT` |
 | `capital` 8,000 | `DELEGATION_WIDENS_LIMIT` |
 
-**D2 (good): T → P.** Window ends 2026-12-01; domain `perp@1`; adapter
+**D2 (good): T → P.** Window ends 2026-12-01; module `perp-policy@1`; adapter
 `venue-signer-L@1`; market `BTC-PERP@L`; recipient I's L sub-account; rights
 `OPEN_RISK`, `REDUCE_RISK`; depth 0; leverage bound 3x; `accountLeverage ≤ 3x`;
 `markedExposure ≤ 20,000 USD` restated; `markPrice` max age 5 s; `capital`
@@ -308,3 +309,228 @@ generation 2) or derive a new `M_2`? A new `M_2`. The kernel record for `M_1`
 then only ever sees one reservation. `M_1`'s own `expiresAt` makes it provably
 dead at a final block. Nothing depends on the kernel and Core counters agreeing
 ([reservations-reconciliation.md §11](reservations-reconciliation.md#11-correspondence-with-the-phase-6-replay-machine)).
+
+## F. External state changes after the ledger CAS
+
+**Setup.** Principal policy: `core.markedExposure(canonical BTC, gross) ≤
+20,000 USD`, an `EVALUATED` principal-global invariant. The `perp-policy@1`
+module's state requirements:
+
+| State kind | Freshness | At issue | At execution |
+| --- | --- | --- | --- |
+| `perp.markPrice` | `AGE` 5 s | `RECHECK` | `ENFORCED_BY_ARTIFACT(limitPrice)` |
+| `perp.account` | `SEQUENCE` ≥ ledger watermark | `WITHIN_POLICY` | `NOT_REQUIRED` |
+
+The principal holds 0.15 BTC long on venue L. PerpAgent proposes buying 0.04
+BTC-PERP at a limit of 101,000.00 USD/BTC.
+
+| Time | Event | Ledger | Mark |
+| --- | --- | --- | --- |
+| T0 = 1000 | reader admits account (sequence 1,040, 0.15 BTC) and mark 100,000.00, both observed at 1000 | v57 | 100,000 |
+| T1 | projection: `(0.15 + 0.04) × 100,000 = 19,000.00 ≤ 20,000` → `HOLDS` | v57 | |
+| T2 = 1001 | decision + `RESERVE` commit by CAS at v57 → v58; bindings recorded | **v58** | |
+| T3 = 1003 | the venue's mark moves to 106,000.00 | v58 | 106,000 |
+| T4 = 1004 | adapter prepares the order. The mark binding says `RECHECK`: fresh mark 106,000.00 admitted; revalidation over `S_fresh ⊕ Pending(L@v58)`, which already contains this reservation's 0.04: `0.19 × 106,000 = 20,140.00 > 20,000` → `VIOLATED` | v58 | |
+| T4 | no attempt was ever admitted → `CLOSE`, `FAILED`, basis `NEVER_ISSUED`, committed by CAS with the failed revalidation's record; everything released; intent `UNUSED` | **v59** | |
+
+At T2 the decision was serializable with every other Mandate decision and
+correct on the state it bound. At T3 it became wrong about the world, and CAS
+could not have known. The ledger stayed consistent throughout, and execution
+still failed closed. Nothing reached the venue, and the closing receipt names
+the binding that failed revalidation and the fresh mark that replaced it.
+
+**Had the mark moved only to 104,000.00**, revalidation would give
+`0.19 × 104,000 = 19,760.00`, which holds. `REVALIDATE` commits, `ADMIT_ATTEMPT`
+follows, and the order is issued with the new bindings. After T4 the 101,000.00
+limit price is what bounds execution (`ENFORCED_BY_ARTIFACT`). The marked-exposure
+invariant was a pre-trade condition; if the mark keeps rising after the fill,
+marked exposure can exceed 20,000 without any Mandate action having been
+wrong.
+
+**Had the module declared `WITHIN_POLICY` for the mark,** the T0 mark would
+still be 4 seconds old at T4, within `AGE 5 s`, and the order would be issued
+without seeing 106,000. That is the policy doing what it says, not a bug. It is
+why a module declares `RECHECK` for state that moves in seconds, and why the
+declaration is on the reservation and in the receipt.
+
+**Ambiguity exposed and fixed.** Before hardening, a reservation whose
+revalidation failed had no way to close. With no artifact, the adapter's
+non-execution rule had nothing to observe. `NEVER_ISSUED` closes it, and its
+evidence is the ledger itself: no `ADMIT_ATTEMPT` was ever committed for the
+generation ([reservations-reconciliation.md §4](reservations-reconciliation.md#4-reservation-state-machine)).
+
+## G. Multiple roots, one principal-global invariant
+
+**Setup.**
+
+```text
+Principal policy P    btc-notional-global   NOTIONAL, USD (2), CAPACITY, AS_CHARGED,
+                                            scope canonical BTC, limit 10,000.00
+Root A → SpotAgent    btc-notional          limit 7,000.00
+Root B → PerpAgent    btc-notional          limit 5,000.00
+```
+
+SpotAgent already holds 6,000.00 of committed BTC notional under Root A. Its lots
+are charged to Root A's dimension and to the policy's.
+
+**PerpAgent requests +5,000.00** (0.05 BTC-PERP at 100,000.00). Charging path:
+PerpAgent's node → Root B → P.
+
+| Node | Dimension | Limit | Occupied | Requested | Available | Outcome |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| Root B | `btc-notional` | 5,000.00 | 0 | 5,000.00 | 5,000.00 | passes |
+| P | `btc-notional-global` | 10,000.00 | 6,000.00 | 5,000.00 | 4,000.00 | **fails** |
+
+**Result: REJECT**, `LEDGER_LIMIT_EXCEEDED {node: PolicyId(P), dimension:
+btc-notional-global, requested: 5,000.00, available: 4,000.00}`. The projected
+principal-global exposure would have been 11,000.00. Root B's local limit passed, and
+that does not matter. At 4,000.00 the request passes, leaving the policy at
+exactly 10,000.00.
+
+**Variants.**
+
+- *Empty principal policy.* Then 11,000.00 passes. That is the aggregate the
+  principal's two independent grants allow, and the principal said so
+  explicitly by registering an empty policy. Nothing is ever read as a
+  12,000.00 grant either: no single action can use more than its own root
+  allows.
+- *No principal policy at all.* Nothing is authorized under either root
+  (`PRINCIPAL_POLICY_MISSING`). The first root could not even have been
+  registered.
+- *Policy introduced after SpotAgent's 6,000.00 was already held.*
+  `btc-notional-global` starts at 6,000.00, from the open lots, not at 0
+  (AUTH-GLOBAL-2). Otherwise adding a limit would have granted 10,000.00 of fresh
+  headroom.
+- *An `EVALUATED` global invariant* (marked BTC exposure, single-issuer share) is
+  evaluated over all of the principal's admitted state and every pending
+  reservation, under both roots, in the same way.
+
+**Ambiguity exposed and fixed.** Phase 7A said "two roots never share a
+dimension" and "global authority is always the root of one tree". That was true
+of grants, and it left principal-wide limits inexpressible across roots. It
+is now the principal policy: a separate signed object that grants nothing and
+is the last node of every charging path
+([authority-model.md §8](authority-model.md#8-principal-policy-and-principal-global-invariants)).
+
+## H. Profit does not mint authority
+
+**Setup.** Root R: `capital`, `CAPITAL` in USDG (6), `CAPACITY`, restoration
+`AS_CHARGED`, `GRANTED` 10,000.000000.
+
+| Step | Event | G | C | R | Rs | Available |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 0 | — | 10,000 | 0 | 0 | 0 | 10,000 |
+| 1 | buy 20 fAAPL authorized; worst-case debit 4,010 reserved | 10,000 | 0 | 4,010 | 0 | 5,990 |
+| 2 | buy settles: debit (cost basis) 4,000; 10 released; lot {20 units, charged 4,000} | 10,000 | 4,000 | 0 | 0 | 6,000 |
+| 3 | sell all 20 authorized (a decreasing action; no capital reserved) | 10,000 | 4,000 | 0 | 0 | 6,000 |
+| 4 | sell final: proceeds 5,200; lot closed; `RESTORE` 4,000 | 10,000 | 4,000 | 0 | 4,000 | **10,000** |
+
+`available = 10,000 − 4,000 − 0 + 4,000 = 10,000`, **not 11,200**. The 1,200 is
+realized profit and appears as a `PNL` quantity in the close receipt. It is not
+authority. `GRANTED` never moved. For the agent to deploy 11,200, the principal
+must sign a grant (or a policy) saying so (LEDGER-GRANT-1).
+
+**Variants.**
+
+- *Selling 10 of the 20 units* for 2,600 restores `4,000 × 10 / 20 = 2,000`.
+  Available is 8,000.
+- *Selling all 20 at a loss* for 3,000 also restores 4,000. `capital` bounds
+  deployment, not loss. A loss limit is a separate `BUDGET` of realized `PNL`
+  loss, restoration `NONE`.
+- *A different agent closes the position.* The restoration goes to the legs the
+  lot was charged to, i.e. SpotAgent's path. It never goes to the closer's
+  path, so capacity cannot be laundered between siblings (LEDGER-RESTORE-1).
+- *Different dimensions restore differently.* A position-size dimension restores
+  20 units (`UNITS`). An action-count budget does not restore (`NONE`). A
+  daily-spend budget does not restore either, but a new day opens a fresh signed
+  window (`EPOCH`).
+
+## I. Domain-module version binding
+
+**Setup.** Two versions of the perp module, each registered with its own
+content-addressed manifest:
+
+| | `perp-policy` v1, digest `D1` | `perp-policy` v2, digest `D2` |
+| --- | --- | --- |
+| A pending order counts as | its full notional at the limit price | the venue-defined reserved notional: only the part that increases the position, net of an existing opposite position |
+
+The account is short 0.01 BTC. The proposal is to buy 0.04 BTC-PERP at 100,000.00.
+`btc-notional` has 3,500.00 available.
+
+| Module | Contribution | Decision |
+| --- | --- | --- |
+| v1 (`D1`) | `0.04 × 100,000 = 4,000.00` | REJECT, `LEDGER_LIMIT_EXCEEDED` |
+| v2 (`D2`) | `(0.04 − 0.01) × 100,000 = 3,000.00` | PASS |
+
+The mandate, action and state are identical, and the meanings differ. Hence:
+
+- the intent names its `ModuleRef`, and the grant allows only exact `ModuleRef`s.
+  Under a grant allowing only `D1`, a v2 proposal is `ACTION_NOT_COVERED`
+  (module) until the principal signs a grant that allows `D2`. A module upgrade
+  never runs under a grant that did not name it;
+- under a grant allowing `D2`, the reservation records `D2` and the conforming
+  `ImplementationDigest` `I2`. If the operator later installs v3, this
+  reservation's fills are still settled by v2's `settle`. The rule that
+  reserved 3,000.00 is the rule that consumes and releases against it (DOM-2).
+  v2 cannot be removed while this reservation or its lots are open;
+- if someone patches the v2 implementation without a new version, its
+  `ImplementationDigest` is no longer registered as conforming to `D2`, and
+  Core refuses to run it (`MODULE_IMPLEMENTATION_UNREGISTERED`);
+- the decision receipt carries `{perp-policy, 2, D2}` and `I2`. An auditor
+  fetches manifest `D2` by digest, reads the netting rule, and reproduces the
+  3,000.00.
+
+Whether v2's netting is sound under PROJ-1 is a review question for v2 itself.
+If the opposite position could be closed by another pending order, crediting it
+would be optimistic. Version binding does not make a module right. It makes it
+visible which module was used, and it stops that module being swapped out
+halfway through an action's lifecycle.
+
+## J. Drift correction
+
+**Setup.** Account L-sub on venue L. The ledger's lots hold 0.05 BTC-PERP with
+committed notional 5,000.00 USD, charged to Root R's `btc-notional` (limit
+8,000.00; available 3,000.00) and to the principal policy's
+`btc-notional-global` (limit 10,000.00). The module's drift policy: tolerance 0
+for position size; evidence must be `VERIFIED` or better and within the
+account-state freshness requirement; adverse drift is valued at the admitted
+mark (100,000.00).
+
+**Adverse drift.** An admitted account snapshot (sequence 2,210) shows 0.06 BTC.
+The ledger shows 0.05.
+
+| Effect | Root `btc-notional` | Policy `btc-notional-global` |
+| --- | ---: | ---: |
+| before: occupied / available | 5,000 / 3,000 | 5,000 / 5,000 |
+| `DRIFT_ADVERSE` +0.01 BTC → +1,000.00 consumed | 6,000 / **2,000** | 6,000 / **4,000** |
+
+The difference is charged immediately, and an unattributed lot of 0.01 BTC
+records the charge, so a final close of it later restores to these same legs.
+The account is flagged `DRIFTED`. Had L-sub been declared Mandate-exclusive,
+the flag would also block risk increases on it (`DRIFT_DETECTED`), because
+unexplained activity on an account only adapter custody can touch is evidence
+that CRED-1 may be broken. No available authority went up (DRIFT-1).
+
+**Favorable drift.** Instead, an admitted snapshot shows 0.03 BTC; the ledger
+shows 0.05.
+
+| Step | Event | Root occupied / available |
+| --- | --- | ---: |
+| 1 | `DRIFT_PENDING` (0.02 BTC less than recorded); no balance effect | 5,000 / 3,000 |
+| 2a | the next snapshot shows 0.05 again (the first came from a lagging replica): the pending record resolves as no drift | 5,000 / 3,000 |
+| 2b | or: a venue liquidation event for 0.02 BTC arrives at the venue's final level, naming the position → `DRIFT_CORRECT` closes 0.02 of the lot and restores `5,000 × 0.02 / 0.05 = 2,000.00` | 3,000 / **5,000** |
+
+In branch 2a, a stale or wrong snapshot manufactured no capacity. In branch 2b,
+capacity comes back only on final evidence, and at the amount charged, not at
+any liquidation price (DRIFT-2, LEDGER-RESTORE-1). Between step 1 and step 2b,
+the agent cannot use the 2,000.00 that may in fact be free. That is the liveness
+cost of the conservative rule, and it is the intended trade.
+
+**Ambiguity exposed and fixed.** Phase 7A had a generic `ADJUST` that could
+raise or lower occupancy "to match evidence", and it left open who could perform
+it. That was a symmetric path, and the favorable direction of it could mint
+capacity from a stale snapshot. It is replaced by the asymmetric
+`DRIFT_ADVERSE` / `DRIFT_PENDING` / `DRIFT_CORRECT` rules. No privileged
+correction function exists (DRIFT-3). A future manual path would need signed
+authority, evidence, a receipt and audit, and is deferred.
+

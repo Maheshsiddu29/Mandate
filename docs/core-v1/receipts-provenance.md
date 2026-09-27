@@ -42,10 +42,12 @@
 | Kind | Emitted at | Chained to |
 | --- | --- | --- |
 | `GrantReceipt` | `REGISTER_GRANT`, accepted or refused | the principal's ledger chain |
+| `PolicyReceipt` | `REGISTER_POLICY`, accepted or refused | the principal's ledger chain |
 | `RevocationReceipt` | `REVOKE` | the principal's ledger chain |
 | `DecisionReceipt` | every authorization decision, PASS or REJECT | the ledger chain; on PASS, starts the reservation's chain |
-| `TransitionReceipt` | `ADMIT_ATTEMPT`, every applied or refused observation, `QUARANTINE`, `ADJUST` | the previous receipt of the same reservation |
-| `CloseReceipt` | `CLOSE` | the previous receipt of the same reservation |
+| `TransitionReceipt` | `REVALIDATE` (passed or failed), `ADMIT_ATTEMPT`, every applied or refused observation, `QUARANTINE` | the previous receipt of the same reservation |
+| `CloseReceipt` | `CLOSE`, including `NEVER_ISSUED` | the previous receipt of the same reservation |
+| `DriftReceipt` | `DRIFT_ADVERSE`, `DRIFT_PENDING`, `DRIFT_CORRECT`, and refused drift evidence | the principal's ledger chain |
 
 Refused observations (`STALE_RESERVATION_OBSERVATION`, `CONFLICT`,
 `OBSERVATION_INVALID`) are receipted too: "who tried to restore this
@@ -82,17 +84,19 @@ one of them.
 ```text
 DecisionReceipt {
   header
-  action          { actionDigest, actor, principal, authority, domain, actionType,
-                    adapter, target, resources, validFrom, expiresAt }
+  action          { actionDigest, actor, principal, authority, actionType,
+                    target, resources, validFrom, expiresAt }
   lineage         list<AuthorityId>, leaf to root
+  policy          PolicyId of the principal policy in force
   effective       digest of the computed effective authority (the meet)
-  domainModule    { id, version }
-  state           list<{ stateDigest, sourceId, trustClass, observedAt, sequence }>
+  module          { ModuleRef, ImplementationDigest }                       DOM-2
+  adapter         AdapterRef
+  state           list<StateBinding>                                        STATE-4
   pending         { ledgerVersion, pendingSetDigest }
   coverage        list<{ term, outcome, reasonCode }>                       failures only on PASS: none
   invariants      list<InvariantResult>
   contributions   list<Contribution>                                        typed worst case
-  availability    list<{ node, dimensionId, requested, available, limit, outcome }>
+  availability    list<{ node, dimensionId, requested, available, limit, outcome }>   node: AuthorityId or PolicyId
   decision        PASS | REJECT
   reasonCodes     sorted, deduplicated
   reservation     { reservationId, generation, attemptCeiling } | NONE
@@ -106,12 +110,15 @@ DecisionReceipt {
 TransitionReceipt {
   header
   reservationId, generation
-  transition      ADMIT_ATTEMPT | APPLY | QUARANTINE | ADJUST
+  module          ModuleRef                                                 identical to the decision's
+  transition      REVALIDATE | ADMIT_ATTEMPT | APPLY | QUARANTINE
+  state           list<StateBinding>, and the invariant results            REVALIDATE only
   attempt         { attemptId, bindingDigest, validUntil }                  | NONE
   observation     { observationId, sourceId, eventId, sequence, observedAt,
                     finality, status, executed, evidence refs }              | NONE
   outcome         APPLIED | DUPLICATE | STALE_RESERVATION_OBSERVATION | STALE_SEQUENCE
                   | CONFLICT | OBSERVATION_INVALID | OBSERVATION_INCONSISTENT
+                  | REVALIDATION_FAILED
   legDeltas       list<{ node, dimensionId, consumed, overrun, restored }>  typed
   remaining       list<{ node, dimensionId, available, limit }>             for every touched (node, dimension)
 }
@@ -123,11 +130,30 @@ TransitionReceipt {
 CloseReceipt {
   header
   reservationId, generation, actionDigest
-  final           { status, executed, basis, observationId }
+  module          ModuleRef                                                 identical to the decision's
+  final           { status, executed, basis, observationId | NONE }         NONE only for NEVER_ISSUED
   legs            list<{ node, dimensionId, reserved, consumed, overrun, released }>
   intentStatus    SPENT | UNUSED
   flags           OVERRUN, CONFLICT
-  remaining       list<{ node, dimensionId, available, limit }>             every lineage node, every touched dimension
+  restored        list<{ node, dimensionId, amount, lot }>                  for a decreasing action
+  remaining       list<{ node, dimensionId, available, limit }>             every charging-path node, every touched dimension
+}
+```
+
+### DriftReceipt
+
+```text
+DriftReceipt {
+  header
+  account, measure
+  direction       ADVERSE | FAVORABLE
+  event           DRIFT_ADVERSE | DRIFT_PENDING | DRIFT_CORRECT | REFUSED
+  ledgerValue     typed; what the ledger recorded
+  observedValue   typed; what the evidence showed
+  evidence        list<StateBinding>, and observation references for a correction
+  module          ModuleRef whose drift policy was applied
+  legDeltas       list<{ node, dimensionId, consumed, restored }>          empty for DRIFT_PENDING
+  remaining       list<{ node, dimensionId, available, limit }>
 }
 ```
 
@@ -138,7 +164,9 @@ CloseReceipt {
 | Who authorized this? | `DecisionReceipt.lineage` → root `GrantReceipt` → the principal and its signature |
 | Under what mandate? | the root `AuthorityId` (`MandateId`) and every `DelegationId` on the lineage |
 | Which agent proposed it? | `action.actor`, whose signature over `actionDigest` is kept with the intent |
-| Which economic state was used? | `state` (snapshot digests, sources, trust classes, times) and `pending` (the ledger version whose reservations were projected) |
+| Which economic state was used? | `state` — each `StateBinding` with source, trust class, sequence, observation time, finality and the requirement it was admitted under — any later `REVALIDATE`, and `pending` (the ledger version whose reservations were projected) |
+| Which semantics interpreted it? | `module` — the `ModuleRef` and `ImplementationDigest`, identical on every receipt of the reservation |
+| Which principal-global constraints applied? | `policy` and the `availability` rows whose node is the `PolicyId` |
 | Which invariants were checked? | `invariants`, each with observed value, bound and inputs |
 | What authority was reserved? | `contributions`, `availability` and `reservation` |
 | What exact execution was permitted? | `TransitionReceipt(ADMIT_ATTEMPT).attempt.bindingDigest` → the `ExecutionBinding` |
@@ -150,7 +178,9 @@ CloseReceipt {
 
 **RECEIPT-2: re-running `Authorize` over the objects a `DecisionReceipt`
 references — the intent, the grants, the admitted snapshots, the ledger at
-`ledgerBefore.version`, `evaluatedAt`, the Core and domain-module versions —
+`ledgerBefore.version`, the principal policy, `evaluatedAt`, the Core version and
+the module named by its `ModuleRef`, run by any implementation registered as
+conforming to that `moduleDigest` —
 produces the same decision, the same reason codes and the same reservation.**
 This is [INV-11](../mandate-design.md#16-major-invariants) carried to Core. A
 receipt whose decision cannot be reproduced from its own references indicates a

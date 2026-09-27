@@ -20,6 +20,7 @@
 8. [Late, conflicting and duplicate observations](#8-late-conflicting-and-duplicate-observations)
 9. [Worked timeline: a partial fill and a cancel](#9-worked-timeline-a-partial-fill-and-a-cancel)
 10. [Attempt ceilings, timeouts and quarantine](#10-attempt-ceilings-timeouts-and-quarantine)
+    - [10a. Issue-time state admission and revalidation](#10a-issue-time-state-admission-and-revalidation)
 11. [Correspondence with the Phase 6 replay machine](#11-correspondence-with-the-phase-6-replay-machine)
 12. [Risk-reducing exceptions](#12-risk-reducing-exceptions)
 
@@ -107,9 +108,11 @@ IntentRecord {
 Reservation {
   reservationId   H("mandate-core/v1/reservation", actionDigest, generation)
   actionDigest, generation
-  lineage         AuthorityIds, leaf to root
-  adapter         EnforcementAdapterId
-  legs            per (node, dimension): reserved, consumed, overrun, released
+  lineage         AuthorityIds, leaf to root; then the PolicyId in force at commit
+  module          ModuleRef and ImplementationDigest            fixed for the lifecycle (DOM-2)
+  adapter         AdapterRef                                    fixed for the lifecycle
+  stateBindings   list<StateBinding>                            replaced only by REVALIDATE
+  legs            per (node, dimension) on the charging path: reserved, consumed, overrun, released
   committedAt     ledger version; reservedAt: UnixSeconds
   attemptCeiling  UnixSeconds       ≤ intent.expiresAt, ≤ every lineage node's expiresAt
   attempts        bounded list of { attemptId, bindingDigest, validUntil ≤ attemptCeiling }
@@ -141,10 +144,17 @@ Reservation {
 | Transition | From | Requires | Effect |
 | --- | --- | --- | --- |
 | `RESERVE` | intent `UNUSED` | a PASS decision committed at the version it read | new reservation `ACTIVE`; legs reserved; intent `RESERVED(g+1)` |
-| `ADMIT_ATTEMPT` | `ACTIVE` | `t < attemptCeiling`; artifact `validUntil ≤ attemptCeiling`; attempt count below its bound | attempt recorded; adapter may issue it |
+| `REVALIDATE` | `ACTIVE` | fresh state admitted and every invariant `HOLDS` over it, committed by CAS at the current version (§10a) | `stateBindings` replaced |
+| `ADMIT_ATTEMPT` | `ACTIVE` | `t < attemptCeiling`; lineage still valid at `t` (not revoked, not expired); every state binding admissible at `t` (§10a); artifact `validUntil ≤ attemptCeiling` and ≤ every `BOUNDED_BY_FRESHNESS` expiry; attempt count below its bound | attempt recorded; adapter may issue it |
+| `CLOSE` never issued | `ACTIVE` | revalidation failed, or the lineage became invalid, and **no attempt was ever admitted** under this generation | `CLOSED`, status `FAILED`, basis `NEVER_ISSUED`; everything released; intent `UNUSED` |
 | `APPLY` non-final | `ACTIVE`, `QUARANTINED` | a valid observation of this generation (§5) | new fills consumed; state unchanged |
 | `APPLY` final | `ACTIVE`, `QUARANTINED` | a valid final observation at the adapter's finality level, with its complete fill set | fills consumed; remainder released; `CLOSED`; intent `SPENT` or `UNUSED` |
 | `QUARANTINE` | `ACTIVE` | reconciliation instant past `attemptCeiling` with no final observation | `QUARANTINED`; **nothing released** |
+
+`NEVER_ISSUED` is the one final outcome whose evidence is the ledger itself:
+`ADMIT_ATTEMPT` is committed before any artifact exists, so a generation with
+no `ADMIT_ATTEMPT` in the log provably has no artifact, and once it is `CLOSED`
+none can be admitted.
 
 There is no transition that releases on time, on command, or on revocation.
 **The passage of time marks a reservation as needing attention; it never
@@ -224,10 +234,15 @@ RELEASE         leg.reserved − leg.consumed               (≥ 0; RECON-1)
 - **Overrun** — a fee above the worst case, a venue over-fill, a fill after a
   cancel believed final — is recorded, never refused, and blocks further
   increases on the dimension
-  ([authority-ledger.md §9](authority-ledger.md#9-overrun-drift-and-adjustment)).
+  ([authority-ledger.md §10](authority-ledger.md#10-overrun)).
 - **Decreasing contributions** from a settled risk-reducing action produce
   `RESTORE` on `CAPACITY` dimensions at close, not before: a reduction frees
-  capacity only once it is final.
+  capacity only once it is final. What is restored is fixed by each
+  dimension's restoration rule — the amount originally charged for the closed
+  units (`AS_CHARGED`: capital at cost basis), or the units (`UNITS`) — and it
+  goes to the legs the closed position lots were charged to, never to the
+  closing actor's path. Proceeds and profit restore nothing
+  ([authority-ledger.md §4](authority-ledger.md#4-authority-vocabulary-granted-reserved-consumed-restored-available)).
 - **Release can never exceed what remains reserved** (RECON-1), because
   consumption beyond the reservation is booked as overrun, not subtracted from
   the release.
@@ -238,7 +253,10 @@ RELEASE         leg.reserved − leg.consumed               (≥ 0; RECON-1)
 | --- | --- | --- | --- |
 | Authorize | created `ACTIVE` at generation g | worst case `RESERVED` on every leg | decision and reservation in one commit at version v |
 | Reject | none | nothing | receipt only |
-| Bind / issue | attempt recorded | none | artifact valid until ≤ `attemptCeiling` |
+| Issue-time admission passes | attempt recorded (`ADMIT_ATTEMPT`) | none | bindings still admissible at `t_i`, or replaced by a passing `REVALIDATE` |
+| Issue-time revalidation fails, no attempt yet admitted | `CLOSED`, `FAILED` (`NEVER_ISSUED`) | `RELEASE` all | intent `UNUSED`; a later decision may try again on fresh state |
+| Issue-time revalidation fails, earlier attempts exist | unchanged | unchanged | the new attempt is refused; earlier attempts reconcile normally |
+| Bind / issue | artifact created | none | artifact valid until ≤ `attemptCeiling` and ≤ any `BOUNDED_BY_FRESHNESS` expiry |
 | Submit | status `SUBMITTED` | none | submission is not settlement ([design §14.1](../mandate-design.md#141-submission-is-not-settlement)) |
 | Partial fill | `ACTIVE`, fills applied | `CONSUME` the fill's actual contribution | remaining stays reserved |
 | Full fill (final) | `CLOSED`, `EXECUTED` | `CONSUME` rest; `RELEASE` price improvement | intent `SPENT` |
@@ -252,7 +270,9 @@ RELEASE         leg.reserved − leg.consumed               (≥ 0; RECON-1)
 | Retry | new reservation at g+1 | new worst case reserved | only after a zero-consumption final close |
 | Reconcile the same observation twice | unchanged | unchanged | `DUPLICATE` |
 | Observation of generation g−1 | unchanged | unchanged | `STALE_RESERVATION_OBSERVATION` |
-| Revocation of a lineage node | unchanged | unchanged | new reservations blocked; this one reconciles normally |
+| Revocation of a lineage node | unchanged | unchanged | new reservations and new attempts blocked; issued attempts reconcile normally; a generation with no admitted attempt closes `NEVER_ISSUED` |
+| Decreasing action closes (final) | `CLOSED`, `EXECUTED` | `RESTORE` on the closed lots' legs, by each dimension's restoration rule | never at proceeds |
+| Module upgraded while open | unchanged | unchanged | reconciliation keeps the reservation's `ModuleRef` (DOM-2) |
 
 ## 8. Late, conflicting and duplicate observations
 
@@ -323,6 +343,43 @@ an `OVERRUN` of its notional plus a `CONFLICT` (§8).
 - **Reservation length is a liveness choice**, as in the kernel: a short
   ceiling flags unresolved attempts sooner and lets a failed attempt be retried
   sooner; it never makes anything less safe.
+
+### 10a. Issue-time state admission and revalidation
+
+The decision's state was admitted at `t`; the artifact is created later, at
+`t_i`, and the world may have moved in between. The ledger's CAS does not see
+that (CORE-CONC-1). So before issuing any artifact, the adapter runs the
+issue-time admission rule — pure, Core-defined — over the reservation's
+`stateBindings`:
+
+1. **Lineage.** The lineage and the principal policy in force are still valid
+   at `t_i` at the current ledger version (not revoked, not expired). If not,
+   nothing is issued.
+2. **Re-admission.** Each binding whose requirement says `atIssue =
+   WITHIN_POLICY` is re-admitted at `t_i`: still fresh under its freshness
+   mode, `t_i < validUntil`, finality still sufficient, and not superseded by a
+   newer sequence of the same subject that the ledger has already applied.
+3. **Revalidation.** If any binding fails step 2, or any says `atIssue =
+   RECHECK`, the adapter fetches fresh snapshots, and Core re-runs admission,
+   projection and every lineage and principal-global invariant over
+   `S_fresh ⊕ Pending(L@v')`. The pending set already contains this
+   reservation's own worst case, which is not added again. Coverage and
+   availability are not re-run: the reservation already holds its authority.
+   The result commits as `REVALIDATE` by CAS at `v'`, because invariants read the
+   pending set.
+4. **Outcome.** Pass: `ADMIT_ATTEMPT` with the new bindings, then issue, with
+   `validUntil` no later than the attempt ceiling and any
+   `BOUNDED_BY_FRESHNESS` expiry. Fail: nothing is issued. If no attempt was
+   ever admitted under this generation, the reservation closes `FAILED` with
+   basis `NEVER_ISSUED` and releases everything. Otherwise only the new attempt
+   is refused.
+
+After issue, Core has no further opportunity to check external state. What
+holds between issue and execution is exactly what the requirement's
+`atExecution` mode says: the enforcement point's own checks, the artifact's
+expiry, or nothing beyond the pre-trade decision
+([action-state-model.md §5.5](action-state-model.md#55-state-bindings-freshness-modes-and-execution-dependence),
+[examples.md §F](examples.md#f-external-state-changes-after-the-ledger-cas)).
 
 ## 11. Correspondence with the Phase 6 replay machine
 

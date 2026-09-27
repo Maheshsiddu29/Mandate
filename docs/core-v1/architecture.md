@@ -32,6 +32,7 @@ multi-agent, multi-venue and adversarial.
 4. [Deterministic Core versus adapter behaviour](#4-deterministic-core-versus-adapter-behaviour)
 5. [The authorization pipeline](#5-the-authorization-pipeline)
 6. [The linearization point](#6-the-linearization-point)
+   - [6a. What the linearization point does not linearize](#6a-what-the-linearization-point-does-not-linearize)
 7. [Relationship to frozen Phase 6](#7-relationship-to-frozen-phase-6)
 8. [Phase 1–6 lessons carried into Core](#8-phase-16-lessons-carried-into-core)
 9. [Concept catalogue](#9-concept-catalogue)
@@ -78,19 +79,24 @@ vocabularies**, not programs.
 ```
 M   = effective authority of the acting node
       = meet of the terms of every grant on its lineage          (authority-model.md §4)
+P   = the principal policy: principal-global dimensions,
+      invariants and state policy, applying to every root         (authority-model.md §8)
+d   = the exact semantic module interpreting A: ModuleRef          (action-state-model.md §8.1)
 L   = the principal's ledger at version v: reconciled occupancy,
       consumption and every active reservation                    (authority-ledger.md)
-S   = admitted state: snapshots whose source and freshness satisfy
-      the state policy of M, plus the ledger view L               (action-state-model.md §5)
+S   = admitted state: snapshots whose source, trust, freshness and
+      finality satisfy the state policy of M and P, plus the ledger
+      view L; each admitted snapshot becomes a StateBinding        (action-state-model.md §5)
 A   = the proposed action intent
 S'  = Project_d(S ⊕ Pending(L), A)                                 worst case, by domain module d
 
 Authorize(A, t) at ledger version v  ⇔
       LineageValid(M, A, t)          every grant signed, unrevoked, unexpired at t; actor = leaf holder
-  ∧   AuthorityCovers(M, A)          sets, rights, per-action bounds, domains, adapters, time
-  ∧   FreshEnough(S, M, t)           every required snapshot admitted and within its age bound
-  ∧   InvariantsHold(M, S')          every required state invariant HOLDS (UNKNOWN rejects)
-  ∧   AuthorityAvailable(L, M, A)    every ledger dimension, at every node on the lineage
+  ∧   AuthorityCovers(M, A)          sets, rights, per-action bounds, modules, adapters, time
+  ∧   FreshEnough(S, M ∧ P, t)       every required snapshot admitted under its state policy
+  ∧   InvariantsHold(M ∧ P, S')      every lineage and principal-global invariant HOLDS (UNKNOWN rejects)
+  ∧   AuthorityAvailable(L, path, A) every ledger dimension on the charging path:
+                                     each lineage node, then the principal policy
 ```
 
 `Pending(L)` is not optional. Invariants and availability are evaluated over the
@@ -112,8 +118,14 @@ and each arrow is owned by exactly one layer (§4).
 
 The time `t` is a parameter, never a clock read inside Core (AGENTS.md §4.2).
 The ledger version `v` is part of the decision: a decision is a function of
-`(A, lineage, S, L@v, t, core version, domain module version)` and is reproducible
-from those inputs (RECEIPT-2).
+`(A, lineage, P, state bindings, L@v, t, core version, ModuleRef)` and is
+reproducible from those inputs (RECEIPT-2).
+
+Two scope statements belong next to the equation. The ledger version `v`
+orders Mandate's own authority state; it does not make external state atomic
+with the decision (CORE-CONC-1, §6a). And the semantic module `d` is fixed
+for the action's whole lifecycle (DOM-2): the reservation, the binding,
+reconciliation and every receipt use the same `ModuleRef`.
 
 ## 3. Layers
 
@@ -181,7 +193,8 @@ constraint value or a trust decision except by passing through Core's checks
 | Evaluate coverage and invariants | Core dispatching to domain invariants | yes | `M`, action, `S'` | `InvariantResult`s |
 | Compute contributions | domain module | yes | action, `S` | typed contributions per dimension |
 | Check availability and reserve | Core rule, applied atomically by the ledger store | rule yes; atomicity is infrastructure | `L@v`, contributions | `Reservation` at `v+1`, or reject |
-| Bind | adapter | yes | authorization, intent | `ExecutionBinding` |
+| Bind | adapter | yes | authorization, intent, `ModuleRef` | `ExecutionBinding` |
+| Issue-time state admission | Core rule, run by the adapter before issuing; revalidation committed by CAS | rule yes; fetching no | state bindings, fresh snapshots if needed, `L@v'`, `t_i` | `ADMIT_ATTEMPT`, or `REVALIDATE`, or refuse |
 | Issue artifact | adapter (custody) | signing yes; custody no | binding | `EnforcementArtifact` |
 | Enforce | enforcement point (gate, venue, account) | outside Mandate | artifact | executes or refuses |
 | Observe | adapter reader (fetching) + adapter rule (pure) | rule yes | chain/venue evidence | `Observation` or none |
@@ -206,9 +219,12 @@ anything.
 3. **Resolve lineage** ([authority-model.md §5](authority-model.md#5-lineage-validity)).
    Every grant from the leaf to the root is present, signed by the right
    issuer, unrevoked and within its window at `t`. The root's issuer is the
-   intent's principal.
-4. **Compute effective authority** `M` as the meet of the lineage's terms.
-5. **Domain decode.** The domain module named by the intent decodes the payload
+   intent's principal, and the principal has a registered principal policy `P`.
+4. **Compute effective authority** `M` as the meet of the lineage's terms. `P`
+   is not part of the meet — it grants nothing — but its invariants, state
+   policy and dimensions apply in steps 7, 9 and 10.
+5. **Domain decode.** The domain module named by the intent's `ModuleRef` — which
+   must be registered and inside `M`'s allowed modules — decodes the payload
    against its schema version, derives resource references and risk direction
    from the payload and state — the agent's own claim of "risk-reducing" is not
    read — and returns a typed domain action.
@@ -216,13 +232,16 @@ anything.
    rights and per-action bounds are inside `M`.
 7. **Admit state.** Every snapshot the domain module and the invariants require
    is present, from an admitted source for its state kind, within its age
-   bound, not in conflict, and not older than the ledger's last reconciled
-   sequence for the same subject (STATE-3).
+   bound, at its required finality, not in conflict, and not older than the
+   ledger's last reconciled sequence for the same subject (STATE-3). Each admitted
+   snapshot is recorded as a `StateBinding` (STATE-4).
 8. **Project** `S' = Project_d(S ⊕ Pending(L), A)`.
-9. **Invariants.** Every required invariant evaluates to `HOLDS`.
+9. **Invariants.** Every lineage invariant and every principal-global invariant
+   evaluates to `HOLDS`.
 10. **Contributions and availability.** The domain module maps the action to
     typed worst-case contributions; Core checks each against every node on the
-    lineage that grants the matching dimension.
+    charging path — the lineage, then the principal policy — that grants the
+    matching dimension.
 11. **Commit.** Steps 7–10 are committed at ledger version `v` by one atomic
     compare-and-swap that also writes the reservation (§6). If the ledger moved
     past `v`, the decision is recomputed at the new version; it is never
@@ -230,7 +249,11 @@ anything.
 12. **Authorize.** Core emits an `ExecutionAuthorization` naming the reservation
     and its generation, and a `DecisionReceipt`. On rejection only the receipt
     is emitted; nothing is reserved.
-13. **Bind, issue, enforce, observe, reconcile, close** — see
+13. **Issue-time admission.** Before issuing any artifact the adapter re-admits
+    the reservation's state bindings at issue time and, where they no longer
+    satisfy their policy or the policy demands it, revalidates on fresh state
+    (§6a, [reservations-reconciliation.md §10a](reservations-reconciliation.md#10a-issue-time-state-admission-and-revalidation)).
+14. **Bind, issue, enforce, observe, reconcile, close** — see
     [enforcement-adapters.md](enforcement-adapters.md) and
     [reservations-reconciliation.md](reservations-reconciliation.md).
 
@@ -270,6 +293,57 @@ Consequences, frozen for 7C:
   this property, and is deferred;
 - state snapshots are fetched **before** the commit and are part of the
   decision's inputs; the commit does not wait on I/O.
+
+### 6a. What the linearization point does not linearize
+
+> **CORE-CONC-1: Mandate serializes authority consumption, not external market
+> state.** The compare-and-swap linearizes Mandate's internal authority state —
+> grants, the principal policy, reservations, observations. It does not make
+> venue, oracle, market or protocol state atomic with a Mandate decision.
+
+```text
+T0  reader fetches venue account (sequence 1,040) and mark price, observedAt T0
+T1  Core projects S ⊕ Pending(L@v) ⊕ A over those snapshots
+T2  decision + RESERVE commit by CAS at v → v+1           ledger-consistent
+T3  the venue moves: new mark, sequence 1,041              Mandate is not told
+T4  adapter is about to issue the artifact
+      issue-time admission of the T0 bindings at t_i:
+        still within policy, and the policy does not demand a recheck
+            → ADMIT_ATTEMPT, issue
+        stale or superseded, or the policy demands a recheck
+            → fetch fresh state, REVALIDATE by CAS at the current version
+                 PASS → ADMIT_ATTEMPT, issue with the new bindings
+                 FAIL → refuse; with no attempt ever admitted, CLOSE (NEVER_ISSUED)
+T5  the enforcement point executes the artifact
+      after T4 the only state guarantees are what the enforcement point itself
+      checks (a limit price, chain time, the gate's pinned price and measured
+      deltas) and the artifact's own expiry
+```
+
+At T2 the decision is serializable with every other Mandate decision, and it
+may already be wrong about the world. The specification therefore keeps four
+properties apart, and never lets one stand in for another:
+
+| Property | Question | Established by | Where |
+| --- | --- | --- | --- |
+| **Ledger consistency** | Was the decision made against every other reservation, grant and policy change, in one order? | CAS on the principal-wide version | [authority-ledger.md §9](authority-ledger.md#9-linearizability-and-what-it-does-not-cover) |
+| **External-state freshness** | Was the state recent enough, from a trusted enough source, for this decision? | admission under the state policy at decision time, bound into the reservation as `StateBinding`s | [action-state-model.md §5](action-state-model.md#5-state-model) |
+| **External-state finality** | Could the observed state still be reorganized or revised (unfinalized block, unacknowledged venue sequence)? | each state kind's minimum finality level | [action-state-model.md §5.5](action-state-model.md#55-state-bindings-freshness-modes-and-execution-dependence) |
+| **Execution-time revalidation** | Does the state the decision depended on still hold when the artifact is created, and what holds after that? | issue-time admission and revalidation; after issue, only the enforcement point's own checks and artifact expiry | [reservations-reconciliation.md §10a](reservations-reconciliation.md#10a-issue-time-state-admission-and-revalidation) |
+
+There is no universal freshness interval. A perp mark price is fresh for
+seconds, a registry identity for hours, onchain state is fresh by block
+distance and finality, venue order state by sequence. Each domain module
+declares, per state kind, how freshness is measured, which finality is
+required, whether a recheck at issue is mandatory, and whether the dependency
+must still hold at execution — and grants and the principal policy can only
+tighten that (STATE-4, STATE-5).
+
+One consequence is stated plainly: an `EVALUATED` invariant — health factor,
+marked exposure — is a **pre-trade condition** on the state bound at decision
+and issue time. It is not a continuous guarantee; markets move afterwards. The
+only continuous guarantees Core gives are over ledger quantities, which move
+only by Mandate's own events and by drift evidence.
 
 ## 7. Relationship to frozen Phase 6
 
@@ -394,14 +468,32 @@ kernel. Not an object; a term. Evaluated against the decision's `t` and, at the
 enforcement point, against the enforcement point's own clock where it has one
 (chain time for EVM).
 
+**PrincipalPolicy**, **PolicyId** — the principal's signed statement of
+principal-global dimensions, invariants and state policy, applying to every
+action under every root. `PolicyId = H("mandate-core/v1/principal-policy", policy)`.
+Owner: the principal. Mutable: no; replaced by a new policy with a higher
+sequence. Created by: the principal only; required before the first root.
+Consumed by: every decision (as the last node of every charging path), the
+ledger, receipts. Boundary: AUTH-GLOBAL-1; it grants nothing
+([authority-model.md §8](authority-model.md#8-principal-policy-and-principal-global-invariants)).
+
 ### Domains and resources
 
-**DomainId** — identifies a domain module and its schema family, e.g.
-`evm-spot`, `perp`. Owner: the Core module registry. Identity: identifier from
-a closed registry, with a module version. Mutable: a module version is
-immutable; new behaviour is a new version. Created by: a Core release. Consumed
-by: intent parsing, dispatch, receipts. Boundary: an intent naming an unknown
-domain or version rejects.
+**DomainId** — identifies a domain, the family of economic actions and state
+a module interprets, e.g. `evm-spot`, `perp`. Owner: the Core module registry.
+Identity: identifier from a closed registry. Mutable: no. Consumed by: intent
+parsing, coverage, receipts.
+
+**ModuleRef** — the exact semantic module that interprets an action and its
+state: `{ domainId, moduleId, moduleVersion, moduleDigest }`, where
+`moduleDigest` content-addresses the module's canonical semantics
+([action-state-model.md §8.1](action-state-model.md#81-module-identity-and-binding)).
+Owner: the module registry, under change control. Mutable: no; any semantic
+change is a new version with a new digest. Created by: a module release.
+Consumed by: the intent, grants (allowed modules), the decision, the
+reservation, the binding, reconciliation and every receipt. Boundary: DOM-2 —
+fixed for the action's whole lifecycle; an unregistered module, a digest
+mismatch or an implementation not registered as conforming rejects.
 
 **ResourceId** — a namespaced reference to anything an action touches:
 `(domain, resourceKind, localId)`. Kinds include market, asset, account,
@@ -441,12 +533,14 @@ the same reason.
 
 ### State
 
-**StateSnapshot**, **StateDigest** — a typed, provenance-carrying observation of
-domain state. `StateDigest = H("mandate-core/v1/state", envelope)`, and the
+**StateSnapshot**, **StateDigest**, **StateBinding** — a typed,
+provenance-carrying observation of domain state; a `StateBinding` is the record
+of one admitted snapshot, with the policy it was admitted under, carried by the
+reservation and every receipt. `StateDigest = H("mandate-core/v1/state", envelope)`, and the
 envelope commits to the payload digest. Owner: the source that produced it.
 Mutable: no. Created by: state readers, from a configured `StateSource`.
 Consumed by: admission, projection, invariants, receipts (by digest). Lifecycle:
-admitted while within the consumer's age bound; superseded by a later sequence
+admitted while within the consumer's freshness and finality requirement; superseded by a later sequence
 from the same source and subject. Boundary: trust class and freshness policy
 ([action-state-model.md §5](action-state-model.md#5-state-model)).
 
@@ -468,12 +562,15 @@ Boundary: evaluation is pure and total; `UNKNOWN` rejects.
 and bound values as typed quantities, and the snapshots read. Created by: Core
 dispatching to the invariant. Consumed by: the decision and its receipt.
 
-**Budget** — a ledger dimension with `BUDGET` accounting: a cumulative quantity
-that consumption only ever increases (fees paid, action count, total capital
-spent). **Capacity** is the other accounting mode: occupancy of a standing
-quantity that observed risk-reducing reconciliation can lower (capital
-deployed, position size). Both are dimension grants inside an authority grant
-([authority-ledger.md §3](authority-ledger.md#3-dimensions)).
+**Budget** — a ledger dimension with `BUDGET` accounting: consumed authority
+is never restored (fees paid, action count, total capital spent), except that
+an `EPOCH` budget opens a fresh, pre-signed window each epoch. **Capacity** is
+the other accounting mode: consumed authority can be **restored** by final
+evidence of an unwind or close, at the amount originally charged or by units
+(capital at cost basis, position size). In every dimension `GRANTED` is fixed
+by signature, `CONSUMED` and `RESTORED` are cumulative, and
+`available = granted − consumed − reserved + restored`; profit never enters it
+([authority-ledger.md §4](authority-ledger.md#4-authority-vocabulary-granted-reserved-consumed-restored-available)).
 
 **Exposure** — a *measure*, not a single concept: committed notional (ledger,
 at execution price), position size (ledger, native units) or marked exposure
@@ -492,7 +589,8 @@ Lifecycle: `ACTIVE` → (`QUARANTINED`) → `CLOSED`
 Boundary: LEDGER-1…4, RECON-1…3.
 
 **ExecutionAuthorization** — Core's statement that one reservation generation
-may be executed through one adapter until its attempt ceiling. Identity:
+may be executed through one adapter until its attempt ceiling, under one
+`ModuleRef` and the reservation's state bindings. Identity:
 `H("mandate-core/v1/authorization", …)`. Mutable: no. Created by: Core at
 step 12. Consumed by: exactly one adapter, to bind and issue artifacts.
 Boundary: an adapter refuses to issue for an authorization whose reservation is
