@@ -32,7 +32,11 @@ import {EncodingHarness} from "./utils/EncodingHarness.sol";
 /// The ABI form is written by `npm run gate-corpus:generate` in the same run that
 /// writes the committed readable corpus; `corpus.test.ts` and
 /// `npm run generated:check` pin that corpus to its generator.
-contract DifferentialTest is Test {
+///
+/// `CorpusWorld` is the deterministic world `world.ts` describes; the tests are
+/// in `DifferentialTest` below, and `GateEquivalence.t.sol` reuses the world to
+/// run each attempt on the pre-optimization gate as well (Phase 6R.2B).
+abstract contract CorpusWorld is Test {
     struct TokenSetup {
         address token;
         uint256 principalBalance;
@@ -123,11 +127,21 @@ contract DifferentialTest is Test {
     /// the pre-optimization encoder, and the bytes must be identical.
     EncodingHarness internal encodings;
 
-    function setUp() public {
+    /// @dev The code etched over every gate-created fixture adapter.
+    address internal scriptedCode;
+
+    function setUp() public virtual {
+        _world();
+        _installGate(_gateArtifact());
+    }
+
+    /// @dev Keys, harnesses and the six tokens at their `world.ts` addresses; no gate.
+    function _world() internal {
         vm.chainId(CHAIN);
         principal = vm.addr(PRINCIPAL_KEY);
         harness = new CodecHarness();
         encodings = new EncodingHarness();
+        scriptedCode = address(new ScriptedAdapter());
 
         _token(FUNDING6, "Fixture USD Coin", "fUSDC", 6);
         _token(FUNDING18, "Fixture USD 18", "fUSD18", 18);
@@ -135,19 +149,29 @@ contract DifferentialTest is Test {
         _token(NVDA, "Fixture NVIDIA Stock Token", "fNVDA", 18);
         _token(SYNTH, "Fixture Synthetic Apple", "sAAPL", 18);
         _token(EIGHT, "Fixture Apple 8dp", "fAAPL8", 8);
+    }
+
+    /// @dev The gate implementation the corpus is replayed against. Phase 6R.2B
+    /// replays it against the pre-optimization gate too (`GateEquivalence.t.sol`).
+    function _gateArtifact() internal pure virtual returns (string memory) {
+        return "MandateExecutionGate.sol:MandateExecutionGate";
+    }
+
+    /// @dev Constructs `artifact` at `GATE` over the four corpus markets and
+    /// replaces each gate-created adapter's code with the scripted double.
+    function _installGate(string memory artifact) internal {
         MarketConfig[] memory markets = new MarketConfig[](4);
         markets[0] = _market(AAPL, FUNDING6, _asset("US0378331005"), "issuer.alpha", "venue.fixture", false);
         markets[1] = _market(NVDA, FUNDING6, _asset("US67066G1040"), "issuer.alpha", "venue.fixture", false);
         markets[2] = _market(SYNTH, FUNDING6, _asset("US0378331005"), "issuer.synthetic", "venue.fixture", true);
         markets[3] = _market(EIGHT, FUNDING18, _asset("US0378331005"), "issuer.alpha", "venue.other", false);
-        _deployGateAt(abi.encode(markets));
+        _deployGateAt(artifact, abi.encode(markets));
         gate = MandateExecutionGate(GATE);
 
         // The gate created each market's adapter; both sides must name the same one.
         adapters = [ADAPTER_AAPL, ADAPTER_NVDA, ADAPTER_SYNTH, ADAPTER_EIGHT];
         address[4] memory representations = [AAPL, NVDA, SYNTH, EIGHT];
         address[6] memory tokens = [FUNDING6, FUNDING18, AAPL, NVDA, SYNTH, EIGHT];
-        address scriptedCode = address(new ScriptedAdapter());
         for (uint256 i = 0; i < adapters.length; ++i) {
             assertEq(vm.computeCreateAddress(GATE, 2 * i + 2), adapters[i], "world.ts adapter derivation");
             assertEq(
@@ -166,8 +190,8 @@ contract DifferentialTest is Test {
 
     /// @dev `deployCodeTo`, but with the account nonce a CREATE would give the new
     /// contract (1, EIP-161), so the gate's own CREATEs land where `world.ts` expects.
-    function _deployGateAt(bytes memory args) internal {
-        vm.etch(GATE, abi.encodePacked(vm.getCode("MandateExecutionGate.sol:MandateExecutionGate"), args));
+    function _deployGateAt(string memory artifact, bytes memory args) internal {
+        vm.etch(GATE, abi.encodePacked(vm.getCode(artifact), args));
         vm.setNonce(GATE, 1);
         (bool ok, bytes memory runtime) = GATE.call("");
         require(ok, "gate construction failed");
@@ -212,6 +236,46 @@ contract DifferentialTest is Test {
         });
     }
 
+    /// @dev A vector's balances, allowances and token decimals.
+    function _fund(GateVector memory v) internal {
+        for (uint256 i = 0; i < v.setup.length; ++i) {
+            TokenSetup memory t = v.setup[i];
+            MockERC20(t.token).mint(principal, t.principalBalance);
+            vm.startPrank(principal);
+            MockERC20(t.token).approve(GATE, t.gateAllowance);
+            for (uint256 k = 0; k < adapters.length; ++k) {
+                MockERC20(t.token).approve(adapters[k], t.adapterAllowance);
+            }
+            vm.stopPrank();
+            MockERC20(t.token).setDecimals(t.decimals);
+        }
+    }
+
+    /// @dev Chain, time and the adapter script an attempt runs under.
+    function _prepare(Attempt memory a) internal {
+        vm.chainId(a.chainId);
+        vm.warp(a.timestamp);
+        // The script applies to the adapter of the market the candidate names; an
+        // unsupported representation reaches no adapter at all.
+        address marketAdapter = gate.marketOf(keccak256(bytes(a.candidate.representationId))).adapter;
+        if (marketAdapter == address(0)) marketAdapter = adapters[0];
+        ScriptedAdapter(marketAdapter)
+            .setScript(
+                ScriptedAdapter.Script({
+                mode: ScriptedAdapter.Mode(a.script.mode),
+                deliver: a.script.deliver,
+                refund: a.script.refund,
+                deliverTo: a.script.deliverElsewhere ? SINK : address(0),
+                reentryTarget: address(0),
+                reentryPayload: "",
+                bubbleReentry: false,
+                extraPull: a.script.extraPull
+            })
+            );
+    }
+}
+
+contract DifferentialTest is CorpusWorld {
     // ------------------------------------------------------------------
     // Execution vectors
     // ------------------------------------------------------------------
@@ -250,17 +314,7 @@ contract DifferentialTest is Test {
     }
 
     function _replay(GateVector memory v) internal returns (uint256 settled, uint256 reverted) {
-        for (uint256 i = 0; i < v.setup.length; ++i) {
-            TokenSetup memory t = v.setup[i];
-            MockERC20(t.token).mint(principal, t.principalBalance);
-            vm.startPrank(principal);
-            MockERC20(t.token).approve(GATE, t.gateAllowance);
-            for (uint256 k = 0; k < adapters.length; ++k) {
-                MockERC20(t.token).approve(adapters[k], t.adapterAllowance);
-            }
-            vm.stopPrank();
-            MockERC20(t.token).setDecimals(t.decimals);
-        }
+        _fund(v);
         for (uint256 j = 0; j < v.attempts.length; ++j) {
             if (_attempt(v.id, j, v.attempts[j])) settled += 1;
             else reverted += 1;
@@ -270,25 +324,7 @@ contract DifferentialTest is Test {
     function _attempt(string memory id, uint256 index, Attempt memory a) internal returns (bool) {
         string memory label = string.concat(id, "#", vm.toString(index));
         _assertEncodingsAgree(label, a.mandate, a.candidate);
-        vm.chainId(a.chainId);
-        vm.warp(a.timestamp);
-        // The script applies to the adapter of the market the candidate names; an
-        // unsupported representation reaches no adapter at all.
-        address marketAdapter = gate.marketOf(keccak256(bytes(a.candidate.representationId))).adapter;
-        if (marketAdapter == address(0)) marketAdapter = adapters[0];
-        ScriptedAdapter(marketAdapter)
-            .setScript(
-                ScriptedAdapter.Script({
-                mode: ScriptedAdapter.Mode(a.script.mode),
-                deliver: a.script.deliver,
-                refund: a.script.refund,
-                deliverTo: a.script.deliverElsewhere ? SINK : address(0),
-                reentryTarget: address(0),
-                reentryPayload: "",
-                bubbleReentry: false,
-                extraPull: a.script.extraPull
-            })
-            );
+        _prepare(a);
 
         vm.recordLogs();
         bool settled;
