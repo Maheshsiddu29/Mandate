@@ -20,3 +20,4 @@ agent autonomy  ⊆  principal-delegated economic authority
 | Document | What it specifies |
 | --- | --- |
 | [architecture.md](architecture.md) | The core equation, the four layers, what is deterministic Core and what belongs to domain modules and adapters, the linearization point, the relationship to frozen Phase 6, and the concept catalogue |
+| [authority-model.md](authority-model.md) | Parties, grants, the seven kinds of authority term, the meet that keeps child ⊆ parent, lineage and delegation validity, revocation and expiry |
