@@ -7,7 +7,8 @@ import {FixtureVenueAdapter} from "../src/fixture/FixtureVenueAdapter.sol";
 
 import {GasBench} from "./utils/GasBench.sol";
 
-/// @notice The canonical Phase 6R.2A gas profiles (docs/phase-6r2a-gas-profile.md §B–C).
+/// @notice The canonical Phase 6R.2A gas profiles (docs/phase-6r2a-gas-profile.md §B–C),
+/// with Phase 6R.2B regression ceilings (docs/phase-6r2b-report.md).
 ///
 /// | profile                | identifiers                         | sets (issuer/chain/venue) | route | adapter              |
 /// | ---------------------- | ----------------------------------- | ------------------------- | ----- | -------------------- |
@@ -25,6 +26,25 @@ import {GasBench} from "./utils/GasBench.sol";
 /// accepted by the gate but only settle through a lean adapter etched at the
 /// gate's adapter address. The two are never conflated.
 contract GasProfilesTest is GasBench {
+    // ------------------------------------------------------------------
+    // Regression guards (Phase 6R.2B)
+    // ------------------------------------------------------------------
+    //
+    // Ceilings on execution gas, not expected values. Each sits roughly 20%
+    // above the Phase 6R.2B measurement (NORMAL_BUY 246,963, LARGE 270,738,
+    // MAX_EXECUTABLE_FIXTURE 425,922, MAX_SERIALIZABLE 386,555 at via-IR, 200
+    // runs), which absorbs compiler and toolchain drift — the whole 6R.2A
+    // compiler matrix moved a normal execution by at most ~2% — while failing
+    // on the regressions that matter. Reintroducing byte-at-a-time identifier
+    // validation costs 6.7M on MAX and ~400k on NORMAL; even the intermediate
+    // plain-Solidity word validator costs 1.33M on MAX and 351k on LARGE.
+    // MAX_ONE_MILLION is the guard that matters most: validation cost is
+    // linear in identifier bytes, so MAX is where a slower validator shows first.
+
+    uint256 internal constant NORMAL_CEILING = 300_000;
+    uint256 internal constant LARGE_CEILING = 330_000;
+    uint256 internal constant MAX_ONE_MILLION = 1_000_000;
+
     Bench internal minimal;
     Bench internal demo;
     Bench internal demoSell;
@@ -141,6 +161,7 @@ contract GasProfilesTest is GasBench {
         _settledBuy(minimal);
         _log("profile", "MINIMAL", r);
         assertEq(r.calldataBytes, 4_132);
+        assertLt(r.executionGas, NORMAL_CEILING, "MINIMAL execution gas regressed");
     }
 
     function test_gasProfile_NORMAL_BUY() public {
@@ -148,6 +169,7 @@ contract GasProfilesTest is GasBench {
         assertEq(aapl.balanceOf(principal), 1_000e18 + QUANTITY);
         _log("profile", "NORMAL_BUY", r);
         assertEq(r.calldataBytes, 4_228);
+        assertLt(r.executionGas, NORMAL_CEILING, "NORMAL_BUY execution gas regressed");
     }
 
     function test_gasProfile_NORMAL_SELL() public {
@@ -155,6 +177,7 @@ contract GasProfilesTest is GasBench {
         assertEq(aapl.balanceOf(principal), 1_000e18 - QUANTITY);
         _log("profile", "NORMAL_SELL", r);
         assertEq(r.calldataBytes, 4_228);
+        assertLt(r.executionGas, NORMAL_CEILING, "NORMAL_SELL execution gas regressed");
     }
 
     function test_gasProfile_DEMO() public {
@@ -162,6 +185,7 @@ contract GasProfilesTest is GasBench {
         _settledBuy(demo);
         _log("profile", "DEMO", r);
         assertEq(r.calldataBytes, 4_132);
+        assertLt(r.executionGas, NORMAL_CEILING, "DEMO execution gas regressed");
     }
 
     function test_gasProfile_DEMO_SELL() public {
@@ -169,6 +193,7 @@ contract GasProfilesTest is GasBench {
         assertEq(demoSell.representation.balanceOf(principal), 1_000e18 - QUANTITY);
         _log("profile", "DEMO_SELL", r);
         assertEq(r.calldataBytes, 4_132);
+        assertLt(r.executionGas, NORMAL_CEILING, "DEMO_SELL execution gas regressed");
     }
 
     function test_gasProfile_LARGE() public {
@@ -176,6 +201,7 @@ contract GasProfilesTest is GasBench {
         _settledBuy(large);
         _log("profile", "LARGE", r);
         assertEq(r.calldataBytes, 5_124);
+        assertLt(r.executionGas, LARGE_CEILING, "LARGE execution gas regressed");
     }
 
     function test_gasProfile_MAX_EXECUTABLE_FIXTURE() public {
@@ -183,6 +209,7 @@ contract GasProfilesTest is GasBench {
         _settledBuy(maxFixture);
         _log("profile", "MAX_EXECUTABLE_FIXTURE", r);
         assertEq(r.calldataBytes, 14_500);
+        assertLt(r.executionGas, MAX_ONE_MILLION, "MAX_EXECUTABLE_FIXTURE execution gas regressed");
     }
 
     function test_gasProfile_MAX_SERIALIZABLE() public {
@@ -191,6 +218,7 @@ contract GasProfilesTest is GasBench {
         _log("profile", "MAX_SERIALIZABLE", r);
         // Profile.t.sol's WORST_CASE_CALLDATA_BYTES: the same attempt.
         assertEq(r.calldataBytes, 18_596);
+        assertLt(r.executionGas, MAX_ONE_MILLION, "MAX_SERIALIZABLE execution gas regressed");
     }
 
     /// @notice The supported fixture path settles no route data at all: one
