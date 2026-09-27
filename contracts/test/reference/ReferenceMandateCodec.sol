@@ -15,10 +15,19 @@ import {
     SIDE_SELL,
     SYNTHETIC_ALLOWED,
     SYNTHETIC_FORBIDDEN
-} from "../MandateTypes.sol";
+} from "../../src/MandateTypes.sol";
 
-/// @title MandateCodec
-/// @notice Solidity re-encoding of MCE v2 mandates and Candidate V3 candidates.
+/// @title ReferenceMandateCodec
+/// @notice The pre-optimization `MandateCodec` (commit `b2295b0`), kept verbatim
+/// apart from its name and import path as the executable reference the
+/// optimized production codec is differentially tested against (Phase 6R.2B).
+/// It is test code: nothing deployable imports it. Do not optimize it — its
+/// value is that it is the simple, byte-at-a-time implementation every earlier
+/// phase reviewed and the kernel corpus pinned.
+///
+/// Original notice follows.
+///
+/// Solidity re-encoding of MCE v2 mandates and Candidate V3 candidates.
 ///
 /// The kernel's encoder (`packages/kernel/src/encoding/codec.ts`) is the
 /// specification; this library is a second implementation of it, and the
@@ -33,7 +42,7 @@ import {
 /// Every string the gate encodes is an identifier (1..128 bytes of
 /// `A-Z a-z 0-9 . _ - : /`, no leading or trailing separator), which also keeps
 /// every `u16` length prefix far inside its width, so the encoding is injective.
-library MandateCodec {
+library ReferenceMandateCodec {
     /// @dev Kernel `IDENTIFIER_MAX_LENGTH`.
     uint256 internal constant IDENTIFIER_MAX_LENGTH = 128;
     /// @dev Kernel `MAX_SET_SIZE`.
@@ -98,52 +107,23 @@ library MandateCodec {
         return true;
     }
 
-    /// @dev Bit `c` is set iff byte `c` is in the kernel identifier charset
-    /// `A-Z a-z 0-9 . _ - : /` (67 values, all below 0x80).
-    uint256 private constant IDENTIFIER_CHARSET = 0x7fffffe87fffffe07ffe00000000000;
-    /// @dev Bit `c` is set iff byte `c` is a separator `. _ - : /`, which may
-    /// not open or close an identifier.
-    uint256 private constant IDENTIFIER_SEPARATORS = 0x800000000400e00000000000;
-
-    /// @notice Kernel `parseIdentifier`: 1..128 bytes of the charset, neither
-    /// end a separator.
-    /// @dev Reads the identifier a word at a time and classifies each byte by
-    /// one shift of a 256-bit charset mask. A calldata slice converts to
-    /// `bytes32` zero-padded on the right, and only the slice's own bytes are
-    /// classified, so nothing past the identifier's length is ever inspected.
+    /// @notice Kernel `parseIdentifier`, byte for byte.
     function isIdentifier(string calldata s) internal pure returns (bool) {
-        bytes calldata b = bytes(s);
-        uint256 n = b.length;
-        if (n == 0 || n > IDENTIFIER_MAX_LENGTH) return false;
-        if (_isSeparator(uint8(b[0])) || _isSeparator(uint8(b[n - 1]))) return false;
-        unchecked {
-            // n <= 128, so no index below can overflow.
-            for (uint256 i = 0; i < n; i += 32) {
-                uint256 len = n - i < 32 ? n - i : 32;
-                uint256 word = uint256(bytes32(b[i:i + len]));
-                for (uint256 j = 0; j < len; ++j) {
-                    if ((IDENTIFIER_CHARSET >> ((word >> (248 - 8 * j)) & 0xff)) & 1 == 0) return false;
-                }
-            }
-        }
-        return true;
+        return isIdentifierBytes(bytes(s));
     }
 
-    /// @notice `isIdentifier` for a string already in memory (constructor input).
     function isIdentifierBytes(bytes memory b) internal pure returns (bool) {
         uint256 n = b.length;
         if (n == 0 || n > IDENTIFIER_MAX_LENGTH) return false;
-        if (_isSeparator(uint8(b[0])) || _isSeparator(uint8(b[n - 1]))) return false;
-        unchecked {
-            for (uint256 i = 0; i < n; ++i) {
-                if ((IDENTIFIER_CHARSET >> uint8(b[i])) & 1 == 0) return false;
-            }
+        for (uint256 i = 0; i < n; ++i) {
+            uint8 ch = uint8(b[i]);
+            bool alnum = (ch >= 0x30 && ch <= 0x39) || (ch >= 0x41 && ch <= 0x5a) || (ch >= 0x61 && ch <= 0x7a);
+            // . _ - : /
+            bool separator = ch == 0x2e || ch == 0x5f || ch == 0x2d || ch == 0x3a || ch == 0x2f;
+            if (!alnum && !separator) return false;
+            if (separator && (i == 0 || i == n - 1)) return false;
         }
         return true;
-    }
-
-    function _isSeparator(uint8 ch) private pure returns (bool) {
-        return (IDENTIFIER_SEPARATORS >> ch) & 1 != 0;
     }
 
     function isCanonicalAsset(CanonicalAsset calldata a) internal pure returns (bool) {
@@ -172,22 +152,11 @@ library MandateCodec {
     }
 
     /// @notice Kernel `compareIdentifierBytes`: length first, then bytes.
-    /// @dev Equal-length operands are compared a 32-byte word at a time. Both
-    /// words of a pair cover the same byte range and a short final slice pads
-    /// both with zeros, so the first differing word orders exactly as the first
-    /// differing byte would, and bytes past the operands never participate.
     /// @return -1, 0 or 1.
-    function compareEncoded(bytes calldata a, bytes calldata b) internal pure returns (int256) {
-        uint256 n = a.length;
-        if (n != b.length) return n < b.length ? int256(-1) : int256(1);
-        unchecked {
-            // i < n <= calldata size, so no index below can overflow.
-            for (uint256 i = 0; i < n; i += 32) {
-                uint256 end = n - i < 32 ? n : i + 32;
-                bytes32 x = bytes32(a[i:end]);
-                bytes32 y = bytes32(b[i:end]);
-                if (x != y) return x < y ? int256(-1) : int256(1);
-            }
+    function compareEncoded(bytes memory a, bytes memory b) internal pure returns (int256) {
+        if (a.length != b.length) return a.length < b.length ? int256(-1) : int256(1);
+        for (uint256 i = 0; i < a.length; ++i) {
+            if (a[i] != b[i]) return uint8(a[i]) < uint8(b[i]) ? int256(-1) : int256(1);
         }
         return 0;
     }
