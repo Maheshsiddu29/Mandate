@@ -819,6 +819,13 @@ policy and never lives in the gate.
   headroom. The Phase 6R figures (17,156 bytes, 172,784 intrinsic gas,
   1,673,113 execution gas) were understated: they used ~14-byte identifiers,
   all-zero route data, and a gas window that included test-side signing.
+  **Phase 6R.2A** re-measured every profile as a cold transaction on a gate
+  deployed before the measured call ([phase-6r2a-gas-profile.md](phase-6r2a-gas-profile.md)),
+  which is the canonical execution baseline from 6R.2A on: BUY 401,684, SELL
+  399,779, worst case 6,689,297 (serializable, lean adapter) and 6,724,561
+  (executable on the fixture path). About 95% of the worst case, and 37% of a
+  normal BUY, is byte-at-a-time identifier validation; the 6R.1b BUY/SELL gap
+  was a measurement artifact.
 - Fixture deployments require non-upgradeable representation tokens, funding
   tokens, adapters and venue targets. A deployment review must record address,
   chain, runtime codehash, proxy status and implementation/codehash. The

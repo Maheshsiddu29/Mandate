@@ -22,7 +22,10 @@ Read it before proposing architectural changes. If a change contradicts it,
 either the change is wrong or the document needs updating first — resolve which
 before writing code.
 
-The repository is at the end of **Phase 6R.1b** (final pre-optimization cleanup;
+The repository is at the end of **Phase 6R.2A** (gas attribution and
+architecture benchmark — measurement only, no production change;
+[docs/phase-6r2a-gas-profile.md](docs/phase-6r2a-gas-profile.md)), after
+**Phase 6R.1b** (final pre-optimization cleanup;
 [docs/phase-6r1b-report.md](docs/phase-6r1b-report.md)), after **Phase 6R.1a**
 (reconciliation coherence and fixture trust closure;
 [docs/phase-6r1a-report.md](docs/phase-6r1a-report.md)), after **Phase 6R.1** (exact principal notional enforcement;
