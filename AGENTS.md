@@ -22,8 +22,11 @@ Read it before proposing architectural changes. If a change contradicts it,
 either the change is wrong or the document needs updating first — resolve which
 before writing code.
 
-The repository is at the end of **Phase 6R.2A** (gas attribution and
-architecture benchmark — measurement only, no production change;
+The repository is at the end of **Phase 6R.2B** (secure gas optimization:
+word-level identifier validation and a single-buffer encoder, externally
+invisible, awaiting independent security and gas review;
+[docs/phase-6r2b-report.md](docs/phase-6r2b-report.md)), after **Phase 6R.2A**
+(gas attribution and architecture benchmark — measurement only;
 [docs/phase-6r2a-gas-profile.md](docs/phase-6r2a-gas-profile.md)), after
 **Phase 6R.1b** (final pre-optimization cleanup;
 [docs/phase-6r1b-report.md](docs/phase-6r1b-report.md)), after **Phase 6R.1a**

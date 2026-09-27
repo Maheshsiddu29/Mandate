@@ -3,7 +3,7 @@
 Phased engineering plan: what each phase delivers, how it is known to be done,
 and what it depends on.
 
-> **Status: Phase 6R.2A (gas attribution and architecture benchmark — measurement only) complete locally, awaiting review; Phase 6R.1b implemented locally, awaiting independent review.** Phase 7 and beyond are
+> **Status: Phase 6R.2B (secure gas optimization) implemented locally, awaiting independent security and gas review; Phase 6R.2A (gas attribution — measurement only) and Phase 6R.1b complete locally.** Phase 7 and beyond are
 > planned, not started. Nothing has been deployed.
 > Rationale for the phase ordering is in
 > [mandate-design.md §25](mandate-design.md#25-phased-engineering-roadmap);
@@ -347,7 +347,8 @@ Solidity is the expensive mistake.
 ## Phase 6 — On-chain execution gate and settlement
 
 **Phase 6R.1b implemented and tested locally; not deployed; awaiting independent review** ([report](phase-6r1b-report.md)).
-**Phase 6R.2A measured where the gate's gas goes and recommends the 6R.2B path; it changed no production code** ([report](phase-6r2a-gas-profile.md)). Semantics,
+**Phase 6R.2A measured where the gate's gas goes and recommends the 6R.2B path; it changed no production code** ([report](phase-6r2a-gas-profile.md)).
+**Phase 6R.2B implemented that path — word-level (SWAR) identifier validation and ordering and a single-buffer encoder — with no semantic change: normal BUY 401,684 → 246,963 execution gas, worst case 6,724,561 → 425,922; awaiting independent security and gas review** ([report](phase-6r2b-report.md)). Semantics,
 threat model and residual risks are in [execution-gate.md](execution-gate.md);
 the decision is [ADR 0019](adr/0019-onchain-execution-gate.md).
 
@@ -466,7 +467,7 @@ the design document before it belongs in code.
 | 6R.1a | Reconciliation coherence and fixture trust closure | 6R.1 | implemented locally; independently reviewed; cleaned up by 6R.1b |
 | 6R.1b | Final pre-optimization cleanup | 6R.1a | ✅ implemented locally, not deployed; awaiting independent review |
 | 6R.2A | Gas attribution and architecture benchmark (measurement only) | 6R.1b | ✅ measured locally; recommendation awaiting review; no production change |
-| 6R.2B | Gas optimization, path chosen from the 6R.2A measurements | 6R.2A | not started |
+| 6R.2B | Gas optimization, path chosen from the 6R.2A measurements | 6R.2A | ✅ implemented locally; awaiting independent security and gas review; not deployed |
 | 7 | Stablecoin funding adapters | 6 | planned, flexible |
 | 8 | Demo product and web experience | 6 | planned |
 | 9+ | Cross-chain network, broader asset classes | 8 | future |

@@ -760,6 +760,10 @@ policy and never lives in the gate.
   execution gas inside a test, without the transaction's intrinsic and calldata
   cost. Full-transaction gas:
 
+  The table is kept as recorded (*superseded by Phase 6R.2A cold-transaction
+  methodology*; the current one-market figure is in
+  [phase-6r2b-report.md](phase-6r2b-report.md) §16):
+
   | Markets | Independent 6R.1a review | Local model, 6R.1a | Local model, 6R.1b |
   | ---: | ---: | ---: | ---: |
   | 1 | 4,256,913 | 4,252,478 | 4,281,711 |
@@ -812,12 +816,13 @@ policy and never lives in the gate.
   is **250,508** under EIP-2028 pricing, at most 318,536 if every byte were
   non-zero, and at most 764,840 under an EIP-7623-style 40-gas floor; Arbitrum
   additionally charges for L1 data, which is not modelled here. The settled
-  `execute` call used **6,646,656 gas** through an adapter that only fills, so
+  `execute` call used **6,646,656 gas** (*superseded by Phase 6R.2A cold-transaction methodology*) through an adapter that only fills, so
   the figure is the gate's (Phase 6R.1a re-measured **6,646,628** with that lean
   adapter etched at the gate-created adapter address, since the fixture adapter
   refuses route data; this is an upper bound for the largest calldata the gate
-  accepts, and on the fixture path route data must be empty). Gas grows linearly with identifier length
-  (≈1.13M at 16-byte identifiers, ≈3.49M at 64) because the gate validates and
+  accepts, and on the fixture path route data must be empty). Gas grew linearly with identifier length
+  (≈1.13M at 16-byte identifiers, ≈3.49M at 64; *superseded by Phase 6R.2A
+  cold-transaction methodology*, and by the Phase 6R.2B optimization) because the gate validates and
   re-encodes every identifier byte to re-derive the digests. The Nitro node
   default is 95,000 transaction-data bytes, so calldata keeps more than 80%
   headroom. The Phase 6R figures (17,156 bytes, 172,784 intrinsic gas,
@@ -829,7 +834,13 @@ policy and never lives in the gate.
   399,779, worst case 6,689,297 (serializable, lean adapter) and 6,724,561
   (executable on the fixture path). About 95% of the worst case, and 37% of a
   normal BUY, is byte-at-a-time identifier validation; the 6R.1b BUY/SELL gap
-  was a measurement artifact.
+  was a measurement artifact. **Phase 6R.2B** made that validation word-level and
+  the encoder single-buffer, with no semantic change
+  ([phase-6r2b-report.md](phase-6r2b-report.md)). By the same method: BUY
+  **246,963**, SELL **245,051**, worst case **386,555** (serializable, lean
+  adapter) and **425,922** (executable on the fixture path); one-market
+  deployment **4,325,376** (was 4,283,720). `GasProfiles.t.sol` asserts
+  regression ceilings on every profile.
 - Fixture deployments require non-upgradeable representation tokens, funding
   tokens, adapters and venue targets. A deployment review must record address,
   chain, runtime codehash, proxy status and implementation/codehash. The
