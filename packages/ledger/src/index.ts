@@ -35,7 +35,6 @@ export {
   nodeTargetKey,
   policyDimensionIdentity,
   policyTargetKey,
-  targetKeyOf,
   type ActionRecord,
   type CapacitySource,
   type DemandRecord,

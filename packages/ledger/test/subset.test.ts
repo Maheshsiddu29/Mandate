@@ -41,7 +41,7 @@ import {
   type EffectiveAuthority,
   type LedgerState,
 } from '../src/index.ts';
-import { AGENT_A, PERP_V1, PRINCIPAL, SPOT_V1, T0, T_END, address, dim, int, must, policy, prng } from './support/grants.ts';
+import { AGENT_A, P, PERP_V1, PRINCIPAL, SPOT_V1, T0, T_END, address, dim, int, must, policy, prng } from './support/grants.ts';
 import { MKTS, grantOf, narrow, randomSpec, termsOf, widen, type Spec } from './support/specs.ts';
 
 // --- Unit rules ---------------------------------------------------------------------
@@ -78,6 +78,8 @@ describe('AUTH-2 subset rules, one kind at a time', () => {
     assert.deepEqual(check({ ...base, depth: 1, maxNotional: 100_001n }), ['DELEGATION_WIDENS_BOUND']);
     assert.deepEqual(check({ ...base, depth: 1, minCredit: 99n }), ['DELEGATION_WIDENS_BOUND']);
     assert.deepEqual(check({ ...base, depth: 1, maxLeverage: 51n }), ['DELEGATION_WIDENS_BOUND']);
+    // A bound the child omits reads as "no such limit": refused, although the meet would still apply it.
+    assert.deepEqual(check({ ...base, depth: 1, maxNotional: null }), ['DELEGATION_DROPS_BOUND']);
     // 5.0x at scale 1 restated as 5x at scale 0 is equal, not wider.
     const p5 = grantOf({ ...base, maxLeverage: 50n }, null, AGENT_A, 9n);
     const c5 = must(
@@ -302,5 +304,24 @@ describe('AUTH-2, meet half (property over random lineages with registration byp
     }
     assert.ok(injected > 100, `only ${injected} widening nodes injected`);
     assert.ok(caughtWithoutMeet > 50, `the oracle rejected only ${caughtWithoutMeet} nodes read without the meet`);
+  });
+});
+
+describe('the meet refuses to form over incomparable terms', () => {
+  it('a lineage whose nodes bound one parameter in different measures has no effective authority', () => {
+    const quantityBound = { kind: 'BOUND', boundId: 'order-size', polarity: 'MAX', value: { type: 'QUANTITY', quantity: { kind: 'CAPITAL', unit: 'USDG', decimals: 2, atoms: 100n } } } as const;
+    const ratioBound = { kind: 'BOUND', boundId: 'order-size', polarity: 'MAX', value: { type: 'RATIO', ratio: { numerator: 3n, scale: 0 } } } as const;
+    const parent = must(validateAuthorityGrant({ lineage: { kind: 'ROOT', issuer: P }, principal: P, holder: AGENT_A, notBefore: T0, expiresAt: T_END, terms: [quantityBound, { kind: 'RIGHT', right: 'DELEGATE', maxDepth: 1 }], nonce: 0n }));
+    const forged = must(validateAuthorityGrant({ lineage: { kind: 'DELEGATION', parent: authorityId(parent), issuer: AGENT_A }, principal: P, holder: address('77'), notBefore: T0, expiresAt: T_END, terms: [ratioBound], nonce: 0n }));
+    // Registration would refuse it…
+    assert.deepEqual(checkDelegationSubset(parent, forged, 1).map((v) => v.code), ['DELEGATION_TERM_INCOMPARABLE']);
+    // …and if it were in the state anyway, no effective authority can be formed for it.
+    const pol = policy();
+    let state: LedgerState = { ...emptyLedgerState(PRINCIPAL), policy: { id: principalPolicyId(pol), policy: pol, registeredAt: 1n as LedgerVersion } };
+    for (const [g, depth] of [[parent, 0], [forged, 1]] as const) {
+      state = { ...state, nodes: state.nodes.set(authorityId(g), { id: authorityId(g), grant: g, depth, registeredAt: 1n as LedgerVersion, revokedAt: null, revocation: null }) };
+    }
+    const e = effectiveAuthority(must(resolveLineage(state, authorityId(forged))), pol);
+    assert.ok(!e.ok && e.error.code === 'LINEAGE_TERMS_INCOMPARABLE');
   });
 });

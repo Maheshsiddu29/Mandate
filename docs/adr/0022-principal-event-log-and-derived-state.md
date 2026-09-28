@@ -66,10 +66,11 @@ wire format; the log is authoritative.
 
 ### New tags
 
-`mandate-core/v1/ledger-batch`, `…/ledger-genesis`, `…/ledger-event`,
-`…/ledger-state`, `…/charge-plan` (reserved; the plan is embedded in `RESERVE`
-as a body) and `…/policy-dimension` (the identity of a principal-global
-dimension, everything but its limit). None reuses a Core tag.
+`mandate-core/v1/ledger-batch`, `…/ledger-genesis`, `…/ledger-event` (a single
+event as a standalone object, for receipts), `…/ledger-state` and
+`…/policy-dimension` (the identity of a principal-global dimension, everything
+but its limit). None reuses a Core tag. A charge plan has no tag of its own: it
+exists only embedded in a `RESERVE` event.
 
 ## Consequences
 

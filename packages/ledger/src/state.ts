@@ -218,14 +218,6 @@ export function policyTargetKey(identity: PolicyDimensionIdentity): string {
   return JSON.stringify(['P', identity]);
 }
 
-export function targetKeyOf(ref: TargetRef, state: LedgerState): string | null {
-  if (ref.kind === 'NODE') return nodeTargetKey(ref.authority, ref.dimensionId);
-  const policy = state.policy;
-  if (policy === null || policy.id !== ref.policy) return null;
-  const d = policy.policy.terms.find((t): t is LedgerDimensionTerm => t.kind === 'LEDGER_DIMENSION' && t.dimensionId === ref.dimensionId);
-  return d === undefined ? null : policyTargetKey(policyDimensionIdentity(d));
-}
-
 // --- Available authority -------------------------------------------------------
 
 export function epochIndex(d: LedgerDimensionTerm, at: bigint): bigint | null {

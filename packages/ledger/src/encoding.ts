@@ -29,7 +29,6 @@ export const LedgerTag = {
   LEDGER_GENESIS: 'mandate-core/v1/ledger-genesis',
   LEDGER_BATCH: 'mandate-core/v1/ledger-batch',
   LEDGER_EVENT: 'mandate-core/v1/ledger-event',
-  CHARGE_PLAN: 'mandate-core/v1/charge-plan',
   LEDGER_STATE: 'mandate-core/v1/ledger-state',
   POLICY_DIMENSION: 'mandate-core/v1/policy-dimension',
 } as const;
