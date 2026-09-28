@@ -30,6 +30,12 @@
  * finality levels on a ladder only its declarer orders, two different
  * execution-time dependencies — a different child value is refused as
  * `DELEGATION_NARROWING_UNPROVEN`. Exact restatement is accepted.
+ *
+ * Invariant parameters are the one exception, from 7D: when the reducer is
+ * configured with an `InvariantOrdering` (rules.ts), a restated invariant with
+ * different parameters is accepted if the ordering proves it `NO_WEAKER`,
+ * refused `DELEGATION_WEAKENS_INVARIANT` if it proves it `WEAKER`, and still
+ * refused `DELEGATION_NARROWING_UNPROVEN` otherwise.
  */
 
 import {
@@ -50,6 +56,7 @@ import {
 } from '@mandate/core';
 import { compareScaled } from './encoding.ts';
 import type { DelegationViolation, DelegationViolationCode } from './errors.ts';
+import { orderInvariants, type InvariantOrdering } from './rules.ts';
 
 // --- Exact member identity ------------------------------------------------------
 
@@ -165,8 +172,14 @@ const DELEGATE_KEY = JSON.stringify(['RIGHT', 'DELEGATE']);
  * valid by §4's right-hand column. `parentDepth` is the parent's *effective*
  * remaining delegation depth along its own lineage, which equals its grant's
  * depth whenever every ancestor was registered through this check.
+ * `ordering` is the reducer's configured invariant ordering, if any.
  */
-export function checkDelegationSubset(parent: AuthorityGrant, child: AuthorityGrant, parentDepth: number): readonly DelegationViolation[] {
+export function checkDelegationSubset(
+  parent: AuthorityGrant,
+  child: AuthorityGrant,
+  parentDepth: number,
+  ordering: InvariantOrdering | null = null,
+): readonly DelegationViolation[] {
   const found: DelegationViolation[] = [];
   const seen = new Set<string>();
   const add = (code: DelegationViolationCode, term: string): void => {
@@ -228,7 +241,11 @@ export function checkDelegationSubset(parent: AuthorityGrant, child: AuthorityGr
       }
       case 'STATE_INVARIANT': {
         if (p === undefined) break;
-        if ((p as StateInvariantTerm).params !== c.params) add('DELEGATION_NARROWING_UNPROVEN', key);
+        const pi = p as StateInvariantTerm;
+        if (pi.params === c.params) break;
+        const verdict = orderInvariants(ordering, pi, c);
+        if (verdict === 'WEAKER') add('DELEGATION_WEAKENS_INVARIANT', key);
+        else if (verdict === 'UNPROVABLE') add('DELEGATION_NARROWING_UNPROVEN', key);
         break;
       }
       case 'STATE_POLICY': {

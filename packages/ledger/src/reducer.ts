@@ -57,6 +57,7 @@ import {
   type TargetBalance,
 } from './state.ts';
 import type { PMap } from './pmap.ts';
+import { CORE_RULES, type ReducerRules } from './rules.ts';
 
 // --- Registration --------------------------------------------------------------
 
@@ -98,9 +99,9 @@ function applyRegisterPolicy(s: LedgerState, e: Extract<LedgerEvent, { kind: 'RE
   return ok({ ...s, policy: { id, policy, registeredAt: version }, targets });
 }
 
-function applyRegisterGrant(s: LedgerState, e: Extract<LedgerEvent, { kind: 'REGISTER_GRANT' }>, version: LedgerVersion): LedgerResult<LedgerState> {
+function applyRegisterGrant(s: LedgerState, e: Extract<LedgerEvent, { kind: 'REGISTER_GRANT' }>, version: LedgerVersion, rules: ReducerRules): LedgerResult<LedgerState> {
   const id = authorityId(e.grant);
-  const depth = checkGrantRegistration(s, id, e.grant, e.at);
+  const depth = checkGrantRegistration(s, id, e.grant, e.at, 'grant', rules.invariantOrdering);
   if (!depth.ok) return depth;
   let targets = s.targets;
   for (const t of e.grant.terms) {
@@ -353,7 +354,7 @@ function applyRestore(s: LedgerState, e: AccountingEvent<'RESTORE'>): LedgerResu
 
 // --- Folding -------------------------------------------------------------------
 
-export function applyEvent(s: LedgerState, e: LedgerEvent, version: LedgerVersion): LedgerResult<LedgerState> {
+export function applyEvent(s: LedgerState, e: LedgerEvent, version: LedgerVersion, rules: ReducerRules = CORE_RULES): LedgerResult<LedgerState> {
   if (s.lastAt !== null && e.at < s.lastAt) return refuse('EVALUATION_TIME_REGRESSED', 'at');
   let next: LedgerResult<LedgerState>;
   switch (e.kind) {
@@ -361,7 +362,7 @@ export function applyEvent(s: LedgerState, e: LedgerEvent, version: LedgerVersio
       next = applyRegisterPolicy(s, e, version);
       break;
     case 'REGISTER_GRANT':
-      next = applyRegisterGrant(s, e, version);
+      next = applyRegisterGrant(s, e, version, rules);
       break;
     case 'REVOKE':
       next = applyRevoke(s, e, version);
@@ -389,13 +390,13 @@ export interface AppliedBatch {
 }
 
 /** Apply one batch atomically: every event, or none. The version advances by exactly one. */
-export function applyBatch(s: LedgerState, events: readonly LedgerEvent[]): LedgerResult<AppliedBatch> {
+export function applyBatch(s: LedgerState, events: readonly LedgerEvent[], rules: ReducerRules = CORE_RULES): LedgerResult<AppliedBatch> {
   if (events.length === 0) return refuse('BATCH_EMPTY', 'events');
   if (events.length > MAX_BATCH_EVENTS) return refuse('BATCH_TOO_LARGE', 'events');
   const version = (s.version + 1n) as LedgerVersion;
   let current = s;
   for (let i = 0; i < events.length; i += 1) {
-    const next = applyEvent(current, events[i] as LedgerEvent, version);
+    const next = applyEvent(current, events[i] as LedgerEvent, version, rules);
     if (!next.ok) return { ok: false, error: withPath(next.error, `events[${i}]`) };
     current = next.value;
   }
@@ -403,11 +404,11 @@ export function applyBatch(s: LedgerState, events: readonly LedgerEvent[]): Ledg
   return ok({ state: { ...current, version, head: batchHead(encoded) }, encoded });
 }
 
-/** The full fold from genesis over in-memory batches. */
-export function replay(principal: PrincipalId, batches: readonly (readonly LedgerEvent[])[]): LedgerResult<LedgerState> {
+/** The full fold from genesis over in-memory batches, under the same rules the store committed them with. */
+export function replay(principal: PrincipalId, batches: readonly (readonly LedgerEvent[])[], rules: ReducerRules = CORE_RULES): LedgerResult<LedgerState> {
   let s = emptyLedgerState(principal);
   for (let i = 0; i < batches.length; i += 1) {
-    const r = applyBatch(s, batches[i] as readonly LedgerEvent[]);
+    const r = applyBatch(s, batches[i] as readonly LedgerEvent[], rules);
     if (!r.ok) return { ok: false, error: withPath(r.error, `batches[${i}]`) };
     s = r.value.state;
   }
@@ -419,7 +420,7 @@ export function replay(principal: PrincipalId, batches: readonly (readonly Ledge
  * name this principal, carry the next version, extend the previous head and
  * be byte-identical to its own re-encoding.
  */
-export function replayEncoded(principal: PrincipalId, batches: readonly Uint8Array[]): LedgerResult<LedgerState> {
+export function replayEncoded(principal: PrincipalId, batches: readonly Uint8Array[], rules: ReducerRules = CORE_RULES): LedgerResult<LedgerState> {
   let s = emptyLedgerState(principal);
   for (let i = 0; i < batches.length; i += 1) {
     const path = `batches[${i}]`;
@@ -430,7 +431,7 @@ export function replayEncoded(principal: PrincipalId, batches: readonly Uint8Arr
     if (!partyIdsEqual(b.principal, principal) || b.version !== s.version + 1n || b.previousHead !== s.head) {
       return refuse('LEDGER_CHAIN_BROKEN', path);
     }
-    const r = applyBatch(s, b.events);
+    const r = applyBatch(s, b.events, rules);
     if (!r.ok) return { ok: false, error: withPath(r.error, path) };
     if (r.value.encoded.length !== bytes.length || r.value.encoded.some((x, j) => x !== bytes[j])) return refuse('LEDGER_CHAIN_BROKEN', path);
     s = r.value.state;

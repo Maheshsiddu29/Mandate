@@ -31,6 +31,7 @@
 import type { LedgerEvent } from './events.ts';
 import type { LedgerHeadDigest, LedgerVersion, PrincipalId } from '@mandate/core';
 import { applyBatch } from './reducer.ts';
+import { CORE_RULES, type ReducerRules } from './rules.ts';
 import { emptyLedgerState, type LedgerState } from './state.ts';
 import { principalKey, type CommitResult, type CommittedBatch, type LedgerSnapshot, type LedgerStore } from './store.ts';
 
@@ -57,10 +58,13 @@ export interface StoreCounters {
 export class InMemoryLedgerStore implements LedgerStore {
   readonly #logs = new Map<string, PrincipalLog>();
   readonly #hooks: InMemoryStoreHooks;
+  readonly #rules: ReducerRules;
   readonly counters: StoreCounters = { reads: 0, commits: 0, conflicts: 0, refusals: 0 };
 
-  constructor(hooks: InMemoryStoreHooks = {}) {
+  /** `rules` configures the reducer the store applies at commit (rules.ts); it is fixed for the store's life. */
+  constructor(hooks: InMemoryStoreHooks = {}, rules: ReducerRules = CORE_RULES) {
     this.#hooks = hooks;
+    this.#rules = rules;
   }
 
   #log(principal: PrincipalId): PrincipalLog {
@@ -93,7 +97,7 @@ export class InMemoryLedgerStore implements LedgerStore {
       return { status: 'CONFLICT', reason: current.version !== expectedVersion ? 'VERSION_CONFLICT' : 'HEAD_MISMATCH', version: current.version, head: current.head };
     }
     fault?.('AFTER_VERSION_CHECK', principal);
-    const applied = applyBatch(current, events);
+    const applied = applyBatch(current, events, this.#rules);
     if (!applied.ok) {
       this.counters.refusals += 1;
       return { status: 'REFUSED', refusal: applied.error };

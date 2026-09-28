@@ -25,6 +25,7 @@ export { LedgerTag, rescaleExact, compareScaled } from './encoding.ts';
 export * from './pmap.ts';
 export * from './revocation.ts';
 export * from './charge-plan.ts';
+export * from './rules.ts';
 export {
   availableOf,
   emptyLedgerState,

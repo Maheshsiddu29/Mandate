@@ -99,6 +99,8 @@ export const DELEGATION_VIOLATION_CODES = [
   'DELEGATION_DROPS_BOUND',
   'DELEGATION_DROPS_INVARIANT',
   'DELEGATION_DROPS_STATE_POLICY',
+  /** 7D: the invariant definition's `noWeaker` proves the child's parameters weaker. */
+  'DELEGATION_WEAKENS_INVARIANT',
   'DELEGATION_WEAKENS_STATE_POLICY',
   'DELEGATION_DEPTH_EXCEEDED',
   'DELEGATION_TERM_INCOMPARABLE',
@@ -106,8 +108,10 @@ export const DELEGATION_VIOLATION_CODES = [
    * 7C: the child restates a term with different content whose ordering Core
    * cannot decide — an invariant's opaque parameters, a finality level on a
    * ladder Core does not order. Neither "weaker" nor "no weaker" is
-   * provable, so the delegation is refused (fail closed). `noWeaker` is the
-   * invariant definition's, and arrives with domain modules (7D).
+   * provable, so the delegation is refused (fail closed). From 7D, the
+   * invariant definition's `noWeaker`, configured as the reducer's
+   * `InvariantOrdering` (rules.ts), decides invariant parameters; without
+   * one, or when it cannot order them, this code stands.
    */
   'DELEGATION_NARROWING_UNPROVEN',
 ] as const;

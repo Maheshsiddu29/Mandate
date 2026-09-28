@@ -35,6 +35,7 @@ import { checkModuleConformance, type ModuleRegistry } from './registry.ts';
 import type { Revocation } from './revocation.ts';
 import type { DemandRecord } from './state.ts';
 import type { LedgerSnapshot, LedgerStore } from './store.ts';
+import { CORE_RULES, type ReducerRules } from './rules.ts';
 
 export interface RetryPolicy {
   /** Commit attempts, 1..`MAX_COMMIT_ATTEMPTS`. There is no default: the caller chooses how long to contend. */
@@ -59,10 +60,13 @@ type Planner = (snapshot: LedgerSnapshot) => LedgerResult<readonly LedgerEvent[]
 export class AuthorityLedger {
   readonly #store: LedgerStore;
   readonly #registry: ModuleRegistry;
+  readonly #rules: ReducerRules;
 
-  constructor(store: LedgerStore, registry: ModuleRegistry) {
+  /** `rules` must be the rules the store's reducer applies; the engine uses them to refuse before writing. */
+  constructor(store: LedgerStore, registry: ModuleRegistry, rules: ReducerRules = CORE_RULES) {
     this.#store = store;
     this.#registry = registry;
+    this.#rules = rules;
   }
 
   read(principal: PrincipalId): Promise<LedgerSnapshot> {
@@ -79,7 +83,7 @@ export class AuthorityLedger {
       // Recomputed from this snapshot on every attempt.
       const events = plan(snapshot);
       if (!events.ok) return { status: 'REFUSED', refusal: events.error, attempts: attempt, version: snapshot.version };
-      const projected = applyBatch(snapshot.state, events.value);
+      const projected = applyBatch(snapshot.state, events.value, this.#rules);
       if (!projected.ok) return { status: 'REFUSED', refusal: projected.error, attempts: attempt, version: snapshot.version };
       const result = await this.#store.compareAndAppend(principal, snapshot.version, snapshot.head, events.value);
       if (result.status === 'COMMITTED') return { status: 'COMMITTED', snapshot: result.snapshot, attempts: attempt };
@@ -136,7 +140,7 @@ export class AuthorityLedger {
         } else {
           event = { kind: f.kind, at, reservation: f.reservation, generation: f.generation, evidence: f.evidence, amounts: f.amounts };
         }
-        const next = applyEvent(draft, event, version);
+        const next = applyEvent(draft, event, version, this.#rules);
         if (!next.ok) return { ok: false, error: withPath(next.error, `effects[${i}]`) };
         draft = next.value;
         events.push(event);
