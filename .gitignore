@@ -62,3 +62,8 @@ Thumbs.db
 
 # Generated at test time from the committed gate corpus generator (docs/execution-gate.md §11)
 contracts/generated/
+
+# Phase 7E.1: Lighter custody build output and disposable testnet secrets (never committed)
+packages/perp-lighter/custody/bin/
+.lighter-testnet/
+*.lighter-key

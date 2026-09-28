@@ -241,7 +241,7 @@ function readDirection(params: string): Direction | null {
 
 // --- The module -----------------------------------------------------------------------------
 
-const unknown = (reason: string): ModuleResult<InvariantEvaluation> => ({ ok: true, value: { outcome: 'UNKNOWN', reason, observed: null, bound: null } });
+const notEvaluable = (reason: string): ModuleResult<InvariantEvaluation> => ({ ok: true, value: { outcome: 'UNKNOWN', reason, observed: null, bound: null } });
 
 export function createPerpPolicy(config: PerpPolicyConfig): PerpPolicy {
   const ref: ModuleRef = must(validateModuleRef(perpModuleRef(config)));
@@ -561,35 +561,35 @@ export function createPerpPolicy(config: PerpPolicyConfig): PerpPolicy {
 
     evaluateInvariant(term: StateInvariantTerm, projection: ModuleProjection): ModuleResult<InvariantEvaluation> {
       const accounts = term.scope.filter((r) => r.kind === 'ACCOUNT');
-      if (accounts.length !== 1 || term.version !== invariantVersion) return unknown('SCOPE_INVALID');
+      if (accounts.length !== 1 || term.version !== invariantVersion) return notEvaluable('SCOPE_INVALID');
       const account = accounts[0] as ResourceId;
       const fact = (id: string) => projection.invariantFacts.find((f) => f.factId === id && f.subject !== null && resourceIdsEqual(f.subject, account));
       const foreign = fact('perp.foreign-open-orders');
-      if (foreign === undefined) return unknown('ACCOUNT_STATE_UNAVAILABLE');
-      if (foreign.value.type === 'FLAG' && foreign.value.value) return unknown('FOREIGN_OPEN_ORDER');
+      if (foreign === undefined) return notEvaluable('ACCOUNT_STATE_UNAVAILABLE');
+      if (foreign.value.type === 'FLAG' && foreign.value.value) return notEvaluable('FOREIGN_OPEN_ORDER');
       if (term.invariantId === MAX_MARKED_EXPOSURE) {
         const limit = readU64(term.params);
         const gross = fact('perp.account-gross');
-        if (limit === null) return unknown('PARAMS_INVALID');
-        if (gross === undefined || gross.value.type !== 'TOTAL') return unknown('EXPOSURE_UNAVAILABLE');
+        if (limit === null) return notEvaluable('PARAMS_INVALID');
+        if (gross === undefined || gross.value.type !== 'TOTAL') return notEvaluable('EXPOSURE_UNAVAILABLE');
         const bound = { type: 'TOTAL' as const, kind: 'GROSS_EXPOSURE' as const, unit: 'USD' as UnitCode, decimals: USD_DECIMALS, atoms: limit };
         const holds = gross.value.atoms <= limit;
         return { ok: true, value: { outcome: holds ? 'HOLDS' : 'VIOLATED', reason: holds ? 'WITHIN_LIMIT' : 'MARKED_EXPOSURE_EXCEEDED', observed: gross.value, bound } };
       }
       if (term.invariantId === MAX_LEVERAGE) {
         const max = readRatio(term.params);
-        if (max === null) return unknown('PARAMS_INVALID');
+        if (max === null) return notEvaluable('PARAMS_INVALID');
         const lev = fact('perp.target-leverage');
-        if (lev === undefined || lev.value.type !== 'RATIO') return unknown('MARGIN_SETTING_UNKNOWN');
+        if (lev === undefined || lev.value.type !== 'RATIO') return notEvaluable('MARGIN_SETTING_UNKNOWN');
         const holds = compareRatios(lev.value.ratio, max) <= 0;
         return { ok: true, value: { outcome: holds ? 'HOLDS' : 'VIOLATED', reason: holds ? 'WITHIN_LEVERAGE' : 'LEVERAGE_EXCEEDED', observed: lev.value, bound: { type: 'RATIO', ratio: max } } };
       }
       if (term.invariantId === ALLOWED_DIRECTION) {
         const d = readDirection(term.params);
-        if (d === null) return unknown('PARAMS_INVALID');
+        if (d === null) return notEvaluable('PARAMS_INVALID');
         const long = fact('perp.long-exposure');
         const short = fact('perp.short-exposure');
-        if (long?.value.type !== 'FLAG' || short?.value.type !== 'FLAG') return unknown('DIRECTION_UNAVAILABLE');
+        if (long?.value.type !== 'FLAG' || short?.value.type !== 'FLAG') return notEvaluable('DIRECTION_UNAVAILABLE');
         const violated = (d === 'LONG_ONLY' && short.value.value) || (d === 'SHORT_ONLY' && long.value.value);
         return { ok: true, value: { outcome: violated ? 'VIOLATED' : 'HOLDS', reason: violated ? 'DIRECTION_NOT_ALLOWED' : 'DIRECTION_ALLOWED', observed: { type: 'FLAG', value: violated }, bound: { type: 'FLAG', value: false } } };
       }
