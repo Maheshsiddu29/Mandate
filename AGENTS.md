@@ -47,8 +47,11 @@ with the **Phase 7D.1** semantic hardening
 ([§24](docs/core-v1/implementation-7d.md#24-phase-7d3-immutable-authority-semantics-and-final-freeze)).
 **Phase 7E.0** — Lighter venue evidence and the PerpPolicy v1 / Venue Signer
 specification ([docs/phase-7e](docs/phase-7e/README.md)), documentation
-only — is complete and awaiting review; **Phase 7E.1 (implementation) is not
-started** and must not begin until explicitly opened. **Phase 6 is
+only — is accepted; **Phase 7E.1** — PerpPolicy v1, the SQLite reference store,
+`ADMIT_ATTEMPT`, `DISABLED`, pre-execution requirements and the Lighter Venue
+Signer ([implementation-7e1.md](docs/phase-7e/implementation-7e1.md)), testnet
+only — is implemented locally and awaiting review. **Phase 7F is not started**
+and must not begin until explicitly opened. **Phase 6 is
 frozen at `dc98df5`**; nothing in Phase 7 may modify
 MCE v2, Candidate V3, the gate, its libraries, fixture or replay semantics, or
 any canonical vector. Before it came **Phase 6R.2B** (secure gas optimization:
@@ -98,7 +101,7 @@ authorization.
 
 The dependency directions are `adapter → registry → kernel`,
 `router → registry → kernel`, `jev → router → registry → kernel`,
-`execution-gate → kernel`, `core → kernel`, `ledger → core → kernel` and `control → ledger → core → kernel`, never the reverse, and it is enforced by structural tests
+`execution-gate → kernel`, `core → kernel`, `ledger → core → kernel`, `control → ledger → core → kernel`, `ledger-sqlite → ledger → core` and `perp-lighter → control, ledger-sqlite, ledger, core, kernel`, never the reverse, and it is enforced by structural tests
 ([ADR 0004](docs/adr/0004-registry-package-boundary.md),
 [ADR 0012](docs/adr/0012-jev-closed-set-authority-boundary.md)). The kernel,
 registry and router perform no I/O; the Robinhood adapter and the Jev client

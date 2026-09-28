@@ -237,3 +237,22 @@ requires explicit owner authorization, which 7E.0 did not have.
 | E-9 | Meaning of `agent_enabled` (L-ACC-12) and `price_protection` (L-TX-9). | the credential and submission model | venue confirmation |
 | E-10 | Whether a maker-only key (L-ACC-7) is refused withdraw, transfer, mint-shares and update-leverage — i.e. whether "restricted to" is exhaustive. | the hardened signer-key option ([signer-architecture.md §3](signer-architecture.md#3-credential-model)) | testnet on a premium account, or venue confirmation |
 | E-11 | Cross-channel ordering of `account_tx`, `account_orders` and `account_all_trades` messages, and whether `block_height` is monotone per account across channels. | observation sequencing ([reconciliation-evidence.md §5](reconciliation-evidence.md#5-observation-model-for-7f)) | long-running read-only capture with reconnects |
+
+## 14. Phase 7E.1 updates
+
+Appended in Phase 7E.1; the 7E.0 tables above are unchanged. Evidence ids
+refer to [testnet-evidence.md](testnet-evidence.md).
+
+| Claim | 7E.0 confidence | 7E.1 | Evidence |
+| --- | --- | --- | --- |
+| L-TX-3 transaction hash = pre-signature message hash | HIGH (SDK source) | **HIGH, recorded**: 4 of 4 published testnet hashes reproduced from their fields | T-2, E-O2 |
+| L-ACC-9 local signing; server never needs the key | HIGH | unchanged; our locally signed transaction was parsed by the API (refused only for the unknown account) | T-3, E-P2 |
+| L-TX-7 SDK default `ExpiredAt` ≈ 10 min | MEDIUM | **HIGH**: seen in use, signing time + 599 s | T-8 |
+| L-TX-4 one transaction per (account, key) nonce slot | HIGH | consistent: strictly increasing per key in observed sequence order | T-10 |
+| L-FIN-3 `committed_at` / `verified_at` per transaction | MEDIUM | on testnet always 0 (fields present on `tx`, absent on `txs`) | T-5 |
+| L-LIFE-6 meaning of status 3 | LOW | observed on every executed transaction; still undocumented | T-5 |
+| fee rates | — (new) | trades carry a charged fee rate that differs from `orderBookDetails.taker_fee` | T-7 |
+| `nextNonce` for an unknown account | — (new) | `code 200, nonce 0`: not evidence that an account exists | T-4 |
+| API timestamps | — (new) | `executed_at` < `queued_at` in 83/194: not an ordering | T-6 |
+| testnet chain id | S2: 300 | **HIGH, recorded**: hashes reproduce only with 300 | T-1 |
+| E-3 … E-8, E-10 | open | **blocked**: no funded disposable testnet account could be created | testnet-evidence.md §2 |

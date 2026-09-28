@@ -1,12 +1,13 @@
 # Phase 7E.0 — Real perp venue evidence and enforcement contract
 
-> **Status: Phase 7E.0 research and specification, complete and awaiting
-> review. Nothing is implemented.** No production PerpPolicy, signer,
-> key handling, HTTP, WebSocket or RPC client exists. No transaction was sent,
-> no order placed, no key generated or used, and no Lighter endpoint was
-> contacted; only public documentation and public SDK source were read.
-> Phases 7A–7D remain frozen and unchanged. Phase 7E.1 (implementation) has
-> not started and must not begin until explicitly opened.
+> **Status: Phase 7E.0 (research and specification) ACCEPTED. Phase 7E.1
+> (implementation) complete locally and awaiting review** —
+> [implementation-7e1.md](implementation-7e1.md),
+> [testnet-evidence.md](testnet-evidence.md),
+> [security-boundary.md](security-boundary.md). Lighter testnet only; no
+> mainnet, no real funds, no production credentials; reconciliation is Phase
+> 7F and not built. The 7E.0 documents below are kept as written; 7E.1's
+> changes to their assumptions are recorded in venue-evidence.md §14.
 
 Phase 7E will be Mandate's first real external-market integration: a real
 `PerpPolicy`, a venue-native enforcement boundary, the `ADMIT_ATTEMPT`
@@ -26,6 +27,9 @@ protection. 7E.0 establishes the venue facts first and specifies against them.
 | [reconciliation-evidence.md](reconciliation-evidence.md) | the finality ladder, cancellation finality, non-execution rules, the 7F observation vocabulary, sequencing, drift, read budget |
 | [threat-model.md](threat-model.md) | 21 threats with prevent / detect / quarantine / unresolved |
 | [venue-fit.md](venue-fit.md) | the verdict, the nine weaker guarantees, alternatives (Hyperliquid, dYdX v4), conditions to proceed |
+| [implementation-7e1.md](implementation-7e1.md) | **7E.1**: the durable store, `ADMIT_ATTEMPT`, `DISABLED`, pre-execution requirements, PerpPolicy v1, the Venue Signer, crash, concurrency and mutation results, benchmarks, changes to frozen packages |
+| [testnet-evidence.md](testnet-evidence.md) | **7E.1**: every testnet interaction, findings T-1 … T-11, status of E-1 … E-11 |
+| [security-boundary.md](security-boundary.md) | **7E.1**: the broad-credential fact, CRED-1 conditions, deployment profiles, key-theft blast radius, residual risks |
 
 ## Summary
 
@@ -128,4 +132,5 @@ so this is a specification choice, not a contradiction.
 
 ## Stop
 
-7E.0 ends here. The signer, PerpPolicy and 7E.1 are not started.
+7E.0 ended with the specification. 7E.1 implemented it (see
+[implementation-7e1.md](implementation-7e1.md)) and stops before 7F.
