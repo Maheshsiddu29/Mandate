@@ -13,7 +13,9 @@ and what it depends on.
 > ([implementation-7d.md](core-v1/implementation-7d.md)), with its 7D.1
 > semantic hardening, 7D.2 historical semantic provenance and 7D.3 immutable
 > authority semantics — is FROZEN.
-> Phase 7E is NEXT and not started.** No production domain module,
+> Phase 7E.0 — Lighter venue evidence and the PerpPolicy v1 / Venue Signer
+> specification ([phase-7e/](phase-7e/README.md)), documentation only — is
+> complete and awaiting review; Phase 7E.1 is not started.** No production domain module,
 > venue integration, observation reconciliation or later Phase 7 mechanism
 > exists, and nothing has been deployed.
 > Rationale for the phase ordering is in
@@ -595,6 +597,18 @@ reserved or quarantined, and nothing is released on a timeout
 **Depends on** first evidencing the venue facts the adapter needs
 ([core-v1 open question 3](core-v1/README.md#open-questions)).
 
+**7E.0 — venue evidence and specification: complete, awaiting review.**
+Lighter's facts are recorded with sources and confidence
+([phase-7e/venue-evidence.md](phase-7e/venue-evidence.md)), and PerpPolicy v1,
+the Venue Signer, `ADMIT_ATTEMPT`, execution REPLAY-1 and the 7F evidence
+rules are specified against them ([phase-7e/](phase-7e/README.md)). Verdict:
+**FIT WITH LIMITATIONS** ([phase-7e/venue-fit.md](phase-7e/venue-fit.md)).
+Documentation only; nothing was sent, signed or queried.
+**7E.1 — implementation: not started.** Needs owner approval of the additive
+frozen-package items F-1…F-4 and the durable-store scope
+([phase-7e/README.md](phase-7e/README.md#7e-implementation-items-that-touch-frozen-packages)),
+and recorded venue evidence before any testnet submission.
+
 ### Phase 7F — Cross-domain reconciliation: EVM fixture and perps
 
 **Delivers** the EVM adapter over the frozen gate and one principal ledger
@@ -667,7 +681,7 @@ to the product, and belongs in the design documents before it belongs in code.
 | 7B | Core types and generic action/state model | 7A | **FROZEN ✓** — with 7B.1 representation hardening (meet and AUTH-2 → 7C; module interface → 7D) |
 | 7C | Authority Graph + Global Authority Ledger (meet, effective lineage, AUTH-2) | 7B | **FROZEN ✓** |
 | 7D | Invariant + Reservation Engine (executable `DomainModule` interface) | 7C | **FROZEN ✓** — with 7D.1 hardening, 7D.2 provenance and 7D.3 immutable authority semantics (observation reconciliation → 7F, issuance → 7E) |
-| 7E | PerpPolicy v1 and Venue Signer | 7D | **NEXT** — not started; blocked on venue evidence |
+| 7E | PerpPolicy v1 and Venue Signer | 7D | **NEXT** — 7E.0 evidence and specification complete, awaiting review (Lighter: fit with limitations); 7E.1 not started |
 | 7F | Cross-domain reconciliation: EVM fixture and perps | 7E | planned |
 | 7G | Developer SDK and simulator | 7F | planned |
 | 7H | Receipts and authority provenance | 7F | planned |
