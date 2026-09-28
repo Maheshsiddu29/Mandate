@@ -9,6 +9,15 @@
 > [§18](#18-specification-readings-for-owner-review) for review. No venue,
 > network, RPC, signature, enforcement adapter, observation pipeline,
 > production domain module or durable store exists.
+>
+> **Phase 7D.1 (semantic hardening) implemented locally, awaiting review.**
+> Five rulings close the semantic issues left before the first real market
+> integration: one valuation context per canonical asset in a
+> principal-global aggregate, a closed aggregate scope, the baseline rule
+> for new or tightened principal-global invariants, historical availability
+> of retired modules, and the frozen issuance precondition for
+> `NEVER_ISSUED`. See [§22](#22-phase-7d1-semantic-hardening). Where
+> §§1–21 describe 7D as first built, §22 says what changed.
 
 Phase 7D turns
 
@@ -52,6 +61,7 @@ before anything would be issued.
 19. [Invariants](#19-invariants)
 20. [Completion answers](#20-completion-answers)
 21. [Open questions and what is next](#21-open-questions-and-what-is-next)
+22. [Phase 7D.1 semantic hardening](#22-phase-7d1-semantic-hardening)
 
 ## 1. What was built
 
@@ -177,7 +187,8 @@ engine's own re-validation; (4) each vector run twice on frozen copies is
 byte-identical and leaves its inputs unchanged; (5) outcomes equal the
 corpus's expectations. No prohibited dependency is checked structurally, as
 for every package. One implementation per `ModuleRef` may be loaded, and each
-invariant definition has exactly one owner.
+invariant definition has exactly one owner — since 7D.1, one whose name it
+is in: `<moduleId>.<name>` at the module's version (§22.5).
 
 **Digest discipline.** The synthetic module's digest is keccak-256 over a
 manifest of every semantic constant and its corpus identity, so a semantic
@@ -340,7 +351,9 @@ exposure only where a module says so (tested: a WBTC-like market mapped to
 another canonical asset, and ETH, are not counted). A consulted module the
 policy does not list that emits a matching fact makes the aggregate `UNKNOWN
 / UNDECLARED_CONTRIBUTOR`; an unavailable contributor, `UNKNOWN /
-CONTRIBUTOR_UNAVAILABLE`.
+CONTRIBUTOR_UNAVAILABLE`. Since 7D.1 every marked fact must also share one
+valuation context, and every module with an unresolved reservation is
+consulted, listed or not (§22.2, §22.3).
 
 Tested across roots (brief §22, §41, §65): spot 4,000 + perp 3,000 + 1,000
 = 8,000 > 6,000 refuses; each root permitting its own action locally, the
@@ -500,7 +513,8 @@ Coverage, availability and demands are not re-run. A `PASSED` result gives
 the bindings to issue under and a lifetime never beyond the record's; the
 authorization itself is never edited.
 
-**NEVER_ISSUED** (`closeNeverIssued`) is the only release this package can
+**NEVER_ISSUED** (`closeNeverIssued`) — see §22.6 for the precondition frozen
+for 7E — is the only release this package can
 cause. The engine re-reads the ledger, requires the reservation active at the
 record's generation with **nothing consumed**, runs revalidation **itself**
 and requires it to fail, and commits a `CLOSE` releasing every remaining leg
@@ -575,7 +589,7 @@ Bounds (`limits.ts`), each a refusal, never a truncation:
 
 ## 16. Tests and the authorization corpus
 
-`packages/control/test`, 99 tests, offline and deterministic:
+`packages/control/test`, 99 tests at 7D (119 after 7D.1, §22.8), offline and deterministic:
 
 | File | Covers |
 | --- | --- |
@@ -602,7 +616,7 @@ runs); value committed notional at the mark; a comparator calling 5x no
 weaker than 4x. Each is built from the production stages with one change and
 fails a probe production passes.
 
-**Corpus.** `corpus/control-v1/vectors.json`
+**Corpus.** `corpus/control-v1/vectors.json` (7D.1 regenerated one vector, §22.8)
 ([README](../../corpus/control-v1/README.md)): nine vectors — valid,
 missing-state, stale-state, global-invariant, pending-reservation, narrowing
 pass, widening refusal, CAS re-projection, NEVER_ISSUED — each with its exact
@@ -644,6 +658,14 @@ decision costs a few hundred milliseconds, which is why the bound exists; if
 it matters, the projection encoding and the freezing are the places to
 start.
 
+**Known scaling item (7D.1).** The roughly 70 µs per relevant open
+reservation stands, and 7D.1 does not optimize it: correctness first. Where
+a principal-global aggregate applies, 7D.1 also consults every module with an
+unresolved reservation, so that module's projection is added to the
+decision. A future direction is to index reservation facts by principal,
+canonical asset or resource, economic fact kind and aggregate scope; nothing
+speculative is built.
+
 ## 18. Specification readings for owner review
 
 Every choice is the fail-closed one; none changes a frozen decision.
@@ -652,17 +674,17 @@ Every choice is the fail-closed one; none changes a frozen decision.
 | --- | --- | --- | --- |
 | 1 | brief §9 vs Core `StateBinding` | The binding must bind the `ModuleRef`; Core's frozen `StateBinding` has no module field | Bound transitively: `stateDigest` is over the envelope, which carries the full `ModuleRef`. The authorization record also lists each binding's module |
 | 2 | action-state-model.md §5.2 | Source configuration must come from somewhere trusted | The operator's explicit evaluation context; digested into the authorization. No `trustedVersionPins`: a pin is part of the effective requirement |
-| 3 | action-state-model.md §6 "values the sum at one admitted mark" vs brief §22 | Cross-domain aggregation of marked facts | Each contributor values its own facts at its own admitted mark; Core sums like with like as an unvalued `TOTAL`. Requiring one shared mark is an open question |
-| 4 | action-state-model.md §6 "every domain" | Which modules an aggregate covers | Its contributor list, stated in its parameters; a consulted non-contributor emitting a matching fact makes it `UNKNOWN`. Pending reservations under a non-contributor predating the policy are not counted (AUTH-GLOBAL-2 territory) |
+| 3 | action-state-model.md §6 "values the sum at one admitted mark" vs brief §22 | Cross-domain aggregation of marked facts | **Superseded by 7D.1 (§22.2):** every marked fact in a principal-global aggregate must share one valuation context per canonical asset, or the aggregate is `UNKNOWN` |
+| 4 | action-state-model.md §6 "every domain" | Which modules an aggregate covers | Its contributor list, stated in its parameters, and closed. **7D.1 (§22.3):** every module with an unresolved reservation is consulted too, so pending activity under a module no longer listed is never silently ignored |
 | 5 | action-state-model.md §8.1 `lotCompatibility` | A module seeing reservations of another version | Only its exact ref's; others in its domain make its own invariants `UNKNOWN` |
 | 6 | PROJ-1 | Consumption recorded on a pending reservation | Not subtracted: the whole reservation counts, possibly double-counting a reflected fill (conservative) until reconciliation |
 | 7 | brief §33 vs action-state-model.md §5.5 | Which state bounds lifetime | `BOUNDED_BY_FRESHNESS` bindings (as specified); other bindings are re-admitted or rechecked at issue |
 | 8 | reservations-reconciliation.md §4 `REVALIDATE` | A revalidation that passes | Returned as a value; committing `REVALIDATE` / `ADMIT_ATTEMPT` is the issuance phase's (7E) |
-| 9 | reservations-reconciliation.md §4 `NEVER_ISSUED` | "No attempt was ever admitted" with no `ADMIT_ATTEMPT` event | Holds vacuously in 7D; also required: no consumption. Anyone able to make revalidation fail (e.g. by withholding fresh state) can close an unissued reservation — safe only because nothing can be issued yet. 7E must add the attempt precondition |
+| 9 | reservations-reconciliation.md §4 `NEVER_ISSUED` | "No attempt was ever admitted" with no `ADMIT_ATTEMPT` event | Holds vacuously in 7D; also required: no consumption. Anyone able to make revalidation fail (e.g. by withholding fresh state) can close an unissued reservation — safe only because nothing can be issued yet. **Frozen in 7D.1 (§22.6)** as the 7E precondition |
 | 10 | brief §18 | How the ledger accepts a comparator result without a forgeable input | Reducer configuration (`ReducerRules`), not event data; replay needs the same ordering |
 | 11 | authority-model.md §3 coverage | Accounts in coverage | `ACCOUNT` resources are not set-checked; every present vocabulary is closed-world |
 | 12 | (not specified) | The state payload digest | `H("mandate-core/v1/state-payload/" ‖ moduleDigest, payload)`, the state analogue of Core's action payload digest |
-| 13 | roadmap §7D exit criteria | RECON-1…5, TIME-1, REPLAY-1 via observations | Not in this brief (venue-driven transitions are excluded) and not built; they move with observation reconciliation |
+| 13 | roadmap §7D exit criteria | RECON-1…5, TIME-1, REPLAY-1 via observations | Not in this brief (venue-driven transitions are excluded) and not built. **7D.1 (§22.7)** corrected the roadmap: RECON-1…5 and TIME-1's external part go to 7F, and REPLAY-1's execution/artifact part to 7E |
 | 14 | 7C §14 item 2 (second half) | Finality ordering in delegated state policies | Unchanged: a different finality level is still `DELEGATION_NARROWING_UNPROVEN` |
 | 15 | reservations-reconciliation.md §10a | Demands during revalidation | Not re-derived, as specified ("the reservation already holds its authority"); a module whose demand depends on state would need this revisited |
 
@@ -688,7 +710,7 @@ Every choice is the fail-closed one; none changes a frozen decision.
 | **EXEC-3/EXEC-6** foundations | the attempt ceiling is the lifetime, bounded by every dependency | `engine.test.ts` |
 | **RECON-2** | **Partly**: facts and closure are generation-exact | `engine.test.ts` |
 | **LEDGER-1…6**, **AUTH-4**, **AUTH-5** | Unchanged from 7C; every 7C test passes | ledger suite |
-| **AUTH-GLOBAL-2** | **Not established**: `POLICY_UPDATE_REQUIRES_BASELINE` still stands; no baseline economic state is modelled | — |
+| **AUTH-GLOBAL-2** | **Not established**: `POLICY_UPDATE_REQUIRES_BASELINE` still stands, and since 7D.1 it also covers new or tightened principal-global state invariants; no baseline economic state is modelled (§22.4) | `policy.test.ts`, `scope.test.ts` |
 | **RECON-1/3/4/5**, **TIME-1** (observations), **REPLAY-1** (`SPENT`), **LEDGER-RESTORE-1** by evidence, **DRIFT-\***, **EXEC-1/2/4/5**, **CRED-1**, **RECEIPT-\*** | **Not established**: observation reconciliation, issuance, adapters and receipts are later phases | — |
 | **PHASE6-1** | Holds: no Phase 6 file, Solidity source or existing corpus changed | `generated:check` |
 
@@ -710,22 +732,329 @@ Every choice is the fail-closed one; none changes a frozen decision.
 
 ## 21. Open questions and what is next
 
-1. **One mark for marked aggregates** (§18 item 3).
-2. **Aggregate coverage of pre-existing pending reservations** under a
-   non-contributor module (§18 item 4) — with AUTH-GLOBAL-2.
+1. ~~One mark for marked aggregates~~ — ruled in 7D.1 (§22.2).
+2. ~~Aggregate coverage of pre-existing pending reservations under a
+   non-contributor module~~ — ruled in 7D.1 (§22.3); the baseline itself
+   remains AUTH-GLOBAL-2 (§22.4).
 3. **`lotCompatibility`** for reservations under earlier module versions
    (§18 item 5).
-4. **Issuance** (7E): commit `REVALIDATE` and `ADMIT_ATTEMPT`, add the attempt
-   precondition to `NEVER_ISSUED`, and bind artifacts to the lifetime.
-5. **Observation reconciliation**: consumption, release, restoration and
-   watermarks from validated evidence (RECON-*, TIME-1, REPLAY-1), replacing
-   the raw `settle` still available to infrastructure.
-6. **Registry governance** (open question 16) now also decides which
-   comparators order delegated invariants, and must keep retired ones for
-   replay.
-7. **Hot-path cost** at many open reservations (§17).
+4. **Issuance** (7E): commit `REVALIDATE` and `ADMIT_ATTEMPT`, enforce the
+   frozen `NEVER_ISSUED` precondition (§22.6), bind artifacts to the lifetime,
+   and establish REPLAY-1's execution/artifact half (§22.7).
+5. **Observation reconciliation** (7F): consumption, release, restoration and
+   watermarks from validated evidence (RECON-1…5, TIME-1's external part),
+   replacing the raw `settle` still available to infrastructure.
+6. **Registry governance and the module archive** (open question 16) decide
+   which comparators order delegated invariants, and must keep every module a
+   replayable history depends on (§22.5).
+7. **Hot-path cost** at many open reservations (§17, known scaling item).
 8. **Finality ordering** for delegated state policies (7C open question 2,
    second half).
 
 **Next (on approval): Phase 7E**, the first real domain module and its
-enforcement adapter. Not started.
+enforcement adapter. Not started; 7D.1 did not begin it.
+
+## 22. Phase 7D.1 semantic hardening
+
+7D's architecture was accepted. 7D.1 is a small checkpoint that closes five
+semantic issues before the first real market integration. It adds no phase
+work: no real perp module, no venue, signer, execution artifact, fill or
+cancel reconciliation, custody, RPC or HTTP/WebSocket client. 7D remains the
+deterministic authorization and reservation layer. Phase 6, `packages/core`,
+the frozen 7A specification and every Solidity source are unchanged.
+
+### 22.1 Rulings
+
+| # | Ruling | Where |
+| --- | --- | --- |
+| R1 | **One valuation context per canonical asset** in a principal-global aggregate. Two marked facts valued at different admitted observations are never summed | `aggregate.ts` |
+| R2 | **Aggregate scope is closed and fail-closed in v1.** An aggregate names the exact `ModuleRef`s it understands. An unlisted module's matching fact is `UNKNOWN`, never ignored, and nothing is trusted by `DomainId` or fact name | `aggregate.ts`, `pipeline.ts` |
+| R3 | **A policy update needs a baseline once economic activity exists.** A new or tightened principal-global economic invariant cannot become active after anything was reserved. The update is refused `POLICY_UPDATE_REQUIRES_BASELINE` | ledger `checkPolicyBaseline` |
+| R4 | **Retired modules stay available for historical verification.** `RETIRING` (retired for new use) never means unavailable for replay or audit | `catalog.ts` |
+| R5 | **`NEVER_ISSUED` becomes stricter in 7E.** Once an issuance attempt is admitted for a reservation generation, `NEVER_ISSUED` is no longer a release path for it | frozen here, built in 7E |
+
+### 22.2 Valuation context (R1)
+
+The old behaviour summed each contributor's facts at its own mark into an
+unvalued `TOTAL`. That is wrong: 4,000 at BTC = 50,000 plus 3,000 at BTC =
+52,000 is not valued at any single price. Now every matching fact with a
+`MARK` valuation must carry the same context:
+
+```text
+ValuationContext {
+  asset       the cited snapshot's subject — must be exactly the aggregate's CANONICAL_ASSET
+  source      the snapshot's configured StateSourceId
+  sequence    the snapshot's sequence
+  observedAt  the snapshot's observation time — must equal the ValuationRef's own
+  price       the ValuationRef's exact Price (numerator and denominator units, decimals, atoms)
+}
+```
+
+It is built from existing primitives only: the fact's Core `ValuationRef`,
+whose `MARK` source is a `StateId`, and the envelope of the admitted snapshot
+that `StateId` names. Nothing new is added to Core, there is no new price
+system, and no payload is copied. A `StateId` cannot be the identity by
+itself, because a snapshot is normalized under exactly one module (DOM-2), so
+two modules never share one. What they can share is the module-independent
+observation, and that is what is compared. For a multi-asset policy the
+conceptual `ValuationSet` is one such context per canonical asset. Each
+`core.aggregate-max` term scopes exactly one asset, so each aggregate
+evaluation has exactly one context.
+
+Before anything is summed, every matching fact must have the aggregate's
+kind, unit and exact canonical asset (as before). Its module must be a
+listed contributor (R2), and its provenance must already be valid (checked
+by `outputs.ts`). All of its valuation contexts must then be equal. If they
+are not, the result is `UNKNOWN`, with one of these reasons:
+
+| Reason | Case |
+| --- | --- |
+| `VALUATION_CONTEXT_MISMATCH` | two marked facts under different contexts: another price, observation time, sequence or source |
+| `VALUATION_NOT_OF_AGGREGATE_ASSET` | the mark is not an observation of the scoped canonical asset. A module's own market mark is domain-local |
+| `VALUATION_PROVENANCE_MISMATCH` | the valuation's `observedAt` differs from its snapshot's |
+| `VALUATION_STATE_UNRESOLVED` | the cited snapshot is not among those admitted to the module |
+| `VALUATION_BASIS_MIXED` | marked and unmarked facts in one matched set |
+
+The engine never picks the newest mark, never averages marks, never adopts
+one module's mark and never converts silently. Local and domain-only
+invariants keep using their own admitted marks. A module's market mark
+serves its own `max-exposure` invariant, but not a principal-global
+aggregate. The test-only synthetic module has a `valuation: 'ASSET'` option
+that values positions at a mark of the canonical asset. That option changes
+its manifest and digest; market-valued modules keep their 7D digests.
+
+**Reading for review.** A `LIMIT` or `EXECUTION` valuation (committed
+notional) is an order's or a fill's own price. It is fixed when committed and
+never revalued, and the ledger itself counts a sum of such commitments. So
+those facts are not required to share one price. The ruling is applied to
+`MARK` valuations, the ones that revalue.
+
+**Test (brief §7).** Module A holds 0.08 BTC, which is 4,000.00 at its admitted
+BTC mark of 50,000. Module B holds 0.0577 BTC, which is 3,000.40 at 52,000
+(0.0577 is the nearest 4-decimal size to 3,000). The principal-global BTC
+limit is ≤ 10,000. The result is `INVARIANT_UNKNOWN / VALUATION_CONTEXT_MISMATCH`,
+no number is reported and nothing is reserved. Given one shared admitted
+observation at 50,000, the same positions sum exactly to 4,000.00 + 2,885.00
++ 100.00 proposed = 6,985.00, the result is `HOLDS`, both modules' mark
+snapshots appear as evidence, and the action reserves. Also tested:
+- the same price observed one second apart is refused;
+- swapping or nudging the two prices is refused in every order;
+- a market-valued module's own invariant `HOLDS` while its principal-global
+  aggregate is `UNKNOWN`;
+- source, sequence, observation-time, subject and missing-snapshot changes are
+  each detected by the context check itself.
+
+### 22.3 Closed aggregate scope (R2)
+
+7D already made the aggregate `UNKNOWN` when a *consulted* non-contributor
+emitted a matching fact. The gap was a module that was never consulted. A
+reservation made under a module that a later policy stopped listing was
+not projected at all, so it silently dropped out of the aggregate.
+
+Now, wherever a `core.aggregate-max` applies, the engine consults every
+listed contributor, the acting module and **every module with an unresolved
+reservation of the principal**. Each is asked, under its exact `ModuleRef`,
+for its part of the aggregate. Then:
+- a matching fact from a non-contributor gives `UNDECLARED_CONTRIBUTOR`;
+- a contributor that cannot be resolved or projected gives
+  `CONTRIBUTOR_UNAVAILABLE`;
+- an unlisted module with unresolved reservations that cannot be consulted
+  gives `UNDECLARED_MODULE_UNAVAILABLE`.
+
+Each of these is `UNKNOWN`, so the action refuses. A module in a listed
+module's domain under another `ModuleRef` is not trusted by `DomainId`: its
+matching facts make the aggregate `UNKNOWN`.
+
+A non-contributor consulted this way is asked, not assumed. If its own
+semantics project no matching fact, it does not block the aggregate. For
+example, the spot module's pending ETH order does not block a BTC aggregate
+that no longer lists spot. This is the only irrelevance the engine accepts,
+because the module's frozen semantics prove it. Any failure to consult the
+module refuses.
+
+**Test.** Policy 1 aggregates BTC over spot and perp, and spot reserves 3,000.
+Policy 2 lists only perp. This is provably no stronger (R3), so it installs.
+A perp action is now `UNKNOWN / UNDECLARED_CONTRIBUTOR`; without the
+consultation it would pass. With spot's implementation missing the result is
+`UNDECLARED_MODULE_UNAVAILABLE`. Once the reservation resolves, the action
+passes.
+
+### 22.4 Policy-update baseline (R3) and AUTH-GLOBAL-2
+
+7C refused a new ledger dimension after the first reservation. 7D.1 extends
+the same rule in the ledger reducer (`checkPolicyBaseline`, the only
+`packages/ledger` change) to the principal policy's `STATE_INVARIANT` terms.
+Once anything was reserved (`everReserved`), each invariant in the new policy
+must meet one of two conditions:
+
+- restate an old one with the same `(invariantId, version, scope)` and
+  identical parameters; or
+- be provably no stronger than that old one. That is, the owning definition's
+  `noWeaker(parent = new, child = old)` is `NO_WEAKER`, from the store's
+  configured ordering.
+
+Anything else is refused `POLICY_UPDATE_REQUIRES_BASELINE`: a new invariant,
+a changed scope, a tighter limit, an added aggregate contributor, or an
+`UNPROVABLE` comparison. Removing an invariant is allowed. Replay asks the
+same ordering, so a loosened policy history replays under
+`controlRules(catalog)` and is refused under the bare 7C rules. That is
+tested, as is the head being reproduced.
+
+The engine does not try to infer that an earlier reservation is irrelevant to
+the new constraint: any committed reservation counts as activity. So
+pre-policy reservations under an unlisted module cannot disappear by
+installing a new closed module list. Tightening the list is refused here.
+Loosening it is allowed, but those reservations still count through R2.
+
+**AUTH-GLOBAL-2 is still not established.** 7D.1 does not implement baseline
+reconciliation. Establishing it needs all of the following, and none exists:
+
+- a complete economic baseline of the principal;
+- the existing positions, per canonical asset and module;
+- the existing unresolved reservations, attributed to the new constraint;
+- proof that the policy's scope covers all of them;
+- evidence-backed acceptance of that baseline.
+
+### 22.5 Module retirement and historical replay (R4)
+
+`RETIRING` means **retired for new use**, not unavailable for historical
+verification. Suppose a ledger holds a delegation whose narrowing proof
+depended on `ModuleRef` M. Replay or audit must then run exactly the
+comparator identified by `M.moduleDigest`. Tested end to end:
+
+1. M proves a 3x child under a 4x parent, and two reservations follow.
+2. M is marked `RETIRING`.
+3. A new authorization under M is refused (`MODULE_NOT_FOUND / MODULE_RETIRING`),
+   and so is a new narrowing it would prove (`COMPARATOR_NOT_ACTIVE`).
+4. Replay from genesis under the archived M reproduces the head and the
+   byte-identical ledger state.
+5. With M removed from the historical verifier, replay refuses
+   (`DELEGATION_NARROWING_UNPROVEN`). It never silently accepts the history.
+
+**No substitution.** An invariant term names `(invariantId, version)`, not a
+digest. So 7D.1 makes the catalog require every invariant a module claims to
+be in its own name: `<moduleId>.<name>` at the module's version
+(`INVARIANT_OUTSIDE_MODULE_NAMESPACE` otherwise). The registry binds that
+name to exactly one digest. Tested cases:
+- a newer version claiming M's definitions is not conforming;
+- loaded with its own definitions only, it does not own M's, and replay
+  refuses;
+- another digest under M's name is refused `MODULE_DIGEST_MISMATCH`.
+
+**Archive.** Deterministic historical replay depends on the content-addressed
+semantic artifacts that ledger history references. The production module
+registry and archive must keep them, and never remap a `(moduleId, version)`
+name to another digest, for as long as dependent history stays auditable.
+Replay cannot detect a registry that breaks this, because the log does not
+carry the digest. Long-term storage and provider design are not solved here
+(open question 16).
+
+### 22.6 `NEVER_ISSUED` and the frozen 7E issuance precondition (R5)
+
+7D.1 does not change `NEVER_ISSUED`: no execution artifact exists, and
+nothing can be issued. It freezes what 7E must build **before any
+enforcement adapter may issue or sign an external artifact**. First commit
+an issuance-attempt event or state (`ADMIT_ATTEMPT`) for the exact
+reservation generation. Then:
+
+```text
+RESERVED
+    │ revalidation fails before attempt admission
+    ▼
+NEVER_ISSUED
+
+RESERVED
+    │
+    ▼
+ADMIT_ATTEMPT committed
+    ├──► ARTIFACT_ISSUED
+    └──► uncertain failure ──► remains reserved / quarantined
+```
+
+Once `ADMIT_ATTEMPT` exists for a generation, `NEVER_ISSUED` may not close
+that generation merely because later revalidation, process execution or
+signer behaviour failed. There is no automatic release after a timeout
+(TIME-1). No `ADMIT_ATTEMPT` placeholder is built in 7D.1. The transition is
+7E's.
+
+### 22.7 Roadmap ownership (corrected, not implemented early)
+
+The original 7D exit criteria named RECON-1…5, TIME-1 and REPLAY-1. Each
+depends on something 7D does not have, so the roadmap ordering was
+**corrected**. These invariants are not claimed, and they were not built
+early to close 7D:
+
+| Criterion | Depends on | Now owned by |
+| --- | --- | --- |
+| RECON-1…5 | validated observations, finality and idempotent application | **7F** Cross-Domain Reconciliation |
+| TIME-1, external/finality part (a lapsed ceiling quarantines, never closes, against real observations) | observation finality | **7F** |
+| REPLAY-1, execution-authorization / artifact replay protection (`SPENT` intents) | the first signer and issuance boundary | **7E** |
+
+Already-established internal foundations stay credited where they were
+built:
+- generation-exact reservation identity and facts (RECON-2, partly);
+- no time-triggered release in the reducer (TIME-1's internal half, 7C);
+- non-repeating generations (7C/7D).
+
+### 22.8 Tests, corpus and mutants
+
+119 control tests (from 99) and 146 ledger tests. The one 7C test that
+asserted invariants "may be replaced freely" now asserts R3.
+
+| File | Covers |
+| --- | --- |
+| `valuation.test.ts` | the §7 two-mark case and its shared-binding pass; observation time; every price order; market marks; the context check field by field |
+| `scope.test.ts` | an unlisted module's pending activity; unavailable unlisted module; consultation, not refusal by name; same `DomainId`; baseline refusals, allowances and replay |
+| `retirement.test.ts` | the §12 retirement / archive / replay sequence and its negative and substitution cases |
+| `catalog.test.ts` | the invariant-namespace rule |
+| `mutation.test.ts` | the mutants below |
+
+The aggregate scenarios of the global, concurrency, determinism, model and
+mutation suites now use asset-valued modules. With market marks they would,
+correctly, be `UNKNOWN`. All 7D scenarios still pass:
+- missing and stale state;
+- pending included;
+- 4x→3x passes and 4x→5x refuses;
+- cross-root aggregates;
+- CAS re-projection;
+- the 100-agent run;
+- `NEVER_ISSUED`;
+- every 7D mutant.
+
+The `global-invariant-refusal` corpus vector was regenerated for asset-valued
+modules, so its module digest and outcome digests changed. Its outcome is
+unchanged: `INVARIANT_FAILED / AGGREGATE_LIMIT_EXCEEDED`. No other vector
+changed.
+
+**Mutants added, each killed:**
+
+| Mutant | Change | Killed by |
+| --- | --- | --- |
+| A | sum marked facts valued at different BTC observations (skip R1) | the 50,000 / 52,000 probe authorizes |
+| B | ignore an unlisted module's matching aggregate fact (skip R2) | spot's unresolved 3,000 drops out; perp authorizes |
+| C | the policy gate forgets principal-global invariants (skip R3) | a tightened aggregate installs after a reservation; production's store refuses it |
+| D | when a historical comparator cannot be resolved, trust the history | replay without M succeeds; production refuses |
+
+### 22.9 Security status after 7D.1
+
+| Invariant | Status |
+| --- | --- |
+| Cross-domain valuation consistency (R1) | **Established** for `core.aggregate-max`: no two marked facts under different admitted valuation contexts are summed |
+| Closed aggregate scope (R2) | **Established**: every module with unresolved activity is consulted, and an unlisted one's matching fact or unavailability refuses |
+| **AUTH-GLOBAL-2** | **Not established** (§22.4) |
+| **RECON-1…5** | **Not established**, owned by 7F |
+| TIME-1, external/finality part | **Not established**, owned by 7F |
+| **REPLAY-1**, execution/artifact part | **Not established**, owned by 7E |
+| Everything else in §19 | Unchanged |
+
+### 22.10 Explicit answers
+
+| Question | Answer |
+| --- | --- |
+| Can two marked facts using different BTC marks be summed into one principal-global BTC exposure? | **No** — `VALUATION_CONTEXT_MISMATCH` |
+| Can an unlisted module's matching fact be silently ignored? | **No** — `UNDECLARED_CONTRIBUTOR` / `UNDECLARED_MODULE_UNAVAILABLE` |
+| Can a new global invariant ignore pre-existing unresolved activity? | **No** — `POLICY_UPDATE_REQUIRES_BASELINE` |
+| Can a retired module disappear if historical ledger replay depends on it? | **No** — replay refuses without it, and nothing substitutes for it |
+| Can `NEVER_ISSUED` remain the release path after a real issuance attempt has been admitted in 7E? | **No** — frozen precondition (§22.6) |
+| Is AUTH-GLOBAL-2 established yet? | **No** |
+| Are RECON-1…5 established yet? | **No** |

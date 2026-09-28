@@ -503,14 +503,29 @@ are folded without observation validation, which is 7D's. AUTH-GLOBAL-2 is not
 established: a new principal-global dimension is refused once anything was
 reserved.
 
-### Phase 7D — Invariant + Reservation Engine — IMPLEMENTED, awaiting review
+### Phase 7D — Invariant + Reservation Engine — IMPLEMENTED; 7D.1 hardening awaiting review
 
 **Delivers** the executable `DomainModule` interface (decode, resources,
 required state, risk direction, projection, contributions, settle, positions,
 invariants), invariant dispatch, conservative projection, the reservation
 state machine and reconciliation rules.
-**Exit:** RECON-1…5, TIME-1 and REPLAY-1 established by randomized
-reconciliation properties with duplicated, reordered and stale observations.
+**Exit (as originally written):** RECON-1…5, TIME-1 and REPLAY-1 established
+by randomized reconciliation properties with duplicated, reordered and stale
+observations.
+
+**Exit ownership corrected in 7D.1.** The original exit criteria depend on
+things 7D does not have, so the ordering was corrected. The invariants were
+not implemented early, and they are not claimed to close 7D:
+
+- **RECON-1…5** → **7F**: they need validated observations, finality and
+  idempotent application.
+- **TIME-1, the external/finality part** → **7F**.
+- **REPLAY-1, execution-authorization / artifact replay protection** →
+  **7E**, where the first signer and issuance boundary exist.
+
+The internal foundations already built stay credited to 7C/7D:
+generation-exact reservation identity and facts, non-repeating generations,
+and no time-triggered release in the reducer.
 
 **As built** ([implementation-7d.md](core-v1/implementation-7d.md),
 ADRs [0024](adr/0024-version-bound-domain-module-interface.md)–[0026](adr/0026-worst-case-projection-over-pending-reservations.md)):
@@ -523,13 +538,39 @@ narrowing through a configured ledger ordering; ledger demands into charge
 plans; atomic reservation by CAS with full re-projection on conflict; pure
 revalidation and `NEVER_ISSUED` closure. The phase brief excluded
 venue-driven transitions, so observation reconciliation — and with it the
-exit criteria RECON-1…5, TIME-1 and REPLAY-1 — is **not** built; it moves
-with the reconciliation work (7F). `settle` and `positions` are not part of
-the interface yet. No production domain module exists.
+exit criteria RECON-1…5, TIME-1 and REPLAY-1 — is **not** built; see the
+corrected ownership above. `settle` and `positions` are not part of the
+interface yet. No production domain module exists.
+
+**Phase 7D.1 — semantic hardening** (implemented locally, awaiting review;
+[implementation-7d.md §22](core-v1/implementation-7d.md#22-phase-7d1-semantic-hardening)).
+It closes five issues before the first real market integration, as rulings:
+
+- a principal-global marked aggregate uses one admitted valuation context per
+  canonical asset;
+- aggregate scope is closed and fail-closed, and every module with unresolved
+  activity is consulted;
+- a new or tightened principal-global invariant needs a baseline once
+  activity exists (`POLICY_UPDATE_REQUIRES_BASELINE`);
+- retired modules stay available for historical replay, and invariant
+  ownership is bound to the module's name and version;
+- `NEVER_ISSUED` becomes unavailable once 7E admits an issuance attempt.
+
+Cross-domain valuation consistency is established. AUTH-GLOBAL-2, RECON-1…5
+and REPLAY-1 are not.
 
 ### Phase 7E — PerpPolicy v1 and Venue Signer
 
 **Delivers** the perp domain module and a Venue Signer adapter.
+**Exit (from 7D, corrected in 7D.1):** REPLAY-1's execution-authorization and
+artifact replay protection.
+**Frozen precondition (7D.1).** Before any enforcement adapter may issue or
+sign an external artifact, it must commit an issuance-attempt event
+(`ADMIT_ATTEMPT`) for the exact reservation generation. From then on,
+`NEVER_ISSUED` cannot close that generation because later revalidation,
+process execution or signer behaviour failed. An uncertain failure leaves it
+reserved or quarantined, and nothing is released on a timeout
+([implementation-7d.md §22.6](core-v1/implementation-7d.md#226-never_issued-and-the-frozen-7e-issuance-precondition-r5)).
 **Depends on** first evidencing the venue facts the adapter needs
 ([core-v1 open question 3](core-v1/README.md#open-questions)).
 
@@ -538,7 +579,9 @@ the interface yet. No production domain module exists.
 **Delivers** the EVM adapter over the frozen gate and one principal ledger
 shared across the EVM fixture and perps.
 **Exit:** examples A–C of [core-v1/examples.md](core-v1/examples.md) run as
-tests.
+tests; and, from 7D (corrected in 7D.1), RECON-1…5 and TIME-1's
+external/finality part, established by randomized reconciliation properties
+with duplicated, reordered and stale observations.
 
 ### Phase 7G — Developer SDK and simulator
 

@@ -39,7 +39,10 @@ admission, worst-case projection, invariant evaluation, semantic delegation
 narrowing and atomic reservation through the ledger, with a test-only
 synthetic module and no venue
 ([docs/core-v1/implementation-7d.md](docs/core-v1/implementation-7d.md),
-ADRs [0024](docs/adr/0024-version-bound-domain-module-interface.md)–[0026](docs/adr/0026-worst-case-projection-over-pending-reservations.md)). **Phase 6 is
+ADRs [0024](docs/adr/0024-version-bound-domain-module-interface.md)–[0026](docs/adr/0026-worst-case-projection-over-pending-reservations.md)),
+with the **Phase 7D.1** semantic hardening, also awaiting review
+([§22](docs/core-v1/implementation-7d.md#22-phase-7d1-semantic-hardening)); Phase
+7E is not started. **Phase 6 is
 frozen at `dc98df5`**; nothing in Phase 7 may modify
 MCE v2, Candidate V3, the gate, its libraries, fixture or replay semantics, or
 any canonical vector. Before it came **Phase 6R.2B** (secure gas optimization:

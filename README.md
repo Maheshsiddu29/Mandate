@@ -5,7 +5,9 @@ financial assets.**
 
 > **Current: Phase 7D — the invariant and reservation engine
 > (`packages/control`,
-> [docs/core-v1/implementation-7d.md](docs/core-v1/implementation-7d.md)) — is
+> [docs/core-v1/implementation-7d.md](docs/core-v1/implementation-7d.md)), with
+> its Phase 7D.1 semantic hardening
+> ([§22](docs/core-v1/implementation-7d.md#22-phase-7d1-semantic-hardening)) — is
 > implemented locally and awaiting review, on Phase 7C's authority graph and
 > global authority ledger (`packages/ledger`,
 > [implementation-7c.md](docs/core-v1/implementation-7c.md)), Phase 7B's Core
