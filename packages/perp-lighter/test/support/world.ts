@@ -34,6 +34,7 @@ import {
   type InMemoryStoreHooks,
   type LedgerStore,
   type ModuleStatus,
+  type ReducerRules,
   type RetryPolicy,
 } from '@mandate/ledger';
 import { ControlEngine, ModuleCatalog, controlRules, statePayloadDigest, type AuthorizationOutcome, type AuthorizationRecord, type DomainModule, type EvaluationContextInput, type SuppliedState } from '@mandate/control';
@@ -121,6 +122,8 @@ export interface WorldOptions {
   readonly moduleStatus?: ModuleStatus;
   readonly adapterStatus?: AdapterStatus;
   readonly store?: LedgerStore;
+  /** Build the store with this world's reducer rules (e.g. the SQLite reference store). */
+  readonly storeOf?: (rules: ReducerRules) => LedgerStore;
   readonly hooks?: InMemoryStoreHooks;
   readonly policy?: PerpPolicy;
   /** Other adapters the registry knows, as ACTIVE (the cross-domain tests' spot adapter). */
@@ -133,7 +136,7 @@ export function perpWorld(o: WorldOptions = {}): PerpWorld {
   const registry = must(ReferenceModuleRegistry.create(modules.map((m) => ({ module: m.ref, status: m === policy ? (o.moduleStatus ?? 'ACTIVE') : 'ACTIVE', implementations: [m.implementation] }))));
   const adapters = must(ReferenceAdapterRegistry.create([{ adapter: lighterAdapterRef({ chainId: CHAIN }), status: o.adapterStatus ?? 'ACTIVE' }, ...(o.extraAdapters ?? []).map((a) => ({ adapter: must(validateAdapterRef(a)), status: 'ACTIVE' as const }))]));
   const catalog = must(ModuleCatalog.create(registry, modules.map((module) => ({ module, corpus: [] }))));
-  const store = o.store ?? new InMemoryLedgerStore(o.hooks ?? {}, controlRules(catalog));
+  const store = o.store ?? o.storeOf?.(controlRules(catalog)) ?? new InMemoryLedgerStore(o.hooks ?? {}, controlRules(catalog));
   return { policy, modules, registry, adapters, catalog, store, engine: new ControlEngine({ store, registry, catalog, adapters }) };
 }
 
