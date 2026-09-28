@@ -34,6 +34,7 @@ Status values: `Proposed`, `Accepted`, `Superseded by ADR NNNN`, `Rejected`.
 | [0020](0020-mandate-core-package-and-encoding.md) | Mandate Core package boundary and canonical encoding | Proposed |
 | [0021](0021-authority-ledger-package-boundary.md) | Authority ledger package boundary | Proposed |
 | [0022](0022-principal-event-log-and-derived-state.md) | Principal event log, hash chain and derived ledger state | Proposed |
+| [0023](0023-ledger-store-contract.md) | Ledger store contract and the in-memory reference store | Proposed |
 
 The canonical product specification remains
 [docs/mandate-design.md](../mandate-design.md). ADRs record *how* a specified

@@ -55,3 +55,7 @@ export * from './meet.ts';
 export { checkAvailability, contributionMatches, deriveLegs, type LegDraft } from './charging.ts';
 export * from './events.ts';
 export * from './reducer.ts';
+export * from './registry.ts';
+export * from './store.ts';
+export * from './memory-store.ts';
+export * from './engine.ts';
