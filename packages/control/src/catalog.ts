@@ -190,6 +190,8 @@ export class ModuleCatalog {
     if (registration === null) return refuse('MODULE_NOT_FOUND', 'MODULE_UNREGISTERED', path, { module: ref });
     // Same name, another digest: a different semantic module, never a substitute (DOM-2).
     if (!moduleRefsEqual(registration.module, ref)) return refuse('MODULE_NOT_FOUND', 'MODULE_DIGEST_MISMATCH', path, { module: ref });
+    // DISABLED: no longer trusted for anything new — not a decision, not a revalidation, not an issuance (7E.1).
+    if (registration.status === 'DISABLED') return refuse('MODULE_NOT_FOUND', 'MODULE_DISABLED', path, { module: ref });
     if (registration.status === 'RETIRING' && !allowRetiring) return refuse('MODULE_NOT_FOUND', 'MODULE_RETIRING', path, { module: ref });
     const entry = this.#entries.get(refKey(ref));
     if (entry === undefined) return refuse('MODULE_NOT_FOUND', 'NO_CONFORMING_IMPLEMENTATION', path, { module: ref });
@@ -260,6 +262,19 @@ export class ModuleCatalog {
     if (definition.owner.kind !== 'MODULE') return null;
     const m = this.resolveExact(definition.owner.module);
     return m !== null && m.invariants.some((d) => d.invariantId === definition.invariantId && d.version === definition.version) ? m : null;
+  }
+
+  /**
+   * Whether `definition`'s exact module is registered `DISABLED` (7E.1). A term
+   * bound to a disabled definition is `UNKNOWN` for every new evaluation — an
+   * untrusted definition cannot be relied on even to refuse — while replay of
+   * committed history still resolves it by exact digest (`resolveDefinition`).
+   */
+  definitionDisabled(definition: SemanticInvariantRef): boolean {
+    if (definition.owner.kind !== 'MODULE') return false;
+    const ref = definition.owner.module;
+    const entry = this.#registry.lookup(ref.moduleId, ref.moduleVersion);
+    return entry !== null && moduleRefsEqual(entry.module, ref) && entry.status === 'DISABLED';
   }
 
   /**

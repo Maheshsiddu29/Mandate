@@ -215,6 +215,12 @@ export function checkAdmissionShape(a: AttemptAdmission, path: string): LedgerRe
   if (!Number.isSafeInteger(a.ordinal) || a.ordinal < 1 || a.ordinal > MAX_ATTEMPTS_PER_RESERVATION) return refuse('ATTEMPT_SHAPE_INVALID', `${path}.ordinal`);
   if (!(a.artifact.id instanceof Uint8Array) || a.artifact.id.length === 0 || a.artifact.id.length > MAX_ARTIFACT_ID_BYTES) return refuse('ATTEMPT_SHAPE_INVALID', `${path}.artifact.id`);
   if (a.slot !== null && (a.slot.sequence < 0n || a.slot.sequence > 0xffff_ffff_ffff_ffffn)) return refuse('ATTEMPT_SHAPE_INVALID', `${path}.slot.sequence`);
+  // Everything committed must decode again at replay: identifiers and the account are re-validated here, not trusted.
+  if (!parseIdentifierAs<Identifier>(a.artifact.kind, 'kind').ok) return refuse('ATTEMPT_SHAPE_INVALID', `${path}.artifact.kind`);
+  if (a.slot !== null && !parseIdentifierAs<Identifier>(a.slot.scope, 'scope').ok) return refuse('ATTEMPT_SHAPE_INVALID', `${path}.slot.scope`);
+  const account = validateResourceId({ domain: a.venueAccount.domain, kind: a.venueAccount.kind, localId: a.venueAccount.localId }, ['ACCOUNT'] as const, 'venueAccount');
+  if (!account.ok) return refuse('ATTEMPT_SHAPE_INVALID', `${path}.venueAccount`);
+  if (typeof a.validUntil !== 'bigint' || !parseUnixSeconds(a.validUntil, 'validUntil').ok) return refuse('ATTEMPT_SHAPE_INVALID', `${path}.validUntil`);
   return ok(true);
 }
 

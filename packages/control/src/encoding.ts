@@ -41,6 +41,9 @@ export const ControlTag = {
   NEVER_ISSUED: 'mandate-core/v1/control/never-issued',
   AGGREGATE_PARAMS: 'mandate-core/v1/control/aggregate-params',
   NARROWING_PROOF: 'mandate-core/v1/control/narrowing-proof',
+  /** 7E.1: the ordered pre-execution results an attempt commits to, and a control-evaluated result's evidence. */
+  PRE_EXECUTION: 'mandate-core/v1/control/pre-execution',
+  PRE_EXECUTION_EVIDENCE: 'mandate-core/v1/control/pre-execution-evidence',
 } as const;
 export type ControlTag = (typeof ControlTag)[keyof typeof ControlTag];
 

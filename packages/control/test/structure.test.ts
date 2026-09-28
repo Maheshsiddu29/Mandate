@@ -88,7 +88,7 @@ describe('control structural boundary', () => {
       assert.doesNotMatch(name, /settle|consume|release|restore|adjust|unsafe|force|override|decideWith|revalidateWith|Pipeline|PIPELINE/i, name);
     }
     const methods = Object.getOwnPropertyNames(control.ControlEngine.prototype);
-    assert.deepEqual(methods.sort(), ['authorizeAndReserve', 'closeNeverIssued', 'constructor', 'decide', 'read', 'registerDelegation', 'registerPolicy', 'revalidate']);
+    assert.deepEqual(methods.sort(), ['admitAttempt', 'authorizeAndReserve', 'closeNeverIssued', 'constructor', 'decide', 'read', 'registerDelegation', 'registerPolicy', 'revalidate']);
     for (const { path, text } of SOURCES) {
       assert.doesNotMatch(text, /\.settle\s*\(|AuthorityLedger/, path);
       // The only accounting event the engine ever writes is the NEVER_ISSUED CLOSE, in engine.ts.

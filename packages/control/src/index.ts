@@ -48,4 +48,19 @@ export { termBindings } from './binding.ts';
 export { authorizationLifetime, chargePlanDigest, decide, type AuthorizationRequest, type ChargePlanDigest, type Decision, type DecisionEnv } from './pipeline.ts';
 export { authorizationRecordOf, encodeAuthorizationRecord, type AuthorizationId, type AuthorizationRecord } from './authorization.ts';
 export { type RevalidationId, type RevalidationRequest, type RevalidationResult } from './revalidation.ts';
-export { ControlEngine, neverIssuedEvidence, type AuthorizationOutcome, type CloseOutcome, type ControlEngineOptions, type RegistrationOutcome } from './engine.ts';
+export { ControlEngine, neverIssuedEvidence, type AttemptOutcome, type AttemptRequest, type AuthorizationOutcome, type CloseOutcome, type ControlEngineOptions, type RegistrationOutcome } from './engine.ts';
+export {
+  ADAPTER_EVALUATED,
+  CONTROL_EVALUATED,
+  PRE_EXECUTION_KINDS,
+  RESERVED_KINDS,
+  canonicalResults,
+  checkPreExecution,
+  evidenceDigest,
+  preExecutionDigest,
+  type PreExecutionDigest,
+  type PreExecutionKind,
+  type PreExecutionOutcome,
+  type PreExecutionRequirement,
+  type PreExecutionResult,
+} from './preexecution.ts';

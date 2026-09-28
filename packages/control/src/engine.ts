@@ -42,10 +42,16 @@
  */
 
 import {
+  adapterRefsEqual,
   keccakDigest,
+  moduleRefDigest,
   policyInvariants,
+  writeAdapterRef,
   writeDigest,
+  type AccountId,
+  type AdapterRef,
   type AuthorityGrant,
+  type Digest32,
   type LedgerVersion,
   type ObservationId,
   type PrincipalId,
@@ -54,9 +60,18 @@ import {
 } from '@mandate/core';
 import {
   MAX_COMMIT_ATTEMPTS,
+  anyAttemptAdmitted,
   applyBatch,
   applyEvent,
+  attemptIdFor,
+  attemptsOf,
+  checkAdapterUsable,
+  checkModuleIssuable,
   grantInvariants,
+  type AdapterRegistry,
+  type ArtifactIdentity,
+  type AttemptAdmission,
+  type AttemptRecord,
   type DemandRecord,
   type LedgerEvent,
   type LedgerSnapshot,
@@ -65,6 +80,7 @@ import {
   type RetryPolicy,
   type SemanticProofRef,
   type SemanticTermBinding,
+  type VenueSlot,
 } from '@mandate/ledger';
 import { authorizationRecordOf, type AuthorizationRecord } from './authorization.ts';
 import { termBindings } from './binding.ts';
@@ -73,6 +89,7 @@ import { ControlTag, controlWriter } from './encoding.ts';
 import { fromLedger, refusal, type ControlRefusal, type ControlResult } from './errors.ts';
 import { narrowingProofs, policyProofs, semanticProofRefs, type NarrowingProof } from './narrowing.ts';
 import { PRODUCTION_PIPELINE, decideWith, type AuthorizationRequest, type Decision, type DecisionEnv } from './pipeline.ts';
+import { checkPreExecution, evidenceDigest, preExecutionDigest, type PreExecutionRequirement, type PreExecutionResult } from './preexecution.ts';
 import { revalidateWith, type RevalidationRequest, type RevalidationResult } from './revalidation.ts';
 
 export type AuthorizationOutcome =
@@ -86,6 +103,36 @@ export type CloseOutcome =
   /** Idempotent: the reservation is already closed with nothing consumed. Nothing was written. */
   | { readonly status: 'ALREADY_CLOSED'; readonly attempts: number }
   | { readonly status: 'REFUSED'; readonly refusal: ControlRefusal; readonly attempts: number }
+  | { readonly status: 'CONFLICT'; readonly refusal: ControlRefusal; readonly attempts: number };
+
+/**
+ * What an enforcement adapter asks for when it is ready to create one exact
+ * artifact (7E.1). Everything here is the adapter's identity of the artifact
+ * and its own pre-execution evidence; nothing in it can widen the
+ * authorization, which is re-read from the ledger and revalidated.
+ */
+export interface AttemptRequest {
+  /** The payload, fresh state and issue-time context for revalidation (reservations-reconciliation.md §10a). */
+  readonly revalidation: RevalidationRequest;
+  /** The adapter performing issuance: must be exactly the authorization's. */
+  readonly adapter: AdapterRef;
+  readonly venueAccount: AccountId;
+  readonly artifact: ArtifactIdentity;
+  readonly slot: VenueSlot | null;
+  /** The artifact's own expiry, at or before the revalidated lifetime (EXEC-3, EXEC-6). */
+  readonly validUntil: bigint;
+  /** The adapter descriptor's requirements; the control-evaluated ones are always added. */
+  readonly requirements: readonly PreExecutionRequirement[];
+  /** The adapter-evaluated results, each with its evidence digest. */
+  readonly results: readonly PreExecutionResult[];
+}
+
+export type AttemptOutcome =
+  | { readonly status: 'ADMITTED'; readonly attempt: AttemptRecord; readonly revalidation: RevalidationResult; readonly preExecution: readonly PreExecutionResult[]; readonly snapshot: LedgerSnapshot; readonly attempts: number }
+  /** The reservation already has an admitted attempt: this is it. Nothing new was admitted, and nothing may be. */
+  | { readonly status: 'EXISTING'; readonly attempt: AttemptRecord; readonly attempts: number }
+  /** Nothing was written. `revalidation` is present when revalidation ran and failed — the case `NEVER_ISSUED` may then close. */
+  | { readonly status: 'REFUSED'; readonly refusal: ControlRefusal; readonly revalidation: RevalidationResult | null; readonly attempts: number }
   | { readonly status: 'CONFLICT'; readonly refusal: ControlRefusal; readonly attempts: number };
 
 export type RegistrationOutcome =
@@ -128,12 +175,35 @@ export interface ControlEngineOptions {
   readonly store: LedgerStore;
   readonly registry: ModuleRegistry;
   readonly catalog: ModuleCatalog;
+  /**
+   * The enforcement-adapter registry (7E.1). When present, a new authorization
+   * through a retiring, disabled, unregistered or re-digested adapter is
+   * refused; issuance (`admitAttempt`) requires it.
+   */
+  readonly adapters?: AdapterRegistry;
+}
+
+/** The control-evaluated requirements every attempt carries, about its reservation. */
+function controlRequirements(subject: string): readonly PreExecutionRequirement[] {
+  return [
+    { kind: 'STATE_REVALIDATION', subject },
+    { kind: 'MODULE_TRUST', subject },
+    { kind: 'ADAPTER_TRUST', subject },
+  ];
+}
+
+function adapterDigestOf(a: AdapterRef): Digest32 {
+  const w = controlWriter(ControlTag.PRE_EXECUTION_EVIDENCE);
+  writeAdapterRef(w, a);
+  return keccakDigest<Digest32>(w.finish());
 }
 
 export class ControlEngine {
   readonly #store: LedgerStore;
   readonly #env: DecisionEnv;
   readonly #catalog: ModuleCatalog;
+  readonly #registry: ModuleRegistry;
+  readonly #adapters: AdapterRegistry | null;
 
   /**
    * The store must apply `controlRules(catalog)` at commit (catalog.ts);
@@ -143,6 +213,8 @@ export class ControlEngine {
   constructor(o: ControlEngineOptions) {
     this.#store = o.store;
     this.#catalog = o.catalog;
+    this.#registry = o.registry;
+    this.#adapters = o.adapters ?? null;
     this.#env = Object.freeze({ catalog: o.catalog, registry: o.registry, rules: controlRules(o.catalog) });
   }
 
@@ -165,6 +237,12 @@ export class ControlEngine {
       // Everything recomputed from this snapshot: authority, state, pending set, projection, invariants, plan.
       const decision = decideWith(PRODUCTION_PIPELINE, snapshot, request, this.#env);
       if (!decision.ok) return { status: 'REFUSED', refusal: decision.error, attempts: attempt, version: snapshot.version, conflicts };
+      // 7E.1: an otherwise authorized action through a retiring, disabled, unknown or re-digested adapter
+      // reserves nothing. Checked after the decision, so every 7D refusal keeps its precedence.
+      if (this.#adapters !== null) {
+        const usable = checkAdapterUsable(this.#adapters, request.action.adapter, 'DECISION', 'action.adapter');
+        if (!usable.ok) return { status: 'REFUSED', refusal: fromLedger(usable.error, ''), attempts: attempt, version: snapshot.version, conflicts };
+      }
       const result = await this.#store.compareAndAppend(snapshot.principal, snapshot.version, snapshot.head, [decision.value.event]);
       if (result.status === 'COMMITTED') {
         const record = authorizationRecordOf(decision.value, result.snapshot);
@@ -206,6 +284,11 @@ export class ControlEngine {
       if (r === undefined || r.generation !== record.generation || r.action !== record.actionId) {
         return { status: 'REFUSED', refusal: refusal('RESERVATION_NOT_ACTIVE', 'RESERVATION_UNKNOWN', 'authorization.reservation'), attempts: attempt };
       }
+      // 7E.1 (7D.1 R5): once an attempt was admitted an artifact may exist, and the ledger is no longer
+      // evidence that none was issued. Nothing — a crash, a timeout, a failed revalidation — changes that.
+      if (anyAttemptAdmitted(snapshot.state, record.reservation)) {
+        return { status: 'REFUSED', refusal: refusal('NEVER_ISSUED_FORBIDDEN', 'ATTEMPT_ADMITTED', 'authorization.reservation'), attempts: attempt };
+      }
       const unconsumed = r.demands.every((d: DemandRecord) => d.consumed === 0n);
       if (r.status === 'CLOSED') {
         if (unconsumed && r.demands.every((d: DemandRecord) => d.released === d.reserved)) return { status: 'ALREADY_CLOSED', attempts: attempt };
@@ -231,6 +314,89 @@ export class ControlEngine {
       const result = await this.#store.compareAndAppend(snapshot.principal, snapshot.version, snapshot.head, [event]);
       if (result.status === 'COMMITTED') return { status: 'CLOSED', evidence, revalidation: revalidation.value, snapshot: result.snapshot, attempts: attempt };
       if (result.status === 'REFUSED') return { status: 'REFUSED', refusal: { ...fromLedger(result.refusal, 'commit'), code: 'LEDGER_CONFLICT' }, attempts: attempt };
+    }
+    return { status: 'CONFLICT', refusal: exhausted(), attempts: retry.maxAttempts };
+  }
+
+  /**
+   * Admit one issuance attempt for an authorization (7E.1; the frozen 7D.1
+   * precondition): the boundary an enforcement adapter must cross **before**
+   * any signing key is used. In one decision against one snapshot:
+   *
+   * 1. if the reservation already has an attempt, return it (`EXISTING`) —
+   *    one generation never yields a second, independent attempt;
+   * 2. the adapter is exactly the authorization's and is usable for issuance
+   *    (active or retiring, never disabled or re-digested);
+   * 3. the reservation's module may carry it to issuance (never disabled);
+   * 4. the authorization revalidates at the issue time (reservation active at
+   *    its generation, lineage valid, state re-admitted or refreshed and every
+   *    invariant re-run over the current pending set);
+   * 5. the artifact's expiry is inside the revalidated lifetime;
+   * 6. every pre-execution requirement — Core's own and the adapter's — is
+   *    `PASS`;
+   * 7. the `ADMIT_ATTEMPT` event, naming the exact artifact and slot, commits
+   *    by compare-and-swap; the ledger re-derives the attempt id and refuses a
+   *    reused artifact or slot.
+   *
+   * A failure before the commit writes nothing, and — because no attempt
+   * exists — `closeNeverIssued` may then close the reservation. After the
+   * commit it may not, ever. A lost race re-runs everything from the new
+   * snapshot.
+   */
+  async admitAttempt(record: AuthorizationRecord, request: AttemptRequest, retry: RetryPolicy): Promise<AttemptOutcome> {
+    const bad = retryRefusal(retry);
+    if (bad !== null) return { status: 'REFUSED', refusal: bad, revalidation: null, attempts: 0 };
+    const adapters = this.#adapters;
+    if (adapters === null) return { status: 'REFUSED', refusal: refusal('REQUEST_INVALID', 'ADAPTER_REGISTRY_MISSING', 'engine.adapters'), revalidation: null, attempts: 0 };
+    const refused = (r: ControlRefusal, attempt: number, revalidation: RevalidationResult | null = null): AttemptOutcome => ({ status: 'REFUSED', refusal: r, revalidation, attempts: attempt });
+    for (let attempt = 1; attempt <= retry.maxAttempts; attempt += 1) {
+      const snapshot = await this.#store.read(record.principal);
+      const existing = attemptsOf(snapshot.state, record.reservation);
+      if (existing.length > 0) return { status: 'EXISTING', attempt: existing[existing.length - 1] as AttemptRecord, attempts: attempt };
+
+      if (!adapterRefsEqual(request.adapter, record.adapter)) return refused(refusal('ADAPTER_NOT_USABLE', 'ADAPTER_MISMATCH', 'request.adapter'), attempt);
+      const usable = checkAdapterUsable(adapters, request.adapter, 'ATTEMPT', 'request.adapter');
+      if (!usable.ok) return refused(fromLedger(usable.error, ''), attempt);
+      const issuable = checkModuleIssuable(this.#registry, record.module, 'authorization.module');
+      if (!issuable.ok) return refused(fromLedger(issuable.error, ''), attempt);
+
+      const revalidation = revalidateWith(PRODUCTION_PIPELINE, snapshot, record, request.revalidation, this.#env);
+      if (!revalidation.ok) return refused(revalidation.error, attempt);
+      const v = revalidation.value;
+      if (v.status === 'FAILED') return refused(v.refusal, attempt, v);
+      const t = v.evaluatedAt;
+      if (request.validUntil <= t) return refused(refusal('REQUEST_INVALID', 'ARTIFACT_ALREADY_EXPIRED', 'request.validUntil'), attempt);
+      if (request.validUntil > v.validUntil) return refused(refusal('REQUEST_INVALID', 'ARTIFACT_OUTLIVES_AUTHORIZATION', 'request.validUntil'), attempt);
+
+      const subject = record.reservation;
+      const control: PreExecutionResult[] = [
+        { kind: 'STATE_REVALIDATION', subject, outcome: 'PASS', reason: v.refreshed ? 'REFRESHED' : 'READMITTED', evidence: evidenceDigest('STATE_REVALIDATION', subject, [v.id]) },
+        { kind: 'MODULE_TRUST', subject, outcome: 'PASS', reason: 'ISSUABLE', evidence: evidenceDigest('MODULE_TRUST', subject, [moduleRefDigest(record.module)]) },
+        { kind: 'ADAPTER_TRUST', subject, outcome: 'PASS', reason: 'USABLE', evidence: evidenceDigest('ADAPTER_TRUST', subject, [adapterDigestOf(request.adapter)]) },
+      ];
+      const pre = checkPreExecution([...controlRequirements(subject), ...request.requirements], control, request.results);
+      if (!pre.ok) return refused(pre.error, attempt, v);
+
+      const base = { reservation: record.reservation, generation: record.generation, action: record.actionId, module: record.module, adapter: record.adapter, authorization: record.executionId, ordinal: 1 };
+      const admission: AttemptAdmission = {
+        attempt: attemptIdFor(base),
+        ...base,
+        venueAccount: request.venueAccount,
+        artifact: { kind: request.artifact.kind, id: new Uint8Array(request.artifact.id) },
+        slot: request.slot,
+        validUntil: request.validUntil,
+        requirements: preExecutionDigest(pre.value),
+        revalidation: v.id,
+      };
+      const event: LedgerEvent = { kind: 'ADMIT_ATTEMPT', at: t, admission };
+      const checked = applyBatch(snapshot.state, [event], this.#env.rules);
+      if (!checked.ok) return refused(fromLedger(checked.error, 'attempt'), attempt, v);
+      const result = await this.#store.compareAndAppend(snapshot.principal, snapshot.version, snapshot.head, [event]);
+      if (result.status === 'COMMITTED') {
+        const committed = result.snapshot.state.attempts.get(admission.attempt) as AttemptRecord;
+        return { status: 'ADMITTED', attempt: committed, revalidation: v, preExecution: pre.value, snapshot: result.snapshot, attempts: attempt };
+      }
+      if (result.status === 'REFUSED') return refused({ ...fromLedger(result.refusal, 'commit'), code: 'LEDGER_CONFLICT' }, attempt, v);
     }
     return { status: 'CONFLICT', refusal: exhausted(), attempts: retry.maxAttempts };
   }

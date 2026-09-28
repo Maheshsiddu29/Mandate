@@ -5,8 +5,8 @@
  */
 
 import assert from 'node:assert/strict';
-import type { ActionEnvelope, AuthorityGrant, ModuleRef, PrincipalPolicy } from '@mandate/core';
-import { AuthorityLedger, InMemoryLedgerStore, ReferenceModuleRegistry, type InMemoryStoreHooks, type LedgerSnapshot, type ModuleStatus } from '@mandate/ledger';
+import { validateAdapterRef, type ActionEnvelope, type AuthorityGrant, type ModuleRef, type PrincipalPolicy } from '@mandate/core';
+import { AuthorityLedger, InMemoryLedgerStore, ReferenceAdapterRegistry, ReferenceModuleRegistry, type AdapterStatus, type InMemoryStoreHooks, type LedgerSnapshot, type ModuleStatus } from '@mandate/ledger';
 import {
   ControlEngine,
   ModuleCatalog,
@@ -20,7 +20,7 @@ import {
   type RegistrationOutcome,
   type SuppliedState,
 } from '../../src/index.ts';
-import { ONCE, PERP_CFG, SPOT_CFG, T0, must } from './builders.ts';
+import { ADAPTER, ONCE, PERP_CFG, SPOT_CFG, T0, must } from './builders.ts';
 import { createSyntheticModule, type SyntheticModule } from './synthetic.ts';
 
 export * from './builders.ts';
@@ -47,6 +47,8 @@ export interface World {
   readonly engine: ControlEngine;
   /** Infrastructure only: registrations with already-derived semantics, and tests of that boundary. */
   readonly ledger: AuthorityLedger;
+  /** 7E.1: the enforcement-adapter registry, holding the synthetic `ADAPTER`. */
+  readonly adapters: ReferenceAdapterRegistry;
 }
 
 export interface WorldOptions {
@@ -56,6 +58,10 @@ export interface WorldOptions {
   readonly status?: (m: SyntheticModule) => ModuleStatus;
   /** Registry entries beyond the loaded modules' own. */
   readonly register?: readonly { module: ModuleRef; implementations: readonly string[]; status?: ModuleStatus }[];
+  /** 7E.1: the synthetic adapter's status. Default `ACTIVE`. */
+  readonly adapterStatus?: AdapterStatus;
+  /** 7E.1: reuse another world's store (a registry or adapter status change over the same ledger). */
+  readonly store?: InMemoryLedgerStore;
 }
 
 export function world(o: WorldOptions = {}): World {
@@ -68,8 +74,9 @@ export function world(o: WorldOptions = {}): World {
   );
   const catalog = must(ModuleCatalog.create(registry, modules.map((module) => ({ module, corpus: o.corpus?.(module) ?? [] }))));
   const rules = controlRules(catalog);
-  const store = new InMemoryLedgerStore(o.hooks ?? {}, rules);
-  return { modules, registry, catalog, store, engine: new ControlEngine({ store, registry, catalog }), ledger: new AuthorityLedger(store, registry, rules) };
+  const store = o.store ?? new InMemoryLedgerStore(o.hooks ?? {}, rules);
+  const adapters = must(ReferenceAdapterRegistry.create([{ adapter: must(validateAdapterRef(ADAPTER)), status: o.adapterStatus ?? 'ACTIVE' }]));
+  return { modules, registry, catalog, store, adapters, engine: new ControlEngine({ store, registry, catalog, adapters }), ledger: new AuthorityLedger(store, registry, rules) };
 }
 
 /**

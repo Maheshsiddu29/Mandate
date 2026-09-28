@@ -65,6 +65,11 @@ export const CONTROL_CODES = [
   'REVALIDATION_FAILED',
   'REVALIDATION_PASSED', // NEVER_ISSUED closure needs a failed revalidation; this one passed
   'EXECUTION_EVIDENCE_EXISTS', // NEVER_ISSUED closure refused: the reservation has consumption
+  // Issuance (7E.1)
+  'NEVER_ISSUED_FORBIDDEN', // an issuance attempt was admitted for this generation: an artifact may exist
+  'ADAPTER_NOT_USABLE', // the adapter is unregistered, another digest, retiring (for new authority) or disabled
+  'PRE_EXECUTION_FAILED', // a required pre-execution requirement is FAIL or UNKNOWN
+  'ATTEMPT_REFUSED', // the ledger refused the attempt admission (a live attempt, a reused artifact or slot, …)
 ] as const;
 
 export type ControlCode = (typeof CONTROL_CODES)[number];
@@ -134,7 +139,23 @@ export function fromLedger(r: LedgerRefusal, path: string): ControlRefusal {
     case 'MODULE_DIGEST_MISMATCH':
     case 'MODULE_IMPLEMENTATION_UNREGISTERED':
     case 'MODULE_RETIRING':
+    case 'MODULE_DISABLED':
       code = 'MODULE_NOT_CONFORMING';
+      break;
+    case 'ADAPTER_UNREGISTERED':
+    case 'ADAPTER_DIGEST_MISMATCH':
+    case 'ADAPTER_RETIRING':
+    case 'ADAPTER_DISABLED':
+      code = 'ADAPTER_NOT_USABLE';
+      break;
+    case 'ATTEMPT_SHAPE_INVALID':
+    case 'ATTEMPT_BINDING_MISMATCH':
+    case 'ATTEMPT_ID_MISMATCH':
+    case 'ATTEMPT_UNRESOLVED':
+    case 'ARTIFACT_REUSED':
+    case 'VENUE_SLOT_REUSED':
+    case 'ATTEMPT_EXPIRED':
+      code = 'ATTEMPT_REFUSED';
       break;
     case 'MODULE_NOT_PERMITTED':
       code = 'ACTION_NOT_COVERED';

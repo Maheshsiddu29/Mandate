@@ -173,6 +173,7 @@ export function applicableInvariants(effective: EffectiveAuthority): readonly Ap
 export function committedSemantics(a: ApplicableInvariant, catalog: ModuleCatalog): SemanticResolution {
   if (!isModuleDefined(a.term)) return { ok: false, reason: 'INVARIANT_DEFINITION_UNRESOLVED' };
   if (a.binding === null) return { ok: false, reason: 'SEMANTIC_BINDING_MISSING' };
+  if (catalog.definitionDisabled(a.binding.definition)) return { ok: false, reason: 'SEMANTIC_DEFINITION_DISABLED' };
   const m = catalog.resolveDefinition(a.binding.definition);
   return m === null ? { ok: false, reason: 'SEMANTIC_DEFINITION_UNAVAILABLE' } : { ok: true, module: m };
 }
