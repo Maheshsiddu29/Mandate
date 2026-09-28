@@ -1,6 +1,6 @@
 # ADR 0024: A pure, version-bound DomainModule interface
 
-- **Status:** Proposed (Phase 7D, awaiting review)
+- **Status:** Accepted (Phase 7D, frozen)
 - **Date:** 2026-09-28
 - **Relates to:** [action-state-model.md §8](../core-v1/action-state-model.md#8-the-domain-module-interface),
   [ADR 0025](0025-control-package-and-authorization-boundary.md),

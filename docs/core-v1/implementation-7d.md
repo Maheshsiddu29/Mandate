@@ -1,6 +1,6 @@
 # Mandate Core v1 — Phase 7D implementation: invariant and reservation engine
 
-> **Status: Phase 7D implemented locally, awaiting review.** This document
+> **Status: Phase 7D — FROZEN**, with its 7D.1 hardening ([§22](#22-phase-7d1-semantic-hardening)) and 7D.2 historical semantic provenance ([§23](#23-phase-7d2-historical-semantic-provenance-and-freeze)). Phase 7E is next. This document
 > describes code in `packages/control` and one extension point added to
 > `packages/ledger`. It does not change the frozen Phase 7A specification in
 > this directory or the Phase 7B representation in `packages/core`; both
@@ -10,7 +10,7 @@
 > network, RPC, signature, enforcement adapter, observation pipeline,
 > production domain module or durable store exists.
 >
-> **Phase 7D.1 (semantic hardening) implemented locally, awaiting review.**
+> **Phase 7D.1 (semantic hardening) — accepted.**
 > Five rulings close the semantic issues left before the first real market
 > integration: one valuation context per canonical asset in a
 > principal-global aggregate, a closed aggregate scope, the baseline rule
@@ -62,6 +62,7 @@ before anything would be issued.
 20. [Completion answers](#20-completion-answers)
 21. [Open questions and what is next](#21-open-questions-and-what-is-next)
 22. [Phase 7D.1 semantic hardening](#22-phase-7d1-semantic-hardening)
+23. [Phase 7D.2 historical semantic provenance and freeze](#23-phase-7d2-historical-semantic-provenance-and-freeze)
 
 ## 1. What was built
 
@@ -658,7 +659,7 @@ decision costs a few hundred milliseconds, which is why the bound exists; if
 it matters, the projection encoding and the freezing are the places to
 start.
 
-**Known scaling item (7D.1).** The roughly 70 µs per relevant open
+**Re-measured after 7D.1, up to the 4,096 bound: §23.7.** **Known scaling item (7D.1).** The roughly 70 µs per relevant open
 reservation stands, and 7D.1 does not optimize it: correctness first. Where
 a principal-global aggregate applies, 7D.1 also consults every module with an
 unresolved reservation, so that module's projection is added to the
@@ -705,7 +706,7 @@ Every choice is the fail-closed one; none changes a frozen decision.
 | **CONC-1** (projected state) | **Established**: a lost CAS forces full re-projection; of two actions valid alone and invalid together at most one reserves | `concurrency.test.ts`, `mutation.test.ts` |
 | **CORE-CONC-1** | **Not regressed**: nothing argues market state from CAS; state is bound and rechecked | — |
 | **DOM-1** | **Partly**: modules are pure (structure, conformance), cannot authorize or choose targets, and their outputs are re-validated; the only module is test-only | `structure.test.ts`, `conformance.test.ts` |
-| **DOM-2** | **Established** at decision and revalidation: exact `ModuleRef` resolution, no fallback, the module fixed on the reservation and the authorization | `catalog.test.ts`, `engine.test.ts`, `mutation.test.ts` |
+| **DOM-2** | **Established** at decision and revalidation: exact `ModuleRef` resolution, no fallback, the module fixed on the reservation and the authorization. **7D.2:** also for history — every committed narrowing names its exact definition, and replay resolves it by digest (§23) | `catalog.test.ts`, `engine.test.ts`, `mutation.test.ts`, `provenance.test.ts` |
 | **SCOPE-1** | **Partly**: facts and demands carry typed canonical assets and scopes; aggregates match assets exactly | `global.test.ts` |
 | **EXEC-3/EXEC-6** foundations | the attempt ceiling is the lifetime, bounded by every dependency | `engine.test.ts` |
 | **RECON-2** | **Partly**: facts and closure are generation-exact | `engine.test.ts` |
@@ -746,13 +747,21 @@ Every choice is the fail-closed one; none changes a frozen decision.
    replacing the raw `settle` still available to infrastructure.
 6. **Registry governance and the module archive** (open question 16) decide
    which comparators order delegated invariants, and must keep every module a
-   replayable history depends on (§22.5).
+   replayable history depends on (§22.5). 7D.2 binds history to exact digests
+   and adds a reference archive (§23); governance of both remains open.
 7. **Hot-path cost** at many open reservations (§17, known scaling item).
 8. **Finality ordering** for delegated state policies (7C open question 2,
    second half).
+9. **Action-time invariant binding** (§23.5): a grant's or policy's invariant
+   term names `(invariantId, version)`, so a *new* decision evaluates it under
+   the module currently registered for that name. History is bound by digest;
+   future evaluation of an existing term still follows the registry's
+   one-digest-per-name rule.
+10. **Risk-reducing exceptions to `UNKNOWN`** (§23.6): none exists; any
+    design is domain-specific and deferred.
 
-**Next (on approval): Phase 7E**, the first real domain module and its
-enforcement adapter. Not started; 7D.1 did not begin it.
+**Next: Phase 7E**, the first real domain module and its enforcement
+adapter. Not started; 7D is frozen and 7D.1/7D.2 did not begin 7E.
 
 ## 22. Phase 7D.1 semantic hardening
 
@@ -947,7 +956,9 @@ registry and archive must keep them, and never remap a `(moduleId, version)`
 name to another digest, for as long as dependent history stays auditable.
 Replay cannot detect a registry that breaks this, because the log does not
 carry the digest. Long-term storage and provider design are not solved here
-(open question 16).
+(open question 16). **Superseded by 7D.2 (§23):** the log now carries the
+exact `ModuleRef` of every proof, and replay resolves it by digest, so a
+remapped registry can no longer change what history replays under.
 
 ### 22.6 `NEVER_ISSUED` and the frozen 7E issuance precondition (R5)
 
@@ -1058,3 +1069,264 @@ changed.
 | Can `NEVER_ISSUED` remain the release path after a real issuance attempt has been admitted in 7E? | **No** — frozen precondition (§22.6) |
 | Is AUTH-GLOBAL-2 established yet? | **No** |
 | Are RECON-1…5 established yet? | **No** |
+
+## 23. Phase 7D.2 historical semantic provenance and freeze
+
+7D.2 closes one provenance gap, re-measures the hot path after 7D.1, and
+freezes Phase 7D. It adds nothing that belongs to 7E: no perp policy, venue
+signing, `ADMIT_ATTEMPT`, reconciliation, RPC, HTTP or custody. Phase 6,
+`packages/core`, the frozen 7A specification and every Solidity source are
+unchanged.
+
+### 23.1 The gap
+
+A delegation that restates a parent's invariant with different parameters
+is accepted because a comparator proved the child no weaker. Through 7D.1
+the ledger event carried only the grant. Replay asked the configured
+ordering again, and the ordering found the comparator by the invariant's
+*name*: `(invariantId, version)` → owning module → the digest the current
+registry maps that name to. History therefore depended on a mutable, present
+mapping. If the registry later pointed `(synthetic, 1)` at digest B, replay
+would re-prove history under B — or, with B gone, look for B rather than for
+the A that actually decided.
+
+### 23.2 Semantic proof representation
+
+Two small ledger structures (`packages/ledger/src/semantic.ts`):
+
+```text
+SemanticInvariantRef {                 the security identity of an invariant definition
+  owner        CORE | MODULE(ModuleRef { domainId, moduleId, moduleVersion, moduleDigest })
+  invariantId  local identifier            (the comparator / rule identity, with version)
+  version
+}
+  encoding  u8(owner) ‖ [ModuleRef] ‖ str(invariantId) ‖ u32(version)
+  identity  semanticInvariantId = keccak-256(str("mandate-core/v1/semantic-invariant") ‖ u16(1) ‖ encoding)
+
+SemanticProofRef {                     one committed narrowing decision
+  definition   SemanticInvariantRef      whose comparator decided it
+  scope        ResourceId[]              which restated term it decided (its scope)
+}
+  encoding  SemanticInvariantRef ‖ u16(n) ‖ ResourceId₁ … ₙ
+  identity  semanticProofId = keccak-256(str("mandate-core/v1/semantic-proof") ‖ u16(1) ‖ encoding)
+```
+
+A proof carries no verdict and no parameters. The parent's parameters are
+bound through the grant's `lineage.parent` (an `AuthorityId`, a content
+digest of the parent grant), and the child's through the grant itself. It
+records only *whose semantics* decided. The reducer re-derives the verdict
+every time. Changing any of `domainId`, `moduleId`, `moduleVersion`,
+`moduleDigest`, the owner kind, `invariantId` or `version` changes both
+identities (tested field by field).
+
+### 23.3 Event and history change
+
+`REGISTER_GRANT` and `REGISTER_POLICY` gain an optional `proofs` list. An
+event with proofs is written under its own wire code. An event without
+proofs keeps its 7C code and bytes exactly:
+
+```text
+REGISTER_POLICY        u8(1) ‖ i64(at) ‖ segment(policy)
+REGISTER_POLICY+proofs u8(8) ‖ i64(at) ‖ segment(policy) ‖ u16(n ≥ 1) ‖ SemanticProofRef₁ … ₙ
+REGISTER_GRANT         u8(2) ‖ i64(at) ‖ segment(grant)
+REGISTER_GRANT+proofs  u8(9) ‖ i64(at) ‖ segment(grant) ‖ u16(n ≥ 1) ‖ SemanticProofRef₁ … ₙ
+```
+
+So every earlier history and every head without a narrowing is unchanged. In
+the control corpus, only `semantic-narrowing-pass` changed head, and it now
+pins its committed `definition`. The proofs are inside the hash-chained
+batch, so the head cryptographically binds "this delegation was accepted
+under these exact semantics".
+
+The reducer requires the proof set to be exact, and checks it at commit and
+at replay alike:
+- canonical order and at most one proof per term (`SEMANTIC_PROOF_INVALID`);
+- an owner structurally able to define the invariant: `core.*` for Core, and
+  `<moduleId>.*` at the module's own version for a module
+  (`SEMANTIC_PROOF_INVALID`);
+- a proof only for a term that needs one — a child term restating a parent
+  term with different parameters, or, for a policy update after activity, a
+  restated principal-global invariant (`SEMANTIC_PROOF_UNEXPECTED`);
+- a needed term without a proof is unproven: `DELEGATION_NARROWING_UNPROVEN`
+  for a grant, or `POLICY_UPDATE_REQUIRES_BASELINE` for a policy.
+
+The ordering is then asked under exactly the committed definition
+(`InvariantOrdering.noWeaker(parent, child, definition)`, bound per
+registration by `committedProver`). The 7D.1 policy-baseline proofs are
+committed the same way.
+
+**Where a proof comes from.** A new proof is always made under the current,
+active semantics:
+- `ControlEngine.registerDelegation` takes the definition from the catalog's
+  current owner (`resolveForDecision`, which is registry-exact and active);
+- the infrastructure `AuthorityLedger.registerGrant` / `registerPolicy`
+  refuse any proof module that is not the registry's current, active one
+  (`checkProofOwnersCurrent`);
+- `policyProofs` + `semanticProofRefs` compute a policy update's proofs.
+
+This registry check is a decision input, like module conformance, and never
+runs in the reducer.
+
+### 23.4 Replay lookup
+
+Replay resolves each committed definition by exact identity:
+- `ModuleCatalog.resolveExact(ref)` looks up the loaded implementations and a
+  content-addressed `ModuleArchive` (`packages/control/src/archive.ts`), keyed
+  by the full `ModuleRef` digest;
+- there is no registry lookup on this path;
+- an archived implementation is admitted only if the archive lists it as
+  conforming to exactly that `ModuleRef`, and only for exact historical
+  resolution. It never owns an invariant by name, serves a new decision or
+  proves a new narrowing.
+
+```text
+allowed    ledger event → exact ModuleRef/moduleDigest → archived (or loaded) implementation → comparator
+forbidden  ledger event → module name → whatever digest the current registry maps it to
+```
+
+If the exact artifact is unavailable, the definition is `UNPROVABLE` and
+replay refuses. Nothing substitutes for it: not a newer version, not the
+same name under another digest, not an implementation claiming the ref
+without the archive's word, and not another module using the same invariant
+name.
+
+**Registry-remap test** (`provenance.test.ts`):
+1. M1 = (`synthetic`, 1, digest A) proves 4x → 3x, the delegation commits and
+   two reservations follow. The stored event names digest A.
+2. A future registry maps (`synthetic`, 1) to digest B. B is a lenient
+   comparator that would prove anything.
+3. With A archived, replay asks A and never B, and reproduces the
+   byte-identical state and head.
+4. Without A, replay refuses, and B is still never asked.
+
+Also tested:
+- an impostor claiming A's ref is refused by the archive;
+- a newer version cannot claim A's invariant;
+- retirement leaves the committed digest untouched and still replays as A;
+- re-pointing a committed proof at B breaks the chain or changes the attested
+  head.
+
+**Mutant E**, which resolves the comparator by name through the current
+registry, re-proves the history under B and is killed.
+
+### 23.5 Invariant identity
+
+The naming convention `<moduleId>.<name>` stays. The **security identity** of
+a semantic invariant is `SemanticInvariantRef`: the exact owner — Core, or a
+`ModuleRef` with its digest — plus the local identifier and version. The
+human-readable name alone never establishes it. The same name under another
+digest is another identity, and a definition naming a digest that is not
+loaded cannot prove (both tested).
+
+**Boundary, recorded rather than changed.** A grant's or policy's
+`StateInvariantTerm` is Core's frozen type and names `(invariantId,
+version)` without a digest. History is now bound by digest. But a *new*
+decision still evaluates an existing term under the module currently
+registered for that name, as it resolves the acting module afresh.
+Evaluation at action time therefore relies on the registry's
+one-digest-per-name rule. Binding each term's owner at registration, so that
+a remap makes future evaluation `UNKNOWN`, would need either Core or ledger
+node state to carry the binding. It is recorded as open question 9 (§21) and
+not built here.
+
+### 23.6 Rulings frozen with 7D
+
+- **Committed prices.** Committed notional may aggregate commitments priced
+  at their own valid execution (fill) or accepted limit-price evidence. The
+  one-valuation-context rule (§22.2) applies to mark, or current-value,
+  principal-global aggregates. Historical fills are never forced to share
+  one price. Regression, tested:
+  - fills at 50,000 and 52,000 sum to 4,600.00 of committed notional and hold;
+  - two marked BTC exposures under different contexts stay `INVARIANT_UNKNOWN
+    / VALUATION_CONTEXT_MISMATCH`.
+- **`UNKNOWN` refuses every action.** In Core v1 an `UNKNOWN` invariant result
+  refuses the decision whatever the action's risk direction. There is no
+  generic risk-reducing exception, and 7D.2 adds none. Any such exception is
+  domain-specific and deferred (open question 10).
+
+### 23.7 Benchmarks after 7D.1
+
+`npm run control:benchmark`, median of 7 rounds, Node v22.21.0 on the
+development machine. The numbers are machine-dependent, reported and not
+asserted. The script now adds principal-global aggregate cases: two
+asset-valued modules, the unresolved reservations split between them, one
+shared BTC valuation, and the 7D.1 closed-scope consultation active. It also
+reports two more stages: reading the reservation facts from the snapshot,
+and Core's aggregate evaluation (scope, valuation context and sum) over the
+decision's participants. Those cases commit their pending reservations
+through the ledger from one engine-decided plan per module, varied only in
+action identity. That gives the same ledger state the engine would build,
+without quadratic set-up.
+
+| Case | Pending | Participants | Reservation facts (µs) | Acting projection (µs) | Aggregate (µs) | Admission + projection + invariants (µs) | Total decision + reservation (µs) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| global aggregate | 20 | 2 | 11 | 44 | 82 | 1,729 | 2,221 |
+| global aggregate | 100 | 2 | 60 | 163 | 390 | 5,777 | 7,095 |
+| global aggregate | 1,000 | 2 | 738 | 1,545 | 3,885 | 54,319 | 60,849 |
+| global aggregate | 4,096 | 2 | 3,192 | 6,716 | 16,837 | 224,921 | 250,718 |
+| single module (7D case) | 20 | 1 | 11 | 75 | — | 1,609 | 2,187 |
+| single module (7D case) | 100 | 1 | 59 | 314 | — | 6,783 | 8,188 |
+| single module (7D case) | 1,000 | 1 | 754 | 3,231 | — | 67,813 | 78,406 |
+| 1 invariant / 1 dimension | 0 | 1 | 0 | 12 | — | 409 | 762 |
+| 5 invariants / 4 dimensions | 0 | 1 | 0 | 11 | 4 | 707 | 1,286 |
+
+**Scaling is linear.**
+- The total cost is about 60 µs per unresolved reservation at every size:
+  (60,849 − 7,095) / 900 ≈ 60 and (250,718 − 60,849) / 3,096 ≈ 61.
+- Core's aggregate evaluation is about 4 µs per reservation. Fact extraction
+  is under 1 µs and the acting module's projection about 1.6 µs.
+- The remainder is the engine's guarantees around each module, as measured
+  in §17: deep-frozen copies, re-validation of every returned fact, and
+  canonical encoding of the projection record. The 7D.1 consultation adds a
+  second participant's projection, not a super-linear term.
+- At the 4,096-reservation bound, one decision costs about 0.25 s. That is the
+  known scaling item already recorded in §17.
+- The single-module cases match the 7D measurements to within noise (78 ms
+  versus 74 ms at 1,000).
+- Nothing pathological was found, so nothing was optimized.
+
+**Found while re-running.** The 7D five-invariant case carries a
+principal-global aggregate over a market-valued module. Since 7D.1 that case
+is correctly `UNKNOWN / VALUATION_NOT_OF_AGGREGATE_ASSET`, so the benchmark
+script had failed since 7D.1. The benchmark is not part of `npm run check`.
+The case now uses an asset-valued module; no engine code changed for it.
+
+### 23.8 Tests and mutants
+
+| File | 7D.2 coverage |
+| --- | --- |
+| `ledger/test/ordering.test.ts` | the ordering is asked only under the committed definition; no proof means unproven; a proof under another digest is refused for new use and unprovable at commit; retiring owner; spurious, duplicate, out-of-order and structurally inconsistent proofs; the proven event round-trips; a proof-free event keeps its 7C bytes; an empty proven list is not an encoding; every field changes the identity |
+| `control/test/provenance.test.ts` | the committed `ModuleRef`; the registry-remap test with and without A; archive impostor and newer-version claims; retirement keeps digest A; the same name under another digest; forgery by re-pointing a proof |
+| `control/test/valuation.test.ts` | the committed-price regression |
+| `control/test/mutation.test.ts` | mutant E |
+| `control/test/scope.test.ts`, `mutation.test.ts` | policy updates now commit their proofs (`registerPolicy` helper) |
+
+Totals: 151 ledger tests (from 146; ordering has 13, from 8) and 127
+control tests (from 119). All 7D and 7D.1 scenarios and mutants pass. The
+mutation suite kills 14: the 9 of 7D, the 4 of 7D.1 and E.
+
+### 23.9 Security status and freeze
+
+| Invariant | Status |
+| --- | --- |
+| **DOM-2**, historical half / semantic provenance | **Established**: every committed narrowing (delegation and policy) names its exact definition; replay resolves it by content identity and refuses without it; nothing substitutes. This is the foundation for replay and audit of semantic decisions, and for receipts (7H) |
+| Cross-domain valuation consistency, closed aggregate scope | Established (7D.1), unchanged |
+| **AUTH-GLOBAL-2** | **Not established** |
+| **RECON-1…5**, TIME-1's external/finality part | **Not established**, 7F |
+| **REPLAY-1**, execution/artifact part | **Not established**, 7E |
+
+**Phase 7D is FROZEN** with 7D.1 and 7D.2, after `npm run check` and
+`npm run generated:check`. Phase 7E is next and not started.
+
+### 23.10 Explicit answers
+
+| Question | Answer |
+| --- | --- |
+| Can historical replay use a newly remapped module digest? | **No** |
+| Does ledger history identify the exact semantic `ModuleRef` used for narrowing? | **Yes** |
+| Can the same invariant name under another module digest impersonate the historical invariant? | **No** |
+| Do committed fills at different valid execution prices require one common mark? | **No** |
+| Do marked principal-global exposures require one admitted valuation context per canonical asset? | **Yes** |
+| Does `UNKNOWN` currently allow a generic risk-reducing exception? | **No** |
+| Is AUTH-GLOBAL-2 established? | **No** |
+| Are RECON-1…5 established? | **No** |

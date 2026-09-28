@@ -1,6 +1,6 @@
 # ADR 0020: Mandate Core package boundary and canonical encoding
 
-- **Status:** Proposed (Phase 7B, awaiting review)
+- **Status:** Accepted (Phase 7B, frozen)
 - **Date:** 2026-09-27
 - **Resolves:** [core-v1 open question 10](../core-v1/README.md#open-questions)
   (exact canonical encodings, domain tags and collection bounds, and whether

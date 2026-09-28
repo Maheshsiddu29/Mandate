@@ -23,26 +23,27 @@ either the change is wrong or the document needs updating first — resolve whic
 before writing code.
 
 The repository has **Phase 7A frozen** — the Mandate Core v1 specification
-([docs/core-v1](docs/core-v1/README.md)) — **Phase 7B implemented locally,
-awaiting review**: `packages/core`, the Core types, canonical encodings and
+([docs/core-v1](docs/core-v1/README.md)) — **Phase 7B frozen**: `packages/core`, the Core types, canonical encodings and
 validators
 ([docs/core-v1/implementation-7b.md](docs/core-v1/implementation-7b.md),
-[ADR 0020](docs/adr/0020-mandate-core-package-and-encoding.md)) — and **Phase
-7C implemented locally, awaiting review**: `packages/ledger`, the authority
+[ADR 0020](docs/adr/0020-mandate-core-package-and-encoding.md)) — **Phase
+7C frozen**: `packages/ledger`, the authority
 graph and principal-wide global authority ledger, with an in-memory reference
 store only
 ([docs/core-v1/implementation-7c.md](docs/core-v1/implementation-7c.md),
 ADRs [0021](docs/adr/0021-authority-ledger-package-boundary.md)–[0023](docs/adr/0023-ledger-store-contract.md)) — and **Phase
-7D implemented locally, awaiting review**: `packages/control`, the invariant
+7D frozen**: `packages/control`, the invariant
 and reservation engine — the version-bound `DomainModule` interface, state
 admission, worst-case projection, invariant evaluation, semantic delegation
 narrowing and atomic reservation through the ledger, with a test-only
 synthetic module and no venue
 ([docs/core-v1/implementation-7d.md](docs/core-v1/implementation-7d.md),
 ADRs [0024](docs/adr/0024-version-bound-domain-module-interface.md)–[0026](docs/adr/0026-worst-case-projection-over-pending-reservations.md)),
-with the **Phase 7D.1** semantic hardening, also awaiting review
-([§22](docs/core-v1/implementation-7d.md#22-phase-7d1-semantic-hardening)); Phase
-7E is not started. **Phase 6 is
+with the **Phase 7D.1** semantic hardening
+([§22](docs/core-v1/implementation-7d.md#22-phase-7d1-semantic-hardening)) and the
+**Phase 7D.2** historical semantic provenance
+([§23](docs/core-v1/implementation-7d.md#23-phase-7d2-historical-semantic-provenance-and-freeze)).
+**Phase 7E is next and not started**; it must not begin until explicitly opened. **Phase 6 is
 frozen at `dc98df5`**; nothing in Phase 7 may modify
 MCE v2, Candidate V3, the gate, its libraries, fixture or replay semantics, or
 any canonical vector. Before it came **Phase 6R.2B** (secure gas optimization:

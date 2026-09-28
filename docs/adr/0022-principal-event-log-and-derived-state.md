@@ -1,6 +1,6 @@
 # ADR 0022: Principal event log, hash chain and derived ledger state
 
-- **Status:** Proposed (Phase 7C, awaiting review)
+- **Status:** Accepted (Phase 7C, frozen)
 - **Date:** 2026-09-27
 - **Relates to:** [authority-ledger.md §5, §9, §13](../core-v1/authority-ledger.md),
   [ADR 0020](0020-mandate-core-package-and-encoding.md),

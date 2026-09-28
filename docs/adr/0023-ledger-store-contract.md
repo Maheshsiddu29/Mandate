@@ -1,6 +1,6 @@
 # ADR 0023: Ledger store contract and the in-memory reference store
 
-- **Status:** Proposed (Phase 7C, awaiting review)
+- **Status:** Accepted (Phase 7C, frozen)
 - **Date:** 2026-09-27
 - **Relates to:** [authority-ledger.md §9, §13](../core-v1/authority-ledger.md),
   [architecture.md §6](../core-v1/architecture.md#6-the-linearization-point),

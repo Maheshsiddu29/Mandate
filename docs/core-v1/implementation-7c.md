@@ -1,6 +1,6 @@
 # Mandate Core v1 — Phase 7C implementation: authority graph and global authority ledger
 
-> **Status: Phase 7C implemented locally, awaiting review.** This document
+> **Status: Phase 7C — FROZEN.** (7D added the invariant-ordering extension point, 7D.1 the invariant baseline rule and 7D.2 committed semantic proofs; see [implementation-7d.md](implementation-7d.md).) This document
 > describes code in `packages/ledger`. It does not change the frozen Phase 7A
 > specification in this directory, or the Phase 7B representation in
 > `packages/core`; both remain normative and unmodified. Where the

@@ -1,6 +1,6 @@
 # ADR 0025: The control package and the authorization orchestration boundary
 
-- **Status:** Proposed (Phase 7D, awaiting review)
+- **Status:** Accepted (Phase 7D, frozen)
 - **Date:** 2026-09-28
 - **Relates to:** [ADR 0021](0021-authority-ledger-package-boundary.md),
   [ADR 0023](0023-ledger-store-contract.md),

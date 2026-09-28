@@ -1,8 +1,7 @@
 # Mandate Core v1 — Phase 7B implementation: types and the generic action/state model
 
-> **Status: Phase 7B architecture accepted; the Phase 7B.1 representation
-> hardening ([§12](#12-phase-7b1-representation-hardening)) is implemented
-> locally and awaiting review.** This document
+> **Status: Phase 7B — FROZEN**, with its Phase 7B.1 representation
+> hardening ([§12](#12-phase-7b1-representation-hardening)). This document
 > describes code in `packages/core`. It does not change the frozen Phase 7A
 > specification in this directory, which remains normative. Where the
 > specification could not be followed literally, or two parts of it disagree,

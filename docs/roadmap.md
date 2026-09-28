@@ -6,13 +6,13 @@ and what it depends on.
 > **Status: Phase 6 is FROZEN at `dc98df5`. Phase 7A — the Mandate Core v1
 > specification ([core-v1/](core-v1/README.md)) — is FROZEN after its hardening
 > checkpoint. Phase 7B — Core types, canonical encodings and the generic
-> action/state model ([implementation-7b.md](core-v1/implementation-7b.md)) —
-> is architecture-accepted, with the Phase 7B.1 representation hardening
-> implemented locally and awaiting review. Phase 7C — the authority graph and
+> action/state model ([implementation-7b.md](core-v1/implementation-7b.md)),
+> with its 7B.1 hardening — is FROZEN. Phase 7C — the authority graph and
 > global authority ledger ([implementation-7c.md](core-v1/implementation-7c.md))
-> — is implemented locally and awaiting review. Phase 7D — the invariant and
-> reservation engine ([implementation-7d.md](core-v1/implementation-7d.md)) —
-> is implemented locally and awaiting review.** No production domain module,
+> — is FROZEN. Phase 7D — the invariant and reservation engine
+> ([implementation-7d.md](core-v1/implementation-7d.md)), with its 7D.1
+> semantic hardening and 7D.2 historical semantic provenance — is FROZEN.
+> Phase 7E is NEXT and not started.** No production domain module,
 > venue integration, observation reconciliation or later Phase 7 mechanism
 > exists, and nothing has been deployed.
 > Rationale for the phase ordering is in
@@ -456,7 +456,7 @@ The remaining open questions are implementation choices assigned to 7B–7H.
 
 **Depends on:** Phase 6 (frozen).
 
-### Phase 7B — Core types and generic action/state model — ACCEPTED; 7B.1 hardening awaiting review
+### Phase 7B — Core types and generic action/state model — FROZEN ✓
 
 **Delivers** a Core package with canonical encodings and strict parsers for
 grants, intents, snapshots and quantities; typed economic quantities; the
@@ -477,7 +477,7 @@ Phase 7B.1 (representation hardening) bound `StateEnvelope` to a full
 and assigned the deferred items: the meet and AUTH-2 to 7C, the executable
 `DomainModule` interface to 7D.
 
-### Phase 7C — Authority Graph + Global Authority Ledger — IMPLEMENTED, awaiting review
+### Phase 7C — Authority Graph + Global Authority Ledger — FROZEN ✓
 
 **Delivers** the authority graph: the authority meet and effective-lineage
 computation (child ⊆ parent at registration and at every action), with AUTH-2
@@ -503,7 +503,7 @@ are folded without observation validation, which is 7D's. AUTH-GLOBAL-2 is not
 established: a new principal-global dimension is refused once anything was
 reserved.
 
-### Phase 7D — Invariant + Reservation Engine — IMPLEMENTED; 7D.1 hardening awaiting review
+### Phase 7D — Invariant + Reservation Engine — FROZEN ✓
 
 **Delivers** the executable `DomainModule` interface (decode, resources,
 required state, risk direction, projection, contributions, settle, positions,
@@ -542,7 +542,7 @@ exit criteria RECON-1…5, TIME-1 and REPLAY-1 — is **not** built; see the
 corrected ownership above. `settle` and `positions` are not part of the
 interface yet. No production domain module exists.
 
-**Phase 7D.1 — semantic hardening** (implemented locally, awaiting review;
+**Phase 7D.1 — semantic hardening** (accepted;
 [implementation-7d.md §22](core-v1/implementation-7d.md#22-phase-7d1-semantic-hardening)).
 It closes five issues before the first real market integration, as rulings:
 
@@ -559,7 +559,17 @@ It closes five issues before the first real market integration, as rulings:
 Cross-domain valuation consistency is established. AUTH-GLOBAL-2, RECON-1…5
 and REPLAY-1 are not.
 
-### Phase 7E — PerpPolicy v1 and Venue Signer
+**Phase 7D.2 — historical semantic provenance and freeze**
+([implementation-7d.md §23](core-v1/implementation-7d.md#23-phase-7d2-historical-semantic-provenance-and-freeze)).
+Every narrowing the ledger accepts now commits the exact definition that
+proved it — Core, or the full `ModuleRef` with its digest — in the
+registration event. Replay resolves that exact artifact from the loaded or
+archived modules, never through the registry's current name mapping, and
+refuses without it. Benchmarks were re-run after 7D.1, up to the
+4,096-reservation bound, and scale linearly. Phase 7D is frozen after this
+checkpoint.
+
+### Phase 7E — PerpPolicy v1 and Venue Signer — NEXT
 
 **Delivers** the perp domain module and a Venue Signer adapter.
 **Exit (from 7D, corrected in 7D.1):** REPLAY-1's execution-authorization and
@@ -643,10 +653,10 @@ to the product, and belongs in the design documents before it belongs in code.
 | 6R.2A | Gas attribution and architecture benchmark (measurement only) | 6R.1b | ✅ measured locally; recommendation awaiting review; no production change |
 | 6R.2B | Gas optimization, path chosen from the 6R.2A measurements | 6R.2A | ✅ implemented locally; awaiting independent security and gas review; not deployed |
 | 7A | Mandate Core v1 specification | 6 | **FROZEN ✓** — specification only, hardened |
-| 7B | Core types and generic action/state model | 7A | ✅ architecture accepted; 7B.1 representation hardening implemented locally (meet and AUTH-2 → 7C; module interface → 7D) |
-| 7C | Authority Graph + Global Authority Ledger (meet, effective lineage, AUTH-2) | 7B | ✅ implemented locally, awaiting review |
-| 7D | Invariant + Reservation Engine (executable `DomainModule` interface) | 7C | ✅ implemented locally, awaiting review (observation reconciliation deferred) |
-| 7E | PerpPolicy v1 and Venue Signer | 7D | planned; blocked on venue evidence |
+| 7B | Core types and generic action/state model | 7A | **FROZEN ✓** — with 7B.1 representation hardening (meet and AUTH-2 → 7C; module interface → 7D) |
+| 7C | Authority Graph + Global Authority Ledger (meet, effective lineage, AUTH-2) | 7B | **FROZEN ✓** |
+| 7D | Invariant + Reservation Engine (executable `DomainModule` interface) | 7C | **FROZEN ✓** — with 7D.1 hardening and 7D.2 provenance (observation reconciliation → 7F, issuance → 7E) |
+| 7E | PerpPolicy v1 and Venue Signer | 7D | **NEXT** — not started; blocked on venue evidence |
 | 7F | Cross-domain reconciliation: EVM fixture and perps | 7E | planned |
 | 7G | Developer SDK and simulator | 7F | planned |
 | 7H | Receipts and authority provenance | 7F | planned |

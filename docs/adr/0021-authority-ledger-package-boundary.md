@@ -1,6 +1,6 @@
 # ADR 0021: Authority ledger package boundary
 
-- **Status:** Proposed (Phase 7C, awaiting review)
+- **Status:** Accepted (Phase 7C, frozen)
 - **Date:** 2026-09-27
 - **Relates to:** [ADR 0020](0020-mandate-core-package-and-encoding.md) (Core
   package and encoding), [authority-ledger.md](../core-v1/authority-ledger.md),

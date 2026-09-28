@@ -1,6 +1,6 @@
 # ADR 0026: Worst-case projection over every unresolved reservation
 
-- **Status:** Proposed (Phase 7D, awaiting review)
+- **Status:** Accepted (Phase 7D, frozen)
 - **Date:** 2026-09-28
 - **Relates to:** [action-state-model.md §6](../core-v1/action-state-model.md#6-projection)
   (PROJ-1), [architecture.md §6](../core-v1/architecture.md#6-the-linearization-point),

@@ -6,9 +6,8 @@ financial assets.**
 > **Current: Phase 7D — the invariant and reservation engine
 > (`packages/control`,
 > [docs/core-v1/implementation-7d.md](docs/core-v1/implementation-7d.md)), with
-> its Phase 7D.1 semantic hardening
-> ([§22](docs/core-v1/implementation-7d.md#22-phase-7d1-semantic-hardening)) — is
-> implemented locally and awaiting review, on Phase 7C's authority graph and
+> its Phase 7D.1 semantic hardening and Phase 7D.2 historical semantic
+> provenance — is FROZEN, as are Phase 7C's authority graph and
 > global authority ledger (`packages/ledger`,
 > [implementation-7c.md](docs/core-v1/implementation-7c.md)), Phase 7B's Core
 > types (`packages/core`, [implementation-7b.md](docs/core-v1/implementation-7b.md))
@@ -16,7 +15,7 @@ financial assets.**
 > ([docs/core-v1](docs/core-v1/README.md)). Its only domain module is a
 > test-only synthetic market; no production domain module, venue integration,
 > observation reconciliation or durable store exists yet. Phase 6 is frozen at
-> `dc98df5`.**
+> `dc98df5`. Phase 7E is next and not started.**
 >
 > **Status: Phase 6R.2B (secure gas optimization) implemented locally and awaiting independent security and gas review ([report](docs/phase-6r2b-report.md): normal BUY 401,684 → 246,963 execution gas, worst case 6,724,561 → 425,922, no semantic change), after the Phase 6R.2A gas attribution benchmark ([report](docs/phase-6r2a-gas-profile.md)) and Phase 6R.1b — an onchain execution
 > gate, tested against a labelled settlement fixture and not deployed.** The
