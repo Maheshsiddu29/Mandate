@@ -13,11 +13,23 @@
  * ledger reservation (the RESERVE the ledger derives, applied to the
  * snapshot), and the whole pure decision plus its reservation.
  *
+ * 7D.2 adds principal-global aggregate cases at 20, 100, 1,000 and 4,096
+ * unresolved reservations (the `MAX_RESERVATION_FACTS` bound): two
+ * asset-valued modules, the pending reservations split between them, one
+ * shared valuation, and the 7D.1 closed-scope consultation of every module
+ * with unresolved activity. Two further stages are reported: reading the
+ * reservation facts from the snapshot, and Core's aggregate evaluation
+ * (scope, valuation context and sum) over the decision's participants.
+ * Their pending reservations are committed through the ledger from one
+ * engine-decided plan per module, varied only in action identity — the same
+ * ledger state the engine would build, without quadratic set-up.
+ *
  * Run: `npm run control:benchmark`. Offline; nothing is written to disk.
  */
 
-import { applyBatch, deriveReserveEvent, type LedgerSnapshot } from '@mandate/ledger';
-import { actionId, type AuthorityGrant, type AuthorityTermInput, type LedgerDimensionInput } from '@mandate/core';
+import { applyBatch, deriveReserveEvent, type ChargePlan, type LedgerSnapshot } from '@mandate/ledger';
+import { actionId, type ActionId, type AuthorityGrant, type AuthorityTermInput, type LedgerDimensionInput, type StateEnvelope, type StateId } from '@mandate/core';
+import { evaluateAggregate, aggregateSpecOf, type AggregateSpec, type ParticipantView } from '../src/aggregate.ts';
 import { admitNeeds, effectiveNeed, mergeNeeds, prepareStates } from '../src/admission.ts';
 import { validateEvaluationContext } from '../src/context.ts';
 import { reservationFacts, factsFor } from '../src/facts.ts';
@@ -32,7 +44,9 @@ import {
   action,
   address,
   aggregate,
+  assetValuedModules,
   capitalDim,
+  digestOf,
   child,
   context,
   marketStates,
@@ -78,8 +92,41 @@ interface Case {
   readonly req: AuthorizationRequest;
 }
 
+/** `count` more reservations of `template`'s plan, each under a fresh action identity, through the ledger. */
+async function reserveCopies(w: World, template: ChargePlan, count: number, label: string): Promise<void> {
+  for (let i = 0; i < count; i += 1) {
+    const plan = { ...template, action: digestOf(`benchmark:${label}:${i}`) as ActionId };
+    const r = await w.ledger.reserve(plan, T, ONCE);
+    if (r.status !== 'COMMITTED') throw new Error(`setup reservation ${label}/${i}: ${r.status === 'REFUSED' ? r.refusal.code : r.status}`);
+  }
+}
+
+/** A principal-global BTC aggregate over spot-like and perp-like, `pending` unresolved reservations split between them; perp acts. */
+async function buildGlobal(name: string, pending: number): Promise<Case> {
+  const w = world({ modules: assetValuedModules() });
+  const perp = w.modules[0] as SyntheticModule;
+  const spot = w.modules[1] as SyntheticModule;
+  const acctS = account(spot);
+  const acctP = account(perp);
+  const rootS = root({ mods: [spot], holder: AGENT_A, terms: [capitalDim('capital', 100_000_000)] });
+  const rootP = root({ mods: [perp], holder: address('62'), nonce: 1n, terms: [capitalDim('capital', 100_000_000)] });
+  await setup(w, policy([aggregate({ whole: 100_000_000, contributors: [spot, perp], accounts: [acctS, acctP] })]), [rootS, rootP]);
+  const states: SuppliedState[] = [...marketStates(spot, [{ account: acctS }]), ...marketStates(perp, [{ account: acctP }])];
+  const ctx = context([perp, spot], { accounts: [{ module: spot, account: acctS }, { module: perp, account: acctP }] });
+  const templates: ChargePlan[] = [];
+  for (const [m, g] of [[spot, rootS], [perp, rootP]] as const) {
+    const s = await w.store.read(g.principal);
+    templates.push(must(decideWith(PRODUCTION_PIPELINE, s, request(action(m, { authority: g, size: sizeFor(100), nonce: 99_999n }), states, ctx), { catalog: w.catalog, registry: w.registry, rules: controlRules(w.catalog) })).plan);
+  }
+  await reserveCopies(w, templates[0] as ChargePlan, Math.floor(pending / 2), 'spot');
+  await reserveCopies(w, templates[1] as ChargePlan, pending - Math.floor(pending / 2), 'perp');
+  const req = request(action(perp, { authority: rootP, size: sizeFor(100) }), states, ctx);
+  return { name, w, m: perp, snapshot: await w.store.read(req.action.principal), req };
+}
+
 async function build(name: string, o: { invariants: 'ONE' | 'FIVE'; depth: number; dims: 'ONE' | 'FOUR'; pending: number }): Promise<Case> {
-  const w = world();
+  // The five-invariant case carries a principal-global marked aggregate, which only asset-valued marks may join (7D.1).
+  const w = o.invariants === 'FIVE' ? world({ modules: assetValuedModules() }) : world();
   const m = w.modules[0] as SyntheticModule;
   const acct = account(m);
   const acct2 = account(m, 'acct-2');
@@ -135,6 +182,25 @@ function measure(c: Case): { [stage: string]: number | string } {
     const d = must(decideWith(PRODUCTION_PIPELINE, c.snapshot, c.req, env));
     must(applyBatch(c.snapshot.state, [d.event], env.rules));
   });
+  const factsStage = medianMicros(100, () => {
+    must(reservationFacts(c.snapshot.state));
+  });
+  // Core's aggregate over the decision's own participants, if a principal-global aggregate applies.
+  const agg = decision.invariants.find((r) => r.evaluator.kind === 'CORE');
+  let aggregateStage = '—';
+  if (agg !== undefined) {
+    const spec = aggregateSpecOf(agg.term);
+    if (!spec.ok) throw new Error(spec.error);
+    const views: ParticipantView[] = decision.projection.participants.map((p) => ({
+      module: p.module,
+      projection: p.projection,
+      admitted: new Map<StateId, StateEnvelope>(decision.admissions.filter((a) => a.need.module.ref.moduleDigest === p.module.moduleDigest).map((a) => [a.state.stateId, a.state.envelope])),
+    }));
+    const active = [...new Map(facts.map((f) => [f.module.moduleDigest, f.module])).values()];
+    aggregateStage = medianMicros(100, () => {
+      evaluateAggregate(spec.value as AggregateSpec, views, active);
+    }).toFixed(1);
+  }
   return {
     case: c.name,
     invariants: n,
@@ -146,6 +212,9 @@ function measure(c: Case): { [stage: string]: number | string } {
     'projection µs': projection.toFixed(1),
     'admission+projection+invariants µs': stateEval.toFixed(1),
     'ledger reservation µs': reservation.toFixed(1),
+    'reservation facts µs': factsStage.toFixed(1),
+    'aggregate µs': aggregateStage,
+    participants: decision.projection.participants.length,
     'total µs': total.toFixed(1),
   };
 }
@@ -157,6 +226,10 @@ const cases = [
   await build('20 pending reservation facts', { invariants: 'ONE', depth: 1, dims: 'ONE', pending: 20 }),
   await build('100 pending reservation facts', { invariants: 'ONE', depth: 1, dims: 'ONE', pending: 100 }),
   await build('1,000 pending reservation facts', { invariants: 'ONE', depth: 1, dims: 'ONE', pending: 1_000 }),
+  await buildGlobal('global aggregate, 20 pending', 20),
+  await buildGlobal('global aggregate, 100 pending', 100),
+  await buildGlobal('global aggregate, 1,000 pending', 1_000),
+  await buildGlobal('global aggregate, 4,096 pending', 4_096),
 ];
 process.stdout.write(`control benchmark — Node ${process.version}, median of ${ROUNDS} rounds\n`);
 for (const c of cases) process.stdout.write(`${JSON.stringify(measure(c))}\n`);

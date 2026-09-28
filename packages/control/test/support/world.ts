@@ -5,12 +5,14 @@
  */
 
 import assert from 'node:assert/strict';
-import type { ActionEnvelope, AuthorityGrant, ModuleRef, PrincipalPolicy } from '@mandate/core';
+import { policyInvariants, type ActionEnvelope, type AuthorityGrant, type ModuleRef, type PrincipalPolicy } from '@mandate/core';
 import { AuthorityLedger, InMemoryLedgerStore, ReferenceModuleRegistry, type InMemoryStoreHooks, type LedgerOutcome, type LedgerSnapshot, type ModuleStatus } from '@mandate/ledger';
 import {
   ControlEngine,
   ModuleCatalog,
   controlRules,
+  policyProofs,
+  semanticProofRefs,
   type AuthorizationOutcome,
   type AuthorizationRecord,
   type AuthorizationRequest,
@@ -69,6 +71,17 @@ export function world(o: WorldOptions = {}): World {
   const rules = controlRules(catalog);
   const store = new InMemoryLedgerStore(o.hooks ?? {}, rules);
   return { modules, registry, catalog, store, engine: new ControlEngine({ store, registry, catalog }), ledger: new AuthorityLedger(store, registry, rules) };
+}
+
+/**
+ * Register a policy through the infrastructure ledger, committing a proof —
+ * the exact definition — for each principal-global invariant it restates
+ * once activity exists (7D.2).
+ */
+export async function registerPolicy(w: World, p: PrincipalPolicy, at: bigint, catalog: ModuleCatalog = w.catalog): Promise<LedgerOutcome> {
+  const snap = await w.store.read(p.principal);
+  const proofs = semanticProofRefs(policyProofs(snap.state, p, catalog), policyInvariants(p));
+  return w.ledger.registerPolicy(p, at, ONCE, proofs);
 }
 
 function committedOutcome(o: LedgerOutcome): LedgerSnapshot {

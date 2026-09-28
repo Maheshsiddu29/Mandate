@@ -61,7 +61,8 @@ import {
   type TargetBalance,
 } from './state.ts';
 import type { PMap } from './pmap.ts';
-import { CORE_RULES, orderInvariants, type ReducerRules } from './rules.ts';
+import { CORE_RULES, committedProver, type ReducerRules } from './rules.ts';
+import { checkProofSet, grantInvariants, restatedInvariants, type SemanticProofRef } from './semantic.ts';
 
 // --- Registration --------------------------------------------------------------
 
@@ -85,12 +86,18 @@ function zeroBalance(ref: TargetRef, source: TargetBalance['source'], dimension:
  *   `noWeaker` with the roles reversed — the old parameters are no weaker than
  *   the new — from the configured ordering; `UNPROVABLE` is not no stronger.
  *   An unchanged restatement and a removed invariant need no baseline. Replay
- *   asks the same ordering again, exactly as for a narrowed delegation.
+ *   asks the same ordering again, exactly as for a narrowed delegation — and,
+ *   since 7D.2, under exactly the definition the event's proof commits.
  *
  * Whether a particular earlier reservation is irrelevant to the new
  * constraint is not inferred: any committed reservation counts as activity.
  */
-export function checkPolicyBaseline(s: LedgerState, policy: PrincipalPolicy, rules: ReducerRules): LedgerResult<true> {
+export function checkPolicyBaseline(s: LedgerState, policy: PrincipalPolicy, rules: ReducerRules, proofs: readonly SemanticProofRef[] = []): LedgerResult<true> {
+  const constrained = s.policy !== null && s.everReserved;
+  // A proof is committed exactly for each restated invariant the ordering is asked about, and for nothing else.
+  const needed = constrained ? restatedInvariants(policyInvariants((s.policy as NonNullable<LedgerState['policy']>).policy), policyInvariants(policy)) : [];
+  const set = checkProofSet(proofs, needed, 'proofs');
+  if (!set.ok) return set;
   if (s.policy === null || !s.everReserved) return ok(true);
   const previous = s.policy.policy;
   const kept = new Set(policyDimensions(previous).map((d) => policyTargetKey(policyDimensionIdentity(d))));
@@ -101,10 +108,12 @@ export function checkPolicyBaseline(s: LedgerState, policy: PrincipalPolicy, rul
   }
   const before = new Map(policyInvariants(previous).map((t) => [termKey(t), t]));
   const invariants = policyInvariants(policy);
+  const prove = committedProver(rules.invariantOrdering, proofs);
   for (let i = 0; i < invariants.length; i += 1) {
     const t = invariants[i] as StateInvariantTerm;
     const p = before.get(termKey(t));
-    if (p !== undefined && (p.params === t.params || orderInvariants(rules.invariantOrdering, t, p) === 'NO_WEAKER')) continue;
+    // No stronger: the old parameters are no weaker than the new, under the committed definition.
+    if (p !== undefined && (p.params === t.params || prove(t, p) === 'NO_WEAKER')) continue;
     return refuse('POLICY_UPDATE_REQUIRES_BASELINE', `policy.terms.invariant[${i}]`);
   }
   return ok(true);
@@ -117,10 +126,10 @@ function applyRegisterPolicy(s: LedgerState, e: Extract<LedgerEvent, { kind: 'RE
   const dims = policyDimensions(policy);
   let targets = s.targets;
 
+  if (s.policy !== null && policy.sequence <= s.policy.policy.sequence) return refuse('POLICY_SEQUENCE_NOT_INCREASING', 'policy.sequence');
+  const baseline = checkPolicyBaseline(s, policy, rules, e.proofs ?? []);
+  if (!baseline.ok) return baseline;
   if (s.policy !== null) {
-    if (policy.sequence <= s.policy.policy.sequence) return refuse('POLICY_SEQUENCE_NOT_INCREASING', 'policy.sequence');
-    const baseline = checkPolicyBaseline(s, policy, rules);
-    if (!baseline.ok) return baseline;
     for (const d of policyDimensions(s.policy.policy)) {
       const key = policyTargetKey(policyDimensionIdentity(d));
       const b = targets.get(key) as TargetBalance;
@@ -140,7 +149,13 @@ function applyRegisterPolicy(s: LedgerState, e: Extract<LedgerEvent, { kind: 'RE
 
 function applyRegisterGrant(s: LedgerState, e: Extract<LedgerEvent, { kind: 'REGISTER_GRANT' }>, version: LedgerVersion, rules: ReducerRules): LedgerResult<LedgerState> {
   const id = authorityId(e.grant);
-  const depth = checkGrantRegistration(s, id, e.grant, e.at, 'grant', rules.invariantOrdering);
+  const proofs = e.proofs ?? [];
+  // A proof is committed exactly for each invariant the child restates with other parameters, and for nothing else.
+  const parent = e.grant.lineage.kind === 'DELEGATION' ? s.nodes.get(e.grant.lineage.parent) : undefined;
+  const needed = parent === undefined ? [] : restatedInvariants(grantInvariants(parent.grant), grantInvariants(e.grant));
+  const set = checkProofSet(proofs, needed, 'proofs');
+  if (!set.ok) return set;
+  const depth = checkGrantRegistration(s, id, e.grant, e.at, 'grant', committedProver(rules.invariantOrdering, proofs));
   if (!depth.ok) return depth;
   let targets = s.targets;
   for (const t of e.grant.terms) {

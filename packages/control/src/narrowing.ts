@@ -25,10 +25,17 @@
  *
  * A proof records whose semantics produced it — Core, or the exact
  * `ModuleRef` — so the registration's evidence names the comparator.
+ *
+ * **Committed provenance (7D.2).** That identity is no longer only evidence
+ * returned to the caller: the registration event commits it, as a ledger
+ * `SemanticProofRef` per restated invariant (`semanticProofRefs`). The
+ * reducer re-proves each narrowing under exactly that definition at commit
+ * and at replay, so a history is bound to the semantics that accepted it
+ * and never to whatever a registry later maps the module's name to.
  */
 
-import { termKey, type AuthorityGrant, type InvariantId, type InvariantVersion, type StateInvariantTerm } from '@mandate/core';
-import type { InvariantNarrowing } from '@mandate/ledger';
+import { policyInvariants, termKey, type AuthorityGrant, type InvariantId, type InvariantVersion, type PrincipalPolicy, type StateInvariantTerm } from '@mandate/core';
+import { canonicalProofs, restatedInvariants, type InvariantNarrowing, type LedgerState, type SemanticInvariantRef, type SemanticProofRef } from '@mandate/ledger';
 import type { Evaluator, ModuleCatalog } from './catalog.ts';
 
 export interface NarrowingProof {
@@ -39,6 +46,8 @@ export interface NarrowingProof {
   readonly parentParams: string;
   readonly childParams: string;
   readonly evaluator: Evaluator;
+  /** The exact definition the proof was made under, or `null` if no definition could be found. */
+  readonly definition: SemanticInvariantRef | null;
   readonly verdict: InvariantNarrowing;
 }
 
@@ -56,8 +65,38 @@ export function narrowingProofs(parent: AuthorityGrant, child: AuthorityGrant, c
     const key = termKey(c);
     const p = parents.get(key);
     if (p === undefined || p.params === c.params) continue;
-    const comparison = catalog.compareInvariants(p, c, true);
-    out.push({ term: key, invariantId: c.invariantId, version: c.version, parentParams: p.params, childParams: c.params, evaluator: comparison.evaluator, verdict: comparison.verdict });
+    const definition = catalog.definitionFor(c.invariantId, c.version);
+    const comparison = definition === null ? { evaluator: { kind: 'NONE' } as const, verdict: 'UNPROVABLE' as const } : catalog.compareInvariants(p, c, definition, true);
+    out.push({ term: key, invariantId: c.invariantId, version: c.version, parentParams: p.params, childParams: c.params, evaluator: comparison.evaluator, definition, verdict: comparison.verdict });
   }
   return out;
+}
+
+/**
+ * A proof for every principal-global invariant a policy update restates with
+ * different parameters once activity exists (7D.1), ordered the other way:
+ * the old parameters must be no weaker than the new. Before any activity, or
+ * for a first policy, nothing needs proving.
+ */
+export function policyProofs(state: LedgerState, policy: PrincipalPolicy, catalog: ModuleCatalog): readonly NarrowingProof[] {
+  if (state.policy === null || !state.everReserved) return [];
+  const previous = policyInvariants(state.policy.policy);
+  const before = new Map(previous.map((t) => [termKey(t), t]));
+  return restatedInvariants(previous, policyInvariants(policy)).map((t) => {
+    const old = before.get(termKey(t)) as StateInvariantTerm;
+    const definition = catalog.definitionFor(t.invariantId, t.version);
+    const comparison = definition === null ? { evaluator: { kind: 'NONE' } as const, verdict: 'UNPROVABLE' as const } : catalog.compareInvariants(t, old, definition, true);
+    return { term: termKey(t), invariantId: t.invariantId, version: t.version, parentParams: t.params, childParams: old.params, evaluator: comparison.evaluator, definition, verdict: comparison.verdict };
+  });
+}
+
+/** What a registration commits: one `SemanticProofRef` per proof with a definition, in canonical order. */
+export function semanticProofRefs(proofs: readonly NarrowingProof[], terms: readonly StateInvariantTerm[]): SemanticProofRef[] {
+  const byKey = new Map(terms.map((t) => [termKey(t), t]));
+  const refs: SemanticProofRef[] = [];
+  for (const p of proofs) {
+    const t = byKey.get(p.term);
+    if (p.definition !== null && t !== undefined) refs.push({ definition: p.definition, scope: t.scope });
+  }
+  return canonicalProofs(refs);
 }

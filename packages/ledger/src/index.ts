@@ -26,6 +26,7 @@ export * from './pmap.ts';
 export * from './revocation.ts';
 export * from './charge-plan.ts';
 export * from './rules.ts';
+export * from './semantic.ts';
 export {
   availableOf,
   emptyLedgerState,

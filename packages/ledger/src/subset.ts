@@ -33,7 +33,8 @@
  *
  * Invariant parameters are the one exception, from 7D: when the reducer is
  * configured with an `InvariantOrdering` (rules.ts), a restated invariant with
- * different parameters is accepted if the ordering proves it `NO_WEAKER`,
+ * different parameters is accepted if the ordering proves it `NO_WEAKER` —
+ * since 7D.2, under exactly the definition the registration committed —
  * refused `DELEGATION_WEAKENS_INVARIANT` if it proves it `WEAKER`, and still
  * refused `DELEGATION_NARROWING_UNPROVEN` otherwise.
  */
@@ -56,7 +57,7 @@ import {
 } from '@mandate/core';
 import { compareScaled } from './encoding.ts';
 import type { DelegationViolation, DelegationViolationCode } from './errors.ts';
-import { orderInvariants, type InvariantOrdering } from './rules.ts';
+import type { NarrowingProver } from './rules.ts';
 
 // --- Exact member identity ------------------------------------------------------
 
@@ -172,13 +173,14 @@ const DELEGATE_KEY = JSON.stringify(['RIGHT', 'DELEGATE']);
  * valid by §4's right-hand column. `parentDepth` is the parent's *effective*
  * remaining delegation depth along its own lineage, which equals its grant's
  * depth whenever every ancestor was registered through this check.
- * `ordering` is the reducer's configured invariant ordering, if any.
+ * `prove` orders a restated invariant's parameters: the reducer's configured
+ * ordering bound to the registration's committed proofs (rules.ts), if any.
  */
 export function checkDelegationSubset(
   parent: AuthorityGrant,
   child: AuthorityGrant,
   parentDepth: number,
-  ordering: InvariantOrdering | null = null,
+  prove: NarrowingProver | null = null,
 ): readonly DelegationViolation[] {
   const found: DelegationViolation[] = [];
   const seen = new Set<string>();
@@ -243,7 +245,7 @@ export function checkDelegationSubset(
         if (p === undefined) break;
         const pi = p as StateInvariantTerm;
         if (pi.params === c.params) break;
-        const verdict = orderInvariants(ordering, pi, c);
+        const verdict = prove === null ? 'UNPROVABLE' : prove(pi, c);
         if (verdict === 'WEAKER') add('DELEGATION_WEAKENS_INVARIANT', key);
         else if (verdict === 'UNPROVABLE') add('DELEGATION_NARROWING_UNPROVEN', key);
         break;

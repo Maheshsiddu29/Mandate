@@ -39,6 +39,7 @@ import {
   must,
   policy,
   refused,
+  registerPolicy,
   request,
   root,
   setup,
@@ -89,7 +90,7 @@ describe('closed aggregate scope: an unlisted module\'s activity is never silent
     const f = await fixture();
     const pending = authorized(await f.w.engine.authorizeAndReserve(request(action(f.spot, { authority: f.rootA, size: sizeFor(3_000) }), f.states, f.ctx), RETRY));
     // Dropping a contributor is provably no stronger, so no baseline is needed to install it…
-    committed(await f.w.ledger.registerPolicy(policy([f.agg(10_000, [f.perp])], 2n), T, ONCE));
+    committed(await registerPolicy(f.w, policy([f.agg(10_000, [f.perp])], 2n), T));
     // …but spot's unresolved 3,000 does not disappear from the aggregate with it.
     const r = refused(await f.w.engine.authorizeAndReserve(request(action(f.perp, { authority: f.rootB, size: sizeFor(1_000) }), f.states, f.ctx), RETRY));
     assert.equal(r.code, 'INVARIANT_UNKNOWN');
@@ -103,7 +104,7 @@ describe('closed aggregate scope: an unlisted module\'s activity is never silent
   it('an unlisted module with unresolved reservations that cannot be consulted makes the aggregate UNKNOWN', async () => {
     const f = await fixture();
     authorized(await f.w.engine.authorizeAndReserve(request(action(f.spot, { authority: f.rootA, size: sizeFor(3_000) }), f.states, f.ctx), RETRY));
-    committed(await f.w.ledger.registerPolicy(policy([f.agg(10_000, [f.perp])], 2n), T, ONCE));
+    committed(await registerPolicy(f.w, policy([f.agg(10_000, [f.perp])], 2n), T));
     // An engine whose catalog has no implementation for spot: its pending activity cannot be accounted for.
     const perpOnly = must(ModuleCatalog.create(f.w.registry, [{ module: f.perp, corpus: [] }]));
     const engine = new ControlEngine({ store: f.w.store, registry: f.w.registry, catalog: perpOnly });
@@ -115,7 +116,7 @@ describe('closed aggregate scope: an unlisted module\'s activity is never silent
   it('an unlisted module is consulted under its exact semantics, not refused by name: its pending ETH is not BTC', async () => {
     const f = await fixture();
     authorized(await f.w.engine.authorizeAndReserve(request(action(f.spot, { authority: f.rootA, size: sizeFor(3_000), market: 'x:ETH-SPOT' }), f.states, f.ctx), RETRY));
-    committed(await f.w.ledger.registerPolicy(policy([f.agg(10_000, [f.perp])], 2n), T, ONCE));
+    committed(await registerPolicy(f.w, policy([f.agg(10_000, [f.perp])], 2n), T));
     const d = await f.w.engine.decide(request(action(f.perp, { authority: f.rootB, size: sizeFor(1_000) }), f.states, f.ctx));
     assert.ok(d.ok, d.ok ? '' : `${d.error.code}/${d.error.reason}`);
     // Spot was a participant: asked, under its own ModuleRef, for its part of the BTC aggregate.
@@ -138,7 +139,7 @@ describe('closed aggregate scope: an unlisted module\'s activity is never silent
 describe('policy update: a new or tightened principal-global invariant requires a baseline', () => {
   it('before anything is reserved the empty baseline is provable: tightening is allowed', async () => {
     const f = await fixture();
-    committed(await f.w.ledger.registerPolicy(policy([f.agg(5_000, [f.spot, f.perp])], 2n), T, ONCE));
+    committed(await registerPolicy(f.w, policy([f.agg(5_000, [f.spot, f.perp])], 2n), T));
   });
 
   it('after activity: a tighter limit, an added contributor or a new aggregate is refused POLICY_UPDATE_REQUIRES_BASELINE', async () => {
@@ -147,7 +148,7 @@ describe('policy update: a new or tightened principal-global invariant requires 
     authorized(await f.w.engine.authorizeAndReserve(request(action(f.spot, { authority: f.rootA, size: sizeFor(3_000) }), f.states, f.ctx), RETRY));
     const eth = aggregate({ whole: 1_000_000, contributors: [f.spot], accounts: [account(f.spot)], asset: ETH });
     for (const terms of [[f.agg(9_999, [f.spot, f.perp])], [f.agg(10_000, [f.spot, f.perp, spot2])], [f.agg(10_000, [f.spot, f.perp]), eth]]) {
-      assert.equal(refusedUpdate(await f.w.ledger.registerPolicy(policy(terms, 2n), T, ONCE)), 'POLICY_UPDATE_REQUIRES_BASELINE');
+      assert.equal(refusedUpdate(await registerPolicy(f.w, policy(terms, 2n), T)), 'POLICY_UPDATE_REQUIRES_BASELINE');
     }
     // The refused updates wrote nothing: policy 1 still decides.
     const snap = await f.w.store.read(f.rootA.principal);
@@ -157,9 +158,9 @@ describe('policy update: a new or tightened principal-global invariant requires 
   it('after activity: an unchanged restatement, a looser limit and a removal need no baseline, and replay re-proves the loosening', async () => {
     const f = await fixture();
     authorized(await f.w.engine.authorizeAndReserve(request(action(f.spot, { authority: f.rootA, size: sizeFor(3_000) }), f.states, f.ctx), RETRY));
-    committed(await f.w.ledger.registerPolicy(policy([f.agg(10_000, [f.spot, f.perp])], 2n), T, ONCE));
-    committed(await f.w.ledger.registerPolicy(policy([f.agg(20_000, [f.spot, f.perp])], 3n), T, ONCE));
-    committed(await f.w.ledger.registerPolicy(policy([], 4n), T, ONCE));
+    committed(await registerPolicy(f.w, policy([f.agg(10_000, [f.spot, f.perp])], 2n), T));
+    committed(await registerPolicy(f.w, policy([f.agg(20_000, [f.spot, f.perp])], 3n), T));
+    committed(await registerPolicy(f.w, policy([], 4n), T));
     const principal = f.rootA.principal;
     const history = await f.w.store.history(principal);
     const head = (await f.w.store.read(principal)).head;

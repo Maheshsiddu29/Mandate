@@ -36,6 +36,20 @@
  * every event in order, so the same history always yields the same head, and
  * reordering, altering, inserting or removing any event changes every later
  * head.
+ *
+ * **Semantic proofs (7D.2).** A `REGISTER_GRANT` or `REGISTER_POLICY` whose
+ * acceptance rests on an invariant definition's comparator commits which
+ * exact definition decided it (`SemanticProofRef`, semantic.ts). Such an
+ * event is written under its own wire code, followed by the canonical proof
+ * list; an event with no proof keeps its 7C code and bytes exactly, so every
+ * earlier history, and its heads, are unchanged:
+ *
+ * ```text
+ * REGISTER_POLICY        u8(1) ‖ i64(at) ‖ segment(policy)
+ * REGISTER_POLICY+proofs u8(8) ‖ i64(at) ‖ segment(policy) ‖ u16(n ≥ 1) ‖ SemanticProofRef₁ … ₙ
+ * REGISTER_GRANT         u8(2) ‖ i64(at) ‖ segment(grant)
+ * REGISTER_GRANT+proofs  u8(9) ‖ i64(at) ‖ segment(grant) ‖ u16(n ≥ 1) ‖ SemanticProofRef₁ … ₙ
+ * ```
  */
 
 import { ok, type ByteWriter } from '@mandate/kernel';
@@ -82,6 +96,7 @@ import { LedgerTag, ledgerWriter, readSegment, writeSegment } from './encoding.t
 import type { TargetRef } from './errors.ts';
 import { MAX_BATCH_EVENTS, MAX_LEGS_PER_CONTRIBUTION, MAX_PLAN_CONTRIBUTIONS } from './limits.ts';
 import { decodeRevocation, encodeRevocation, type Revocation } from './revocation.ts';
+import { MAX_SEMANTIC_PROOFS, readSemanticProofRef, writeSemanticProofRef, type SemanticProofRef } from './semantic.ts';
 import { writeTargetRef } from './state.ts';
 
 export interface EventLeg {
@@ -92,8 +107,20 @@ export interface EventLeg {
 }
 
 export type LedgerEvent =
-  | { readonly kind: 'REGISTER_POLICY'; readonly at: bigint; readonly policy: PrincipalPolicy }
-  | { readonly kind: 'REGISTER_GRANT'; readonly at: bigint; readonly grant: AuthorityGrant }
+  | {
+      readonly kind: 'REGISTER_POLICY';
+      readonly at: bigint;
+      readonly policy: PrincipalPolicy;
+      /** The definitions that proved each restated invariant no stronger (7D.2). Absent = none. */
+      readonly proofs?: readonly SemanticProofRef[];
+    }
+  | {
+      readonly kind: 'REGISTER_GRANT';
+      readonly at: bigint;
+      readonly grant: AuthorityGrant;
+      /** The definitions that proved each restated invariant no weaker (7D.2). Absent = none. */
+      readonly proofs?: readonly SemanticProofRef[];
+    }
   | { readonly kind: 'REVOKE'; readonly at: bigint; readonly revocation: Revocation }
   | {
       readonly kind: 'RESERVE';
@@ -123,7 +150,10 @@ export interface AccountingEvent<K extends 'CONSUME' | 'CLOSE' | 'RESTORE'> {
 
 export type LedgerEventKind = LedgerEvent['kind'];
 
-const EVENT_CODE: WireCodes<LedgerEventKind> = {
+/** Wire kinds: every event kind, plus the proof-carrying forms of the two registrations (7D.2). */
+type WireKind = LedgerEventKind | 'REGISTER_POLICY_PROVEN' | 'REGISTER_GRANT_PROVEN';
+
+const EVENT_CODE: WireCodes<WireKind> = {
   REGISTER_POLICY: 1,
   REGISTER_GRANT: 2,
   REVOKE: 3,
@@ -131,7 +161,22 @@ const EVENT_CODE: WireCodes<LedgerEventKind> = {
   CONSUME: 5,
   CLOSE: 6,
   RESTORE: 7,
+  REGISTER_POLICY_PROVEN: 8,
+  REGISTER_GRANT_PROVEN: 9,
 };
+
+function wireKind(e: LedgerEvent): WireKind {
+  if (e.kind === 'REGISTER_POLICY' && (e.proofs?.length ?? 0) > 0) return 'REGISTER_POLICY_PROVEN';
+  if (e.kind === 'REGISTER_GRANT' && (e.proofs?.length ?? 0) > 0) return 'REGISTER_GRANT_PROVEN';
+  return e.kind;
+}
+
+function writeProofs(w: ByteWriter, proofs: readonly SemanticProofRef[] | undefined): void {
+  const list = proofs ?? [];
+  if (list.length === 0) return;
+  w.u16(list.length);
+  for (const p of list) writeSemanticProofRef(w, p);
+}
 
 const TARGET_CODE = { NODE: 1, POLICY: 2 } as const;
 
@@ -144,14 +189,16 @@ function writeLeg(w: ByteWriter, leg: EventLeg): void {
 }
 
 export function writeEventBody(w: ByteWriter, e: LedgerEvent): void {
-  writeCode(w, EVENT_CODE, e.kind);
+  writeCode(w, EVENT_CODE, wireKind(e));
   w.i64(e.at);
   switch (e.kind) {
     case 'REGISTER_POLICY':
       writeSegment(w, encodePrincipalPolicy(e.policy));
+      writeProofs(w, e.proofs);
       return;
     case 'REGISTER_GRANT':
       writeSegment(w, encodeAuthorityGrant(e.grant));
+      writeProofs(w, e.proofs);
       return;
     case 'REVOKE':
       writeSegment(w, encodeRevocation(e.revocation));
@@ -229,6 +276,15 @@ function readLeg(r: CoreReader): EventLeg {
   return { target, amount, epoch };
 }
 
+/** A proof-carrying form has at least one proof: an empty list has exactly one encoding, the 7C one. */
+function readProofs(r: CoreReader): SemanticProofRef[] {
+  const n = r.u16();
+  if (n === 0 || n > MAX_SEMANTIC_PROOFS) throw new DecodeFailure('ENCODING_MALFORMED');
+  const out: SemanticProofRef[] = [];
+  for (let i = 0; i < n; i += 1) out.push(readSemanticProofRef(r));
+  return out;
+}
+
 function readEventBody(r: CoreReader): LedgerEvent {
   const kind = readCode(r, EVENT_CODE);
   const at = must(parseUnixSeconds(r.i64(), 'at'));
@@ -237,6 +293,14 @@ function readEventBody(r: CoreReader): LedgerEvent {
       return { kind, at, policy: decodeEmbedded(r, decodePrincipalPolicy) };
     case 'REGISTER_GRANT':
       return { kind, at, grant: decodeEmbedded(r, decodeAuthorityGrant) };
+    case 'REGISTER_POLICY_PROVEN': {
+      const policy = decodeEmbedded(r, decodePrincipalPolicy);
+      return { kind: 'REGISTER_POLICY', at, policy, proofs: readProofs(r) };
+    }
+    case 'REGISTER_GRANT_PROVEN': {
+      const grant = decodeEmbedded(r, decodeAuthorityGrant);
+      return { kind: 'REGISTER_GRANT', at, grant, proofs: readProofs(r) };
+    }
     case 'REVOKE':
       return { kind, at, revocation: decodeEmbedded(r, decodeRevocation) };
     case 'RESERVE': {

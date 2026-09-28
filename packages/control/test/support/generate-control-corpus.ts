@@ -42,7 +42,7 @@ import {
   world,
   type SyntheticModule,
 } from './world.ts';
-import type { InMemoryStoreHooks } from '@mandate/ledger';
+import { semanticInvariantId, type InMemoryStoreHooks } from '@mandate/ledger';
 
 export const CONTROL_CORPUS_PATH = fileURLToPath(new URL('../../../../corpus/control-v1/vectors.json', import.meta.url));
 export const CONTROL_CORPUS_VERSION = 1;
@@ -163,7 +163,17 @@ async function vectors(): Promise<Vector[]> {
       module: moduleJson(m),
       outcome:
         r.status === 'REGISTERED'
-          ? { status: 'REGISTERED', ledgerHead: r.snapshot.head, proofs: r.proofs.map((p) => ({ term: p.term, verdict: p.verdict, evaluator: p.evaluator.kind === 'MODULE' ? p.evaluator.module.moduleDigest : p.evaluator.kind })) }
+          ? {
+              status: 'REGISTERED',
+              ledgerHead: r.snapshot.head,
+              proofs: r.proofs.map((p) => ({
+                term: p.term,
+                verdict: p.verdict,
+                evaluator: p.evaluator.kind === 'MODULE' ? p.evaluator.module.moduleDigest : p.evaluator.kind,
+                // 7D.2: the exact definition the registration committed.
+                definition: p.definition === null ? null : semanticInvariantId(p.definition),
+              })),
+            }
           : { status: r.status, refusal: refusalJson(r.refusal) },
     });
   }

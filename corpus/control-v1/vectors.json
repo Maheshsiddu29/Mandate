@@ -171,12 +171,13 @@
       },
       "outcome": {
         "status": "REGISTERED",
-        "ledgerHead": "0x1169767233ad940d4ab4bb91e938a6b8ea89b82e94bd555278cfc54034422cac",
+        "ledgerHead": "0x30d4f44e54bc0b691f36a1ce434e92d0610d9ee02aba8ed957ede780c041564e",
         "proofs": [
           {
             "term": "[\"STATE_INVARIANT\",\"perp-like.account-leverage\",1,[[\"synth-perp\",\"ACCOUNT\",\"acct-1\"]]]",
             "verdict": "NO_WEAKER",
-            "evaluator": "0xb534ba3c88e54e28a025dbe3afe07a03c49ec3f422572ceb3c19672c5ff9ea09"
+            "evaluator": "0xb534ba3c88e54e28a025dbe3afe07a03c49ec3f422572ceb3c19672c5ff9ea09",
+            "definition": "0x0de7a248164638529dd57296f4f2629d5327a6a7b243eb8b3c9c8bf50fee0b4b"
           }
         ]
       },

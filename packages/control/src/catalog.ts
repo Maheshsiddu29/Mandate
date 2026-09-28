@@ -42,11 +42,22 @@
  * of an invariant are ordered by the `noWeaker` of the one module that owns
  * the invariant's definition — resolved by exact ref, never by name — or by
  * Core for Core's own aggregate invariant.
+ *
+ * **Exact historical semantics (7D.2).** Every narrowing the ledger accepted
+ * names, in its event, the exact definition that decided it: Core, or a
+ * `ModuleRef` with its digest. The ordering resolves that definition by
+ * exact identity — among the loaded modules and the archived ones
+ * (archive.ts) — and never through the registry's current name mapping. A
+ * registry that later maps the name to another digest changes nothing about
+ * how history replays; if the committed artifact is not available, the
+ * narrowing is `UNPROVABLE` and replay refuses. Only a *new* proof asks the
+ * registry, and requires its current, active module.
  */
 
 import { ok } from '@mandate/kernel';
-import { moduleRefDigest, moduleRefsEqual, type ModuleRef, type StateInvariantTerm } from '@mandate/core';
-import type { InvariantNarrowing, InvariantOrdering, ModuleRegistry, ModuleStatus, ReducerRules } from '@mandate/ledger';
+import { moduleRefDigest, moduleRefsEqual, type InvariantId, type InvariantVersion, type ModuleRef, type StateInvariantTerm } from '@mandate/core';
+import type { InvariantNarrowing, InvariantOrdering, ModuleRegistry, ModuleStatus, ReducerRules, SemanticInvariantRef } from '@mandate/ledger';
+import { EMPTY_ARCHIVE, type ModuleArchive } from './archive.ts';
 import { AGGREGATE_INVARIANT_ID, AGGREGATE_INVARIANT_VERSION, compareAggregateParams } from './aggregate.ts';
 import { checkConformance, type ConformanceVector } from './conformance.ts';
 import { refuse, type ControlResult } from './errors.ts';
@@ -82,18 +93,51 @@ function invariantKey(invariantId: string, version: number): string {
   return JSON.stringify([invariantId, version]);
 }
 
+/** Implementations loaded only for exact historical resolution, with the archive that vouches for them. */
+export interface ArchivedModules {
+  readonly archive: ModuleArchive;
+  readonly modules: readonly CatalogModule[];
+}
+
+function checkNamespace(module: DomainModule, path: string): ControlResult<true> {
+  for (const inv of module.invariants) {
+    if (inv.invariantId.startsWith(CORE_INVARIANT_NAMESPACE)) return refuse('MODULE_NOT_CONFORMING', 'CORE_INVARIANT_CLAIMED', path, { module: module.ref });
+    if (!inv.invariantId.startsWith(`${module.ref.moduleId}.`) || (inv.version as number) !== (module.ref.moduleVersion as number)) {
+      return refuse('MODULE_NOT_CONFORMING', 'INVARIANT_OUTSIDE_MODULE_NAMESPACE', path, { module: module.ref });
+    }
+  }
+  return ok(true);
+}
+
+/** The archive, seen as a registry that knows exactly one name — this module's — and only as retired. */
+function archiveView(archive: ModuleArchive, ref: ModuleRef): ModuleRegistry {
+  return {
+    lookup: (moduleId, moduleVersion) => {
+      const e = archive.lookup(ref);
+      return e === null || moduleId !== ref.moduleId || moduleVersion !== ref.moduleVersion ? null : { module: e.module, status: 'RETIRING', implementations: e.implementations };
+    },
+  };
+}
+
 export class ModuleCatalog {
   readonly #registry: ModuleRegistry;
   readonly #entries: ReadonlyMap<string, Entry>;
   readonly #owners: ReadonlyMap<string, string>;
+  readonly #archived: ReadonlyMap<string, DomainModule>;
 
-  private constructor(registry: ModuleRegistry, entries: ReadonlyMap<string, Entry>, owners: ReadonlyMap<string, string>) {
+  private constructor(registry: ModuleRegistry, entries: ReadonlyMap<string, Entry>, owners: ReadonlyMap<string, string>, archived: ReadonlyMap<string, DomainModule>) {
     this.#registry = registry;
     this.#entries = entries;
     this.#owners = owners;
+    this.#archived = archived;
   }
 
-  static create(registry: ModuleRegistry, modules: readonly CatalogModule[]): ControlResult<ModuleCatalog> {
+  /**
+   * `modules` are the current implementations, admitted against `registry`.
+   * `archived` are historical ones, admitted against the archive by exact
+   * `ModuleRef` and loaded for replay and audit only (7D.2).
+   */
+  static create(registry: ModuleRegistry, modules: readonly CatalogModule[], archived: ArchivedModules = { archive: EMPTY_ARCHIVE, modules: [] }): ControlResult<ModuleCatalog> {
     const entries = new Map<string, Entry>();
     const owners = new Map<string, string>();
     for (let i = 0; i < modules.length; i += 1) {
@@ -105,18 +149,29 @@ export class ModuleCatalog {
       if (entries.has(key)) return refuse('MODULE_NOT_CONFORMING', 'DUPLICATE_IMPLEMENTATION', path, { module: module.ref });
       const registration = registry.lookup(module.ref.moduleId, module.ref.moduleVersion);
       if (registration === null) return refuse('MODULE_NOT_CONFORMING', 'MODULE_UNREGISTERED', path, { module: module.ref });
+      const namespaced = checkNamespace(module, path);
+      if (!namespaced.ok) return namespaced;
       for (const inv of module.invariants) {
-        if (inv.invariantId.startsWith(CORE_INVARIANT_NAMESPACE)) return refuse('MODULE_NOT_CONFORMING', 'CORE_INVARIANT_CLAIMED', path, { module: module.ref });
-        if (!inv.invariantId.startsWith(`${module.ref.moduleId}.`) || (inv.version as number) !== (module.ref.moduleVersion as number)) {
-          return refuse('MODULE_NOT_CONFORMING', 'INVARIANT_OUTSIDE_MODULE_NAMESPACE', path, { module: module.ref });
-        }
         const k = invariantKey(inv.invariantId, inv.version);
         if (owners.has(k)) return refuse('MODULE_NOT_CONFORMING', 'INVARIANT_OWNED_TWICE', path, { module: module.ref });
         owners.set(k, key);
       }
       entries.set(key, { module, status: registration.status });
     }
-    return ok(new ModuleCatalog(registry, entries, owners));
+    const history = new Map<string, DomainModule>();
+    for (let i = 0; i < archived.modules.length; i += 1) {
+      const path = `archived[${i}]`;
+      const { module, corpus } = archived.modules[i] as CatalogModule;
+      // Vouched for by the archive under exactly its own ModuleRef; the registry's current mapping is irrelevant.
+      const conforming = checkConformance(module, archiveView(archived.archive, module.ref), corpus, path);
+      if (!conforming.ok) return conforming;
+      const namespaced = checkNamespace(module, path);
+      if (!namespaced.ok) return namespaced;
+      const key = refKey(module.ref);
+      if (entries.has(key) || history.has(key)) return refuse('MODULE_NOT_CONFORMING', 'DUPLICATE_IMPLEMENTATION', path, { module: module.ref });
+      history.set(key, module);
+    }
+    return ok(new ModuleCatalog(registry, entries, owners, history));
   }
 
   #resolve(ref: ModuleRef, path: string, allowRetiring: boolean): ControlResult<DomainModule> {
@@ -144,6 +199,28 @@ export class ModuleCatalog {
     return this.#resolve(ref, path, true);
   }
 
+  /**
+   * The implementation for exactly `ref` — loaded or archived — with no
+   * registry lookup: how a committed history's semantics are found (7D.2).
+   */
+  resolveExact(ref: ModuleRef): DomainModule | null {
+    const key = refKey(ref);
+    const current = this.#entries.get(key);
+    if (current !== undefined) return moduleRefsEqual(current.module.ref, ref) ? current.module : null;
+    const archived = this.#archived.get(key);
+    return archived !== undefined && moduleRefsEqual(archived.ref, ref) ? archived : null;
+  }
+
+  /**
+   * The exact definition a *new* proof for `(invariantId, version)` is made
+   * under: Core's aggregate, or the current owning module's exact `ModuleRef`.
+   */
+  definitionFor(invariantId: InvariantId, version: InvariantVersion): SemanticInvariantRef | null {
+    if (invariantId === AGGREGATE_INVARIANT_ID && version === AGGREGATE_INVARIANT_VERSION) return { owner: { kind: 'CORE' }, invariantId, version };
+    const owner = this.invariantOwner(invariantId, version);
+    return owner === null ? null : { owner: { kind: 'MODULE', module: owner.ref }, invariantId, version };
+  }
+
   /** The module that defines `(invariantId, version)`, or `null`. */
   invariantOwner(invariantId: string, version: number): DomainModule | null {
     const key = this.#owners.get(invariantKey(invariantId, version));
@@ -156,30 +233,40 @@ export class ModuleCatalog {
   }
 
   /**
-   * Whether `child`'s parameters are no weaker than `parent`'s, by the
-   * definition that owns the invariant: Core's aggregate comparator, or the
-   * exact owning module's `noWeaker`. `forNewDecision` additionally requires
-   * the owner to be `ACTIVE`; replay does not, so retiring a module never
-   * makes a committed history unreplayable.
+   * Whether `child`'s parameters are no weaker than `parent`'s, under exactly
+   * `definition`: Core's aggregate comparator, or the `noWeaker` of the module
+   * with exactly the definition's `ModuleRef`, which must itself define the
+   * invariant. Resolved by exact identity (`resolveExact`), so a committed
+   * history is re-proved by its own semantics or not at all. `forNewDecision`
+   * instead requires the registry's current, active module: a new proof is
+   * never made under retired or remapped semantics.
    */
-  compareInvariants(parent: StateInvariantTerm, child: StateInvariantTerm, forNewDecision = false): InvariantComparison {
-    if (parent.invariantId !== child.invariantId || parent.version !== child.version) return { evaluator: { kind: 'NONE' }, verdict: 'UNPROVABLE' };
-    if (parent.invariantId === AGGREGATE_INVARIANT_ID && parent.version === AGGREGATE_INVARIANT_VERSION) {
+  compareInvariants(parent: StateInvariantTerm, child: StateInvariantTerm, definition: SemanticInvariantRef, forNewDecision = false): InvariantComparison {
+    const none: InvariantComparison = { evaluator: { kind: 'NONE' }, verdict: 'UNPROVABLE' };
+    if (parent.invariantId !== child.invariantId || parent.version !== child.version) return none;
+    if (definition.invariantId !== parent.invariantId || definition.version !== parent.version) return none;
+    if (definition.owner.kind === 'CORE') {
+      if (parent.invariantId !== AGGREGATE_INVARIANT_ID || parent.version !== AGGREGATE_INVARIANT_VERSION) return none;
       return { evaluator: { kind: 'CORE' }, verdict: compareAggregateParams(parent, child) };
     }
-    const owner = this.invariantOwner(parent.invariantId, parent.version);
-    if (owner === null) return { evaluator: { kind: 'NONE' }, verdict: 'UNPROVABLE' };
-    const resolved = forNewDecision ? this.resolveForDecision(owner.ref, 'invariant.owner') : this.resolveForLifecycle(owner.ref, 'invariant.owner');
-    if (!resolved.ok) return { evaluator: { kind: 'MODULE', module: owner.ref }, verdict: 'UNPROVABLE' };
-    const verdict = callModule(owner, 'SEMANTIC_NARROWING_UNPROVABLE', 'noWeaker', () => owner.noWeaker(parent, child));
-    if (!verdict.ok) return { evaluator: { kind: 'MODULE', module: owner.ref }, verdict: 'UNPROVABLE' };
-    const checked = checkNarrowing(owner, verdict.value, 'noWeaker');
-    return { evaluator: { kind: 'MODULE', module: owner.ref }, verdict: checked.ok ? checked.value : 'UNPROVABLE' };
+    const ref = definition.owner.module;
+    const evaluator: Evaluator = { kind: 'MODULE', module: ref };
+    let owner: DomainModule | null;
+    if (forNewDecision) {
+      const resolved = this.resolveForDecision(ref, 'invariant.owner');
+      owner = resolved.ok ? resolved.value : null;
+    } else owner = this.resolveExact(ref);
+    if (owner === null || !owner.invariants.some((d) => d.invariantId === definition.invariantId && d.version === definition.version)) return { evaluator, verdict: 'UNPROVABLE' };
+    const m = owner;
+    const verdict = callModule(m, 'SEMANTIC_NARROWING_UNPROVABLE', 'noWeaker', () => m.noWeaker(parent, child));
+    if (!verdict.ok) return { evaluator, verdict: 'UNPROVABLE' };
+    const checked = checkNarrowing(m, verdict.value, 'noWeaker');
+    return { evaluator, verdict: checked.ok ? checked.value : 'UNPROVABLE' };
   }
 
   /** The ledger's `InvariantOrdering` for this catalog. */
   invariantOrdering(): InvariantOrdering {
-    return { noWeaker: (parent, child) => this.compareInvariants(parent, child).verdict };
+    return { noWeaker: (parent, child, definition) => this.compareInvariants(parent, child, definition).verdict };
   }
 }
 

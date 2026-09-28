@@ -8,12 +8,13 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import type { ResourceLocalId, StateEnvelope, StateSourceId } from '@mandate/core';
-import { aggregateSpecOf, checkValuationContexts, type ParticipantView } from '../src/aggregate.ts';
-import type { InvariantResult, SuppliedState } from '../src/index.ts';
+import { validateQuantity, type ResourceLocalId, type StateEnvelope, type StateSourceId } from '@mandate/core';
+import { aggregateSpecOf, checkValuationContexts, sumAggregate, type ParticipantView } from '../src/aggregate.ts';
+import type { EconomicFact, InvariantResult, SuppliedState } from '../src/index.ts';
 import {
   AGENT_A,
   AGENT_B,
+  BTC,
   MARK,
   RETRY,
   T,
@@ -26,8 +27,10 @@ import {
   capitalDim,
   context,
   createSyntheticModule,
+  digestOf,
   marketStates,
   maxExposure,
+  must,
   policy,
   refused,
   request,
@@ -179,5 +182,44 @@ describe('principal-global marked aggregate: one admitted valuation per canonica
       const r = refused(await s.w.engine.authorizeAndReserve(s.req(s.states(pa, pb)), RETRY));
       assert.equal(r.reason, 'VALUATION_CONTEXT_MISMATCH');
     }
+  });
+});
+
+describe('committed-price ruling (7D.2): commitments keep their own valid prices', () => {
+  it('two fills at different execution prices aggregate as committed notional; two BTC marks in different contexts do not', async () => {
+    const m = createSyntheticModule(PERP_CFG);
+    const fill = (atoms: bigint, price: bigint, label: string): EconomicFact => ({
+      component: 'HELD',
+      quantity: must(
+        validateQuantity({
+          kind: 'NOTIONAL',
+          unit: 'USD',
+          decimals: 2,
+          atoms,
+          asset: BTC,
+          valuation: { price: { numeratorUnit: 'USD', denominatorUnit: 'UNIT', decimals: 2, atoms: price }, basis: 'EXECUTION', source: { kind: 'OBSERVATION', observationId: digestOf(`fill:${label}`) }, observedAt: T },
+        }),
+      ),
+      market: null,
+      account: null,
+      states: [],
+      reservations: [],
+    });
+    const spec = aggregateSpecOf(policy([aggregate({ whole: 10_000, contributors: [m], accounts: [], kind: 'NOTIONAL' })]).terms[0] as never);
+    assert.ok(spec.ok);
+    if (!spec.ok) return;
+    const notional = spec.value;
+    const view = (facts: EconomicFact[]): ParticipantView[] => [{ module: m.ref, projection: { facts, invariantFacts: [], resources: [], assumptions: [], payload: new Uint8Array() }, admitted: new Map() }];
+    // 0.04 BTC filled at 50,000 and 0.05 BTC at 52,000: 2,000.00 + 2,600.00 committed.
+    const fills = view([fill(usd(2_000), BTC_50K, 'a'), fill(usd(2_600), BTC_52K, 'b')]);
+    assert.equal(checkValuationContexts(notional, fills), null);
+    const sum = sumAggregate(notional, fills);
+    assert.equal(sum.outcome, 'HOLDS');
+    assert.deepEqual(sum.observed, { type: 'TOTAL', kind: 'NOTIONAL', unit: 'USD', decimals: 2, atoms: usd(4_600) });
+
+    // The marked case is unchanged: UNKNOWN, refused.
+    const s = await twoModules();
+    const r = refused(await s.w.engine.authorizeAndReserve(s.req(s.states(BTC_50K, BTC_52K)), RETRY));
+    assert.equal(`${r.code}/${r.reason}`, 'INVARIANT_UNKNOWN/VALUATION_CONTEXT_MISMATCH');
   });
 });

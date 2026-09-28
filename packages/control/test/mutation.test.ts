@@ -9,7 +9,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { bindState, moduleRefsEqual, resourceIdsEqual, stateBindingId, stateRequirementInputOf, type ModuleRef } from '@mandate/core';
-import { checkPolicyBaseline, deriveReserveEvent, nodeTargetKey, replayEncoded, type InvariantOrdering, type TargetBalance } from '@mandate/ledger';
+import { ReferenceModuleRegistry, checkPolicyBaseline, deriveReserveEvent, nodeTargetKey, replayEncoded, type InvariantOrdering, type TargetBalance } from '@mandate/ledger';
 import { admitNeeds, type Admission } from '../src/admission.ts';
 import { checkAggregateScope, checkValuationContexts, sumAggregate, type AggregateEvaluator } from '../src/aggregate.ts';
 import { ModuleCatalog, controlRules, type ControlResult } from '../src/index.ts';
@@ -41,6 +41,7 @@ import {
   positionState,
   request,
   must,
+  registerPolicy,
   root,
   setup,
   sizeFor,
@@ -158,7 +159,7 @@ async function unlistedPending() {
 /** 7D.1: spot's unresolved 3,000 must not drop out of the aggregate when a new policy stops listing spot. */
 async function unlistedProbe(p: Pipeline): Promise<boolean> {
   const f = await unlistedPending();
-  assert.equal((await f.w.ledger.registerPolicy(policy([f.agg(10_000, [f.perp])], 2n), T, ONCE)).status, 'COMMITTED');
+  assert.equal((await registerPolicy(f.w, policy([f.agg(10_000, [f.perp])], 2n), T)).status, 'COMMITTED');
   return (await reserveWith(p, f.w, request(action(f.perp, { authority: f.rb, size: sizeFor(1_000) }), f.states, f.ctx))).status === 'REFUSED';
 }
 
@@ -328,7 +329,7 @@ describe('mutants outside the pipeline are killed', () => {
   });
 });
 
-describe('7D.1 mutants outside the pipeline are killed', () => {
+describe('7D.1 and 7D.2 mutants outside the pipeline are killed', () => {
   it('C: activate a tightened principal-global invariant despite unresolved activity and no baseline', async () => {
     // The reducer's policy-update gate, and a mutant of it that forgets principal-global invariants.
     const forgetful: typeof checkPolicyBaseline = (s, p, rules) => checkPolicyBaseline(s, { ...p, terms: p.terms.filter((t) => t.kind !== 'STATE_INVARIANT') }, rules);
@@ -363,12 +364,39 @@ describe('7D.1 mutants outside the pipeline are killed', () => {
     };
     // Mutant: when the comparator cannot be resolved, trust the committed history.
     const trustHistory = (c: ModuleCatalog): InvariantOrdering => ({
-      noWeaker: (p, ch) => {
-        const v = c.compareInvariants(p, ch).verdict;
+      noWeaker: (p, ch, d) => {
+        const v = c.compareInvariants(p, ch, d).verdict;
         return v === 'UNPROVABLE' ? 'NO_WEAKER' : v;
       },
     });
     assert.equal(await probe((c) => c.invariantOrdering()), true);
     assert.equal(await probe(trustHistory), false);
+  });
+
+  it('E (7D.2): resolve a historical comparator by name through the current registry — a remapped digest re-proves history', async () => {
+    const probe = async (orderingOf: (verifier: ModuleCatalog) => InvariantOrdering): Promise<boolean> => {
+      const cfg = { ...PERP_CFG, moduleId: 'synthetic' };
+      const w = world({ modules: [createSyntheticModule(cfg)] });
+      const a = w.modules[0] as SyntheticModule;
+      const acct = account(a);
+      const parent = root({ mods: [a], holder: AGENT_A, delegate: 1, terms: [capitalDim('capital', 1_000), maxLeverage(a, acct, 4n)] });
+      await setup(w, policy(), [parent]);
+      assert.equal((await w.engine.registerDelegation(child(parent, { mods: [a], holder: AGENT_B, terms: [maxLeverage(a, acct, 3n)] }), T0, ONCE)).status, 'REGISTERED');
+      const batches = (await w.store.history(parent.principal)).map((x) => x.encoded);
+      // The name now maps to digest B; digest A is not available.
+      const b = createSyntheticModule({ ...cfg, variant: 'LENIENT_NARROWING' });
+      const future = must(ReferenceModuleRegistry.create([{ module: b.ref, status: 'ACTIVE', implementations: [b.implementation] }]));
+      const verifier = must(ModuleCatalog.create(future, [{ module: b, corpus: [] }]));
+      return !replayEncoded(parent.principal, batches, { invariantOrdering: orderingOf(verifier) }).ok;
+    };
+    // Mutant: whatever definition was committed, use the current owner of the invariant's name.
+    const byName = (c: ModuleCatalog): InvariantOrdering => ({
+      noWeaker: (p, ch, d) => {
+        const current = c.definitionFor(d.invariantId, d.version);
+        return current === null ? 'UNPROVABLE' : c.compareInvariants(p, ch, current).verdict;
+      },
+    });
+    assert.equal(await probe((c) => c.invariantOrdering()), true);
+    assert.equal(await probe(byName), false);
   });
 });

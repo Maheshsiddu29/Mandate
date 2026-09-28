@@ -26,6 +26,7 @@
 import { ok } from '@mandate/kernel';
 import { moduleRefsEqual, type ImplementationDigest, type ModuleRef } from '@mandate/core';
 import { refuse, type LedgerResult } from './errors.ts';
+import type { SemanticProofRef } from './semantic.ts';
 
 export type ModuleStatus = 'ACTIVE' | 'RETIRING';
 
@@ -76,5 +77,24 @@ export function checkModuleConformance(registry: ModuleRegistry, module: ModuleR
   if (!moduleRefsEqual(entry.module, module)) return refuse('MODULE_DIGEST_MISMATCH', path);
   if (entry.status === 'RETIRING') return refuse('MODULE_RETIRING', path);
   if (!entry.implementations.includes(implementation)) return refuse('MODULE_IMPLEMENTATION_UNREGISTERED', 'plan.implementation');
+  return ok(true);
+}
+
+/**
+ * A new proof's comparator must be the registry's current, active module for
+ * its name (7D.2). A decision input, like `checkModuleConformance`: applied
+ * when a proof is first committed, never by the reducer, so replay depends
+ * only on the exact `ModuleRef` the event committed.
+ */
+export function checkProofOwnersCurrent(registry: ModuleRegistry, proofs: readonly SemanticProofRef[], path = 'proofs'): LedgerResult<true> {
+  for (let i = 0; i < proofs.length; i += 1) {
+    const owner = (proofs[i] as SemanticProofRef).definition.owner;
+    if (owner.kind !== 'MODULE') continue;
+    const entry = registry.lookup(owner.module.moduleId, owner.module.moduleVersion);
+    const at = `${path}[${i}].definition.owner`;
+    if (entry === null) return refuse('MODULE_UNREGISTERED', at);
+    if (!moduleRefsEqual(entry.module, owner.module)) return refuse('MODULE_DIGEST_MISMATCH', at);
+    if (entry.status === 'RETIRING') return refuse('MODULE_RETIRING', at);
+  }
   return ok(true);
 }

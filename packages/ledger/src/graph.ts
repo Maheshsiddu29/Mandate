@@ -21,7 +21,7 @@ import { refuse, type LedgerResult } from './errors.ts';
 import type { LedgerState, NodeRecord } from './state.ts';
 import { checkDelegationSubset, delegateDepth } from './subset.ts';
 import type { Revocation } from './revocation.ts';
-import type { InvariantOrdering } from './rules.ts';
+import type { NarrowingProver } from './rules.ts';
 
 /** Leaf to root. Refuses an unknown node anywhere on the path. */
 export function resolveLineage(state: LedgerState, leaf: AuthorityId, path = 'authority'): LedgerResult<readonly NodeRecord[]> {
@@ -92,7 +92,8 @@ export function checkLineageValid(state: LedgerState, lineage: readonly NodeReco
  * registered principal policy (§8.2); a delegation needs a registered parent
  * whose lineage is valid at `at`, the parent's holder as issuer, and every
  * subset rule. Nothing is registered first and validated later. Returns the
- * new node's depth. `ordering` is the reducer's configured invariant ordering.
+ * new node's depth. `prove` orders restated invariants under the
+ * registration's committed proofs (rules.ts `committedProver`).
  */
 export function checkGrantRegistration(
   state: LedgerState,
@@ -100,7 +101,7 @@ export function checkGrantRegistration(
   grant: AuthorityGrant,
   at: bigint,
   path = 'grant',
-  ordering: InvariantOrdering | null = null,
+  prove: NarrowingProver | null = null,
 ): LedgerResult<number> {
   if (!partyIdsEqual(grant.principal, state.principal)) return refuse('PRINCIPAL_MISMATCH', `${path}.principal`, id);
   if (state.policy === null) return refuse('PRINCIPAL_POLICY_MISSING', path, id);
@@ -117,7 +118,7 @@ export function checkGrantRegistration(
   const parent = lineage.value[0] as NodeRecord;
   if (!partyIdsEqual(grant.principal, parent.grant.principal)) return refuse('AUTHORITY_PRINCIPAL_MISMATCH', `${path}.principal`, id);
   if (!partyIdsEqual(grant.lineage.issuer, parent.grant.holder)) return refuse('AUTHORITY_ISSUER_MISMATCH', `${path}.lineage.issuer`, id);
-  const violations = checkDelegationSubset(parent.grant, grant, effectiveDepths(lineage.value)[0] as number, ordering);
+  const violations = checkDelegationSubset(parent.grant, grant, effectiveDepths(lineage.value)[0] as number, prove);
   if (violations.length > 0) return { ok: false, error: { code: 'DELEGATION_REFUSED', path, violations } };
   // Unreachable through the depth meet (Core caps DELEGATE at 7); kept as an absolute bound.
   if (lineage.value.length >= MAX_LINEAGE_LENGTH) return refuse('AUTHORITY_DEPTH_EXCEEDED', path, id);

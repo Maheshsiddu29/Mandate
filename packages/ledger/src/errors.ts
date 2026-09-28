@@ -47,6 +47,8 @@ export const LEDGER_REFUSAL_CODES = [
   'AUTHORITY_DEPTH_EXCEEDED',
   'LINEAGE_TERMS_INCOMPARABLE', // 7C: the action-time meet cannot be formed
   'DELEGATION_REFUSED',
+  'SEMANTIC_PROOF_INVALID', // 7D.2: a committed proof is out of order, duplicated, or names an owner that cannot define its invariant
+  'SEMANTIC_PROOF_UNEXPECTED', // 7D.2: a committed proof for a term that needs none
   'REVOCATION_ISSUER_NOT_ELIGIBLE', // 7C: authority-model.md §7 scope rule
   'REVOCATION_NOT_EFFECTIVE', // 7C: effectiveAt after the registration time
   // Reservation

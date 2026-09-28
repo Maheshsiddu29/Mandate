@@ -142,6 +142,10 @@ export function fromLedger(r: LedgerRefusal, path: string): ControlRefusal {
     case 'MALFORMED':
       code = 'DEMAND_INVALID';
       break;
+    case 'SEMANTIC_PROOF_INVALID':
+    case 'SEMANTIC_PROOF_UNEXPECTED':
+      code = 'SEMANTIC_NARROWING_UNPROVABLE';
+      break;
     case 'DELEGATION_REFUSED':
       code = r.violations.every((v) => v.code === 'DELEGATION_NARROWING_UNPROVEN') ? 'SEMANTIC_NARROWING_UNPROVABLE' : 'DELEGATION_REFUSED';
       break;

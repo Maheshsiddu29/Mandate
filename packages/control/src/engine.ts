@@ -43,6 +43,7 @@ import {
   MAX_COMMIT_ATTEMPTS,
   applyBatch,
   checkGrantRegistration,
+  committedProver,
   type DemandRecord,
   type LedgerEvent,
   type LedgerSnapshot,
@@ -54,7 +55,7 @@ import { authorizationRecordOf, type AuthorizationRecord } from './authorization
 import { controlRules, type ModuleCatalog } from './catalog.ts';
 import { ControlTag, controlWriter } from './encoding.ts';
 import { fromLedger, refusal, type ControlRefusal, type ControlResult } from './errors.ts';
-import { narrowingProofs, type NarrowingProof } from './narrowing.ts';
+import { narrowingProofs, semanticProofRefs, type NarrowingProof } from './narrowing.ts';
 import { PRODUCTION_PIPELINE, decideWith, type AuthorizationRequest, type Decision, type DecisionEnv } from './pipeline.ts';
 import { revalidateWith, type RevalidationRequest, type RevalidationResult } from './revalidation.ts';
 
@@ -225,7 +226,9 @@ export class ControlEngine {
       const snapshot = await this.#store.read(grant.principal);
       const parent = grant.lineage.kind === 'DELEGATION' ? snapshot.state.nodes.get(grant.lineage.parent) : undefined;
       const proofs = parent === undefined ? [] : narrowingProofs(parent.grant, grant, this.#catalog);
-      const checked = checkGrantRegistration(snapshot.state, id, grant, at, 'grant', this.#env.rules.invariantOrdering);
+      // Committed with the grant: exactly whose semantics proved each narrowing (7D.2).
+      const refs = semanticProofRefs(proofs, grant.terms.filter((t) => t.kind === 'STATE_INVARIANT'));
+      const checked = checkGrantRegistration(snapshot.state, id, grant, at, 'grant', committedProver(this.#env.rules.invariantOrdering, refs));
       if (!checked.ok) {
         const r = fromLedger(checked.error, '');
         const detail = checked.error.code === 'DELEGATION_REFUSED' ? { kind: 'DELEGATION' as const, violations: checked.error.violations, proofs } : r.detail;
@@ -236,7 +239,7 @@ export class ControlEngine {
       if (unproven !== undefined) {
         return { status: 'REFUSED', refusal: refusal('SEMANTIC_NARROWING_UNPROVABLE', 'COMPARATOR_NOT_ACTIVE', `grant.terms.${unproven.invariantId}`, { detail: { kind: 'DELEGATION', violations: [], proofs } }), attempts: attempt };
       }
-      const event: LedgerEvent = { kind: 'REGISTER_GRANT', at, grant };
+      const event: LedgerEvent = { kind: 'REGISTER_GRANT', at, grant, ...(refs.length > 0 ? { proofs: refs } : {}) };
       const result = await this.#store.compareAndAppend(snapshot.principal, snapshot.version, snapshot.head, [event]);
       if (result.status === 'COMMITTED') return { status: 'REGISTERED', proofs, snapshot: result.snapshot, attempts: attempt };
       if (result.status === 'REFUSED') return { status: 'REFUSED', refusal: { ...fromLedger(result.refusal, 'commit'), code: 'LEDGER_CONFLICT' }, attempts: attempt };

@@ -31,7 +31,8 @@ import { withPath, type LedgerRefusal, type LedgerResult } from './errors.ts';
 import type { LedgerEvent } from './events.ts';
 import { MAX_COMMIT_ATTEMPTS } from './limits.ts';
 import { applyBatch, applyEvent, deriveReserveEvent } from './reducer.ts';
-import { checkModuleConformance, type ModuleRegistry } from './registry.ts';
+import { checkModuleConformance, checkProofOwnersCurrent, type ModuleRegistry } from './registry.ts';
+import type { SemanticProofRef } from './semantic.ts';
 import type { Revocation } from './revocation.ts';
 import type { DemandRecord } from './state.ts';
 import type { LedgerSnapshot, LedgerStore } from './store.ts';
@@ -92,13 +93,26 @@ export class AuthorityLedger {
     return { status: 'CONFLICT', attempts: max };
   }
 
-  /** Register the principal's first policy, or replace it (7C refuses a new dimension once anything was reserved). */
-  registerPolicy(policy: PrincipalPolicy, at: bigint, retry: RetryPolicy): Promise<LedgerOutcome> {
-    return this.#commit(policy.principal, retry, () => ({ ok: true, value: [{ kind: 'REGISTER_POLICY', at, policy }] }));
+  /**
+   * Register the principal's first policy, or replace it (7C refuses a new
+   * dimension once anything was reserved; 7D.1 a new or tightened invariant).
+   * `proofs` name the exact definition proving each restated invariant no
+   * stronger (7D.2); each module named must be the registry's current, active
+   * one — a new proof is never made under retired or remapped semantics.
+   */
+  registerPolicy(policy: PrincipalPolicy, at: bigint, retry: RetryPolicy, proofs: readonly SemanticProofRef[] = []): Promise<LedgerOutcome> {
+    return this.#commit(policy.principal, retry, () => {
+      const current = checkProofOwnersCurrent(this.#registry, proofs);
+      return current.ok ? { ok: true, value: [{ kind: 'REGISTER_POLICY', at, policy, ...(proofs.length > 0 ? { proofs } : {}) }] } : current;
+    });
   }
 
-  registerGrant(grant: AuthorityGrant, at: bigint, retry: RetryPolicy): Promise<LedgerOutcome> {
-    return this.#commit(grant.principal, retry, () => ({ ok: true, value: [{ kind: 'REGISTER_GRANT', at, grant }] }));
+  /** Register a grant; `proofs` as for `registerPolicy`, for each invariant the grant narrows (7D.2). */
+  registerGrant(grant: AuthorityGrant, at: bigint, retry: RetryPolicy, proofs: readonly SemanticProofRef[] = []): Promise<LedgerOutcome> {
+    return this.#commit(grant.principal, retry, () => {
+      const current = checkProofOwnersCurrent(this.#registry, proofs);
+      return current.ok ? { ok: true, value: [{ kind: 'REGISTER_GRANT', at, grant, ...(proofs.length > 0 ? { proofs } : {}) }] } : current;
+    });
   }
 
   /** Several registrations as one atomic batch: all are registered, or none. */

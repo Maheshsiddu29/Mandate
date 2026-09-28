@@ -31,6 +31,9 @@ export const LedgerTag = {
   LEDGER_EVENT: 'mandate-core/v1/ledger-event',
   LEDGER_STATE: 'mandate-core/v1/ledger-state',
   POLICY_DIMENSION: 'mandate-core/v1/policy-dimension',
+  /** 7D.2: an invariant definition's exact identity, and one committed narrowing (semantic.ts). */
+  SEMANTIC_INVARIANT: 'mandate-core/v1/semantic-invariant',
+  SEMANTIC_PROOF: 'mandate-core/v1/semantic-proof',
 } as const;
 export type LedgerTag = (typeof LedgerTag)[keyof typeof LedgerTag];
 
