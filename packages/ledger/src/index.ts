@@ -24,3 +24,31 @@ export * from './limits.ts';
 export { LedgerTag, rescaleExact, compareScaled } from './encoding.ts';
 export * from './pmap.ts';
 export * from './revocation.ts';
+export * from './charge-plan.ts';
+export {
+  availableOf,
+  emptyLedgerState,
+  encodeLedgerState,
+  epochIndex,
+  genesisHead,
+  ledgerStateDigest,
+  nodeTargetKey,
+  policyDimensionIdentity,
+  policyTargetKey,
+  targetKeyOf,
+  type ActionRecord,
+  type CapacitySource,
+  type DemandRecord,
+  type LedgerState,
+  type LedgerStateDigest,
+  type LegRecord,
+  type NodeRecord,
+  type PolicyDimensionIdentity,
+  type PolicyRecord,
+  type ReservationRecord,
+  type ReservationStatus,
+  type TargetBalance,
+} from './state.ts';
+export { checkDelegationSubset, compareBoundValues, delegateDepth, dimensionsComparable, setMemberKeys } from './subset.ts';
+export { checkGrantRegistration, checkLineageValid, checkRevocation, effectiveDepths, resolveLineage } from './graph.ts';
+export * from './meet.ts';
