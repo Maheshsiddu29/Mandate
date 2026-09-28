@@ -24,3 +24,5 @@ export * from './state.ts';
 export * from './terms.ts';
 export * from './authority.ts';
 export * from './action.ts';
+export * from './execution.ts';
+export * from './receipt.ts';
