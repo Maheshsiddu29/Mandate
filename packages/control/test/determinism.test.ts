@@ -28,6 +28,7 @@ import {
   root,
   setup,
   sizeFor,
+  assetValuedModules,
   world,
   type SyntheticModule,
 } from './support/world.ts';
@@ -51,7 +52,7 @@ function render(o: AuthorizationOutcome): string {
 
 async function scenario(seed: number, order: number): Promise<string[]> {
   const rand = prng(seed);
-  const w = world();
+  const w = world({ modules: assetValuedModules() });
   const perp = w.modules[0] as SyntheticModule;
   const spot = w.modules[1] as SyntheticModule;
   const acctS = account(spot);

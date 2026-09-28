@@ -8,7 +8,8 @@
  *  3. the authority: principal, lineage valid at t, actor = holder, the meet
  *  4. the module's analysis of the action; coverage over the meet
  *  5. every applicable invariant: the lineage's union and the principal policy's
- *  6. participants: the acting module, every invariant's owner, every aggregate's contributors
+ *  6. participants: the acting module, every invariant's owner, every aggregate's contributors,
+ *     and — where an aggregate applies — every module with an unresolved reservation
  *  7. each participant's state requirements, tightened by lineage and policy state policies
  *  8. admission of exactly that state; a binding per admitted snapshot
  *  9. unresolved reservations from the snapshot: each module gets exactly its own
@@ -81,7 +82,17 @@ import {
   type ReducerRules,
 } from '@mandate/ledger';
 import { admitNeeds, effectiveNeed, mergeNeeds, prepareStates, statesFor, type Admission, type EffectiveNeed, type PreparedState, type SuppliedState } from './admission.ts';
-import { AGGREGATE_INVARIANT_ID, AGGREGATE_INVARIANT_VERSION, aggregateQueryFor, aggregateSpecOf, distinctQueries, evaluateAggregate, type AggregateSpec } from './aggregate.ts';
+import {
+  AGGREGATE_INVARIANT_ID,
+  AGGREGATE_INVARIANT_VERSION,
+  aggregateQueryFor,
+  aggregateSpecOf,
+  distinctQueries,
+  evaluateAggregate,
+  type AggregateEvaluator,
+  type AggregateSpec,
+  type ParticipantView,
+} from './aggregate.ts';
 import type { Evaluator, ModuleCatalog } from './catalog.ts';
 import { validateEvaluationContext, type ContextDigest, type EvaluationContext, type EvaluationContextInput } from './context.ts';
 import { checkCoverage } from './coverage.ts';
@@ -124,6 +135,7 @@ export interface Pipeline {
   readonly applicable: (effective: EffectiveAuthority) => readonly ApplicableInvariant[];
   readonly facts: (state: LedgerState) => ControlResult<readonly ReservationFact[]>;
   readonly admit: (needs: readonly EffectiveNeed[], prepared: readonly PreparedState[], ctx: EvaluationContext, path: string) => ControlResult<readonly Admission[]>;
+  readonly aggregate: AggregateEvaluator;
 }
 
 /** Every lineage invariant (the union over the lineage), then every principal-global one. */
@@ -138,7 +150,15 @@ export const PRODUCTION_PIPELINE: Pipeline = Object.freeze({
   applicable: applicableInvariants,
   facts: (state: LedgerState) => reservationFacts(state),
   admit: admitNeeds,
+  aggregate: evaluateAggregate,
 });
+
+/** Every `ModuleRef` with an unresolved reservation, once each, in canonical order. */
+function activeModules(facts: readonly ReservationFact[]): readonly ModuleRef[] {
+  const byKey = new Map<string, ModuleRef>();
+  for (const f of facts) byKey.set(moduleRefDigest(f.module), f.module);
+  return [...byKey.keys()].sort().map((k) => byKey.get(k) as ModuleRef);
+}
 
 // --- Projection and invariants (shared with revalidation) ----------------------
 
@@ -216,11 +236,6 @@ export function evaluateState(p: Pipeline, input: EvaluationInput): ControlResul
         plan.push({ origin: a.origin, term: t, kind: 'UNRESOLVED', spec: null, owner: null, reason: spec.error });
         continue;
       }
-      for (const c of spec.value.params.contributors) {
-        const m = catalog.resolveForLifecycle(c, 'invariant.contributor');
-        // An unresolvable contributor is simply absent; the aggregate then evaluates UNKNOWN.
-        if (m.ok) join(m.value, false).aggregates.push(aggregateQueryFor(spec.value, c));
-      }
       plan.push({ origin: a.origin, term: t, kind: 'AGGREGATE', spec: spec.value, owner: null, reason: '' });
       continue;
     }
@@ -233,6 +248,21 @@ export function evaluateState(p: Pipeline, input: EvaluationInput): ControlResul
     const d = join(owner, false);
     if (!d.invariants.some((x) => sameTerm(x, t))) d.invariants.push(t);
     plan.push({ origin: a.origin, term: t, kind: 'MODULE', spec: null, owner, reason: '' });
+  }
+  // Aggregate scope is closed: its contributors, the acting module and every module with an
+  // unresolved reservation are each asked for their part, so no pending activity drops out of an
+  // aggregate because its module is not listed. A module that cannot be resolved is simply absent;
+  // the aggregate then evaluates UNKNOWN.
+  const active = activeModules(facts.value);
+  for (const x of plan) {
+    if (x.kind !== 'AGGREGATE') continue;
+    const spec = x.spec as AggregateSpec;
+    const consulted = new Map<string, ModuleRef>();
+    for (const r of [...spec.params.contributors, ...active, acting.ref]) consulted.set(moduleRefDigest(r), r);
+    for (const r of consulted.values()) {
+      const m = catalog.resolveForLifecycle(r, 'invariant.contributor');
+      if (m.ok) join(m.value, false).aggregates.push(aggregateQueryFor(spec, r));
+    }
   }
   if (drafts.size > MAX_PARTICIPANTS) return refuse('RESOURCE_BOUND_EXCEEDED', 'TOO_MANY_PARTICIPANTS', 'participants');
   const ordered = [...drafts.keys()].sort().map((k) => drafts.get(k) as ParticipantDraft);
@@ -277,6 +307,7 @@ export function evaluateState(p: Pipeline, input: EvaluationInput): ControlResul
 
   // --- projection
   const participants: ParticipantProjection[] = [];
+  const views: ParticipantView[] = [];
   let actingProjection: ModuleProjection | null = null;
   for (const d of ordered) {
     const { scope, foreign } = scopes.get(moduleRefDigest(d.module.ref)) as { scope: ModuleScope; foreign: readonly ReservationId[] };
@@ -296,6 +327,7 @@ export function evaluateState(p: Pipeline, input: EvaluationInput): ControlResul
       foreignPending: [...foreign].sort(),
       projection: projection.value,
     });
+    views.push({ module: d.module.ref, projection: projection.value, admitted: new Map(states.map((x) => [x.stateId, x.envelope])) });
   }
   const record: ProjectionRecord = { ledgerVersion: snapshot.version, participants };
   const digest = projectionDigest(record);
@@ -305,12 +337,11 @@ export function evaluateState(p: Pipeline, input: EvaluationInput): ControlResul
   const result = (x: Pending, evaluator: Evaluator, e: Pick<InvariantResult, 'outcome' | 'reason' | 'observed' | 'bound' | 'states' | 'reservations'>): void => {
     results.push({ origin: x.origin, term: x.term, evaluator, ...e, projection: digest, ledgerVersion: snapshot.version });
   };
-  const views = participants.map((x) => ({ module: x.module, projection: x.projection }));
   for (const x of plan) {
     if (x.kind === 'UNRESOLVED') {
       result(x, { kind: 'NONE' }, { outcome: 'UNKNOWN', reason: x.reason, observed: null, bound: null, states: [], reservations: [] });
     } else if (x.kind === 'AGGREGATE') {
-      result(x, { kind: 'CORE' }, evaluateAggregate(x.spec as AggregateSpec, views));
+      result(x, { kind: 'CORE' }, p.aggregate(x.spec as AggregateSpec, views, active));
     } else {
       const owner = x.owner as DomainModule;
       const part = participants.find((q) => moduleRefDigest(q.module) === moduleRefDigest(owner.ref)) as ParticipantProjection;

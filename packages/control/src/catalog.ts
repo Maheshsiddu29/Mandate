@@ -13,7 +13,14 @@
  *   deterministically (conformance.ts);
  * - no other loaded implementation claims the same `ModuleRef`, and no other
  *   module claims an invariant definition it claims. `core.*` invariants are
- *   Core's, never a module's.
+ *   Core's, never a module's;
+ * - every invariant definition it claims is in its own name: the id is
+ *   `<moduleId>.<name>` and the version is the module's version (7D.1). An
+ *   `InvariantRef` in a grant or a policy names `(invariantId, version)`, not
+ *   a digest, so this is what ties a committed term to exactly one module
+ *   name — and, through the registry, to exactly one digest. A newer version,
+ *   or another module, can never become the owner of a retired module's
+ *   invariant and silently re-prove its history.
  *
  * Resolution is by exact `ModuleRef`. There is no "latest", no fallback to
  * another version and no silent upgrade: a reservation decided under
@@ -21,6 +28,15 @@
  * exactly that implementation for its whole lifecycle. A module the registry
  * marks `RETIRING` may still project held and pending state and revalidate
  * existing reservations, but may not make a new decision.
+ *
+ * **Retired for new use is not unavailable for verification (7D.1).** A
+ * `RETIRING` module still resolves for lifecycle and replay, with exactly
+ * its own digest and implementation: a ledger whose delegations were proven
+ * narrower by its `noWeaker` replays only while its implementation is loaded.
+ * A catalog without it — or with anything else in its place — cannot prove
+ * those narrowings, and replay refuses. Keeping every module a replayable
+ * history depends on is the job of the production module archive, which is
+ * not built here.
  *
  * The catalog also answers the ledger's `InvariantOrdering`: the parameters
  * of an invariant are ordered by the `noWeaker` of the one module that owns
@@ -91,6 +107,9 @@ export class ModuleCatalog {
       if (registration === null) return refuse('MODULE_NOT_CONFORMING', 'MODULE_UNREGISTERED', path, { module: module.ref });
       for (const inv of module.invariants) {
         if (inv.invariantId.startsWith(CORE_INVARIANT_NAMESPACE)) return refuse('MODULE_NOT_CONFORMING', 'CORE_INVARIANT_CLAIMED', path, { module: module.ref });
+        if (!inv.invariantId.startsWith(`${module.ref.moduleId}.`) || (inv.version as number) !== (module.ref.moduleVersion as number)) {
+          return refuse('MODULE_NOT_CONFORMING', 'INVARIANT_OUTSIDE_MODULE_NAMESPACE', path, { module: module.ref });
+        }
         const k = invariantKey(inv.invariantId, inv.version);
         if (owners.has(k)) return refuse('MODULE_NOT_CONFORMING', 'INVARIANT_OWNED_TWICE', path, { module: module.ref });
         owners.set(k, key);

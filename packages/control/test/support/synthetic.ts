@@ -13,7 +13,11 @@
  * - `synth.open` buys `size` at no worse than `limitPrice` (USD per unit, 2
  *   decimals) with `leverage`; `synth.close` reduces and is never credited
  *   before it settles;
- * - marked gross exposure is size × the admitted mark, rounded up;
+ * - marked gross exposure is size × the admitted mark, rounded up. The mark
+ *   is taken either for the module's own market (`valuation: 'MARKET'`, the
+ *   default: a domain-local valuation) or for the canonical asset the market
+ *   maps to (`valuation: 'ASSET'`: a valuation other modules can share, and
+ *   the only kind a principal-global aggregate accepts, 7D.1);
  * - capital is notional-at-limit ÷ leverage in USDG, rounded up, under the
  *   module's declared assumption that USDG settles USD (UNIT-3).
  *
@@ -155,6 +159,8 @@ export interface SyntheticConfig {
   /** Market local ids and the canonical asset each is exposure to. */
   readonly markets: readonly { readonly localId: string; readonly asset: ResourceIdInput }[];
   readonly variant?: Variant;
+  /** The subject a mark is taken for: the module's own market (default) or the market's canonical asset. */
+  readonly valuation?: 'MARKET' | 'ASSET';
   /** Declare this ref and implementation instead of the variant's own (a lying implementation). */
   readonly claim?: { readonly ref: ModuleRefInput; readonly implementation: string };
 }
@@ -218,20 +224,25 @@ function decodeOrder(bytes: Uint8Array): DecodedOrder | null {
   });
 }
 
-export function encodeMark(market: ResourceIdInput, price: bigint): Uint8Array {
+/** A mark of a market, or of a canonical asset. */
+export function encodeMark(subject: ResourceIdInput, price: bigint): Uint8Array {
   const w = new ByteWriter().str('synthetic/v1/mark');
-  writeResourceId(w, must(validateResourceId(market, ['MARKET'] as const, 'market')));
+  writeResourceId(w, must(validateResourceId(subject, ['MARKET', 'CANONICAL_ASSET'] as const, 'subject')));
   return w.u64(price).finish();
 }
 
-function decodeMark(bytes: Uint8Array): { market: MarketId; price: bigint } | null {
+function decodeMark(bytes: Uint8Array): { subject: ResourceId; price: bigint } | null {
   return decodeWith(bytes, (r) => {
     if (r.str() !== 'synthetic/v1/mark') throw new Error('tag');
-    const market = validateResourceId(readResourceIdInput(r), ['MARKET'] as const, 'market');
+    const subject = validateResourceId(readResourceIdInput(r), ['MARKET', 'CANONICAL_ASSET'] as const, 'subject');
     const price = r.u64();
-    if (!market.ok || price === 0n) throw new Error('mark');
-    return { market: market.value, price };
+    if (!subject.ok || price === 0n) throw new Error('mark');
+    return { subject: subject.value, price };
   });
+}
+
+function subjectKey(r: ResourceId): string {
+  return bytesToHex(encodeWith(writeResourceId, r));
 }
 
 export interface PositionBook {
@@ -333,6 +344,8 @@ export function syntheticManifest(config: SyntheticConfig): Uint8Array {
   for (const a of ASSUMPTIONS) w.str(a);
   // The conformance corpus's expected summaries are fixed by these semantics, and so bound here too.
   w.str('corpus:synthetic/v1');
+  // Appended only when set, so every market-valued module keeps its 7D digest.
+  if ((config.valuation ?? 'MARKET') === 'ASSET') w.str('valuation:ASSET');
   return w.finish();
 }
 
@@ -373,9 +386,12 @@ export function createSyntheticModule(config: SyntheticConfig): SyntheticModule 
   const calls = { project: 0 };
 
   const assetOf = (market: MarketId): CanonicalAssetRef | null => markets.find((m) => resourceIdsEqual(m.market, market))?.asset ?? null;
+  const byAsset = (config.valuation ?? 'MARKET') === 'ASSET';
+  /** What a position in `market` is marked by. */
+  const markSubject = (market: MarketId): ResourceId => (byAsset ? (assetOf(market) ?? market) : market);
   const marketNeed = (market: MarketId): StateNeed => ({
     stateKind: MARK,
-    subject: market,
+    subject: markSubject(market),
     admittedSources: [FEED_SOURCE],
     requirement: requirement({
       freshness: { kind: 'AGE', maxAgeSeconds: 30n },
@@ -524,7 +540,7 @@ export function createSyntheticModule(config: SyntheticConfig): SyntheticModule 
       const e = state.envelope;
       if (e.stateKind === MARK) {
         const m = decodeMark(state.payload);
-        return m !== null && resourceIdsEqual(m.market, e.subject) ? { ok: true, value: true } : moduleFail('MARK_PAYLOAD_INVALID');
+        return m !== null && resourceIdsEqual(m.subject, e.subject) ? { ok: true, value: true } : moduleFail('MARK_PAYLOAD_INVALID');
       }
       if (e.stateKind === POSITION) {
         const p = decodePosition(state.payload);
@@ -546,7 +562,7 @@ export function createSyntheticModule(config: SyntheticConfig): SyntheticModule 
         if (s.envelope.stateKind === MARK) {
           const m = decodeMark(s.payload);
           if (m === null) return moduleFail('MARK_PAYLOAD_INVALID');
-          marks.set(m.market.localId, { price: m.price, state: s.stateId, observedAt: s.envelope.observedAt });
+          marks.set(subjectKey(m.subject), { price: m.price, state: s.stateId, observedAt: s.envelope.observedAt });
         } else if (s.envelope.stateKind === POSITION) {
           const p = decodePosition(s.payload);
           if (p === null) return moduleFail('POSITION_PAYLOAD_INVALID');
@@ -566,7 +582,7 @@ export function createSyntheticModule(config: SyntheticConfig): SyntheticModule 
       const emit = (component: EconomicFact['component'], market: MarketId, account: AccountId, size: bigint, states: StateId[], reservations: ReservationId[]): ModuleResult<true> => {
         const asset = assetOf(market);
         if (asset === null) return moduleFail('MARKET_UNKNOWN');
-        const mark = marks.get(market.localId);
+        const mark = marks.get(subjectKey(markSubject(market)));
         if (mark === undefined) return moduleFail('MARK_MISSING');
         const value = valueOf(size, mark.price);
         const acc = touch(account);

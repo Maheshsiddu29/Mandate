@@ -38,6 +38,7 @@ import {
   root,
   setup,
   sizeFor,
+  assetValuedModules,
   world,
   type SyntheticModule,
 } from './world.ts';
@@ -131,7 +132,8 @@ async function vectors(): Promise<Vector[]> {
     out.push({ id: 'pending-reservation-refusal', description: 'held 2,000 + pending 2,000 + proposed 2,000 > 5,000 (brief §12)', module: moduleJson(f.m), outcome: outcomeJson(o), extra: { pending: outcomeJson(first) } });
   }
   {
-    const w = world();
+    // Both modules value at canonical-asset marks: only such facts join a principal-global aggregate (7D.1).
+    const w = world({ modules: assetValuedModules() });
     const perp = w.modules[0] as SyntheticModule;
     const spot = w.modules[1] as SyntheticModule;
     const acctS = account(spot);

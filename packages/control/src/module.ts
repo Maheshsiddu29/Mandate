@@ -224,9 +224,11 @@ export interface EconomicFact {
 }
 
 /**
- * A typed value with no floating point. `TOTAL` is an unvalued typed sum —
- * the only honest form of a sum of marked quantities valued at different
- * marks, which no single `EconomicQuantity` can carry.
+ * A typed value with no floating point. `TOTAL` is a typed sum of parts, its
+ * valuation carried by the evidence rather than the value: a module's own
+ * total, or Core's principal-global aggregate, whose marked parts must share
+ * one admitted valuation context (7D.1, aggregate.ts) named by the snapshots
+ * the result cites.
  */
 export type Measure =
   | { readonly type: 'QUANTITY'; readonly quantity: EconomicQuantity }

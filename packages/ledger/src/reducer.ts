@@ -30,10 +30,14 @@ import {
   authorityId,
   partyIdsEqual,
   policyDimensions,
+  policyInvariants,
   principalPolicyId,
+  termKey,
   type LedgerVersion,
   type PrincipalId,
+  type PrincipalPolicy,
   type ReservationId,
+  type StateInvariantTerm,
 } from '@mandate/core';
 import { planReservationId, type ChargePlan } from './charge-plan.ts';
 import { checkAvailability, deriveLegs, legRecordOf, policyDimsOf, type LegDraft } from './charging.ts';
@@ -57,7 +61,7 @@ import {
   type TargetBalance,
 } from './state.ts';
 import type { PMap } from './pmap.ts';
-import { CORE_RULES, type ReducerRules } from './rules.ts';
+import { CORE_RULES, orderInvariants, type ReducerRules } from './rules.ts';
 
 // --- Registration --------------------------------------------------------------
 
@@ -65,7 +69,48 @@ function zeroBalance(ref: TargetRef, source: TargetBalance['source'], dimension:
   return { ref, source, dimension, current: true, reserved: 0n, consumed: 0n, restored: 0n, epochConsumed: null };
 }
 
-function applyRegisterPolicy(s: LedgerState, e: Extract<LedgerEvent, { kind: 'REGISTER_POLICY' }>, version: LedgerVersion): LedgerResult<LedgerState> {
+/**
+ * AUTH-GLOBAL-2: a policy update may not activate a principal-global
+ * constraint that would have to account for activity which already exists,
+ * because no baseline of that activity is established. The only baseline the
+ * ledger can prove is the empty one — no reservation has ever been committed.
+ * Anything else needs the open-lot initialization of authority-model.md §8.2,
+ * which is not implemented, so the update is refused.
+ *
+ * - A **ledger dimension** new to the policy would start from zero while
+ *   earlier reservations exist (7C).
+ * - A **state invariant** new to the policy, or restated with parameters that
+ *   are not provably no stronger than before, would newly constrain activity
+ *   that was admitted without it (7D.1). "No stronger" is the definition's own
+ *   `noWeaker` with the roles reversed — the old parameters are no weaker than
+ *   the new — from the configured ordering; `UNPROVABLE` is not no stronger.
+ *   An unchanged restatement and a removed invariant need no baseline. Replay
+ *   asks the same ordering again, exactly as for a narrowed delegation.
+ *
+ * Whether a particular earlier reservation is irrelevant to the new
+ * constraint is not inferred: any committed reservation counts as activity.
+ */
+export function checkPolicyBaseline(s: LedgerState, policy: PrincipalPolicy, rules: ReducerRules): LedgerResult<true> {
+  if (s.policy === null || !s.everReserved) return ok(true);
+  const previous = s.policy.policy;
+  const kept = new Set(policyDimensions(previous).map((d) => policyTargetKey(policyDimensionIdentity(d))));
+  const dims = policyDimensions(policy);
+  for (let i = 0; i < dims.length; i += 1) {
+    const key = policyTargetKey(policyDimensionIdentity(dims[i] as (typeof dims)[number]));
+    if (!kept.has(key)) return refuse('POLICY_UPDATE_REQUIRES_BASELINE', `policy.terms.dimension[${i}]`);
+  }
+  const before = new Map(policyInvariants(previous).map((t) => [termKey(t), t]));
+  const invariants = policyInvariants(policy);
+  for (let i = 0; i < invariants.length; i += 1) {
+    const t = invariants[i] as StateInvariantTerm;
+    const p = before.get(termKey(t));
+    if (p !== undefined && (p.params === t.params || orderInvariants(rules.invariantOrdering, t, p) === 'NO_WEAKER')) continue;
+    return refuse('POLICY_UPDATE_REQUIRES_BASELINE', `policy.terms.invariant[${i}]`);
+  }
+  return ok(true);
+}
+
+function applyRegisterPolicy(s: LedgerState, e: Extract<LedgerEvent, { kind: 'REGISTER_POLICY' }>, version: LedgerVersion, rules: ReducerRules): LedgerResult<LedgerState> {
   const policy = e.policy;
   if (!partyIdsEqual(policy.principal, s.principal)) return refuse('PRINCIPAL_MISMATCH', 'policy.principal');
   const id = principalPolicyId(policy);
@@ -74,14 +119,8 @@ function applyRegisterPolicy(s: LedgerState, e: Extract<LedgerEvent, { kind: 'RE
 
   if (s.policy !== null) {
     if (policy.sequence <= s.policy.policy.sequence) return refuse('POLICY_SEQUENCE_NOT_INCREASING', 'policy.sequence');
-    const kept = new Set(policyDimensions(s.policy.policy).map((d) => policyTargetKey(policyDimensionIdentity(d))));
-    // AUTH-GLOBAL-2: a dimension new to the policy must start from what already exists. The only
-    // baseline 7C can prove is the empty one — no reservation has ever been committed. Anything else
-    // needs the open-lot initialization of authority-model.md §8.2, which is not implemented.
-    for (let i = 0; i < dims.length; i += 1) {
-      const key = policyTargetKey(policyDimensionIdentity(dims[i] as (typeof dims)[number]));
-      if (!kept.has(key) && s.everReserved) return refuse('POLICY_UPDATE_REQUIRES_BASELINE', `policy.terms.dimension[${i}]`);
-    }
+    const baseline = checkPolicyBaseline(s, policy, rules);
+    if (!baseline.ok) return baseline;
     for (const d of policyDimensions(s.policy.policy)) {
       const key = policyTargetKey(policyDimensionIdentity(d));
       const b = targets.get(key) as TargetBalance;
@@ -359,7 +398,7 @@ export function applyEvent(s: LedgerState, e: LedgerEvent, version: LedgerVersio
   let next: LedgerResult<LedgerState>;
   switch (e.kind) {
     case 'REGISTER_POLICY':
-      next = applyRegisterPolicy(s, e, version);
+      next = applyRegisterPolicy(s, e, version, rules);
       break;
     case 'REGISTER_GRANT':
       next = applyRegisterGrant(s, e, version, rules);

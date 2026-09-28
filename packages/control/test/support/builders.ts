@@ -246,9 +246,27 @@ function envelope(m: SyntheticModule, stateKind: string, subject: ResourceIdInpu
   };
 }
 
+/** The mark `m` values a position in market `localId` by: the market's own, or its canonical asset's (`valuation: 'ASSET'`). */
 export function markState(m: SyntheticModule, localId: string, price: bigint = PRICE, o: StateOptions = {}): SuppliedState {
   const market = m.market(localId);
-  return envelope(m, MARK, market, encodeMark(market, price), o, { sourceId: FEED_SOURCE, trustClass: 'VERIFIED', finality: { ladder: 'synth.feed', level: 'PUBLISHED' }, sequence: { kind: 'NONE' } });
+  const asset = m.config.markets.find((x) => x.localId === localId)?.asset;
+  const subject = m.config.valuation === 'ASSET' && asset !== undefined ? asset : market;
+  return subjectMarkState(m, subject, price, o);
+}
+
+/** A mark of any subject, normalized under `m`. */
+export function subjectMarkState(m: SyntheticModule, subject: ResourceIdInput, price: bigint = PRICE, o: StateOptions = {}): SuppliedState {
+  return envelope(m, MARK, subject, encodeMark(subject, price), o, { sourceId: FEED_SOURCE, trustClass: 'VERIFIED', finality: { ladder: 'synth.feed', level: 'PUBLISHED' }, sequence: { kind: 'NONE' } });
+}
+
+/** `cfg`, valued at canonical-asset marks: a module able to contribute to a principal-global marked aggregate (7D.1). */
+export function assetValued(cfg: SyntheticConfig): SyntheticConfig {
+  return { ...cfg, valuation: 'ASSET' };
+}
+
+/** The default perp-like and spot-like modules, both valued at canonical-asset marks. */
+export function assetValuedModules(): SyntheticModule[] {
+  return [createSyntheticModule(assetValued(PERP_CFG)), createSyntheticModule(assetValued(SPOT_CFG))];
 }
 
 export function positionState(m: SyntheticModule, acct: ResourceIdInput, positions: readonly { localId: string; size: bigint }[] = [], collateral: bigint = usd(100_000), o: StateOptions = {}): SuppliedState {
@@ -273,7 +291,8 @@ export function instrumentsState(m: SyntheticModule, o: StateOptions = {}): Supp
 /** Every mark of `m` at `price`, its instruments, and a position book for each account. */
 export function marketStates(m: SyntheticModule, books: readonly { account: ResourceIdInput; positions?: readonly { localId: string; size: bigint }[]; collateral?: bigint }[], price: bigint = PRICE, o: StateOptions = {}): SuppliedState[] {
   return [
-    ...m.config.markets.map((x) => markState(m, x.localId, price, o)),
+    // One mark per distinct subject: an asset-valued module's markets can share one.
+    ...[...new Map(m.config.markets.map((x) => { const st = markState(m, x.localId, price, o); return [st.envelope.subject.localId, st] as const; })).values()],
     instrumentsState(m, o.observedAt === undefined ? {} : { observedAt: o.observedAt }),
     ...books.map((b) => positionState(m, b.account, b.positions ?? [], b.collateral ?? usd(100_000), o.observedAt === undefined ? {} : { observedAt: o.observedAt })),
   ];

@@ -45,7 +45,7 @@ describe('exact ModuleRef resolution (brief §5)', () => {
     assert.equal(r(catalog.resolveForLifecycle(spot.ref)), 'MODULE_NOT_FOUND/NO_CONFORMING_IMPLEMENTATION');
   });
 
-  it('refuses a catalog with an unregistered module, an unregistered implementation, a duplicate, a claimed core invariant or an invariant owned twice', () => {
+  it('refuses a catalog with an unregistered module, an unregistered implementation, a duplicate, a claimed core invariant or another module\'s invariant', () => {
     const perp = createSyntheticModule(PERP_CFG);
     const reg = registryOf([{ m: perp }]);
     const spot = createSyntheticModule(SPOT_CFG);
@@ -55,9 +55,14 @@ describe('exact ModuleRef resolution (brief §5)', () => {
     assert.equal(catalogError(reg, [perp, perp]).reason, 'DUPLICATE_IMPLEMENTATION');
     const greedy = { ...perp, invariants: [{ invariantId: "core.aggregate-max", version: 1 }] } as unknown as DomainModule;
     assert.equal(catalogError(reg, [greedy]).reason, 'CORE_INVARIANT_CLAIMED');
+    // A newer version claiming the previous version's invariants: an invariant belongs to exactly one module name (7D.1).
     const twin = createSyntheticModule({ ...PERP_CFG, moduleVersion: 2 });
     const twinClaims = { ...twin, invariants: perp.invariants } as DomainModule;
-    assert.equal(catalogError(registryOf([{ m: perp }, { m: twin }]), [perp, twinClaims]).reason, 'INVARIANT_OWNED_TWICE');
+    assert.equal(catalogError(registryOf([{ m: perp }, { m: twin }]), [perp, twinClaims]).reason, 'INVARIANT_OUTSIDE_MODULE_NAMESPACE');
+    assert.equal(catalogError(registryOf([{ m: twin }]), [twinClaims]).reason, 'INVARIANT_OUTSIDE_MODULE_NAMESPACE');
+    // Another module name claiming them.
+    const spotClaims = { ...createSyntheticModule(SPOT_CFG), invariants: perp.invariants } as DomainModule;
+    assert.equal(catalogError(registryOf([{ m: createSyntheticModule(SPOT_CFG) }]), [spotClaims]).reason, 'INVARIANT_OUTSIDE_MODULE_NAMESPACE');
   });
 });
 

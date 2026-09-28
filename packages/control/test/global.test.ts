@@ -23,6 +23,8 @@ import {
   account,
   action,
   aggregate,
+  assetValued,
+  assetValuedModules,
   authorized,
   capitalDim,
   context,
@@ -47,7 +49,8 @@ interface Book {
 }
 
 async function twoRoots(o: { limit: number; spot?: readonly Book[]; perp?: readonly Book[]; contributors?: 'BOTH' | 'PERP_ONLY'; extraPolicy?: readonly StateInvariantInput[]; modules?: readonly SyntheticModule[] }) {
-  const w = world(o.modules === undefined ? {} : { modules: o.modules });
+  // Both modules value at canonical-asset marks: only such facts join a principal-global aggregate (7D.1).
+  const w = world({ modules: o.modules ?? assetValuedModules() });
   const perp = w.modules[0] as SyntheticModule;
   const spot = w.modules[1] as SyntheticModule;
   const acctS = account(spot);
@@ -102,14 +105,14 @@ describe('principal-global aggregate across roots', () => {
 
   it('never matches by name: a WBTC-like market mapped to another canonical asset, and ETH, are not BTC (brief §23)', async () => {
     const spot = createSyntheticModule({
-      ...SPOT_CFG,
+      ...assetValued(SPOT_CFG),
       markets: [
         { localId: 'x:BTC-SPOT', asset: BTC },
         { localId: 'x:WBTC-SPOT', asset: { domain: 'registry', kind: 'CANONICAL_ASSET', localId: 'crypto:wbtc' } },
         { localId: 'x:ETH-SPOT', asset: { domain: 'registry', kind: 'CANONICAL_ASSET', localId: 'crypto:eth' } },
       ],
     });
-    const perp = createSyntheticModule(PERP_CFG);
+    const perp = createSyntheticModule(assetValued(PERP_CFG));
     const s = await twoRoots({
       limit: 5_000,
       modules: [perp, spot],

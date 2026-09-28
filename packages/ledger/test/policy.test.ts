@@ -119,8 +119,20 @@ describe('replacement (7C: only where the baseline is provable)', () => {
     assert.equal(stepRefused(s, [next([global], 3n)]).code, 'POLICY_UPDATE_REQUIRES_BASELINE');
   });
 
-  it('may replace invariants and state policy freely: they are not quantitative baselines', () => {
+  it('refuses a new or changed principal-global invariant once anything was reserved (7D.1: AUTH-GLOBAL-2 extended)', () => {
+    const inv = (params: string) => ({ kind: 'STATE_INVARIANT' as const, invariantId: 'core.markedExposure', version: 1, scope: [BTC], params });
+    // Before any reservation the empty baseline is provable: an invariant may be introduced.
+    step(bootstrap(policy([global], 1n), [a]), [next([global, inv('0x01')], 2n)]);
+    // After one, introducing it is refused: it would newly constrain activity admitted without it.
     const s = reserve(bootstrap(policy([global], 1n), [a]), spend(a, 'a', units(1)));
-    step(s, [next([global, { kind: 'STATE_INVARIANT', invariantId: 'core.markedExposure', version: 1, scope: [BTC], params: '0x01' }], 2n)]);
+    const r = stepRefused(s, [next([global, inv('0x01')], 2n)]);
+    assert.equal(r.code, 'POLICY_UPDATE_REQUIRES_BASELINE');
+    assert.equal(r.path, 'events[0].policy.terms.invariant[0]');
+    // An unchanged restatement and a removal need no baseline.
+    const s2 = reserve(bootstrap(policy([global, inv('0x01')], 1n), [a]), spend(a, 'a', units(1)));
+    step(s2, [next([global, inv('0x01')], 2n)]);
+    step(s2, [next([global], 2n)]);
+    // Changed parameters no ordering can prove no stronger (the 7C rules have none) are refused.
+    assert.equal(stepRefused(s2, [next([global, inv('0x02')], 2n)]).code, 'POLICY_UPDATE_REQUIRES_BASELINE');
   });
 });

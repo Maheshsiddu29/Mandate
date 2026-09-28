@@ -31,6 +31,7 @@ import {
   request,
   root,
   setup,
+  assetValuedModules,
   world,
   type SyntheticModule,
 } from './support/world.ts';
@@ -51,7 +52,7 @@ describe('reference model', () => {
     const outcomes = new Map<string, number>();
     for (let seed = 1; seed <= 30; seed += 1) {
       const rand = prng(seed * 7919);
-      const w = world();
+      const w = world({ modules: assetValuedModules() });
       const m = w.modules[0] as SyntheticModule;
       const acct = account(m);
       const rootCap = BigInt(int(rand, 50, 200)) * 10_000n;

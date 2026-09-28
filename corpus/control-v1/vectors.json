@@ -126,8 +126,8 @@
         "domainId": "synth-perp",
         "moduleId": "perp-like",
         "moduleVersion": 1,
-        "moduleDigest": "0xb534ba3c88e54e28a025dbe3afe07a03c49ec3f422572ceb3c19672c5ff9ea09",
-        "implementation": "0x0be15fda310792e01ab2e6fe132b5e67aeb8ccb5258ba7773ba009d299f59243"
+        "moduleDigest": "0xc1309336f6612f8bd83caf75a253882745e7c255a0ae904c626bf5d9e5b57a12",
+        "implementation": "0x250bfb311b1aa2ce9aa8d6ad0dcae146fd87c9316f2fa600d9f9ed67bcbfcd25"
       },
       "outcome": {
         "status": "REFUSED",
@@ -137,23 +137,23 @@
           "reason": "AGGREGATE_LIMIT_EXCEEDED",
           "origin": "CONTROL",
           "path": "invariants.core.aggregate-max",
-          "invariantResults": "0x3b990f1fe22c1570ecc5245f0ac4f42d4156a726ccd830094e3d03cf55ac5bcf",
+          "invariantResults": "0x0b5379f48e5f25af9b65c7689f129aa8f53c32f39a7dd507eb6d70f6203fffc8",
           "violations": null
         }
       },
       "extra": {
         "pending": {
           "status": "AUTHORIZED",
-          "authorization": "0x8cbc7d1cede9a1b7824c8a41476c1a9ec715552d83b3c7223b68a91845f4e2b4",
-          "executionAuthorization": "0xfd528cd38f0ec73267af9d9e242e3c4c0a1c95d563ec956f787eb21a52bd6c3c",
-          "reservation": "0x508a0adf10445a2f5514edf814e84cf5d6245a0ac490541dda0b824faa5a2b4b",
+          "authorization": "0x3f9262706af420889e2144e341bdfdf051301eb35ff4251a58e057551dfcc251",
+          "executionAuthorization": "0xd34fd92f17357ea5a2d971962e623a41c16897f16993b6704e023198eb429fc7",
+          "reservation": "0x36b7ef959d082680e00ca784f2b8e5f5a6c4330714e3438e242de5ce1141184c",
           "generation": "1",
-          "projection": "0xd22bd4a72d12633c270cc4b2bd62ec8b3f5704c28f8e5337c1bf9b736f902d4d",
-          "invariantResults": "0xdc32eeb98d31382f5a2b2487369dfd6988389a95a7a8c255c86f2d47aa6a2b96",
-          "chargePlan": "0xfea92d8796ebfb55890d0eefe0c01336124cc5e18e5b791f25f8408f12b9f940",
+          "projection": "0x3d992b025c77984ed980eede535e20dca9020d25d662a8bf176c483724cef355",
+          "invariantResults": "0x4745dac497860b84512654f61cd52ec36fd6a4848d962b009812dd3a3b0eaa63",
+          "chargePlan": "0x718ce16b4b85c5825248c3979d73fca8c11952f5e2c3344822a3b3a58a6643da",
           "ledgerVersionRead": "3",
           "ledgerVersionCommitted": "4",
-          "ledgerHead": "0xfce90bb5120e44fa653a94308128c3a66920a5b50e2296761a3fb39f21bd6be0",
+          "ledgerHead": "0x988493f7239cc5e655c3f09d1c463b468b95af36aa0453514c1223482e01444b",
           "validUntil": "1790813830",
           "stateBindings": 6
         }

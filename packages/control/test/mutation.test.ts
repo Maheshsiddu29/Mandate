@@ -9,9 +9,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { bindState, moduleRefsEqual, resourceIdsEqual, stateBindingId, stateRequirementInputOf, type ModuleRef } from '@mandate/core';
-import { deriveReserveEvent, nodeTargetKey, type TargetBalance } from '@mandate/ledger';
+import { checkPolicyBaseline, deriveReserveEvent, nodeTargetKey, replayEncoded, type InvariantOrdering, type TargetBalance } from '@mandate/ledger';
 import { admitNeeds, type Admission } from '../src/admission.ts';
-import { controlRules, type ControlResult, type ModuleCatalog } from '../src/index.ts';
+import { checkAggregateScope, checkValuationContexts, sumAggregate, type AggregateEvaluator } from '../src/aggregate.ts';
+import { ModuleCatalog, controlRules, type ControlResult } from '../src/index.ts';
 import { PRODUCTION_PIPELINE, decideWith, type AuthorizationRequest, type Decision, type Pipeline } from '../src/pipeline.ts';
 import { reservationFacts } from '../src/facts.ts';
 import {
@@ -39,11 +40,13 @@ import {
   policy,
   positionState,
   request,
+  must,
   root,
   setup,
   sizeFor,
   syntheticRef,
   usd,
+  assetValuedModules,
   world,
   type SyntheticModule,
   type World,
@@ -96,7 +99,7 @@ async function heldStateProbe(p: Pipeline): Promise<boolean> {
 
 /** Two roots each within their own authority must not together pass a principal-global 5,000 (brief §41). */
 async function globalProbe(p: Pipeline): Promise<boolean> {
-  const w = world();
+  const w = world({ modules: assetValuedModules() });
   const perp = w.modules[0] as SyntheticModule;
   const spot = w.modules[1] as SyntheticModule;
   const acctS = account(spot);
@@ -116,6 +119,60 @@ async function staleProbe(p: Pipeline): Promise<boolean> {
   const ctx = context([f.m], { accounts: [{ module: f.m, account: f.acct, watermark: 11n }] });
   return (await reserveWith(p, f.w, request(action(f.m, { authority: f.a, size: sizeFor(1_000) }), marketStates(f.m, [{ account: f.acct }]), ctx))).status === 'REFUSED';
 }
+
+/** 7D.1: A at BTC 50,000 and B at BTC 52,000 fit ≤ 10,000 numerically, but must not be summed. */
+async function valuationProbe(p: Pipeline): Promise<boolean> {
+  const w = world({ modules: assetValuedModules() });
+  const a = w.modules[0] as SyntheticModule;
+  const b = w.modules[1] as SyntheticModule;
+  const acctA = account(a);
+  const acctB = account(b);
+  const ra = root({ mods: [a], holder: AGENT_A, terms: [capitalDim('capital', 100_000)] });
+  const rb = root({ mods: [b], holder: AGENT_B, nonce: 1n, terms: [capitalDim('capital', 100_000)] });
+  await setup(w, policy([aggregate({ whole: 10_000, contributors: [a, b], accounts: [acctA, acctB] })]), [ra, rb]);
+  const states = [
+    ...marketStates(a, [{ account: acctA, positions: [{ localId: 'x:BTC-PERP', size: 800n }] }], 5_000_000n),
+    ...marketStates(b, [{ account: acctB, positions: [{ localId: 'x:BTC-SPOT', size: 577n }] }], 5_200_000n),
+  ];
+  const ctx = context([a, b], { accounts: [{ module: a, account: acctA }, { module: b, account: acctB }] });
+  return (await reserveWith(p, w, request(action(a, { authority: ra, size: 20n }), states, ctx))).status === 'REFUSED';
+}
+
+/** Policy 1 lists spot and perp; spot reserves 3,000 BTC; policy 2 lists only perp (≤ 10,000 for both). */
+async function unlistedPending() {
+  const w = world({ modules: assetValuedModules() });
+  const perp = w.modules[0] as SyntheticModule;
+  const spot = w.modules[1] as SyntheticModule;
+  const acctS = account(spot);
+  const acctP = account(perp);
+  const agg = (whole: number, contributors: readonly SyntheticModule[]) => aggregate({ whole, contributors, accounts: [acctS, acctP] });
+  const ra = root({ mods: [spot], holder: AGENT_A, terms: [capitalDim('capital', 100_000)] });
+  const rb = root({ mods: [perp], holder: AGENT_B, nonce: 1n, terms: [capitalDim('capital', 100_000)] });
+  await setup(w, policy([agg(10_000, [spot, perp])]), [ra, rb]);
+  const states = [...marketStates(spot, [{ account: acctS }]), ...marketStates(perp, [{ account: acctP }])];
+  const ctx = context([perp, spot], { accounts: [{ module: spot, account: acctS }, { module: perp, account: acctP }] });
+  assert.equal((await reserveWith(PRODUCTION_PIPELINE, w, request(action(spot, { authority: ra, size: sizeFor(3_000) }), states, ctx))).status, 'AUTHORIZED');
+  return { w, perp, spot, rb, agg, states, ctx };
+}
+
+/** 7D.1: spot's unresolved 3,000 must not drop out of the aggregate when a new policy stops listing spot. */
+async function unlistedProbe(p: Pipeline): Promise<boolean> {
+  const f = await unlistedPending();
+  assert.equal((await f.w.ledger.registerPolicy(policy([f.agg(10_000, [f.perp])], 2n), T, ONCE)).status, 'COMMITTED');
+  return (await reserveWith(p, f.w, request(action(f.perp, { authority: f.rb, size: sizeFor(1_000) }), f.states, f.ctx))).status === 'REFUSED';
+}
+
+/** Mutant A: the closed scope is checked, then everything is summed whatever it was valued at. */
+const sumAcrossValuations: AggregateEvaluator = (spec, participants, active) => {
+  const scope = checkAggregateScope(spec, participants, active);
+  return scope !== null ? { outcome: 'UNKNOWN', reason: scope, observed: null, bound: null, states: [], reservations: [] } : sumAggregate(spec, participants);
+};
+
+/** Mutant B: only listed contributors are looked at; an unlisted module's matching facts are ignored. */
+const ignoreUnlisted: AggregateEvaluator = (spec, participants) => {
+  const valuation = checkValuationContexts(spec, participants);
+  return valuation !== null ? { outcome: 'UNKNOWN', reason: valuation, observed: null, bound: null, states: [], reservations: [] } : sumAggregate(spec, participants);
+};
 
 // --- Mutant stages -------------------------------------------------------------------
 
@@ -144,6 +201,8 @@ const MUTANTS: { name: string; pipeline: Pipeline; probe: (p: Pipeline) => Promi
   { name: 'ignore one pending reservation', pipeline: { ...PRODUCTION_PIPELINE, facts: (s) => { const r = reservationFacts(s); return r.ok ? { ok: true, value: r.value.slice(1) } : r; } }, probe: pendingProbe },
   { name: 'skip the principal-global invariants', pipeline: { ...PRODUCTION_PIPELINE, applicable: (e) => e.invariants.map((term) => ({ origin: 'LINEAGE' as const, term })) }, probe: globalProbe },
   { name: 'authorize after a stale-state failure', pipeline: { ...PRODUCTION_PIPELINE, admit: admitWithoutChecks }, probe: staleProbe },
+  { name: '7D.1 A: aggregate two marked facts valued at different BTC observations', pipeline: { ...PRODUCTION_PIPELINE, aggregate: sumAcrossValuations }, probe: valuationProbe },
+  { name: '7D.1 B: ignore an unlisted module\'s matching aggregate fact', pipeline: { ...PRODUCTION_PIPELINE, aggregate: ignoreUnlisted }, probe: unlistedProbe },
 ];
 
 describe('mutants of the decision pipeline are killed (brief §58)', () => {
@@ -162,7 +221,7 @@ describe('mutants outside the pipeline are killed', () => {
       let reads = 0;
       let armed = false;
       const gate = new Promise<void>((resolve) => (hold = resolve));
-      const w = world({ hooks: { delay: async (point) => { if (point === 'READ' && armed) { reads += 1; if (reads === 2) hold?.(); if (reads <= 2) await gate; } } } });
+      const w = world({ modules: assetValuedModules(), hooks: { delay: async (point) => { if (point === 'READ' && armed) { reads += 1; if (reads === 2) hold?.(); if (reads <= 2) await gate; } } } });
       const perp = w.modules[0] as SyntheticModule;
       const spot = w.modules[1] as SyntheticModule;
       const acctS = account(spot);
@@ -266,5 +325,50 @@ describe('mutants outside the pipeline are killed', () => {
     const mut = decideWith({ ...PRODUCTION_PIPELINE, admit: admitWithoutChecks }, s, req, env);
     // Defence in depth: the lifetime rule still refuses a mark already past its freshness, but not as stale state.
     assert.ok(!mut.ok && mut.error.code !== 'STATE_STALE');
+  });
+});
+
+describe('7D.1 mutants outside the pipeline are killed', () => {
+  it('C: activate a tightened principal-global invariant despite unresolved activity and no baseline', async () => {
+    // The reducer's policy-update gate, and a mutant of it that forgets principal-global invariants.
+    const forgetful: typeof checkPolicyBaseline = (s, p, rules) => checkPolicyBaseline(s, { ...p, terms: p.terms.filter((t) => t.kind !== 'STATE_INVARIANT') }, rules);
+    const probe = async (gate: typeof checkPolicyBaseline): Promise<boolean> => {
+      const f = await unlistedPending();
+      const tightened = policy([f.agg(5_000, [f.spot, f.perp])], 2n);
+      const s = await f.w.store.read(tightened.principal);
+      const refusedByGate = !gate(s.state, tightened, controlRules(f.w.catalog)).ok;
+      if (gate === checkPolicyBaseline) {
+        // The production gate is the one the store's reducer applies.
+        const o = await f.w.ledger.registerPolicy(tightened, T, ONCE);
+        assert.equal(o.status === 'REFUSED' ? o.refusal.code : o.status, 'POLICY_UPDATE_REQUIRES_BASELINE');
+      }
+      return refusedByGate;
+    };
+    assert.equal(await probe(checkPolicyBaseline), true);
+    assert.equal(await probe(forgetful), false);
+  });
+
+  it('D: replay a historical semantic narrowing after its module comparator was removed', async () => {
+    const probe = async (orderingOf: (verifier: ModuleCatalog) => InvariantOrdering): Promise<boolean> => {
+      const w = world({ modules: [createSyntheticModule(PERP_CFG)] });
+      const m = w.modules[0] as SyntheticModule;
+      const acct = account(m);
+      const parent = root({ mods: [m], holder: AGENT_A, delegate: 1, terms: [capitalDim('capital', 1_000), maxLeverage(m, acct, 4n)] });
+      await setup(w, policy(), [parent]);
+      assert.equal((await w.engine.registerDelegation(child(parent, { mods: [m], holder: AGENT_B, terms: [maxLeverage(m, acct, 3n)] }), T0, ONCE)).status, 'REGISTERED');
+      const batches = (await w.store.history(parent.principal)).map((b) => b.encoded);
+      // The historical verifier no longer has M.
+      const verifier = must(ModuleCatalog.create(w.registry, []));
+      return !replayEncoded(parent.principal, batches, { invariantOrdering: orderingOf(verifier) }).ok;
+    };
+    // Mutant: when the comparator cannot be resolved, trust the committed history.
+    const trustHistory = (c: ModuleCatalog): InvariantOrdering => ({
+      noWeaker: (p, ch) => {
+        const v = c.compareInvariants(p, ch).verdict;
+        return v === 'UNPROVABLE' ? 'NO_WEAKER' : v;
+      },
+    });
+    assert.equal(await probe((c) => c.invariantOrdering()), true);
+    assert.equal(await probe(trustHistory), false);
   });
 });

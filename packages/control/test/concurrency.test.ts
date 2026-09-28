@@ -34,6 +34,7 @@ import {
   ticks,
   usd,
   valueOf,
+  assetValuedModules,
   world,
   type SyntheticModule,
 } from './support/world.ts';
@@ -58,7 +59,7 @@ function barrier(n: number): InMemoryStoreHooks & { arm: () => void } {
 }
 
 async function twoAgents(hooks: InMemoryStoreHooks) {
-  const w = world({ hooks });
+  const w = world({ hooks, modules: assetValuedModules() });
   const perp = w.modules[0] as SyntheticModule;
   const spot = w.modules[1] as SyntheticModule;
   const acctS = account(spot);
@@ -126,7 +127,7 @@ describe('concurrent projection (brief §42)', () => {
 describe('100 agents, one principal, several roots, shared invariant and budget (brief §43)', () => {
   it('ends with every global constraint satisfied, no reservation lost, and no decision on a pre-conflict projection', async () => {
     const rand = prng(4242);
-    const w = world({ hooks: { delay: () => ticks(int(rand, 0, 4)) } });
+    const w = world({ hooks: { delay: () => ticks(int(rand, 0, 4)) }, modules: assetValuedModules() });
     const perp = w.modules[0] as SyntheticModule;
     const spot = w.modules[1] as SyntheticModule;
     const acctS = account(spot);
