@@ -1,0 +1,20 @@
+{
+  "name": "@mandate/perp-lighter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "PerpPolicy v1 for Lighter (isolated margin only) and the narrow Lighter Venue Signer: exact transaction binding, ADMIT_ATTEMPT before key use, a transaction allowlist, and signer-owned submission. Testnet only in Phase 7E.1.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "dependencies": {
+    "@mandate/control": "0.1.0",
+    "@mandate/core": "0.1.0",
+    "@mandate/kernel": "0.1.0",
+    "@mandate/ledger": "0.1.0",
+    "@mandate/ledger-sqlite": "0.1.0"
+  }
+}

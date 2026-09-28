@@ -15,7 +15,8 @@
     "packages/core",
     "packages/ledger",
     "packages/control",
-    "packages/ledger-sqlite"
+    "packages/ledger-sqlite",
+    "packages/perp-lighter"
   ],
   "scripts": {
     "audit:security": "npm audit --audit-level=high",
