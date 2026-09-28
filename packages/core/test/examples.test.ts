@@ -670,11 +670,25 @@ describe('J — drift', () => {
     assert.equal(formatFixedDecimal(diff.atoms, 8), '-0.02000000');
   });
 
-  it('GAP: the drift charge "+0.01 BTC valued at the admitted mark → +1,000.00" on a NOTIONAL dimension needs a MARK-valued NOTIONAL, which §3.2 does not permit', () => {
-    // action-state-model.md §3.2 allows NOTIONAL only at EXECUTION or LIMIT; examples.md §J charges a NOTIONAL
-    // dimension with an amount valued at the mark. 7B does not relax the kind rule; the drift event's
-    // quantity type is left to 7C with this conflict reported (implementation-7b.md, open questions).
-    const r = validateQuantity({
+  it('marked-exposure drift changes state and invariant evaluation: a MARK value from the admitted snapshot, never a counter', () => {
+    const drifted = quantity('NET_EXPOSURE', {
+      kind: 'NET_EXPOSURE',
+      unit: 'USD',
+      decimals: 2,
+      atoms: amount('6000.00', 2),
+      asset: BTC,
+      valuation: { price: price('100000.00'), basis: 'MARK', source: { kind: 'STATE', stateId: stateId(snapshot) }, observedAt: 2_000n },
+    });
+    assert.equal(drifted.valuation?.basis, 'MARK');
+    // It is what a marked-exposure invariant reads; it cannot be charged to the committed-notional dimension.
+    const committed = notional('5000.00', '100000.00', { kind: 'OBSERVATION', observationId: digestOf('L:fill:lot') }, 1_000n);
+    assert.ok(quantityMismatches(drifted, committed).includes('KIND'));
+  });
+
+  it('committed-notional drift requires execution evidence: a fill observation at the price actually paid', () => {
+    const fromFill = notional('1000.00', '100000.00', { kind: 'OBSERVATION', observationId: digestOf('L:liquidation-or-fill:2210') }, 2_000n);
+    assert.equal(fromFill.valuation?.basis, 'EXECUTION');
+    const atMark = validateQuantity({
       kind: 'NOTIONAL',
       unit: 'USD',
       decimals: 2,
@@ -682,7 +696,17 @@ describe('J — drift', () => {
       asset: BTC,
       valuation: { price: price('100000.00'), basis: 'MARK', source: { kind: 'STATE', stateId: stateId(snapshot) }, observedAt: 2_000n },
     });
-    assert.ok(!r.ok);
-    assert.equal(r.error.code, 'VALUATION_BASIS_INVALID');
+    assert.ok(!atMark.ok);
+    assert.equal(atMark.error.code, 'VALUATION_BASIS_INVALID');
+    const snapshotAsFill = validateQuantity({
+      kind: 'NOTIONAL',
+      unit: 'USD',
+      decimals: 2,
+      atoms: amount('1000.00', 2),
+      asset: BTC,
+      valuation: { price: price('100000.00'), basis: 'EXECUTION', source: { kind: 'STATE', stateId: stateId(snapshot) }, observedAt: 2_000n },
+    });
+    assert.ok(!snapshotAsFill.ok);
+    assert.equal(snapshotAsFill.error.code, 'VALUATION_SOURCE_INVALID');
   });
 });

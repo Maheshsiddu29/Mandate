@@ -50,6 +50,9 @@ import {
   writeResourceId,
   writeStateBinding,
   writeTerm,
+  writeQuantityBody,
+  validateQuantity,
+  type EconomicQuantity,
   ZERO_DIGEST,
   executionAuthorizationId,
   executionBindingId,
@@ -365,6 +368,15 @@ function negatives(): Negative[] {
     requirement: { ...binding.requirement, freshness: { kind: 'SEQUENCE' }, atExecution: { kind: 'BOUNDED_BY_FRESHNESS' } },
   } as unknown as StateBinding);
   add('bounded-by-sequence', 'StateBinding', 'BOUNDED_BY_FRESHNESS with SEQUENCE freshness: sequence distance has no expiry time.', bounded.finish(), 'EXECUTION_DEPENDENCE_INCOMPATIBLE');
+
+  // Phase 7B.1 ruling 2: a mark read from a snapshot, relabelled as an execution price, is not committed notional.
+  const committed = must(validateQuantity(notionalAtLimit(100_000n, 10_000_000n, actionId(action), 1_000n)));
+  const markAsExecution = taggedWriter(CoreTag.QUANTITY);
+  writeQuantityBody(markAsExecution, {
+    ...committed,
+    valuation: { ...(committed.valuation as NonNullable<typeof committed.valuation>), basis: 'EXECUTION', source: { kind: 'STATE', stateId: stateId(state) } },
+  } as unknown as EconomicQuantity);
+  add('notional-mark-as-execution', 'EconomicQuantity', 'Committed notional priced from a state snapshot but labelled EXECUTION: execution prices come only from fill observations.', markAsExecution.finish(), 'VALUATION_SOURCE_INVALID');
 
   return out;
 }

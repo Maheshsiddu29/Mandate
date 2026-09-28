@@ -54,6 +54,25 @@ describe('core structural boundary', () => {
     }
   });
 
+  it('takes only generic primitives from the kernel: no MCE, candidate, spot, verifier or Phase 6 semantics', () => {
+    // Result plumbing, the identifier charset, PartyId, TrustClass and the byte reader/writer. Nothing that
+    // encodes, verifies or means an MCE mandate, a candidate, trusted spot state, a receipt or a replay record.
+    const allowed = new Set(['ok', 'err', 'Result', 'ByteReader', 'ByteWriter', 'parseIdentifier', 'Identifier', 'parsePartyId', 'TrustClass']);
+    const used = new Set<string>();
+    for (const { path, text } of SOURCES) {
+      for (const m of text.matchAll(/import\s*\{([^}]*)\}\s*from\s*['"]@mandate\/kernel['"]/g)) {
+        for (const raw of (m[1] as string).split(',')) {
+          const name = raw.trim().replace(/^type\s+/, '');
+          if (name === '') continue;
+          assert.ok(allowed.has(name), `${path} imports kernel symbol ${name}`);
+          used.add(name);
+        }
+      }
+      assert.doesNotMatch(text, /import\s+\*\s+as\s+\w+\s+from\s+['"]@mandate\/kernel['"]/, path);
+    }
+    assert.deepEqual([...used].sort(), [...allowed].sort());
+  });
+
   it('performs no I/O, reads no clock or randomness, and holds no model, chain or HTTP client', () => {
     const forbiddenImports = /from\s+['"](?:node:)?(?:fs|http|https|net|tls|dgram|child_process|worker_threads)['"]|from\s+['"][^'"]*(?:openai|anthropic|jev|langchain|viem|ethers|web3|axios|undici)/i;
     const forbiddenCalls = /\b(?:fetch|Date\.now|Math\.random|setTimeout|setInterval|performance\.now)\s*\(|new\s+Date\s*\(|process\.env/;

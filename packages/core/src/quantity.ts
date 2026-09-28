@@ -246,6 +246,18 @@ export type PriceSource =
   | { readonly kind: 'ACTION'; readonly actionId: ActionId };
 
 const PRICE_SOURCE_CODE: WireCodes<PriceSource['kind']> = { STATE: 1, OBSERVATION: 2, ACTION: 3 };
+
+/**
+ * The only source each basis can have. An execution price is a fill's, so it
+ * comes from an observation; a limit price is the order's, from its action; a
+ * mark is an admitted snapshot's. Without this, a mark read from a snapshot
+ * could be labelled `EXECUTION` and pass as committed notional.
+ */
+const SOURCE_FOR_BASIS: { readonly [B in ValuationBasis]: PriceSource['kind'] } = {
+  EXECUTION: 'OBSERVATION',
+  LIMIT: 'ACTION',
+  MARK: 'STATE',
+};
 const PRICE_SOURCE_KINDS: readonly PriceSource['kind'][] = ['STATE', 'OBSERVATION', 'ACTION'];
 
 function validatePriceSource(input: PriceSourceInput, path: string): CoreResult<PriceSource> {
@@ -294,6 +306,7 @@ function validateValuationRef(input: ValuationRefInput, path: string): CoreResul
   if (!basis.ok) return basis;
   const source = validatePriceSource(input.source, at(path, 'source'));
   if (!source.ok) return source;
+  if (source.value.kind !== SOURCE_FOR_BASIS[basis.value]) return fail('VALUATION_SOURCE_INVALID', at(path, 'source.kind'));
   const observedAt = parseUnixSeconds(input.observedAt, at(path, 'observedAt'));
   if (!observedAt.ok) return observedAt;
   return ok({ price: price.value, basis: basis.value, source: source.value, observedAt: observedAt.value } as ValuationRef);

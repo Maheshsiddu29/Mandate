@@ -7,7 +7,8 @@ and what it depends on.
 > specification ([core-v1/](core-v1/README.md)) — is FROZEN after its hardening
 > checkpoint. Phase 7B — Core types, canonical encodings and the generic
 > action/state model ([implementation-7b.md](core-v1/implementation-7b.md)) —
-> is implemented locally and awaiting review.** No ledger or later Phase 7
+> is architecture-accepted, with the Phase 7B.1 representation hardening
+> implemented locally and awaiting review. Phase 7C is not started.** No ledger or later Phase 7
 > mechanism exists, and nothing has been deployed.
 > Rationale for the phase ordering is in
 > [mandate-design.md §25](mandate-design.md#25-phased-engineering-roadmap);
@@ -450,7 +451,7 @@ The remaining open questions are implementation choices assigned to 7B–7H.
 
 **Depends on:** Phase 6 (frozen).
 
-### Phase 7B — Core types and generic action/state model — IMPLEMENTED, awaiting review
+### Phase 7B — Core types and generic action/state model — ACCEPTED; 7B.1 hardening awaiting review
 
 **Delivers** a Core package with canonical encodings and strict parsers for
 grants, intents, snapshots and quantities; typed economic quantities; the
@@ -466,19 +467,27 @@ domain-separated type; UNIT-1 established for Core arithmetic by type-level
 and runtime tests; encodings pinned by `corpus/core-v1`; Phase 6 artifacts
 byte-identical. By the Phase 7B brief, **the authority meet, AUTH-2 and the
 domain module interface were not built** (no subset or later-phase logic).
-They need assigning, to 7C or a 7B follow-up, together with the specification
-gaps listed in implementation-7b.md §9.
+Phase 7B.1 (representation hardening) bound `StateEnvelope` to a full
+`ModuleRef`, required fill evidence for execution-priced committed notional,
+and assigned the deferred items: the meet and AUTH-2 to 7C, the executable
+`DomainModule` interface to 7D.
 
-### Phase 7C — Global Authority Ledger
+### Phase 7C — Authority Graph + Global Authority Ledger
 
-**Delivers** pure ledger transition rules over an event log, the
-compare-and-swap store contract and a reference store.
-**Exit:** LEDGER-1…6 and CONC-1 established by stateful tests with concurrent
-agents, including the mutation that removes compare-and-swap.
+**Delivers** the authority graph: the authority meet and effective-lineage
+computation (child ⊆ parent at registration and at every action), with AUTH-2
+subset and property testing; and the ledger: pure ledger transition rules over
+an event log, the compare-and-swap store contract and a reference store.
+**Exit:** AUTH-2 established by property tests over random grant trees
+(including the mutation of each half separately); LEDGER-1…6 and CONC-1
+established by stateful tests with concurrent agents, including the mutation
+that removes compare-and-swap.
 
-### Phase 7D — Invariant and reservation engine
+### Phase 7D — Invariant + Reservation Engine
 
-**Delivers** invariant dispatch, conservative projection, the reservation
+**Delivers** the executable `DomainModule` interface (decode, resources,
+required state, risk direction, projection, contributions, settle, positions,
+invariants), invariant dispatch, conservative projection, the reservation
 state machine and reconciliation rules.
 **Exit:** RECON-1…5, TIME-1 and REPLAY-1 established by randomized
 reconciliation properties with duplicated, reordered and stale observations.
@@ -556,9 +565,9 @@ to the product, and belongs in the design documents before it belongs in code.
 | 6R.2A | Gas attribution and architecture benchmark (measurement only) | 6R.1b | ✅ measured locally; recommendation awaiting review; no production change |
 | 6R.2B | Gas optimization, path chosen from the 6R.2A measurements | 6R.2A | ✅ implemented locally; awaiting independent security and gas review; not deployed |
 | 7A | Mandate Core v1 specification | 6 | **FROZEN ✓** — specification only, hardened |
-| 7B | Core types and generic action/state model | 7A | ✅ implemented locally; awaiting review (meet, AUTH-2 and module interface deferred) |
-| 7C | Global Authority Ledger | 7B | planned |
-| 7D | Invariant and reservation engine | 7C | planned |
+| 7B | Core types and generic action/state model | 7A | ✅ architecture accepted; 7B.1 representation hardening implemented locally (meet and AUTH-2 → 7C; module interface → 7D) |
+| 7C | Authority Graph + Global Authority Ledger (meet, effective lineage, AUTH-2) | 7B | planned |
+| 7D | Invariant + Reservation Engine (executable `DomainModule` interface) | 7C | planned |
 | 7E | PerpPolicy v1 and Venue Signer | 7D | planned; blocked on venue evidence |
 | 7F | Cross-domain reconciliation: EVM fixture and perps | 7E | planned |
 | 7G | Developer SDK and simulator | 7F | planned |

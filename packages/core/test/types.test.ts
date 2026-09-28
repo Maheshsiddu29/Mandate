@@ -25,6 +25,7 @@ import {
   type AuthorityId,
   type Capital,
   type EconomicQuantity,
+  type FreshnessPolicyInput,
   type LedgerVersion,
   type MandateId,
   type Margin,
@@ -146,7 +147,17 @@ export function typeLevelChecks(
     side: 'BUY',
   };
 
-  void [asMargin, asMarked, asPosition, forged, policy, withSide];
+  // --- Freshness modes are not interchangeable (Phase 7B.1 ruling 4) ------------------
+  // @ts-expect-error BLOCKS is a block count; it has no age
+  const blocksAsAge: FreshnessPolicyInput = { kind: 'BLOCKS', maxAgeSeconds: 12n };
+  // @ts-expect-error SEQUENCE is bounded by the ledger watermark; it takes no age
+  const sequenceAsAge: FreshnessPolicyInput = { kind: 'SEQUENCE', maxAgeSeconds: 5n };
+  // @ts-expect-error SEQUENCE takes no block count either
+  const sequenceAsBlocks: FreshnessPolicyInput = { kind: 'SEQUENCE', maxBlocksBehind: 5n };
+  // @ts-expect-error a pinned version is a digest identity, not elapsed time
+  const versionAsTime: FreshnessPolicyInput = { kind: 'VERSION', pinnedDigest: 3_600n, maxAgeSeconds: 60n };
+
+  void [asMargin, asMarked, asPosition, forged, policy, withSide, blocksAsAge, sequenceAsAge, sequenceAsBlocks, versionAsTime];
 }
 
 describe('runtime counterparts of the type-level checks', () => {

@@ -149,6 +149,32 @@ describe('freshness policies', () => {
   });
 });
 
+describe('freshness modes do not share a representation (Phase 7B.1 ruling 4)', () => {
+  it('BLOCKS is a block count and cannot accept an AGE duration', () => {
+    assert.deepEqual(validateFreshnessPolicy({ kind: 'BLOCKS', maxAgeSeconds: 12n } as never, 'f'), { ok: false, error: { code: 'UNKNOWN_FIELD', path: 'f.maxAgeSeconds' } });
+    assert.equal(code(validateFreshnessPolicy({ kind: 'BLOCKS', maxBlocksBehind: 12n, maxAgeSeconds: 12n } as never, 'f')), 'UNKNOWN_FIELD');
+    assert.deepEqual(validateFreshnessPolicy({ kind: 'AGE', maxBlocksBehind: 12n } as never, 'f'), { ok: false, error: { code: 'UNKNOWN_FIELD', path: 'f.maxBlocksBehind' } });
+  });
+
+  it('SEQUENCE is bounded by the ledger watermark and cannot accept an AGE duration or a BLOCKS count', () => {
+    assert.deepEqual(validateFreshnessPolicy({ kind: 'SEQUENCE', maxAgeSeconds: 5n } as never, 'f'), { ok: false, error: { code: 'UNKNOWN_FIELD', path: 'f.maxAgeSeconds' } });
+    assert.deepEqual(validateFreshnessPolicy({ kind: 'SEQUENCE', maxBlocksBehind: 5n } as never, 'f'), { ok: false, error: { code: 'UNKNOWN_FIELD', path: 'f.maxBlocksBehind' } });
+  });
+
+  it('a pinned VERSION is a digest identity and cannot be represented as elapsed time', () => {
+    assert.equal(code(validateFreshnessPolicy({ kind: 'VERSION', pinnedDigest: '3600', maxAgeSeconds: 60n }, 'f')), 'MALFORMED_DIGEST');
+    assert.equal(code(validateFreshnessPolicy({ kind: 'VERSION', pinnedDigest: 3600n as never, maxAgeSeconds: 60n }, 'f')), 'WRONG_TYPE');
+    assert.deepEqual(validateFreshnessPolicy({ kind: 'VERSION', maxAgeSeconds: 3_600n } as never, 'f'), { ok: false, error: { code: 'MISSING_FIELD', path: 'f.pinnedDigest' } });
+    assert.equal(code(validateFreshnessPolicy({ kind: 'AGE', maxAgeSeconds: 60n, pinnedDigest: digestOf('v') } as never, 'f')), 'UNKNOWN_FIELD');
+  });
+
+  it('the same number under two modes is two different canonical requirements', () => {
+    const requirement = (freshness: FreshnessPolicyInput): string =>
+      stateBindingId(must(bindState(must(validateStateEnvelope(MARK)), { ...RECHECK_MARK, atExecution: { kind: 'NOT_REQUIRED' }, freshness })));
+    assert.notEqual(requirement({ kind: 'AGE', maxAgeSeconds: 12n }), requirement({ kind: 'BLOCKS', maxBlocksBehind: 12n }));
+  });
+});
+
 describe('state requirements', () => {
   it('admit only AUTHORITATIVE or VERIFIED as a minimum trust', () => {
     assert.equal(code(validateStateRequirement(RECHECK_MARK, 'r')), 'OK');

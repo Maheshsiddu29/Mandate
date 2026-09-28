@@ -200,8 +200,8 @@ suite(validateQuantity, quantityDigest)('EconomicQuantity (valued)', NOTIONAL, {
   asset: (q) => ({ ...q, asset: { ...BTC, localId: 'crypto:eth' } }),
   'valuation.price': (q) => ({ ...q, valuation: { ...valuation, price: { ...valuation.price, atoms: 10_000_001n } } }),
   'valuation.price.denominator': (q) => ({ ...q, valuation: { ...valuation, price: { ...valuation.price, denominatorUnit: 'XBT' } } }),
-  'valuation.basis': (q) => ({ ...q, valuation: { ...valuation, basis: 'EXECUTION' } }),
-  'valuation.source.kind': (q) => ({ ...q, valuation: { ...valuation, source: { kind: 'OBSERVATION', observationId: digestOf('sample:action') } } }),
+  // Basis and source kind move together: each basis has exactly one source kind.
+  'valuation.basis': (q) => ({ ...q, valuation: { ...valuation, basis: 'EXECUTION', source: { kind: 'OBSERVATION', observationId: digestOf('sample:action') } } }),
   'valuation.source.id': (q) => ({ ...q, valuation: { ...valuation, source: { kind: 'ACTION', actionId: other('action') } } }),
   'valuation.observedAt': (q) => ({ ...q, valuation: { ...valuation, observedAt: 1_001n } }),
 });

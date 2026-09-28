@@ -236,6 +236,35 @@ describe('UNIT-1: compatibility and arithmetic', () => {
   });
 });
 
+describe('mark-priced exposure cannot satisfy committed notional (Phase 7B.1 ruling 2)', () => {
+  it('a notional valued at a mark is refused', () => {
+    assert.equal(code(validateQuantity(q('NOTIONAL', 'USD', 2, 100_000n, BTC, mark(10_000_000n)))), 'VALUATION_BASIS_INVALID');
+  });
+
+  it('a mark read from a snapshot cannot be relabelled as an execution price: EXECUTION needs fill evidence', () => {
+    const markAsExecution: ValuationRefInput = { ...execution(10_000_000n), source: { kind: 'STATE', stateId: digestOf('mark:1') } };
+    assert.deepEqual(validateQuantity(q('NOTIONAL', 'USD', 2, 100_000n, BTC, markAsExecution)), {
+      ok: false,
+      error: { code: 'VALUATION_SOURCE_INVALID', path: 'quantity.valuation.source.kind' },
+    });
+    const limitFromFill: ValuationRefInput = { ...execution(10_000_000n), basis: 'LIMIT' };
+    assert.equal(code(validateQuantity(q('NOTIONAL', 'USD', 2, 100_000n, BTC, limitFromFill))), 'VALUATION_SOURCE_INVALID');
+    const markFromFill: ValuationRefInput = { ...mark(10_000_000n), source: { kind: 'OBSERVATION', observationId: digestOf('fill:1') } };
+    assert.equal(code(validateQuantity(q('GROSS_EXPOSURE', 'USD', 2, 100_000n, BTC, markFromFill))), 'VALUATION_SOURCE_INVALID');
+  });
+
+  it('a marked exposure is not a committed notional, and neither adds to nor compares with one', () => {
+    const exposure = grossExposure(100_000n);
+    const committed = must(validateQuantityOf('NOTIONAL', q('NOTIONAL', 'USD', 2, 100_000n, BTC, execution(10_000_000n))));
+    assert.equal(code(validateQuantityOf('NOTIONAL', q('GROSS_EXPOSURE', 'USD', 2, 100_000n, BTC, mark(10_000_000n)))), 'QUANTITY_KIND_MISMATCH');
+    assert.equal(code(addQuantities(committed as EconomicQuantity, exposure as EconomicQuantity)), 'QUANTITY_KIND_MISMATCH');
+    assert.equal(code(compareQuantities(exposure as EconomicQuantity, committed as EconomicQuantity)), 'QUANTITY_KIND_MISMATCH');
+    // A marked value floats and is never a ledger counter (decision 10), so no committed-notional dimension can receive it.
+    assert.equal(QUANTITY_KIND_RULES.GROSS_EXPOSURE.ledgerTrackable, false);
+    assert.equal(QUANTITY_KIND_RULES.NET_EXPOSURE.ledgerTrackable, false);
+  });
+});
+
 describe('bounds and ratios', () => {
   it('a limit carries kind, unit and decimals, no asset and no price, and is never negative', () => {
     assert.equal(code(validateQuantityBound({ kind: 'NOTIONAL', unit: 'USD', decimals: 2, atoms: 500_000n }, 'limit')), 'OK');
