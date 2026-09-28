@@ -13,7 +13,8 @@
     "packages/jev",
     "packages/execution-gate",
     "packages/core",
-    "packages/ledger"
+    "packages/ledger",
+    "packages/control"
   ],
   "scripts": {
     "audit:security": "npm audit --audit-level=high",

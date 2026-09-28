@@ -1,0 +1,18 @@
+{
+  "name": "@mandate/control",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Mandate Core v1 invariant and reservation engine: exact module resolution, state admission, worst-case projection, invariant evaluation, semantic delegation narrowing and atomic reservation through the authority ledger. No venue, network or clock.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "dependencies": {
+    "@mandate/core": "0.1.0",
+    "@mandate/kernel": "0.1.0",
+    "@mandate/ledger": "0.1.0"
+  }
+}
