@@ -1,0 +1,292 @@
+{
+  "corpusVersion": 1,
+  "engine": "Mandate Core v1 control engine (Phase 7D), synthetic reference module, in-memory reference store",
+  "note": "Integers are decimal strings. Digests are keccak-256 of the canonical encodings in docs/core-v1/implementation-7d.md. The synthetic module is test-only and names no real venue.",
+  "vectorCount": 9,
+  "vectors": [
+    {
+      "id": "valid-authorization",
+      "description": "a 2,000 order under a 10,000 marked-exposure limit, fresh state, generous capital",
+      "module": {
+        "domainId": "synth-perp",
+        "moduleId": "perp-like",
+        "moduleVersion": 1,
+        "moduleDigest": "0xb534ba3c88e54e28a025dbe3afe07a03c49ec3f422572ceb3c19672c5ff9ea09",
+        "implementation": "0x0be15fda310792e01ab2e6fe132b5e67aeb8ccb5258ba7773ba009d299f59243"
+      },
+      "outcome": {
+        "status": "AUTHORIZED",
+        "authorization": "0x4bb0c240b39ae7a1f3a45b607113d092ac13aed608b3a756c177bea7631bdda2",
+        "executionAuthorization": "0xde0d66a38114f871e200f59bb714119f49595711550af682be5c9974aecc12b1",
+        "reservation": "0xaa79ef592f7b5a5730f32bf043e69e5c4c3df9701211c97b3b1ec087b3a21891",
+        "generation": "1",
+        "projection": "0x5798991d28003857ca553b2924a622c350ab2228ead8e6bd634492eef9daa8fa",
+        "invariantResults": "0xfc690d93d643102e6b9516a5f3ea7e27aab896f7e2fa117063225b3e30092a72",
+        "chargePlan": "0xdfb17f82d43867eebd2a1bddf8cd9048f6154c6bb58e6c62db7cd6f2d40f4f36",
+        "ledgerVersionRead": "4",
+        "ledgerVersionCommitted": "5",
+        "ledgerHead": "0x1edb96dc5dc35de7eefb95c4271c20fe08d4b54944ff2f15129f0992dcff6ecf",
+        "validUntil": "1790813830",
+        "stateBindings": 3
+      },
+      "extra": null
+    },
+    {
+      "id": "missing-state",
+      "description": "the mark the module requires is not supplied",
+      "module": {
+        "domainId": "synth-perp",
+        "moduleId": "perp-like",
+        "moduleVersion": 1,
+        "moduleDigest": "0xb534ba3c88e54e28a025dbe3afe07a03c49ec3f422572ceb3c19672c5ff9ea09",
+        "implementation": "0x0be15fda310792e01ab2e6fe132b5e67aeb8ccb5258ba7773ba009d299f59243"
+      },
+      "outcome": {
+        "status": "REFUSED",
+        "attempts": 1,
+        "refusal": {
+          "code": "STATE_MISSING",
+          "reason": "STATE_NOT_SUPPLIED",
+          "origin": "CONTROL",
+          "path": "state.perp-like@1/synth.mark/synth-perp:MARKET:x:BTC-PERP",
+          "invariantResults": null,
+          "violations": null
+        }
+      },
+      "extra": null
+    },
+    {
+      "id": "stale-state",
+      "description": "the mark is 31 s old under a 30 s AGE requirement",
+      "module": {
+        "domainId": "synth-perp",
+        "moduleId": "perp-like",
+        "moduleVersion": 1,
+        "moduleDigest": "0xb534ba3c88e54e28a025dbe3afe07a03c49ec3f422572ceb3c19672c5ff9ea09",
+        "implementation": "0x0be15fda310792e01ab2e6fe132b5e67aeb8ccb5258ba7773ba009d299f59243"
+      },
+      "outcome": {
+        "status": "REFUSED",
+        "attempts": 1,
+        "refusal": {
+          "code": "STATE_STALE",
+          "reason": "AGE_EXCEEDED",
+          "origin": "CONTROL",
+          "path": "state.perp-like@1/synth.mark/synth-perp:MARKET:x:BTC-PERP",
+          "invariantResults": null,
+          "violations": null
+        }
+      },
+      "extra": null
+    },
+    {
+      "id": "pending-reservation-refusal",
+      "description": "held 2,000 + pending 2,000 + proposed 2,000 > 5,000 (brief §12)",
+      "module": {
+        "domainId": "synth-perp",
+        "moduleId": "perp-like",
+        "moduleVersion": 1,
+        "moduleDigest": "0xb534ba3c88e54e28a025dbe3afe07a03c49ec3f422572ceb3c19672c5ff9ea09",
+        "implementation": "0x0be15fda310792e01ab2e6fe132b5e67aeb8ccb5258ba7773ba009d299f59243"
+      },
+      "outcome": {
+        "status": "REFUSED",
+        "attempts": 1,
+        "refusal": {
+          "code": "INVARIANT_FAILED",
+          "reason": "EXPOSURE_LIMIT_EXCEEDED",
+          "origin": "CONTROL",
+          "path": "invariants.perp-like.max-exposure",
+          "invariantResults": "0x69f5c942db31769c93b7b9e8fe0b72ed2789631d1458dd3c82201e4cdf54728c",
+          "violations": null
+        }
+      },
+      "extra": {
+        "pending": {
+          "status": "AUTHORIZED",
+          "authorization": "0x06e02846e05049d3863766cbf8f36b018e0e2886fae3452d65c581af72c6fa3a",
+          "executionAuthorization": "0xc70197e230d8f5181c808d27083a321fefa2b113f4735f8fc41b7df3f7f89960",
+          "reservation": "0xb82b2819cda28bfef9d8877532c4c2b9657a68b258e986d91f8893fbb92297d8",
+          "generation": "1",
+          "projection": "0xd1c9656b6f6fd2a169e0973e8b075f77d0080ae2d7ebff5c2a6d66a8a7da8a0f",
+          "invariantResults": "0x5d28868ebf5d79e51f3ee6fbb7faf036c17832ffa873279f1daac6443a30f413",
+          "chargePlan": "0x591897045982e425c877e6fe1374d36fa37282b6239b7d28a4021c0646f265f8",
+          "ledgerVersionRead": "4",
+          "ledgerVersionCommitted": "5",
+          "ledgerHead": "0xec4a04390ee2ab0f64647e2a3382e5e2a2dc26536fa2f943fca8e4234ec206ad",
+          "validUntil": "1790813830",
+          "stateBindings": 3
+        }
+      }
+    },
+    {
+      "id": "global-invariant-refusal",
+      "description": "two roots: 1,500 held + 2,500 pending + 2,000 proposed > principal-global 5,000 (brief §65)",
+      "module": {
+        "domainId": "synth-perp",
+        "moduleId": "perp-like",
+        "moduleVersion": 1,
+        "moduleDigest": "0xb534ba3c88e54e28a025dbe3afe07a03c49ec3f422572ceb3c19672c5ff9ea09",
+        "implementation": "0x0be15fda310792e01ab2e6fe132b5e67aeb8ccb5258ba7773ba009d299f59243"
+      },
+      "outcome": {
+        "status": "REFUSED",
+        "attempts": 1,
+        "refusal": {
+          "code": "INVARIANT_FAILED",
+          "reason": "AGGREGATE_LIMIT_EXCEEDED",
+          "origin": "CONTROL",
+          "path": "invariants.core.aggregate-max",
+          "invariantResults": "0x3b990f1fe22c1570ecc5245f0ac4f42d4156a726ccd830094e3d03cf55ac5bcf",
+          "violations": null
+        }
+      },
+      "extra": {
+        "pending": {
+          "status": "AUTHORIZED",
+          "authorization": "0x8cbc7d1cede9a1b7824c8a41476c1a9ec715552d83b3c7223b68a91845f4e2b4",
+          "executionAuthorization": "0xfd528cd38f0ec73267af9d9e242e3c4c0a1c95d563ec956f787eb21a52bd6c3c",
+          "reservation": "0x508a0adf10445a2f5514edf814e84cf5d6245a0ac490541dda0b824faa5a2b4b",
+          "generation": "1",
+          "projection": "0xd22bd4a72d12633c270cc4b2bd62ec8b3f5704c28f8e5337c1bf9b736f902d4d",
+          "invariantResults": "0xdc32eeb98d31382f5a2b2487369dfd6988389a95a7a8c255c86f2d47aa6a2b96",
+          "chargePlan": "0xfea92d8796ebfb55890d0eefe0c01336124cc5e18e5b791f25f8408f12b9f940",
+          "ledgerVersionRead": "3",
+          "ledgerVersionCommitted": "4",
+          "ledgerHead": "0xfce90bb5120e44fa653a94308128c3a66920a5b50e2296761a3fb39f21bd6be0",
+          "validUntil": "1790813830",
+          "stateBindings": 6
+        }
+      }
+    },
+    {
+      "id": "semantic-narrowing-pass",
+      "description": "a child restating account leverage ≤ 3x under a parent's ≤ 4x",
+      "module": {
+        "domainId": "synth-perp",
+        "moduleId": "perp-like",
+        "moduleVersion": 1,
+        "moduleDigest": "0xb534ba3c88e54e28a025dbe3afe07a03c49ec3f422572ceb3c19672c5ff9ea09",
+        "implementation": "0x0be15fda310792e01ab2e6fe132b5e67aeb8ccb5258ba7773ba009d299f59243"
+      },
+      "outcome": {
+        "status": "REGISTERED",
+        "ledgerHead": "0x1169767233ad940d4ab4bb91e938a6b8ea89b82e94bd555278cfc54034422cac",
+        "proofs": [
+          {
+            "term": "[\"STATE_INVARIANT\",\"perp-like.account-leverage\",1,[[\"synth-perp\",\"ACCOUNT\",\"acct-1\"]]]",
+            "verdict": "NO_WEAKER",
+            "evaluator": "0xb534ba3c88e54e28a025dbe3afe07a03c49ec3f422572ceb3c19672c5ff9ea09"
+          }
+        ]
+      },
+      "extra": null
+    },
+    {
+      "id": "semantic-widening-refusal",
+      "description": "a child restating account leverage ≤ 5x under a parent's ≤ 4x",
+      "module": {
+        "domainId": "synth-perp",
+        "moduleId": "perp-like",
+        "moduleVersion": 1,
+        "moduleDigest": "0xb534ba3c88e54e28a025dbe3afe07a03c49ec3f422572ceb3c19672c5ff9ea09",
+        "implementation": "0x0be15fda310792e01ab2e6fe132b5e67aeb8ccb5258ba7773ba009d299f59243"
+      },
+      "outcome": {
+        "status": "REFUSED",
+        "refusal": {
+          "code": "DELEGATION_REFUSED",
+          "reason": "DELEGATION_REFUSED",
+          "origin": "LEDGER",
+          "path": "grant",
+          "invariantResults": null,
+          "violations": [
+            "DELEGATION_WEAKENS_INVARIANT"
+          ]
+        }
+      },
+      "extra": null
+    },
+    {
+      "id": "cas-conflict-reprojection",
+      "description": "held 1,000; two 2,500 orders read one snapshot against 5,000: one reserves, the other re-projects after the CAS conflict and is refused",
+      "module": {
+        "domainId": "synth-perp",
+        "moduleId": "perp-like",
+        "moduleVersion": 1,
+        "moduleDigest": "0xb534ba3c88e54e28a025dbe3afe07a03c49ec3f422572ceb3c19672c5ff9ea09",
+        "implementation": "0x0be15fda310792e01ab2e6fe132b5e67aeb8ccb5258ba7773ba009d299f59243"
+      },
+      "outcome": {
+        "first": {
+          "status": "AUTHORIZED",
+          "authorization": "0x3ab0db9a53e5a9d4f6d699be6764ce21e6b8bfb63abac3d897b19f30fe8d3b40",
+          "executionAuthorization": "0x96c7112a339a914c62e5fa70c201155571be6bfd529f39363f36d8833364aa39",
+          "reservation": "0x442eb087d81a0f7aa5fab5a3666b580313eefc33c1648558900621c7fc9d8d15",
+          "generation": "1",
+          "projection": "0x2509d489bd63c903003cc6d413367dd2a52bbd51af3bc43dd2329de8482559bd",
+          "invariantResults": "0x8e5c869660dec1c812475b660b124b903dac86079d589b0a19d9e4285db483ad",
+          "chargePlan": "0xd08d3e85bde137085c78f1576f7f9de4f60698a726beaa93f8fc36404cb430ae",
+          "ledgerVersionRead": "4",
+          "ledgerVersionCommitted": "5",
+          "ledgerHead": "0x42c8b08525d686ba1bf7bb2efc0c5ff84fa13c4da857345d6f9b682ff41082d6",
+          "validUntil": "1790813830",
+          "stateBindings": 3
+        },
+        "second": {
+          "status": "REFUSED",
+          "attempts": 2,
+          "refusal": {
+            "code": "INVARIANT_FAILED",
+            "reason": "EXPOSURE_LIMIT_EXCEEDED",
+            "origin": "CONTROL",
+            "path": "invariants.perp-like.max-exposure",
+            "invariantResults": "0x63e79a3fe6aef7794935f0c5dff2172c7e6f8e7d9d178d41ed11cb49bd7df871",
+            "violations": null
+          }
+        }
+      },
+      "extra": {
+        "conflicts": [
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "id": "never-issued-closure",
+      "description": "examples.md §F: reserved at mark 100,000; the mark moves to 106,000; revalidation fails; nothing was issued; the reservation closes NEVER_ISSUED",
+      "module": {
+        "domainId": "synth-perp",
+        "moduleId": "perp-like",
+        "moduleVersion": 1,
+        "moduleDigest": "0xb534ba3c88e54e28a025dbe3afe07a03c49ec3f422572ceb3c19672c5ff9ea09",
+        "implementation": "0x0be15fda310792e01ab2e6fe132b5e67aeb8ccb5258ba7773ba009d299f59243"
+      },
+      "outcome": {
+        "status": "CLOSED",
+        "evidence": "0xb831b6534c86a600cce4e33458d10965786c45cb4ea2fb6ec0ec7fdefd0357e2",
+        "revalidation": "0x8b01a7e4298a40af4bff2da7959254a9a05adc23b45716a6776e6d4432480b64",
+        "reason": "INVARIANT_FAILED.EXPOSURE_LIMIT_EXCEEDED",
+        "ledgerHead": "0xb6167c2abaf7652cacd675d31819865f5a11286ea96549afdfe0c525ebe64a6e"
+      },
+      "extra": {
+        "reserved": {
+          "status": "AUTHORIZED",
+          "authorization": "0x24b8a91685e9973c36a289190499bcbb0e58cda1eb4db1c8f505804abedb0244",
+          "executionAuthorization": "0x615a01571c223fe78f8521a490be536ee96a0f7d15df0398179fbc6d83680382",
+          "reservation": "0x1c8a5cc00045ba74e7a121e410742452402717a9d9037d4fb468107d06f60169",
+          "generation": "1",
+          "projection": "0xd56caad216ecceaa9ed2370fffc0f620c21cce51c8d494f9ac99dd22fe23a625",
+          "invariantResults": "0xf68cbe9b4a39de14c9f6ef105c41dec9182ff90feff1529ee58a048c619dfae1",
+          "chargePlan": "0xa2667f0d11bbe614e67504a0f2d2ed43be17a1241fb3bbe66d62d8367992f510",
+          "ledgerVersionRead": "4",
+          "ledgerVersionCommitted": "5",
+          "ledgerHead": "0x6231c8f934bdbe8f5119d240adac848a86db31fcca4c2ad4b48a3fdccf876471",
+          "validUntil": "1790813830",
+          "stateBindings": 3
+        }
+      }
+    }
+  ]
+}
