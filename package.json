@@ -34,6 +34,7 @@
     "jev:characterize": "node packages/jev/scripts/characterize.ts",
     "jev:evaluate": "node packages/jev/scripts/evaluate.ts",
     "jev:fixtures:validate": "node packages/jev/scripts/validate-fixtures.ts",
+    "ledger:benchmark": "node packages/ledger/scripts/benchmark.ts",
     "mainnet-replay:generate": "node packages/adapter-robinhood/scripts/generate-mainnet-replay.ts",
     "mainnet-replay:validate": "node --test packages/adapter-robinhood/test/mainnet-replay.test.ts",
     "mainnet-routing:generate": "node packages/router/scripts/generate-mainnet-routing.ts",

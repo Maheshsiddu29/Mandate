@@ -288,7 +288,8 @@ The ledger package's runtime dependencies are fixed to `@mandate/core` and
 It performs no I/O, reads no clock, names no venue, implements no domain
 module and declares no `any`, `unknown` or `Record` type; its store is an
 interface with an in-memory reference implementation only.
-`structure.test.ts` enforces all of it.
+`structure.test.ts` enforces all of it. `npm run ledger:benchmark` measures its
+hot paths.
 
 The execution-gate package's runtime dependencies are fixed to
 `@mandate/kernel`, `@noble/curves` and `@noble/hashes` at the kernel's pinned
