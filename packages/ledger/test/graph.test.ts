@@ -59,6 +59,7 @@ import {
   refused,
   revocation,
   root,
+  semanticsOf,
   setup,
   units,
 } from './support/fixtures.ts';
@@ -212,7 +213,7 @@ describe('registration refusals', () => {
 
   it('refuses every widening at once, naming each (examples §D, D2 bad)', async () => {
     const { ledger } = newLedger();
-    const inv = { kind: 'STATE_INVARIANT', invariantId: 'perp.accountLeverage', version: 1, scope: [], params: '0x04' } as const;
+    const inv = { kind: 'STATE_INVARIANT', invariantId: 'perp-policy.accountLeverage', version: 1, scope: [], params: '0x04' } as const;
     const exposure = { kind: 'STATE_INVARIANT', invariantId: 'core.markedExposure', version: 1, scope: [], params: '0x2000' } as const;
     const bound = (x: bigint) => ({ kind: 'BOUND', boundId: 'perp.orderLeverage', polarity: 'MAX', value: { type: 'RATIO', ratio: { numerator: x, scale: 0 } } }) as const;
     const markPolicy = {
@@ -244,7 +245,7 @@ describe('registration refusals', () => {
         dim('capital', units(8_000)),
       ],
     });
-    const codes = violations(refused(await ledger.registerGrant(bad, T0, ONCE)));
+    const codes = violations(refused(await ledger.registerGrant(bad, T0, ONCE, semanticsOf(bad))));
     assert.deepEqual(
       [...codes].sort(),
       [
@@ -288,7 +289,7 @@ describe('cycles and hostile graph state', () => {
     const y = digestOf('y') as AuthorityId;
     const mk = (parent: AuthorityId): AuthorityGrant =>
       must(validateAuthorityGrant({ lineage: { kind: 'DELEGATION', parent, issuer: AGENT_A }, principal: P, holder: AGENT_A, notBefore: T0, expiresAt: T_END, terms: [], nonce: 0n }));
-    const node = (id: AuthorityId, grant: AuthorityGrant): NodeRecord => ({ id, grant, depth: 1, registeredAt: 1n as LedgerVersion, revokedAt: null, revocation: null });
+    const node = (id: AuthorityId, grant: AuthorityGrant): NodeRecord => ({ id, grant, depth: 1, bindings: [], registeredAt: 1n as LedgerVersion, revokedAt: null, revocation: null });
     const cyclic: LedgerState = { ...s, nodes: s.nodes.set(x, node(x, mk(y))).set(y, node(y, mk(x))) };
     const r = resolveLineage(cyclic, x);
     assert.ok(!r.ok && r.error.code === 'AUTHORITY_DEPTH_EXCEEDED');
@@ -301,7 +302,7 @@ describe('cycles and hostile graph state', () => {
     const forged = child(r, { holder: AGENT_A });
     const inject = (g: AuthorityGrant, over: Partial<NodeRecord> = {}): LedgerState => ({
       ...s,
-      nodes: s.nodes.set(authorityId(g), { id: authorityId(g), grant: g, depth: 1, registeredAt: 9n as LedgerVersion, revokedAt: null, revocation: null, ...over }),
+      nodes: s.nodes.set(authorityId(g), { id: authorityId(g), grant: g, depth: 1, bindings: [], registeredAt: 9n as LedgerVersion, revokedAt: null, revocation: null, ...over }),
     });
     const depth = checkLineageValid(inject(forged), must(resolveLineage(inject(forged), authorityId(forged))), T0);
     assert.ok(!depth.ok && depth.error.code === 'AUTHORITY_DEPTH_EXCEEDED');
@@ -418,10 +419,10 @@ describe('AUTH-2 registration half, end to end through the ledger', () => {
       const p = randomSpec(rand);
       const parent = grantOf(p, null, address('50'));
       committed(await ledger.registerPolicy(policy(), T0, ONCE));
-      committed(await ledger.registerGrant(parent, p.notBefore, ONCE));
+      committed(await ledger.registerGrant(parent, p.notBefore, ONCE, semanticsOf(parent)));
       const w = widen(rand, p, narrow(rand, p));
       const bad = grantOf(w.spec, parent);
-      const r = refused(await ledger.registerGrant(bad, p.notBefore + 10n, ONCE));
+      const r = refused(await ledger.registerGrant(bad, p.notBefore + 10n, ONCE, semanticsOf(bad)));
       assert.equal(r.code, 'DELEGATION_REFUSED');
       assert.equal((await ledger.read(parent.principal)).state.nodes.has(authorityId(bad)), false);
     }

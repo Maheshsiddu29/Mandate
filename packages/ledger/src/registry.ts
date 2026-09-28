@@ -26,7 +26,7 @@
 import { ok } from '@mandate/kernel';
 import { moduleRefsEqual, type ImplementationDigest, type ModuleRef } from '@mandate/core';
 import { refuse, type LedgerResult } from './errors.ts';
-import type { SemanticProofRef } from './semantic.ts';
+import type { SemanticInvariantRef, SemanticProofRef, SemanticTermBinding } from './semantic.ts';
 
 export type ModuleStatus = 'ACTIVE' | 'RETIRING';
 
@@ -87,8 +87,23 @@ export function checkModuleConformance(registry: ModuleRegistry, module: ModuleR
  * only on the exact `ModuleRef` the event committed.
  */
 export function checkProofOwnersCurrent(registry: ModuleRegistry, proofs: readonly SemanticProofRef[], path = 'proofs'): LedgerResult<true> {
-  for (let i = 0; i < proofs.length; i += 1) {
-    const owner = (proofs[i] as SemanticProofRef).definition.owner;
+  return checkOwnersCurrent(registry, proofs, path);
+}
+
+/**
+ * A new binding's definition must be the registry's current, active module
+ * for its name (7D.3): new authority is only ever bound to current
+ * semantics. A decision input like `checkProofOwnersCurrent`, applied when a
+ * registration is first committed and never by the reducer — so a later
+ * registry change can neither reinterpret nor unreplay an existing binding.
+ */
+export function checkBindingOwnersCurrent(registry: ModuleRegistry, bindings: readonly SemanticTermBinding[], path = 'bindings'): LedgerResult<true> {
+  return checkOwnersCurrent(registry, bindings, path);
+}
+
+function checkOwnersCurrent(registry: ModuleRegistry, xs: readonly { readonly definition: SemanticInvariantRef }[], path: string): LedgerResult<true> {
+  for (let i = 0; i < xs.length; i += 1) {
+    const owner = (xs[i] as { readonly definition: SemanticInvariantRef }).definition.owner;
     if (owner.kind !== 'MODULE') continue;
     const entry = registry.lookup(owner.module.moduleId, owner.module.moduleVersion);
     const at = `${path}[${i}].definition.owner`;

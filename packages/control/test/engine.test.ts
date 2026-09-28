@@ -316,7 +316,7 @@ describe('bounded retry and concurrency results (brief §27)', () => {
       const extra = child(f.r0, { mods: [f.m], holder: AGENT_B, nonce: BigInt(100 + n), terms: [maxExposure(f.m, f.acct, 20_000)] });
       const saved = interfere;
       interfere = null;
-      await f.w.ledger.registerGrant(extra, T0, ONCE);
+      await f.w.engine.registerDelegation(extra, T0, ONCE);
       interfere = saved;
     };
     const out = await f.w.engine.authorizeAndReserve(request(action(f.m, { authority: f.agent, size: sizeFor(1_000) }), marketStates(f.m, [{ account: f.acct }]), ctxAt(f, T)), { maxAttempts: 3 });

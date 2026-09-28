@@ -8,12 +8,32 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { bindState, moduleRefsEqual, resourceIdsEqual, stateBindingId, stateRequirementInputOf, type ModuleRef } from '@mandate/core';
-import { ReferenceModuleRegistry, checkPolicyBaseline, deriveReserveEvent, nodeTargetKey, replayEncoded, type InvariantOrdering, type TargetBalance } from '@mandate/ledger';
+import { authorityId, bindState, moduleRefsEqual, resourceIdsEqual, stateBindingId, stateRequirementInputOf, type AuthorityGrant, type ModuleRef, type ResourceId } from '@mandate/core';
+import {
+  ReferenceModuleRegistry,
+  bindingOf,
+  checkBindingSet,
+  checkGrantRegistration,
+  checkPolicyBaseline,
+  checkProofsBound,
+  committedProver,
+  decodeBatch,
+  deriveReserveEvent,
+  grantInvariants,
+  isModuleDefined,
+  nodeTargetKey,
+  replayEncoded,
+  type InvariantOrdering,
+  type LedgerEvent,
+  type LedgerResult,
+  type SemanticTermBinding,
+  type TargetBalance,
+} from '@mandate/ledger';
 import { admitNeeds, type Admission } from '../src/admission.ts';
 import { checkAggregateScope, checkValuationContexts, sumAggregate, type AggregateEvaluator } from '../src/aggregate.ts';
-import { ModuleCatalog, controlRules, type ControlResult } from '../src/index.ts';
-import { PRODUCTION_PIPELINE, decideWith, type AuthorizationRequest, type Decision, type Pipeline } from '../src/pipeline.ts';
+import { ModuleCatalog, ReferenceModuleArchive, controlRules, type ControlResult } from '../src/index.ts';
+import { PRODUCTION_PIPELINE, committedSemantics, decideWith, type AuthorizationRequest, type Decision, type Pipeline, type SemanticResolver } from '../src/pipeline.ts';
+import { CFG, CFG_B, definitionOf, spotOrder, t0, t1 } from './support/drift.ts';
 import { reservationFacts } from '../src/facts.ts';
 import {
   AGENT_A,
@@ -159,7 +179,7 @@ async function unlistedPending() {
 /** 7D.1: spot's unresolved 3,000 must not drop out of the aggregate when a new policy stops listing spot. */
 async function unlistedProbe(p: Pipeline): Promise<boolean> {
   const f = await unlistedPending();
-  assert.equal((await registerPolicy(f.w, policy([f.agg(10_000, [f.perp])], 2n), T)).status, 'COMMITTED');
+  assert.equal((await registerPolicy(f.w, policy([f.agg(10_000, [f.perp])], 2n), T)).status, 'REGISTERED');
   return (await reserveWith(p, f.w, request(action(f.perp, { authority: f.rb, size: sizeFor(1_000) }), f.states, f.ctx))).status === 'REFUSED';
 }
 
@@ -200,7 +220,7 @@ const admitWithoutChecks: Pipeline['admit'] = (needs, prepared) => {
 const MUTANTS: { name: string; pipeline: Pipeline; probe: (p: Pipeline) => Promise<boolean> }[] = [
   { name: 'drop one required state binding (the position book)', pipeline: { ...PRODUCTION_PIPELINE, admit: withoutKind('synth.position') }, probe: heldStateProbe },
   { name: 'ignore one pending reservation', pipeline: { ...PRODUCTION_PIPELINE, facts: (s) => { const r = reservationFacts(s); return r.ok ? { ok: true, value: r.value.slice(1) } : r; } }, probe: pendingProbe },
-  { name: 'skip the principal-global invariants', pipeline: { ...PRODUCTION_PIPELINE, applicable: (e) => e.invariants.map((term) => ({ origin: 'LINEAGE' as const, term })) }, probe: globalProbe },
+  { name: 'skip the principal-global invariants', pipeline: { ...PRODUCTION_PIPELINE, applicable: (e) => e.invariants.map((b) => ({ origin: 'LINEAGE' as const, term: b.term, binding: b.binding })) }, probe: globalProbe },
   { name: 'authorize after a stale-state failure', pipeline: { ...PRODUCTION_PIPELINE, admit: admitWithoutChecks }, probe: staleProbe },
   { name: '7D.1 A: aggregate two marked facts valued at different BTC observations', pipeline: { ...PRODUCTION_PIPELINE, aggregate: sumAcrossValuations }, probe: valuationProbe },
   { name: '7D.1 B: ignore an unlisted module\'s matching aggregate fact', pipeline: { ...PRODUCTION_PIPELINE, aggregate: ignoreUnlisted }, probe: unlistedProbe },
@@ -278,6 +298,7 @@ describe('mutants outside the pipeline are killed', () => {
         },
         resolveForLifecycle: (ref: ModuleRef) => w.catalog.resolveForLifecycle(ref),
         invariantOwner: (id: string, v: number) => w.catalog.invariantOwner(id, v),
+        resolveDefinition: w.catalog.resolveDefinition.bind(w.catalog),
         compareInvariants: w.catalog.compareInvariants.bind(w.catalog),
         modules: () => w.catalog.modules(),
       }) as unknown as ModuleCatalog;
@@ -398,5 +419,107 @@ describe('7D.1 and 7D.2 mutants outside the pipeline are killed', () => {
     });
     assert.equal(await probe((c) => c.invariantOrdering()), true);
     assert.equal(await probe(byName), false);
+  });
+});
+
+/** Mutant F's resolver: the invariant's name through the catalog's current owner — what 7D.3 forbids for existing authority. */
+const byCurrentName: SemanticResolver = (a, catalog) => {
+  const owner = catalog.invariantOwner(a.term.invariantId, a.term.version);
+  return owner === null ? { ok: false, reason: 'INVARIANT_DEFINITION_UNRESOLVED' } : { ok: true, module: owner };
+};
+
+describe('7D.3 mutants are killed', () => {
+  it('F: evaluate an old grant under the registry\'s current module instead of its committed binding', async () => {
+    const probe = async (semantics: SemanticResolver): Promise<boolean> => {
+      const f = await t0();
+      const x = t1(f, { archiveA: true });
+      // 5x against the old 4x term, with state for both A and B, so nothing but the choice of semantics decides.
+      const req = spotOrder(f, f.grant, 5, 1n);
+      const both = { ...req, states: [...req.states, ...marketStates(x.b, [{ account: f.acctA, positions: [{ localId: 'x:BTC-PERP', size: sizeFor(500_000) }], collateral: usd(100_000) }])] };
+      const snapshot = await f.w.store.read(f.grant.principal);
+      const d = decideWith({ ...PRODUCTION_PIPELINE, semantics }, snapshot, both, { catalog: x.catalog, registry: x.registry, rules: controlRules(x.catalog) });
+      return !d.ok && d.error.code === 'INVARIANT_FAILED';
+    };
+    assert.equal(await probe(committedSemantics), true);
+    assert.equal(await probe(byCurrentName), false);
+  });
+
+  it('G: accept a module-defined authority term with no semantic binding — at registration, or at evaluation', async () => {
+    // At registration: the reducer's binding-set rule, and a mutant of it that forgets unbound terms.
+    const forgetful: typeof checkBindingSet = (b, terms, path, termsPath) => checkBindingSet(b, terms.filter((t) => bindingOf(b, t) !== null), path, termsPath);
+    const f = await t0();
+    const gate = (check: typeof checkBindingSet): boolean => !check([], grantInvariants(f.grant), 'bindings', 'grant.terms').ok;
+    assert.equal(gate(checkBindingSet), true);
+    assert.equal(gate(forgetful), false);
+    // The production gate is the one the store applies: an unbound registration is refused at commit.
+    const unbound = root({ mods: [f.a, f.s], holder: AGENT_B, nonce: 9n, terms: [maxLeverage(f.a, f.acctA, 4n)] });
+    const s = await f.w.store.read(f.grant.principal);
+    const direct = await f.w.store.compareAndAppend(s.principal, s.version, s.head, [{ kind: 'REGISTER_GRANT', at: T0, grant: unbound }]);
+    assert.equal(direct.status === 'REFUSED' ? direct.refusal.code : direct.status, 'SEMANTIC_BINDING_MISSING');
+
+    // At evaluation: a node whose term is unbound (as legacy state would be), and a resolver that falls back to the name.
+    const fallback: SemanticResolver = (a, catalog) => (a.binding === null && isModuleDefined(a.term) ? byCurrentName(a, catalog) : committedSemantics(a, catalog));
+    const probe = async (semantics: SemanticResolver): Promise<boolean> => {
+      const snap = await f.w.store.read(f.grant.principal);
+      const node = snap.state.nodes.get(authorityId(f.grant));
+      assert.ok(node !== undefined);
+      const legacy = { ...snap, state: { ...snap.state, nodes: snap.state.nodes.set(node.id, { ...node, bindings: [] }) } };
+      const d = decideWith({ ...PRODUCTION_PIPELINE, semantics }, legacy, spotOrder(f, f.grant, 3, 1n), { catalog: f.w.catalog, registry: f.w.registry, rules: controlRules(f.w.catalog) });
+      return !d.ok && d.error.code === 'INVARIANT_UNKNOWN';
+    };
+    assert.equal(await probe(committedSemantics), true);
+    assert.equal(await probe(fallback), false);
+  });
+
+  it('H: use comparator B for a narrowing proof while the authority term is bound to A', async () => {
+    const f = await t0();
+    const lenient = createSyntheticModule({ ...CFG, variant: 'LENIENT_NARROWING' });
+    const scope = [f.acctA as ResourceId];
+    const boundA: SemanticTermBinding = { definition: definitionOf(f.a.ref), scope };
+    const proofB = { definition: definitionOf(lenient.ref), scope };
+    // A 5x child under the 4x parent: its term (necessarily, like its parent's) means A; its proof claims lenient B.
+    const wide = child(f.grant, { mods: [f.a, f.s], holder: AGENT_B, terms: [capitalDim('capital', 1_000), maxLeverage(f.a, f.acctA, 5n)] });
+    const archive = must(ReferenceModuleArchive.create([{ module: lenient.ref, implementations: [lenient.implementation] }]));
+    const verifier = must(ModuleCatalog.create(f.w.registry, f.w.modules.map((module) => ({ module, corpus: [] })), { archive, modules: [{ module: lenient, corpus: [] }] }));
+    // Safe iff the reducer's agreement rule refuses the proof before any comparator can order the parameters.
+    const probe = (gate: typeof checkProofsBound): boolean => {
+      const agreed: LedgerResult<true> = gate([proofB], [boundA], 'proofs');
+      return !agreed.ok;
+    };
+    assert.equal(probe(checkProofsBound), true);
+    assert.equal(probe(() => ({ ok: true, value: true })), false);
+    // The widening the mutant would let through: under B's comparator, the 5x child passes the subset check.
+    const snap = await f.w.store.read(f.grant.principal);
+    const unchecked = checkGrantRegistration(snap.state, authorityId(wide), wide, T0, 'grant', committedProver(verifier.invariantOrdering(), [proofB]));
+    assert.ok(unchecked.ok, 'without the agreement rule, lenient B proves 5x no weaker than 4x');
+    // Production refuses it at commit, whatever comparators the store can reach.
+    const direct = await f.w.store.compareAndAppend(snap.principal, snap.version, snap.head, [{ kind: 'REGISTER_GRANT', at: T0, grant: wide, bindings: [boundA], proofs: [proofB] }]);
+    assert.equal(direct.status === 'REFUSED' ? direct.refusal.code : direct.status, 'SEMANTIC_BINDING_MISMATCH');
+  });
+
+  it('I: let a caller supply its own trusted semantics — structurally impossible through the control engine', async () => {
+    type Register = (w: World, grant: AuthorityGrant, forged: readonly SemanticTermBinding[]) => Promise<unknown>;
+    const probe = async (register: Register): Promise<boolean> => {
+      const a = createSyntheticModule(CFG);
+      const b = createSyntheticModule(CFG_B);
+      const w = world({ modules: [a] });
+      await setup(w, policy(), []);
+      const scope = [account(a) as ResourceId];
+      const g = root({ mods: [a], holder: AGENT_A, terms: [maxLeverage(a, account(a), 4n)] });
+      await register(w, g, [{ definition: definitionOf(b.ref), scope }]);
+      const events = (await w.store.history(g.principal)).flatMap((x) => must(decodeBatch(x.encoded)).events);
+      const reg = events.find((e): e is Extract<LedgerEvent, { kind: 'REGISTER_GRANT' }> => e.kind === 'REGISTER_GRANT');
+      // Safe iff what was committed is the catalog's own derivation: A, never the caller's B.
+      return reg !== undefined && JSON.stringify(reg.bindings?.map((x) => x.definition)) === JSON.stringify([definitionOf(a.ref)]);
+    };
+    // Production: the engine's surface has no place for semantics; whatever a caller adds is ignored.
+    const production: Register = (w, g, forged) => (w.engine.registerDelegation.bind(w.engine) as unknown as (...args: unknown[]) => Promise<unknown>)({ ...g, bindings: forged }, T0, ONCE, { bindings: forged }, forged);
+    // Mutant: a registration path that commits the caller's semantics as given.
+    const trusting: Register = async (w, g, forged) => {
+      const s = await w.store.read(g.principal);
+      return w.store.compareAndAppend(s.principal, s.version, s.head, [{ kind: 'REGISTER_GRANT', at: T0, grant: g, bindings: forged }]);
+    };
+    assert.equal(await probe(production), true);
+    assert.equal(await probe(trusting), false);
   });
 });

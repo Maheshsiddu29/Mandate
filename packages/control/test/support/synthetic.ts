@@ -139,6 +139,12 @@ export type Variant =
   | 'MARK_NOTIONAL'
   /** Mutant: every narrowing is "no weaker". */
   | 'LENIENT_NARROWING'
+  /**
+   * Another semantics for the same invariant name (7D.3): the account-leverage
+   * bound is read at twice its value. A different manifest and digest — the
+   * registry drift a committed binding must never let reinterpret old authority.
+   */
+  | 'DOUBLE_LEVERAGE'
   /** Broken: output differs between identical calls. */
   | 'UNSTABLE'
   /** Broken: projection omits a required output. */
@@ -673,8 +679,9 @@ export function createSyntheticModule(config: SyntheticConfig): SyntheticModule 
         return { ok: true, value: { outcome: gross.value.atoms <= limit ? 'HOLDS' : 'VIOLATED', reason: gross.value.atoms <= limit ? 'WITHIN_LIMIT' : 'EXPOSURE_LIMIT_EXCEEDED', observed: gross.value, bound } };
       }
       if (term.invariantId === ACCOUNT_LEVERAGE) {
-        const max = readRatio(term.params);
-        if (max === null) return { ok: true, value: { outcome: 'UNKNOWN', reason: 'PARAMS_INVALID', observed: null, bound: null } };
+        const read = readRatio(term.params);
+        if (read === null) return { ok: true, value: { outcome: 'UNKNOWN', reason: 'PARAMS_INVALID', observed: null, bound: null } };
+        const max = variant === 'DOUBLE_LEVERAGE' ? { ...read, numerator: read.numerator * 2n } : read;
         const lev = fact('synth.account-leverage');
         if (lev === undefined || lev.value.type !== 'RATIO') return { ok: true, value: { outcome: 'UNKNOWN', reason: 'COLLATERAL_UNAVAILABLE', observed: null, bound: null } };
         const holds = compareRatios(lev.value.ratio, max) <= 0;

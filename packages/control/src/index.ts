@@ -44,6 +44,7 @@ export { reservationFacts } from './facts.ts';
 export { encodeProjectionRecord, projectionDigest, stateDependencyDigest, type ParticipantProjection, type ProjectionDigest, type ProjectionRecord } from './projection.ts';
 export { invariantResultsDigest, type InvariantOrigin, type InvariantResult, type InvariantResultsDigest } from './invariants.ts';
 export { narrowingProofs, policyProofs, semanticProofRefs, type NarrowingProof } from './narrowing.ts';
+export { termBindings } from './binding.ts';
 export { authorizationLifetime, chargePlanDigest, decide, type AuthorizationRequest, type ChargePlanDigest, type Decision, type DecisionEnv } from './pipeline.ts';
 export { authorizationRecordOf, encodeAuthorizationRecord, type AuthorizationId, type AuthorizationRecord } from './authorization.ts';
 export { type RevalidationId, type RevalidationRequest, type RevalidationResult } from './revalidation.ts';

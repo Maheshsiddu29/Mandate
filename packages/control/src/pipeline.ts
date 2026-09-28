@@ -26,10 +26,18 @@
  * a concurrent reservation changes the projection, not just the capacity
  * (brief §26).
  *
+ * **Immutable authority semantics (7D.3).** Step 5 takes each invariant
+ * together with the binding its registration committed, and step 11
+ * evaluates it under exactly that definition (`committedSemantics`): the
+ * `ModuleRef` and digest the grant or policy was registered with, loaded or
+ * archived, never the module the invariant's name maps to now. An unbound
+ * module-defined term, or a committed definition that is not available, is
+ * `UNKNOWN`, and the action refuses.
+ *
  * The stages that decide what is *seen* — which invariants apply, which
- * reservations are pending, how state is admitted — are one `Pipeline`
- * record, so the mutation suite can replace exactly one and show the others
- * catch it. Production code uses only `PRODUCTION_PIPELINE`; the record is
+ * reservations are pending, how state is admitted, which definition a term
+ * is evaluated under — are one `Pipeline` record, so the mutation suite can
+ * replace exactly one and show the others catch it. Production code uses only `PRODUCTION_PIPELINE`; the record is
  * not exported from the package.
  */
 
@@ -80,6 +88,8 @@ import {
   type ModuleRegistry,
   type NodeRecord,
   type ReducerRules,
+  type SemanticTermBinding,
+  isModuleDefined,
 } from '@mandate/ledger';
 import { admitNeeds, effectiveNeed, mergeNeeds, prepareStates, statesFor, type Admission, type EffectiveNeed, type PreparedState, type SuppliedState } from './admission.ts';
 import {
@@ -128,7 +138,13 @@ export interface DecisionEnv {
 export interface ApplicableInvariant {
   readonly origin: InvariantOrigin;
   readonly term: StateInvariantTerm;
+  /** The exact definition the term's registration committed (7D.3); `null` for a Core term. */
+  readonly binding: SemanticTermBinding | null;
 }
+
+/** Which implementation interprets a module-defined term, or why none may. */
+export type SemanticResolution = { readonly ok: true; readonly module: DomainModule } | { readonly ok: false; readonly reason: string };
+export type SemanticResolver = (invariant: ApplicableInvariant, catalog: ModuleCatalog) => SemanticResolution;
 
 /** The stages whose replacement changes what a decision sees. */
 export interface Pipeline {
@@ -136,14 +152,29 @@ export interface Pipeline {
   readonly facts: (state: LedgerState) => ControlResult<readonly ReservationFact[]>;
   readonly admit: (needs: readonly EffectiveNeed[], prepared: readonly PreparedState[], ctx: EvaluationContext, path: string) => ControlResult<readonly Admission[]>;
   readonly aggregate: AggregateEvaluator;
+  readonly semantics: SemanticResolver;
 }
 
-/** Every lineage invariant (the union over the lineage), then every principal-global one. */
+/** Every lineage invariant (the union over the lineage), then every principal-global one, each with its committed binding. */
 export function applicableInvariants(effective: EffectiveAuthority): readonly ApplicableInvariant[] {
   return [
-    ...effective.invariants.map((term) => ({ origin: 'LINEAGE' as const, term })),
-    ...effective.principalInvariants.map((term) => ({ origin: 'POLICY' as const, term })),
+    ...effective.invariants.map((b) => ({ origin: 'LINEAGE' as const, term: b.term, binding: b.binding })),
+    ...effective.principalInvariants.map((b) => ({ origin: 'POLICY' as const, term: b.term, binding: b.binding })),
   ];
+}
+
+/**
+ * SEMANTIC-AUTH-1…3: a module-defined term is interpreted by exactly the
+ * definition its registration committed — resolved by exact `ModuleRef`
+ * among the loaded and archived implementations, with no registry lookup
+ * and no name resolution — or by nothing. A `core.*` term other than the
+ * aggregate has no definition anywhere.
+ */
+export function committedSemantics(a: ApplicableInvariant, catalog: ModuleCatalog): SemanticResolution {
+  if (!isModuleDefined(a.term)) return { ok: false, reason: 'INVARIANT_DEFINITION_UNRESOLVED' };
+  if (a.binding === null) return { ok: false, reason: 'SEMANTIC_BINDING_MISSING' };
+  const m = catalog.resolveDefinition(a.binding.definition);
+  return m === null ? { ok: false, reason: 'SEMANTIC_DEFINITION_UNAVAILABLE' } : { ok: true, module: m };
 }
 
 export const PRODUCTION_PIPELINE: Pipeline = Object.freeze({
@@ -151,6 +182,7 @@ export const PRODUCTION_PIPELINE: Pipeline = Object.freeze({
   facts: (state: LedgerState) => reservationFacts(state),
   admit: admitNeeds,
   aggregate: evaluateAggregate,
+  semantics: committedSemantics,
 });
 
 /** Every `ModuleRef` with an unresolved reservation, once each, in canonical order. */
@@ -239,12 +271,13 @@ export function evaluateState(p: Pipeline, input: EvaluationInput): ControlResul
       plan.push({ origin: a.origin, term: t, kind: 'AGGREGATE', spec: spec.value, owner: null, reason: '' });
       continue;
     }
-    const owner = catalog.invariantOwner(t.invariantId, t.version);
-    const resolved = owner === null ? null : catalog.resolveForLifecycle(owner.ref, 'invariant.owner');
-    if (owner === null || resolved === null || !resolved.ok) {
-      plan.push({ origin: a.origin, term: t, kind: 'UNRESOLVED', spec: null, owner: null, reason: 'INVARIANT_DEFINITION_UNRESOLVED' });
+    // The committed definition, never the name's current owner (7D.3).
+    const resolved = p.semantics(a, catalog);
+    if (!resolved.ok) {
+      plan.push({ origin: a.origin, term: t, kind: 'UNRESOLVED', spec: null, owner: null, reason: resolved.reason });
       continue;
     }
+    const owner = resolved.module;
     const d = join(owner, false);
     if (!d.invariants.some((x) => sameTerm(x, t))) d.invariants.push(t);
     plan.push({ origin: a.origin, term: t, kind: 'MODULE', spec: null, owner, reason: '' });
@@ -464,7 +497,7 @@ export function resolveAuthority(snapshot: LedgerSnapshot, action: ActionEnvelop
   if (!valid.ok) return { ok: false, error: fromLedger(valid.error, '') };
   const leaf = lineage.value[0] as NodeRecord;
   if (!partyIdsEqual(action.actor, leaf.grant.holder)) return refuse('AUTHORITY_INVALID', 'ACTOR_NOT_HOLDER', 'action.actor');
-  const effective = effectiveAuthority(lineage.value, s.policy.policy, 'action.authority');
+  const effective = effectiveAuthority(lineage.value, s.policy.policy, 'action.authority', s.policy.bindings);
   if (!effective.ok) return { ok: false, error: fromLedger(effective.error, '') };
   return ok({ lineage: lineage.value, effective: effective.value });
 }

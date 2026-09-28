@@ -42,7 +42,7 @@ export function termsOf(s: Spec): AuthorityTermInput[] {
   if (s.minCredit !== null) t.push({ kind: 'BOUND', boundId: 'min-credit', polarity: 'MIN', value: { type: 'QUANTITY', quantity: { kind: 'CAPITAL', unit: 'USDG', decimals: 2, atoms: s.minCredit } } });
   if (s.window !== null) t.push({ kind: 'TIME_WINDOW', domain: 'perp', notBefore: s.window.nb, expiresAt: s.window.ea });
   if (s.capital !== null) t.push(dim('capital', s.capital));
-  if (s.invariant !== null) t.push({ kind: 'STATE_INVARIANT', invariantId: 'perp.accountLeverage', version: 1, scope: [], params: s.invariant });
+  if (s.invariant !== null) t.push({ kind: 'STATE_INVARIANT', invariantId: 'perp-policy.accountLeverage', version: 1, scope: [], params: s.invariant });
   if (s.statePolicy !== null) {
     t.push({
       kind: 'STATE_POLICY',

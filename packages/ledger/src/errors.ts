@@ -49,6 +49,11 @@ export const LEDGER_REFUSAL_CODES = [
   'DELEGATION_REFUSED',
   'SEMANTIC_PROOF_INVALID', // 7D.2: a committed proof is out of order, duplicated, or names an owner that cannot define its invariant
   'SEMANTIC_PROOF_UNEXPECTED', // 7D.2: a committed proof for a term that needs none
+  'SEMANTIC_BINDING_INVALID', // 7D.3: a committed binding is out of order, duplicated, Core-owned, or names an owner that cannot define its invariant
+  'SEMANTIC_BINDING_UNEXPECTED', // 7D.3: a committed binding for a term that is absent or Core-defined
+  'SEMANTIC_BINDING_MISSING', // 7D.3: a new registration with a module-defined term and no committed binding
+  'SEMANTIC_BINDING_MISMATCH', // 7D.3: a restated term, or a proof, names another definition than the term's committed binding
+  'HISTORICAL_SEMANTICS_UNBOUND', // 7D.3: replayed history registers a module-defined term with no committed binding
   'REVOCATION_ISSUER_NOT_ELIGIBLE', // 7C: authority-model.md §7 scope rule
   'REVOCATION_NOT_EFFECTIVE', // 7C: effectiveAt after the registration time
   // Reservation

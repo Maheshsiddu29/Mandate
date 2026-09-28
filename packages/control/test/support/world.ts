@@ -5,20 +5,19 @@
  */
 
 import assert from 'node:assert/strict';
-import { policyInvariants, type ActionEnvelope, type AuthorityGrant, type ModuleRef, type PrincipalPolicy } from '@mandate/core';
-import { AuthorityLedger, InMemoryLedgerStore, ReferenceModuleRegistry, type InMemoryStoreHooks, type LedgerOutcome, type LedgerSnapshot, type ModuleStatus } from '@mandate/ledger';
+import type { ActionEnvelope, AuthorityGrant, ModuleRef, PrincipalPolicy } from '@mandate/core';
+import { AuthorityLedger, InMemoryLedgerStore, ReferenceModuleRegistry, type InMemoryStoreHooks, type LedgerSnapshot, type ModuleStatus } from '@mandate/ledger';
 import {
   ControlEngine,
   ModuleCatalog,
   controlRules,
-  policyProofs,
-  semanticProofRefs,
   type AuthorizationOutcome,
   type AuthorizationRecord,
   type AuthorizationRequest,
   type ConformanceVector,
   type ControlRefusal,
   type EvaluationContextInput,
+  type RegistrationOutcome,
   type SuppliedState,
 } from '../../src/index.ts';
 import { ONCE, PERP_CFG, SPOT_CFG, T0, must } from './builders.ts';
@@ -46,7 +45,7 @@ export interface World {
   readonly catalog: ModuleCatalog;
   readonly store: InMemoryLedgerStore;
   readonly engine: ControlEngine;
-  /** Infrastructure registration only: policies and roots. */
+  /** Infrastructure only: registrations with already-derived semantics, and tests of that boundary. */
   readonly ledger: AuthorityLedger;
 }
 
@@ -74,29 +73,23 @@ export function world(o: WorldOptions = {}): World {
 }
 
 /**
- * Register a policy through the infrastructure ledger, committing a proof —
- * the exact definition — for each principal-global invariant it restates
- * once activity exists (7D.2).
+ * Register a policy through the control engine, which binds each
+ * module-defined term to its exact definition (7D.3) and commits a proof for
+ * each principal-global invariant restated once activity exists (7D.2).
  */
-export async function registerPolicy(w: World, p: PrincipalPolicy, at: bigint, catalog: ModuleCatalog = w.catalog): Promise<LedgerOutcome> {
-  const snap = await w.store.read(p.principal);
-  const proofs = semanticProofRefs(policyProofs(snap.state, p, catalog), policyInvariants(p));
-  return w.ledger.registerPolicy(p, at, ONCE, proofs);
+export function registerPolicy(w: World, p: PrincipalPolicy, at: bigint): Promise<RegistrationOutcome> {
+  return w.engine.registerPolicy(p, at, ONCE);
 }
 
-function committedOutcome(o: LedgerOutcome): LedgerSnapshot {
-  if (o.status !== 'COMMITTED') assert.fail(`expected COMMITTED, got ${o.status}${o.status === 'REFUSED' ? ` ${o.refusal.code} at ${o.refusal.path}` : ''}`);
-  return o.snapshot;
+export function registered(r: RegistrationOutcome): LedgerSnapshot {
+  if (r.status !== 'REGISTERED') assert.fail(`registration refused: ${r.refusal.code}/${r.refusal.reason} at ${r.refusal.path}`);
+  return r.snapshot;
 }
 
-/** Register a policy and grants, in order. */
+/** Register a policy and grants, in order, through the engine. */
 export async function setup(w: World, p: PrincipalPolicy, grants: readonly AuthorityGrant[], at: bigint = T0): Promise<LedgerSnapshot> {
-  let last = committedOutcome(await w.ledger.registerPolicy(p, at, ONCE));
-  for (const g of grants) {
-    const r = await w.engine.registerDelegation(g, at, ONCE);
-    if (r.status !== 'REGISTERED') assert.fail(`registration refused: ${r.status === 'REFUSED' || r.status === 'CONFLICT' ? `${r.refusal.code}/${r.refusal.reason}` : ''}`);
-    last = r.snapshot;
-  }
+  let last = registered(await w.engine.registerPolicy(p, at, ONCE));
+  for (const g of grants) last = registered(await w.engine.registerDelegation(g, at, ONCE));
   return last;
 }
 

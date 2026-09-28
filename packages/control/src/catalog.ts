@@ -52,6 +52,17 @@
  * how history replays; if the committed artifact is not available, the
  * narrowing is `UNPROVABLE` and replay refuses. Only a *new* proof asks the
  * registry, and requires its current, active module.
+ *
+ * **Immutable authority semantics (7D.3).** The same holds for the terms
+ * themselves, not only for narrowings. A grant or policy commits, at
+ * registration, the exact definition of each module-defined term
+ * (`bindingFor`: the current, active owner — the only place a name is
+ * mapped to a module for authority semantics, and only for authority being
+ * created). Every later evaluation resolves the committed definition by
+ * exact identity (`resolveDefinition`), loaded or archived, whatever the
+ * registry maps the name to by then; if it is unavailable the term is
+ * `UNKNOWN` and the action refuses. `invariantOwner` — the name lookup —
+ * never decides what an existing term means.
  */
 
 import { ok } from '@mandate/kernel';
@@ -221,7 +232,41 @@ export class ModuleCatalog {
     return owner === null ? null : { owner: { kind: 'MODULE', module: owner.ref }, invariantId, version };
   }
 
-  /** The module that defines `(invariantId, version)`, or `null`. */
+  /**
+   * The exact definition a module-defined term of a *new* grant or policy is
+   * bound to (7D.3), or `null` for a Core term, which needs none. The one
+   * module owning `(invariantId, version)` must be registered, exact,
+   * conforming and active: new authority is never bound to retiring,
+   * remapped or unknown semantics. Ownership is unambiguous by construction
+   * (`INVARIANT_OWNED_TWICE`).
+   */
+  bindingFor(invariantId: InvariantId, version: InvariantVersion, path: string): ControlResult<SemanticInvariantRef | null> {
+    if (invariantId.startsWith(CORE_INVARIANT_NAMESPACE)) return ok(null);
+    const owner = this.invariantOwner(invariantId, version);
+    if (owner === null) return refuse('SEMANTIC_BINDING_REFUSED', 'INVARIANT_OWNER_UNKNOWN', path);
+    const current = this.resolveForDecision(owner.ref, path);
+    if (!current.ok) return refuse('SEMANTIC_BINDING_REFUSED', current.error.reason, path, { module: owner.ref });
+    return ok({ owner: { kind: 'MODULE', module: owner.ref }, invariantId, version });
+  }
+
+  /**
+   * The implementation of exactly `definition` — its `ModuleRef`, loaded or
+   * archived, which must itself declare the invariant — with no registry
+   * lookup and no name resolution: how a committed term, or a committed
+   * proof, is interpreted (7D.2, 7D.3). `null` if that artifact is not
+   * available; nothing stands in for it.
+   */
+  resolveDefinition(definition: SemanticInvariantRef): DomainModule | null {
+    if (definition.owner.kind !== 'MODULE') return null;
+    const m = this.resolveExact(definition.owner.module);
+    return m !== null && m.invariants.some((d) => d.invariantId === definition.invariantId && d.version === definition.version) ? m : null;
+  }
+
+  /**
+   * The module currently owning `(invariantId, version)` by name, or `null`.
+   * A fact about the present catalog: it decides which definition *new*
+   * authority is bound to (`bindingFor`), never what an existing term means.
+   */
   invariantOwner(invariantId: string, version: number): DomainModule | null {
     const key = this.#owners.get(invariantKey(invariantId, version));
     return key === undefined ? null : ((this.#entries.get(key) as Entry).module);
@@ -255,7 +300,7 @@ export class ModuleCatalog {
     if (forNewDecision) {
       const resolved = this.resolveForDecision(ref, 'invariant.owner');
       owner = resolved.ok ? resolved.value : null;
-    } else owner = this.resolveExact(ref);
+    } else owner = this.resolveDefinition(definition);
     if (owner === null || !owner.invariants.some((d) => d.invariantId === definition.invariantId && d.version === definition.version)) return { evaluator, verdict: 'UNPROVABLE' };
     const m = owner;
     const verdict = callModule(m, 'SEMANTIC_NARROWING_UNPROVABLE', 'noWeaker', () => m.noWeaker(parent, child));

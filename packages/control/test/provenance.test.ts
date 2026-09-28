@@ -171,28 +171,39 @@ describe('a semantic identity is the exact ModuleRef plus the local invariant id
   it('a proof committed under A cannot be re-pointed to B: the history\'s head changes, whatever B would say', async () => {
     const h = await history();
     const b = createSyntheticModule({ ...CFG, variant: 'LENIENT_NARROWING' });
-    // Re-point every committed proof at B and re-chain the whole history, as a forger would have to.
+    // Re-pointing only the proof is refused outright: it no longer agrees with the term's committed binding (7D.3).
+    const proofOnly = h.committedBatches.map((batch) =>
+      encodeBatch(h.principal, batch.version, batch.previousHead, batch.events.map((e) => (e.kind === 'REGISTER_GRANT' && e.proofs !== undefined ? { ...e, proofs: e.proofs.map((p) => ({ ...p, definition: leverageDefinition(b.ref) })) } : e))),
+    );
+    const mismatched = replayEncoded(h.principal, proofOnly, controlRules(h.w.catalog));
+    assert.ok(!mismatched.ok && mismatched.error.code === 'SEMANTIC_BINDING_MISMATCH');
+    // Re-point every committed proof and binding at B and re-chain the whole history, as a forger would have to.
+    const toB = <T extends { definition: SemanticInvariantRef }>(x: T): T => (x.definition.owner.kind === 'MODULE' ? { ...x, definition: { ...x.definition, owner: { kind: 'MODULE', module: b.ref } } } : x);
     let previous = h.committedBatches[0]?.previousHead as LedgerHeadDigest;
     const forged: Uint8Array[] = [];
     for (const batch of h.committedBatches) {
       const events = batch.events.map((e) =>
-        e.kind === 'REGISTER_GRANT' && e.proofs !== undefined ? { ...e, proofs: e.proofs.map((p) => ({ ...p, definition: leverageDefinition(b.ref) })) } : e,
+        e.kind === 'REGISTER_GRANT' && e.bindings !== undefined ? { ...e, bindings: e.bindings.map(toB), ...(e.proofs !== undefined ? { proofs: e.proofs.map(toB) } : {}) } : e,
       );
       const bytes = encodeBatch(h.principal, batch.version, previous, events);
       forged.push(bytes);
       previous = batchHead(bytes);
     }
     const k = h.committedBatches.findIndex((x) => x.events.some((e) => e.kind === 'REGISTER_GRANT' && e.proofs !== undefined));
-    const spliced = h.batches.map((x, i) => (i === k ? (forged[k] as Uint8Array) : x));
-    // Spliced into the genuine chain, under the genuine verifier: B's semantics are not there, so the narrowing is unproven.
-    const unproven = replayEncoded(h.principal, spliced, controlRules(h.w.catalog));
-    assert.ok(!unproven.ok && unproven.error.code === 'DELEGATION_REFUSED');
-    // Under a verifier that does have B, the altered batch folds and the next genuine batch no longer extends it.
+    // Only the child's registration altered, on the genuine previous head.
+    const genuineK = h.committedBatches[k] as (typeof h.committedBatches)[number];
+    const childOnly = encodeBatch(h.principal, genuineK.version, genuineK.previousHead, genuineK.events.map((e) => (e.kind === 'REGISTER_GRANT' && e.bindings !== undefined ? { ...e, bindings: e.bindings.map(toB), ...(e.proofs !== undefined ? { proofs: e.proofs.map(toB) } : {}) } : e)));
+    const spliced = h.batches.map((x, i) => (i === k ? childOnly : x));
+    // Spliced into the genuine chain, the child's term now means B under a parent whose term means A: refused, under any verifier.
     const bRegistry = must(ReferenceModuleRegistry.create([{ module: b.ref, status: 'ACTIVE', implementations: [b.implementation] }]));
     const bCatalog = must(ModuleCatalog.create(bRegistry, [{ module: b, corpus: [] }]));
-    assert.ok(k < h.batches.length - 1);
-    const broken = replayEncoded(h.principal, spliced, controlRules(bCatalog));
-    assert.ok(!broken.ok && broken.error.code === 'LEDGER_CHAIN_BROKEN');
+    for (const verifier of [h.w.catalog, bCatalog]) {
+      const r = replayEncoded(h.principal, spliced, controlRules(verifier));
+      assert.ok(!r.ok && r.error.code === 'SEMANTIC_BINDING_MISMATCH', r.ok ? 'ok' : `${r.error.code} at ${r.error.path}`);
+    }
+    // Fully re-chained under the genuine verifier, B's semantics are not there, so the narrowing is unproven.
+    const unproven = replayEncoded(h.principal, forged, controlRules(h.w.catalog));
+    assert.ok(!unproven.ok && unproven.error.code === 'DELEGATION_REFUSED');
     // Fully re-chained, it may fold — but to another head than the one attested.
     const refolded = replayEncoded(h.principal, forged, controlRules(bCatalog));
     assert.ok(refolded.ok);

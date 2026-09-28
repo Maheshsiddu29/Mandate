@@ -147,10 +147,13 @@ describe('principal-global aggregate across roots', () => {
     assert.equal(r.reason, 'CONTRIBUTOR_UNAVAILABLE');
   });
 
-  it('an invariant no loaded module defines is UNKNOWN, and every applicable invariant is reported, not only the first failure', async () => {
+  it('an invariant nothing defines is UNKNOWN, and every applicable invariant is reported, not only the first failure', async () => {
+    // A module-defined name no module owns cannot be registered at all (7D.3: nothing to bind it to)…
+    await assert.rejects(twoRoots({ limit: 1_000, extraPolicy: [{ kind: 'STATE_INVARIANT', invariantId: 'nobody.defines-this', version: 1, scope: [], params: '0x01' }] }), /SEMANTIC_BINDING_REFUSED\/INVARIANT_OWNER_UNKNOWN/);
+    // …so the undefined invariant is one in Core's namespace that Core does not define: it needs no binding and has no definition.
     const s = await twoRoots({
       limit: 1_000,
-      extraPolicy: [{ kind: 'STATE_INVARIANT', invariantId: 'nobody.defines-this', version: 1, scope: [], params: '0x01' }],
+      extraPolicy: [{ kind: 'STATE_INVARIANT', invariantId: 'core.defines-nothing', version: 1, scope: [], params: '0x01' }],
     });
     const r = refused(await s.w.engine.authorizeAndReserve(request(action(s.perp, { authority: s.rootB, size: sizeFor(2_000) }), s.states, s.ctx), RETRY));
     // A violation outranks an unknown in the code; both are in the evidence.

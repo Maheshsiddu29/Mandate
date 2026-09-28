@@ -32,10 +32,26 @@
  * reducer re-proves each narrowing under exactly that definition at commit
  * and at replay, so a history is bound to the semantics that accepted it
  * and never to whatever a registry later maps the module's name to.
+ *
+ * **Bound terms (7D.3).** A comparator orders two parameters only if both
+ * mean the same thing: the parent term's committed binding and the child
+ * term's binding must be one definition, and the proof is made under exactly
+ * it. If they differ, no comparator is asked at all — the restatement is
+ * refused by the ledger as `SEMANTIC_BINDING_MISMATCH`.
  */
 
 import { policyInvariants, termKey, type AuthorityGrant, type InvariantId, type InvariantVersion, type PrincipalPolicy, type StateInvariantTerm } from '@mandate/core';
-import { canonicalProofs, restatedInvariants, type InvariantNarrowing, type LedgerState, type SemanticInvariantRef, type SemanticProofRef } from '@mandate/ledger';
+import {
+  bindingOf,
+  canonicalProofs,
+  restatedInvariants,
+  sameDefinition,
+  type InvariantNarrowing,
+  type LedgerState,
+  type SemanticInvariantRef,
+  type SemanticProofRef,
+  type SemanticTermBinding,
+} from '@mandate/ledger';
 import type { Evaluator, ModuleCatalog } from './catalog.ts';
 
 export interface NarrowingProof {
@@ -51,12 +67,21 @@ export interface NarrowingProof {
   readonly verdict: InvariantNarrowing;
 }
 
+/** The committed bindings of the two sides of a restatement (7D.3). */
+export interface RestatementBindings {
+  readonly parent: readonly SemanticTermBinding[];
+  readonly child: readonly SemanticTermBinding[];
+}
+
 /**
  * A proof for every invariant the child restates with different parameters,
  * by the owning definition, for a *new* registration (the owner must be
- * active, not retiring). Exact restatements need no proof.
+ * active, not retiring). Exact restatements need no proof. With `bindings`,
+ * a module-defined term is ordered only when the parent's and the child's
+ * bindings are one definition — the one the proof is then made under;
+ * otherwise nothing is asked and the proof is `UNPROVABLE` with no definition.
  */
-export function narrowingProofs(parent: AuthorityGrant, child: AuthorityGrant, catalog: ModuleCatalog): readonly NarrowingProof[] {
+export function narrowingProofs(parent: AuthorityGrant, child: AuthorityGrant, catalog: ModuleCatalog, bindings?: RestatementBindings): readonly NarrowingProof[] {
   const parents = new Map<string, StateInvariantTerm>();
   for (const t of parent.terms) if (t.kind === 'STATE_INVARIANT') parents.set(termKey(t), t);
   const out: NarrowingProof[] = [];
@@ -65,11 +90,19 @@ export function narrowingProofs(parent: AuthorityGrant, child: AuthorityGrant, c
     const key = termKey(c);
     const p = parents.get(key);
     if (p === undefined || p.params === c.params) continue;
-    const definition = catalog.definitionFor(c.invariantId, c.version);
+    const definition = bindings === undefined ? catalog.definitionFor(c.invariantId, c.version) : boundDefinition(p, c, bindings, catalog);
     const comparison = definition === null ? { evaluator: { kind: 'NONE' } as const, verdict: 'UNPROVABLE' as const } : catalog.compareInvariants(p, c, definition, true);
     out.push({ term: key, invariantId: c.invariantId, version: c.version, parentParams: p.params, childParams: c.params, evaluator: comparison.evaluator, definition, verdict: comparison.verdict });
   }
   return out;
+}
+
+/** The one definition both sides of a restatement are bound to, Core's for a Core term, or `null` if they differ. */
+function boundDefinition(parent: StateInvariantTerm, child: StateInvariantTerm, bindings: RestatementBindings, catalog: ModuleCatalog): SemanticInvariantRef | null {
+  const p = bindingOf(bindings.parent, parent);
+  const c = bindingOf(bindings.child, child);
+  if (p === null && c === null) return catalog.definitionFor(child.invariantId, child.version);
+  return p !== null && c !== null && sameDefinition(p.definition, c.definition) ? c.definition : null;
 }
 
 /**
@@ -78,13 +111,15 @@ export function narrowingProofs(parent: AuthorityGrant, child: AuthorityGrant, c
  * the old parameters must be no weaker than the new. Before any activity, or
  * for a first policy, nothing needs proving.
  */
-export function policyProofs(state: LedgerState, policy: PrincipalPolicy, catalog: ModuleCatalog): readonly NarrowingProof[] {
+export function policyProofs(state: LedgerState, policy: PrincipalPolicy, catalog: ModuleCatalog, bindings?: readonly SemanticTermBinding[]): readonly NarrowingProof[] {
   if (state.policy === null || !state.everReserved) return [];
   const previous = policyInvariants(state.policy.policy);
   const before = new Map(previous.map((t) => [termKey(t), t]));
+  const committed = state.policy.bindings;
   return restatedInvariants(previous, policyInvariants(policy)).map((t) => {
     const old = before.get(termKey(t)) as StateInvariantTerm;
-    const definition = catalog.definitionFor(t.invariantId, t.version);
+    // With the new policy's bindings, ordered only under the one definition both sides mean (7D.3).
+    const definition = bindings === undefined ? catalog.definitionFor(t.invariantId, t.version) : boundDefinition(old, t, { parent: committed, child: bindings }, catalog);
     const comparison = definition === null ? { evaluator: { kind: 'NONE' } as const, verdict: 'UNPROVABLE' as const } : catalog.compareInvariants(t, old, definition, true);
     return { term: termKey(t), invariantId: t.invariantId, version: t.version, parentParams: t.params, childParams: old.params, evaluator: comparison.evaluator, definition, verdict: comparison.verdict };
   });

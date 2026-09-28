@@ -44,6 +44,7 @@ export const CONTROL_CODES = [
   'AUTHORITY_UNAVAILABLE', // the ledger's charging path cannot hold the demand
   'DELEGATION_REFUSED',
   'SEMANTIC_NARROWING_UNPROVABLE',
+  'SEMANTIC_BINDING_REFUSED', // 7D.3: a term's exact semantic definition cannot be bound, or a binding disagrees with a committed one
   // State
   'STATE_MISSING',
   'STATE_STALE',
@@ -145,6 +146,13 @@ export function fromLedger(r: LedgerRefusal, path: string): ControlRefusal {
     case 'SEMANTIC_PROOF_INVALID':
     case 'SEMANTIC_PROOF_UNEXPECTED':
       code = 'SEMANTIC_NARROWING_UNPROVABLE';
+      break;
+    case 'SEMANTIC_BINDING_INVALID':
+    case 'SEMANTIC_BINDING_UNEXPECTED':
+    case 'SEMANTIC_BINDING_MISSING':
+    case 'SEMANTIC_BINDING_MISMATCH':
+    case 'HISTORICAL_SEMANTICS_UNBOUND':
+      code = 'SEMANTIC_BINDING_REFUSED';
       break;
     case 'DELEGATION_REFUSED':
       code = r.violations.every((v) => v.code === 'DELEGATION_NARROWING_UNPROVEN') ? 'SEMANTIC_NARROWING_UNPROVABLE' : 'DELEGATION_REFUSED';

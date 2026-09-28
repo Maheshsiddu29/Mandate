@@ -78,7 +78,8 @@ describe('module retirement and historical replay', () => {
     assert.equal(`${r.code}/${r.reason}`, 'MODULE_NOT_FOUND/MODULE_RETIRING');
     const again = await engine.registerDelegation(child(h.parent, { mods: [h.m], holder: AGENT_C, nonce: 9n, terms: [maxLeverage(h.m, h.acct, 2n)] }), T, ONCE);
     assert.equal(again.status, 'REFUSED');
-    if (again.status === 'REFUSED') assert.equal(again.refusal.reason, 'COMPARATOR_NOT_ACTIVE');
+    // 7D.3: new authority is never bound to retiring semantics, so the child is refused before any comparator is asked.
+    if (again.status === 'REFUSED') assert.equal(`${again.refusal.code}/${again.refusal.reason}`, 'SEMANTIC_BINDING_REFUSED/MODULE_RETIRING');
 
     // 6–7. Replay from genesis under archived M reproduces the ledger exactly.
     const replayed = replayEncoded(h.principal, h.batches, controlRules(archived));

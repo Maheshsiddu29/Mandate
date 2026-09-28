@@ -23,6 +23,13 @@
  * registry. The ledger's own rules are checked twice: here, to refuse before
  * writing, and by the store's reducer at commit, against the state actually
  * committed to.
+ *
+ * **Infrastructure boundary (7D.3).** `registerGrant` and `registerPolicy`
+ * accept already-derived semantics — the bindings and proofs a registration
+ * commits — and check only that every module they name is the registry's
+ * current, active one. They do not derive semantics, and they are not an
+ * agent's surface: the control engine derives both from the exact module
+ * implementations and never takes them from its caller.
  */
 
 import type { LedgerVersion, ObservationId, PrincipalId, ReservationGeneration, ReservationId, AuthorityGrant, PrincipalPolicy } from '@mandate/core';
@@ -31,8 +38,8 @@ import { withPath, type LedgerRefusal, type LedgerResult } from './errors.ts';
 import type { LedgerEvent } from './events.ts';
 import { MAX_COMMIT_ATTEMPTS } from './limits.ts';
 import { applyBatch, applyEvent, deriveReserveEvent } from './reducer.ts';
-import { checkModuleConformance, checkProofOwnersCurrent, type ModuleRegistry } from './registry.ts';
-import type { SemanticProofRef } from './semantic.ts';
+import { checkBindingOwnersCurrent, checkModuleConformance, checkProofOwnersCurrent, type ModuleRegistry } from './registry.ts';
+import type { SemanticProofRef, SemanticTermBinding } from './semantic.ts';
 import type { Revocation } from './revocation.ts';
 import type { DemandRecord } from './state.ts';
 import type { LedgerSnapshot, LedgerStore } from './store.ts';
@@ -57,6 +64,24 @@ export type AccountingEffect =
   | { readonly kind: 'RESTORE'; readonly reservation: ReservationId; readonly generation: ReservationGeneration; readonly evidence: ObservationId; readonly amounts: readonly bigint[] };
 
 type Planner = (snapshot: LedgerSnapshot) => LedgerResult<readonly LedgerEvent[]>;
+
+/** Already-derived semantics a registration commits (infrastructure input; see the module comment). */
+export interface RegistrationSemantics {
+  /** The exact definition each module-defined term is bound to (7D.3). */
+  readonly bindings?: readonly SemanticTermBinding[];
+  /** The exact definition that proved each restated invariant (7D.2). */
+  readonly proofs?: readonly SemanticProofRef[];
+}
+
+function registrationSemantics(registry: ModuleRegistry, semantics: RegistrationSemantics): LedgerResult<{ bindings?: readonly SemanticTermBinding[]; proofs?: readonly SemanticProofRef[] }> {
+  const bindings = semantics.bindings ?? [];
+  const proofs = semantics.proofs ?? [];
+  const bound = checkBindingOwnersCurrent(registry, bindings);
+  if (!bound.ok) return bound;
+  const proven = checkProofOwnersCurrent(registry, proofs);
+  if (!proven.ok) return proven;
+  return { ok: true, value: { ...(bindings.length > 0 ? { bindings } : {}), ...(proofs.length > 0 ? { proofs } : {}) } };
+}
 
 export class AuthorityLedger {
   readonly #store: LedgerStore;
@@ -96,22 +121,24 @@ export class AuthorityLedger {
   /**
    * Register the principal's first policy, or replace it (7C refuses a new
    * dimension once anything was reserved; 7D.1 a new or tightened invariant).
-   * `proofs` name the exact definition proving each restated invariant no
-   * stronger (7D.2); each module named must be the registry's current, active
-   * one — a new proof is never made under retired or remapped semantics.
+   * `semantics.bindings` name the exact definition of each module-defined
+   * term (7D.3), and `semantics.proofs` the exact definition proving each
+   * restated invariant no stronger (7D.2). Every module named must be the
+   * registry's current, active one: new authority is never bound, and a new
+   * proof never made, under retired or remapped semantics.
    */
-  registerPolicy(policy: PrincipalPolicy, at: bigint, retry: RetryPolicy, proofs: readonly SemanticProofRef[] = []): Promise<LedgerOutcome> {
+  registerPolicy(policy: PrincipalPolicy, at: bigint, retry: RetryPolicy, semantics: RegistrationSemantics = {}): Promise<LedgerOutcome> {
     return this.#commit(policy.principal, retry, () => {
-      const current = checkProofOwnersCurrent(this.#registry, proofs);
-      return current.ok ? { ok: true, value: [{ kind: 'REGISTER_POLICY', at, policy, ...(proofs.length > 0 ? { proofs } : {}) }] } : current;
+      const s = registrationSemantics(this.#registry, semantics);
+      return s.ok ? { ok: true, value: [{ kind: 'REGISTER_POLICY', at, policy, ...s.value }] } : s;
     });
   }
 
-  /** Register a grant; `proofs` as for `registerPolicy`, for each invariant the grant narrows (7D.2). */
-  registerGrant(grant: AuthorityGrant, at: bigint, retry: RetryPolicy, proofs: readonly SemanticProofRef[] = []): Promise<LedgerOutcome> {
+  /** Register a grant; `semantics` as for `registerPolicy`, proofs being for each invariant the grant narrows. */
+  registerGrant(grant: AuthorityGrant, at: bigint, retry: RetryPolicy, semantics: RegistrationSemantics = {}): Promise<LedgerOutcome> {
     return this.#commit(grant.principal, retry, () => {
-      const current = checkProofOwnersCurrent(this.#registry, proofs);
-      return current.ok ? { ok: true, value: [{ kind: 'REGISTER_GRANT', at, grant, ...(proofs.length > 0 ? { proofs } : {}) }] } : current;
+      const s = registrationSemantics(this.#registry, semantics);
+      return s.ok ? { ok: true, value: [{ kind: 'REGISTER_GRANT', at, grant, ...s.value }] } : s;
     });
   }
 

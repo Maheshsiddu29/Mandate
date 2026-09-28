@@ -34,6 +34,8 @@ export const LedgerTag = {
   /** 7D.2: an invariant definition's exact identity, and one committed narrowing (semantic.ts). */
   SEMANTIC_INVARIANT: 'mandate-core/v1/semantic-invariant',
   SEMANTIC_PROOF: 'mandate-core/v1/semantic-proof',
+  /** 7D.3: the exact definition one registered term is interpreted under (semantic.ts). */
+  SEMANTIC_BINDING: 'mandate-core/v1/semantic-binding',
 } as const;
 export type LedgerTag = (typeof LedgerTag)[keyof typeof LedgerTag];
 

@@ -6,9 +6,9 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import type { AuthorityGrant, StateInvariantInput } from '@mandate/core';
-import { replay } from '@mandate/ledger';
-import { ControlEngine, controlRules, type RegistrationOutcome } from '../src/index.ts';
+import { validateTerm, type AuthorityGrant, type StateInvariantInput, type StateInvariantTerm } from '@mandate/core';
+import { ReferenceModuleRegistry, grantInvariants, replay } from '@mandate/ledger';
+import { ControlEngine, ModuleCatalog, controlRules, termBindings, type RegistrationOutcome } from '../src/index.ts';
 import {
   AGENT_A,
   AGENT_B,
@@ -27,6 +27,7 @@ import {
   createSyntheticModule,
   marketStates,
   maxLeverage,
+  must,
   policy,
   refused,
   request,
@@ -47,6 +48,10 @@ function registered(o: RegistrationOutcome): Extract<RegistrationOutcome, { stat
 function refusedRegistration(o: RegistrationOutcome) {
   if (o.status !== 'REFUSED') assert.fail(`expected REFUSED, got ${o.status}`);
   return o.refusal;
+}
+
+function opaqueTerm(params: string): StateInvariantTerm {
+  return must(validateTerm({ kind: 'STATE_INVARIANT', invariantId: 'nobody.opaque', version: 1, scope: [], params }, 'term')) as StateInvariantTerm;
 }
 
 async function parentWith(w: World, invariant: (m: SyntheticModule) => StateInvariantInput): Promise<{ m: SyntheticModule; parent: AuthorityGrant }> {
@@ -79,13 +84,25 @@ describe('noWeaker by the owning module', () => {
     }
   });
 
-  it('two different opaque invariants no module can order stay refused', async () => {
+  it('an opaque invariant no module defines has no meaning to bind: no grant carrying it registers, so nothing can be ordered under it (7D.3)', async () => {
     const w = world();
+    const m = w.modules[0] as SyntheticModule;
     const opaque = (params: string): StateInvariantInput => ({ kind: 'STATE_INVARIANT', invariantId: 'nobody.opaque', version: 1, scope: [], params });
-    const { m, parent } = await parentWith(w, () => opaque('0x01'));
-    const r = refusedRegistration(await w.engine.registerDelegation(child(parent, { mods: [m], holder: AGENT_B, terms: [opaque('0x02')] }), T0, ONCE));
+    await setup(w, policy(), []);
+    const r = refusedRegistration(await w.engine.registerDelegation(root({ mods: [m], holder: AGENT_A, delegate: 1, terms: [opaque('0x01')] }), T0, ONCE));
+    assert.equal(`${r.code}/${r.reason}`, 'SEMANTIC_BINDING_REFUSED/INVARIANT_OWNER_UNKNOWN');
+    // Ordering it under no definition is UNPROVABLE (the reducer-level case is ledger/test/ordering.test.ts).
+    const none = w.catalog.compareInvariants(opaqueTerm('0x01'), opaqueTerm('0x02'), { owner: { kind: 'MODULE', module: m.ref }, invariantId: 'nobody.opaque', version: 1 } as never);
+    assert.equal(none.verdict, 'UNPROVABLE');
+  });
+
+  it('a restatement its own bound definition cannot order stays refused, fail closed', async () => {
+    const w = world();
+    const { m, parent } = await parentWith(w, (x) => maxLeverage(x, account(x), 4n));
+    const unreadable: StateInvariantInput = { ...maxLeverage(m, account(m), 3n), params: '0x01' };
+    const r = refusedRegistration(await w.engine.registerDelegation(child(parent, { mods: [m], holder: AGENT_B, terms: [unreadable] }), T0, ONCE));
     assert.equal(r.code, 'SEMANTIC_NARROWING_UNPROVABLE');
-    if (r.detail.kind === 'DELEGATION') assert.deepEqual(r.detail.proofs.map((p) => [p.verdict, p.evaluator.kind]), [['UNPROVABLE', 'NONE']]);
+    if (r.detail.kind === 'DELEGATION') assert.deepEqual(r.detail.proofs.map((p) => [p.verdict, p.evaluator.kind]), [['UNPROVABLE', 'MODULE']]);
   });
 
   it('the narrowed child is enforced by both invariants at action time: 3.5x passes the parent, fails the child', async () => {
@@ -127,18 +144,26 @@ describe('noWeaker by the owning module', () => {
     const plainStore = new InMemoryLedgerStore();
     const plainLedger = new AuthorityLedger(plainStore, w.registry);
     await plainLedger.registerPolicy(policy(), T0, ONCE);
-    await plainLedger.registerGrant(parent, T0, ONCE);
+    // Infrastructure registration with the parent's already-derived bindings.
+    const bindings = termBindings(grantInvariants(parent), w.catalog, 'grant.terms');
+    assert.ok(bindings.ok);
+    assert.equal((await plainLedger.registerGrant(parent, T0, ONCE, { bindings: bindings.ok ? bindings.value : [] })).status, 'COMMITTED');
     const engine = new ControlEngine({ store: plainStore, registry: w.registry, catalog: w.catalog });
     const r = refusedRegistration(await engine.registerDelegation(child(parent, { mods: [m], holder: AGENT_B, terms: [maxLeverage(m, account(m), 3n)] }), T0, ONCE));
     assert.equal(r.code, 'LEDGER_CONFLICT');
   });
 
-  it('a retiring owner cannot prove a new narrowing', async () => {
-    const w = world({ status: () => 'RETIRING' });
+  it('a retiring owner cannot prove a new narrowing — new authority is not even bound to its semantics (7D.3)', async () => {
+    const w = world();
     const { m, parent } = await parentWith(w, (x) => maxLeverage(x, account(x), 4n));
-    const r = refusedRegistration(await w.engine.registerDelegation(child(parent, { mods: [m], holder: AGENT_B, terms: [maxLeverage(m, account(m), 3n)] }), T0, ONCE));
-    assert.equal(r.code, 'SEMANTIC_NARROWING_UNPROVABLE');
-    assert.equal(r.reason, 'COMPARATOR_NOT_ACTIVE');
+    const retiring = must(ReferenceModuleRegistry.create(w.modules.map((x) => ({ module: x.ref, status: 'RETIRING' as const, implementations: [x.implementation] }))));
+    const catalog = must(ModuleCatalog.create(retiring, w.modules.map((module) => ({ module, corpus: [] }))));
+    const engine = new ControlEngine({ store: w.store, registry: retiring, catalog });
+    const r = refusedRegistration(await engine.registerDelegation(child(parent, { mods: [m], holder: AGENT_B, terms: [maxLeverage(m, account(m), 3n)] }), T0, ONCE));
+    assert.equal(`${r.code}/${r.reason}`, 'SEMANTIC_BINDING_REFUSED/MODULE_RETIRING');
+    // Its comparator, asked for a new decision, cannot prove anything either.
+    const t = (n: bigint) => must(validateTerm(maxLeverage(m, account(m), n), 'term')) as StateInvariantTerm;
+    assert.equal(catalog.compareInvariants(t(4n), t(3n), { owner: { kind: 'MODULE', module: m.ref }, invariantId: t(4n).invariantId, version: t(4n).version } as never, true).verdict, 'UNPROVABLE');
   });
 
   it('the registration API takes a grant, a time and a retry policy — never a verdict', () => {

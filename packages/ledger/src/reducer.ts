@@ -18,6 +18,13 @@
  * - **Time never regresses** within a principal's ledger: every event's time
  *   is at or after the latest committed one (7C; implementation-7c.md §5.4).
  *
+ * - **Immutable semantics (7D.3).** A registration binds each of its
+ *   module-defined terms to one exact definition, and the node or policy
+ *   keeps that binding for its life. An unbound module-defined term is
+ *   refused — at commit as `SEMANTIC_BINDING_MISSING`, and in replayed
+ *   history as `HISTORICAL_SEMANTICS_UNBOUND` — and nothing is inferred for
+ *   it from any registry.
+ *
  * Boundary with 7D: `CONSUME`, `CLOSE` and `RESTORE` are folded here with
  * their arithmetic and attribution rules. When they are *legal* — which
  * observation, at which finality, for which lots — is the reservation and
@@ -42,7 +49,7 @@ import {
 import { planReservationId, type ChargePlan } from './charge-plan.ts';
 import { checkAvailability, deriveLegs, legRecordOf, policyDimsOf, type LegDraft } from './charging.ts';
 import { rescaleExact } from './encoding.ts';
-import { refuse, withPath, type LedgerResult, type TargetRef } from './errors.ts';
+import { refuse, withPath, type LedgerRefusal, type LedgerResult, type TargetRef } from './errors.ts';
 import { batchHead, decodeBatch, encodeBatch, type AccountingEvent, type EventLeg, type LedgerEvent } from './events.ts';
 import { checkGrantRegistration, checkLineageValid, checkRevocation, resolveLineage } from './graph.ts';
 import { MAX_BATCH_EVENTS } from './limits.ts';
@@ -62,7 +69,18 @@ import {
 } from './state.ts';
 import type { PMap } from './pmap.ts';
 import { CORE_RULES, committedProver, type ReducerRules } from './rules.ts';
-import { checkProofSet, grantInvariants, restatedInvariants, type SemanticProofRef } from './semantic.ts';
+import {
+  canonicalBindings,
+  checkBindingSet,
+  checkProofSet,
+  checkProofsBound,
+  checkRestatedBindings,
+  grantInvariants,
+  keepsSemantics,
+  restatedInvariants,
+  type SemanticProofRef,
+  type SemanticTermBinding,
+} from './semantic.ts';
 
 // --- Registration --------------------------------------------------------------
 
@@ -88,18 +106,30 @@ function zeroBalance(ref: TargetRef, source: TargetBalance['source'], dimension:
  *   An unchanged restatement and a removed invariant need no baseline. Replay
  *   asks the same ordering again, exactly as for a narrowed delegation — and,
  *   since 7D.2, under exactly the definition the event's proof commits.
+ * - Since 7D.3, a restated invariant whose committed binding differs — the
+ *   same name under another definition — is a new constraint, whatever its
+ *   parameters, and needs the same baseline.
  *
  * Whether a particular earlier reservation is irrelevant to the new
  * constraint is not inferred: any committed reservation counts as activity.
  */
-export function checkPolicyBaseline(s: LedgerState, policy: PrincipalPolicy, rules: ReducerRules, proofs: readonly SemanticProofRef[] = []): LedgerResult<true> {
+export function checkPolicyBaseline(
+  s: LedgerState,
+  policy: PrincipalPolicy,
+  rules: ReducerRules,
+  proofs: readonly SemanticProofRef[] = [],
+  bindings: readonly SemanticTermBinding[] = [],
+): LedgerResult<true> {
   const constrained = s.policy !== null && s.everReserved;
   // A proof is committed exactly for each restated invariant the ordering is asked about, and for nothing else.
   const needed = constrained ? restatedInvariants(policyInvariants((s.policy as NonNullable<LedgerState['policy']>).policy), policyInvariants(policy)) : [];
   const set = checkProofSet(proofs, needed, 'proofs');
   if (!set.ok) return set;
+  const agree = checkProofsBound(proofs, bindings, 'proofs');
+  if (!agree.ok) return agree;
   if (s.policy === null || !s.everReserved) return ok(true);
   const previous = s.policy.policy;
+  const previousBindings = s.policy.bindings;
   const kept = new Set(policyDimensions(previous).map((d) => policyTargetKey(policyDimensionIdentity(d))));
   const dims = policyDimensions(policy);
   for (let i = 0; i < dims.length; i += 1) {
@@ -112,8 +142,8 @@ export function checkPolicyBaseline(s: LedgerState, policy: PrincipalPolicy, rul
   for (let i = 0; i < invariants.length; i += 1) {
     const t = invariants[i] as StateInvariantTerm;
     const p = before.get(termKey(t));
-    // No stronger: the old parameters are no weaker than the new, under the committed definition.
-    if (p !== undefined && (p.params === t.params || prove(t, p) === 'NO_WEAKER')) continue;
+    // Same meaning, and no stronger: the old parameters are no weaker than the new, under the committed definition.
+    if (p !== undefined && keepsSemantics(p, previousBindings, t, bindings) && (p.params === t.params || prove(t, p) === 'NO_WEAKER')) continue;
     return refuse('POLICY_UPDATE_REQUIRES_BASELINE', `policy.terms.invariant[${i}]`);
   }
   return ok(true);
@@ -127,7 +157,10 @@ function applyRegisterPolicy(s: LedgerState, e: Extract<LedgerEvent, { kind: 'RE
   let targets = s.targets;
 
   if (s.policy !== null && policy.sequence <= s.policy.policy.sequence) return refuse('POLICY_SEQUENCE_NOT_INCREASING', 'policy.sequence');
-  const baseline = checkPolicyBaseline(s, policy, rules, e.proofs ?? []);
+  const bindings = e.bindings ?? [];
+  const bound = checkBindingSet(bindings, policyInvariants(policy), 'bindings', 'policy.terms');
+  if (!bound.ok) return bound;
+  const baseline = checkPolicyBaseline(s, policy, rules, e.proofs ?? [], bindings);
   if (!baseline.ok) return baseline;
   if (s.policy !== null) {
     for (const d of policyDimensions(s.policy.policy)) {
@@ -144,17 +177,29 @@ function applyRegisterPolicy(s: LedgerState, e: Extract<LedgerEvent, { kind: 'RE
     // A kept dimension keeps its whole history; only its ceiling follows the new policy.
     targets = targets.set(key, prev === undefined ? zeroBalance(ref, 'POLICY', d) : { ...prev, ref, dimension: d, current: true });
   }
-  return ok({ ...s, policy: { id, policy, registeredAt: version }, targets });
+  return ok({ ...s, policy: { id, policy, bindings: canonicalBindings(bindings), registeredAt: version }, targets });
 }
 
 function applyRegisterGrant(s: LedgerState, e: Extract<LedgerEvent, { kind: 'REGISTER_GRANT' }>, version: LedgerVersion, rules: ReducerRules): LedgerResult<LedgerState> {
   const id = authorityId(e.grant);
   const proofs = e.proofs ?? [];
+  const bindings = e.bindings ?? [];
+  const invariants = grantInvariants(e.grant);
+  // Every module-defined term is bound to exactly one definition, and nothing else is bound.
+  const bound = checkBindingSet(bindings, invariants, 'bindings', 'grant.terms');
+  if (!bound.ok) return bound;
   // A proof is committed exactly for each invariant the child restates with other parameters, and for nothing else.
   const parent = e.grant.lineage.kind === 'DELEGATION' ? s.nodes.get(e.grant.lineage.parent) : undefined;
-  const needed = parent === undefined ? [] : restatedInvariants(grantInvariants(parent.grant), grantInvariants(e.grant));
+  const needed = parent === undefined ? [] : restatedInvariants(grantInvariants(parent.grant), invariants);
   const set = checkProofSet(proofs, needed, 'proofs');
   if (!set.ok) return set;
+  // …under the definition the term itself is bound to, and a restated term keeps its parent's meaning.
+  const agree = checkProofsBound(proofs, bindings, 'proofs');
+  if (!agree.ok) return agree;
+  if (parent !== undefined) {
+    const kept = checkRestatedBindings(grantInvariants(parent.grant), parent.bindings, invariants, bindings, 'grant.terms');
+    if (!kept.ok) return kept;
+  }
   const depth = checkGrantRegistration(s, id, e.grant, e.at, 'grant', committedProver(rules.invariantOrdering, proofs));
   if (!depth.ok) return depth;
   let targets = s.targets;
@@ -162,7 +207,7 @@ function applyRegisterGrant(s: LedgerState, e: Extract<LedgerEvent, { kind: 'REG
     if (t.kind !== 'LEDGER_DIMENSION') continue;
     targets = targets.set(nodeTargetKey(id, t.dimensionId), zeroBalance({ kind: 'NODE', authority: id, dimensionId: t.dimensionId }, 'GRANT', t));
   }
-  const node: NodeRecord = { id, grant: e.grant, depth: depth.value, registeredAt: version, revokedAt: null, revocation: null };
+  const node: NodeRecord = { id, grant: e.grant, depth: depth.value, bindings: canonicalBindings(bindings), registeredAt: version, revokedAt: null, revocation: null };
   return ok({ ...s, nodes: s.nodes.set(id, node), targets });
 }
 
@@ -200,7 +245,7 @@ export function deriveReservation(s: LedgerState, plan: ChargePlan, at: bigint):
   if (!valid.ok) return valid;
   const leaf = lineage.value[0] as NodeRecord;
   if (!partyIdsEqual(plan.actor, leaf.grant.holder)) return refuse('ACTOR_NOT_HOLDER', 'plan.actor', leaf.id);
-  const effective = effectiveAuthority(lineage.value, s.policy.policy, 'plan.authority');
+  const effective = effectiveAuthority(lineage.value, s.policy.policy, 'plan.authority', s.policy.bindings);
   if (!effective.ok) return effective;
   if (!moduleAllowed(effective.value, plan.module)) return refuse('MODULE_NOT_PERMITTED', 'plan.module', leaf.id);
 
@@ -458,12 +503,22 @@ export function applyBatch(s: LedgerState, events: readonly LedgerEvent[], rules
   return ok({ state: { ...current, version, head: batchHead(encoded) }, encoded });
 }
 
+/**
+ * A module-defined term with no committed binding, met while replaying
+ * history, is history whose semantics were never bound: nothing may be
+ * inferred for it, so replay refuses (7D.3).
+ */
+function historical(r: LedgerRefusal, path: string): LedgerRefusal {
+  const e = withPath(r, path);
+  return e.code === 'SEMANTIC_BINDING_MISSING' ? { code: 'HISTORICAL_SEMANTICS_UNBOUND', path: e.path, node: e.node } : e;
+}
+
 /** The full fold from genesis over in-memory batches, under the same rules the store committed them with. */
 export function replay(principal: PrincipalId, batches: readonly (readonly LedgerEvent[])[], rules: ReducerRules = CORE_RULES): LedgerResult<LedgerState> {
   let s = emptyLedgerState(principal);
   for (let i = 0; i < batches.length; i += 1) {
     const r = applyBatch(s, batches[i] as readonly LedgerEvent[], rules);
-    if (!r.ok) return { ok: false, error: withPath(r.error, `batches[${i}]`) };
+    if (!r.ok) return { ok: false, error: historical(r.error, `batches[${i}]`) };
     s = r.value.state;
   }
   return ok(s);
@@ -486,7 +541,7 @@ export function replayEncoded(principal: PrincipalId, batches: readonly Uint8Arr
       return refuse('LEDGER_CHAIN_BROKEN', path);
     }
     const r = applyBatch(s, b.events, rules);
-    if (!r.ok) return { ok: false, error: withPath(r.error, path) };
+    if (!r.ok) return { ok: false, error: historical(r.error, path) };
     if (r.value.encoded.length !== bytes.length || r.value.encoded.some((x, j) => x !== bytes[j])) return refuse('LEDGER_CHAIN_BROKEN', path);
     s = r.value.state;
   }

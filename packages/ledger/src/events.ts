@@ -50,6 +50,24 @@
  * REGISTER_GRANT         u8(2) ‖ i64(at) ‖ segment(grant)
  * REGISTER_GRANT+proofs  u8(9) ‖ i64(at) ‖ segment(grant) ‖ u16(n ≥ 1) ‖ SemanticProofRef₁ … ₙ
  * ```
+ *
+ * **Semantic bindings (7D.3).** A registration whose grant or policy has a
+ * module-defined term commits, for each such term, the exact definition it
+ * is interpreted under (`SemanticTermBinding`, semantic.ts). Such an event
+ * is written under a third pair of wire codes, carrying its bindings and
+ * then its proofs (possibly none). An event without bindings keeps its 7C
+ * or 7D.2 code and bytes exactly, so a history whose terms are all Core's is
+ * unchanged:
+ *
+ * ```text
+ * REGISTER_POLICY+bindings u8(10) ‖ i64(at) ‖ segment(policy) ‖ u16(m ≥ 1) ‖ SemanticTermBinding₁ … ₘ ‖ u16(n ≥ 0) ‖ SemanticProofRef₁ … ₙ
+ * REGISTER_GRANT+bindings  u8(11) ‖ i64(at) ‖ segment(grant)  ‖ u16(m ≥ 1) ‖ SemanticTermBinding₁ … ₘ ‖ u16(n ≥ 0) ‖ SemanticProofRef₁ … ₙ
+ * ```
+ *
+ * Every registration has exactly one encoding: no binding and no proof is
+ * code 1 or 2; proofs only, 8 or 9; any binding, 10 or 11. Which bindings a
+ * registration must carry — one per module-defined term, none otherwise —
+ * is the reducer's rule, checked at commit and at every replay.
  */
 
 import { ok, type ByteWriter } from '@mandate/kernel';
@@ -96,7 +114,16 @@ import { LedgerTag, ledgerWriter, readSegment, writeSegment } from './encoding.t
 import type { TargetRef } from './errors.ts';
 import { MAX_BATCH_EVENTS, MAX_LEGS_PER_CONTRIBUTION, MAX_PLAN_CONTRIBUTIONS } from './limits.ts';
 import { decodeRevocation, encodeRevocation, type Revocation } from './revocation.ts';
-import { MAX_SEMANTIC_PROOFS, readSemanticProofRef, writeSemanticProofRef, type SemanticProofRef } from './semantic.ts';
+import {
+  MAX_SEMANTIC_BINDINGS,
+  MAX_SEMANTIC_PROOFS,
+  readSemanticProofRef,
+  readSemanticTermBinding,
+  writeSemanticProofRef,
+  writeSemanticTermBinding,
+  type SemanticProofRef,
+  type SemanticTermBinding,
+} from './semantic.ts';
 import { writeTargetRef } from './state.ts';
 
 export interface EventLeg {
@@ -113,6 +140,8 @@ export type LedgerEvent =
       readonly policy: PrincipalPolicy;
       /** The definitions that proved each restated invariant no stronger (7D.2). Absent = none. */
       readonly proofs?: readonly SemanticProofRef[];
+      /** The exact definition of each module-defined invariant (7D.3). Absent = none. */
+      readonly bindings?: readonly SemanticTermBinding[];
     }
   | {
       readonly kind: 'REGISTER_GRANT';
@@ -120,6 +149,8 @@ export type LedgerEvent =
       readonly grant: AuthorityGrant;
       /** The definitions that proved each restated invariant no weaker (7D.2). Absent = none. */
       readonly proofs?: readonly SemanticProofRef[];
+      /** The exact definition of each module-defined invariant (7D.3). Absent = none. */
+      readonly bindings?: readonly SemanticTermBinding[];
     }
   | { readonly kind: 'REVOKE'; readonly at: bigint; readonly revocation: Revocation }
   | {
@@ -150,8 +181,8 @@ export interface AccountingEvent<K extends 'CONSUME' | 'CLOSE' | 'RESTORE'> {
 
 export type LedgerEventKind = LedgerEvent['kind'];
 
-/** Wire kinds: every event kind, plus the proof-carrying forms of the two registrations (7D.2). */
-type WireKind = LedgerEventKind | 'REGISTER_POLICY_PROVEN' | 'REGISTER_GRANT_PROVEN';
+/** Wire kinds: every event kind, plus the proof-carrying (7D.2) and binding-carrying (7D.3) forms of the two registrations. */
+type WireKind = LedgerEventKind | 'REGISTER_POLICY_PROVEN' | 'REGISTER_GRANT_PROVEN' | 'REGISTER_POLICY_BOUND' | 'REGISTER_GRANT_BOUND';
 
 const EVENT_CODE: WireCodes<WireKind> = {
   REGISTER_POLICY: 1,
@@ -163,19 +194,28 @@ const EVENT_CODE: WireCodes<WireKind> = {
   RESTORE: 7,
   REGISTER_POLICY_PROVEN: 8,
   REGISTER_GRANT_PROVEN: 9,
+  REGISTER_POLICY_BOUND: 10,
+  REGISTER_GRANT_BOUND: 11,
 };
 
 function wireKind(e: LedgerEvent): WireKind {
+  if (e.kind === 'REGISTER_POLICY' && (e.bindings?.length ?? 0) > 0) return 'REGISTER_POLICY_BOUND';
+  if (e.kind === 'REGISTER_GRANT' && (e.bindings?.length ?? 0) > 0) return 'REGISTER_GRANT_BOUND';
   if (e.kind === 'REGISTER_POLICY' && (e.proofs?.length ?? 0) > 0) return 'REGISTER_POLICY_PROVEN';
   if (e.kind === 'REGISTER_GRANT' && (e.proofs?.length ?? 0) > 0) return 'REGISTER_GRANT_PROVEN';
   return e.kind;
 }
 
-function writeProofs(w: ByteWriter, proofs: readonly SemanticProofRef[] | undefined): void {
-  const list = proofs ?? [];
-  if (list.length === 0) return;
-  w.u16(list.length);
-  for (const p of list) writeSemanticProofRef(w, p);
+/** The semantic suffix of a registration: nothing (codes 1, 2), proofs (8, 9), or bindings then proofs (10, 11). */
+function writeSemantics(w: ByteWriter, bindings: readonly SemanticTermBinding[] | undefined, proofs: readonly SemanticProofRef[] | undefined): void {
+  const b = bindings ?? [];
+  const p = proofs ?? [];
+  if (b.length > 0) {
+    w.u16(b.length);
+    for (const x of b) writeSemanticTermBinding(w, x);
+    w.u16(p.length);
+  } else if (p.length > 0) w.u16(p.length);
+  for (const x of p) writeSemanticProofRef(w, x);
 }
 
 const TARGET_CODE = { NODE: 1, POLICY: 2 } as const;
@@ -194,11 +234,11 @@ export function writeEventBody(w: ByteWriter, e: LedgerEvent): void {
   switch (e.kind) {
     case 'REGISTER_POLICY':
       writeSegment(w, encodePrincipalPolicy(e.policy));
-      writeProofs(w, e.proofs);
+      writeSemantics(w, e.bindings, e.proofs);
       return;
     case 'REGISTER_GRANT':
       writeSegment(w, encodeAuthorityGrant(e.grant));
-      writeProofs(w, e.proofs);
+      writeSemantics(w, e.bindings, e.proofs);
       return;
     case 'REVOKE':
       writeSegment(w, encodeRevocation(e.revocation));
@@ -277,12 +317,22 @@ function readLeg(r: CoreReader): EventLeg {
 }
 
 /** A proof-carrying form has at least one proof: an empty list has exactly one encoding, the 7C one. */
-function readProofs(r: CoreReader): SemanticProofRef[] {
+function readProofs(r: CoreReader, min = 1): SemanticProofRef[] {
   const n = r.u16();
-  if (n === 0 || n > MAX_SEMANTIC_PROOFS) throw new DecodeFailure('ENCODING_MALFORMED');
+  if (n < min || n > MAX_SEMANTIC_PROOFS) throw new DecodeFailure('ENCODING_MALFORMED');
   const out: SemanticProofRef[] = [];
   for (let i = 0; i < n; i += 1) out.push(readSemanticProofRef(r));
   return out;
+}
+
+/** A binding-carrying form has at least one binding, then its proofs — possibly none. */
+function readBound(r: CoreReader): { bindings: SemanticTermBinding[]; proofs?: SemanticProofRef[] } {
+  const n = r.u16();
+  if (n === 0 || n > MAX_SEMANTIC_BINDINGS) throw new DecodeFailure('ENCODING_MALFORMED');
+  const bindings: SemanticTermBinding[] = [];
+  for (let i = 0; i < n; i += 1) bindings.push(readSemanticTermBinding(r));
+  const proofs = readProofs(r, 0);
+  return proofs.length > 0 ? { bindings, proofs } : { bindings };
 }
 
 function readEventBody(r: CoreReader): LedgerEvent {
@@ -300,6 +350,14 @@ function readEventBody(r: CoreReader): LedgerEvent {
     case 'REGISTER_GRANT_PROVEN': {
       const grant = decodeEmbedded(r, decodeAuthorityGrant);
       return { kind: 'REGISTER_GRANT', at, grant, proofs: readProofs(r) };
+    }
+    case 'REGISTER_POLICY_BOUND': {
+      const policy = decodeEmbedded(r, decodePrincipalPolicy);
+      return { kind: 'REGISTER_POLICY', at, policy, ...readBound(r) };
+    }
+    case 'REGISTER_GRANT_BOUND': {
+      const grant = decodeEmbedded(r, decodeAuthorityGrant);
+      return { kind: 'REGISTER_GRANT', at, grant, ...readBound(r) };
     }
     case 'REVOKE':
       return { kind, at, revocation: decodeEmbedded(r, decodeRevocation) };

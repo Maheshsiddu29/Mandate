@@ -37,6 +37,7 @@ import {
   type ReducerRules,
   type SemanticInvariantRef,
   type SemanticProofRef,
+  type SemanticTermBinding,
 } from '../src/index.ts';
 import { ALL_MODULES, DELEGATE, ONCE, PERP_V1, PERP_V1_OTHER_DIGEST, PERP_V2, PRINCIPAL, REGISTRY, RETIRED_V0, SPOT_V1, T0, TRADING, child, committed, moduleRef, policy, refused, root } from './support/fixtures.ts';
 
@@ -46,6 +47,10 @@ const definition = (m: ModuleRef = moduleRef(PERP_V1), invariantId = LEVERAGE, v
   ({ owner: { kind: 'MODULE', module: m }, invariantId, version }) as SemanticInvariantRef;
 const proof = (d: SemanticInvariantRef = definition()): SemanticProofRef => ({ definition: d, scope: [] });
 const PROOF = proof();
+/** Every grant here carries the one leverage term, bound to PERP_V1 (7D.3). */
+const BINDING: SemanticTermBinding = { definition: definition(), scope: [] };
+const BOUND = { bindings: [BINDING] };
+const PROVEN = { bindings: [BINDING], proofs: [PROOF] };
 
 /**
  * A test ordering over one-byte parameters: a lower byte is narrower. It
@@ -132,20 +137,20 @@ describe('invariant ordering (7D extension point)', () => {
 
     const plain = ledgerWith(CORE_RULES);
     committed(await plain.ledger.registerPolicy(policy(), T0, ONCE));
-    committed(await plain.ledger.registerGrant(parentGrant, T0, ONCE));
-    assert.deepEqual(violations(refused(await plain.ledger.registerGrant(narrow, T0, ONCE, [PROOF]))), ['DELEGATION_NARROWING_UNPROVEN']);
+    committed(await plain.ledger.registerGrant(parentGrant, T0, ONCE, BOUND));
+    assert.deepEqual(violations(refused(await plain.ledger.registerGrant(narrow, T0, ONCE, PROVEN))), ['DELEGATION_NARROWING_UNPROVEN']);
 
     const ordered = ledgerWith(rulesWith(byteOrdering()));
     committed(await ordered.ledger.registerPolicy(policy(), T0, ONCE));
-    committed(await ordered.ledger.registerGrant(parentGrant, T0, ONCE));
+    committed(await ordered.ledger.registerGrant(parentGrant, T0, ONCE, BOUND));
     // No committed proof: unproven, whatever the ordering could say.
-    assert.deepEqual(violations(refused(await ordered.ledger.registerGrant(narrow, T0, ONCE))), ['DELEGATION_NARROWING_UNPROVEN']);
-    committed(await ordered.ledger.registerGrant(narrow, T0, ONCE, [PROOF]));
-    assert.deepEqual(violations(refused(await ordered.ledger.registerGrant(wide, T0, ONCE, [PROOF]))), ['DELEGATION_WEAKENS_INVARIANT']);
+    assert.deepEqual(violations(refused(await ordered.ledger.registerGrant(narrow, T0, ONCE, BOUND))), ['DELEGATION_NARROWING_UNPROVEN']);
+    committed(await ordered.ledger.registerGrant(narrow, T0, ONCE, PROVEN));
+    assert.deepEqual(violations(refused(await ordered.ledger.registerGrant(wide, T0, ONCE, PROVEN))), ['DELEGATION_WEAKENS_INVARIANT']);
 
     // A writer bypassing the engine meets the same rule inside the store's critical section.
     const s = await ordered.store.read(PRINCIPAL);
-    const direct = await ordered.store.compareAndAppend(PRINCIPAL, s.version, s.head, [{ kind: 'REGISTER_GRANT', at: T0, grant: wide, proofs: [PROOF] }]);
+    const direct = await ordered.store.compareAndAppend(PRINCIPAL, s.version, s.head, [{ kind: 'REGISTER_GRANT', at: T0, grant: wide, ...PROVEN }]);
     assert.equal(direct.status, 'REFUSED');
   });
 
@@ -153,8 +158,8 @@ describe('invariant ordering (7D extension point)', () => {
     const rules = rulesWith(byteOrdering());
     const { store, ledger } = ledgerWith(rules);
     committed(await ledger.registerPolicy(policy(), T0, ONCE));
-    committed(await ledger.registerGrant(parentGrant, T0, ONCE));
-    committed(await ledger.registerGrant(child(parentGrant, { terms: [ALL_MODULES, leverage('0x03')] }), T0, ONCE, [PROOF]));
+    committed(await ledger.registerGrant(parentGrant, T0, ONCE, BOUND));
+    committed(await ledger.registerGrant(child(parentGrant, { terms: [ALL_MODULES, leverage('0x03')] }), T0, ONCE, PROVEN));
     const history = await store.history(PRINCIPAL);
     const events = history.map((b) => b.events);
     const bytes = history.map((b) => b.encoded);
@@ -170,14 +175,15 @@ describe('invariant ordering (7D extension point)', () => {
 
   it('no event carries a verdict: the registration carries the grant and whose definition decides, and nothing else', async () => {
     const narrow = child(parentGrant, { terms: [ALL_MODULES, leverage('0x03')] });
-    const event = { kind: 'REGISTER_GRANT', at: T0, grant: narrow, proofs: [PROOF] } as const;
-    assert.deepEqual(Object.keys(event).sort(), ['at', 'grant', 'kind', 'proofs']);
+    const event = { kind: 'REGISTER_GRANT', at: T0, grant: narrow, bindings: [BINDING], proofs: [PROOF] } as const;
+    assert.deepEqual(Object.keys(event).sort(), ['at', 'bindings', 'grant', 'kind', 'proofs']);
+    assert.deepEqual(Object.keys(BINDING).sort(), ['definition', 'scope']);
     assert.deepEqual(Object.keys(PROOF).sort(), ['definition', 'scope']);
     const { store, ledger } = ledgerWith(rulesWith(byteOrdering()));
     committed(await ledger.registerPolicy(policy(), T0, ONCE));
-    committed(await ledger.registerGrant(parentGrant, T0, ONCE));
+    committed(await ledger.registerGrant(parentGrant, T0, ONCE, BOUND));
     const before = await store.read(PRINCIPAL);
-    committed(await ledger.registerGrant(narrow, T0, ONCE, [PROOF]));
+    committed(await ledger.registerGrant(narrow, T0, ONCE, PROVEN));
     const stored = (await store.history(PRINCIPAL)).at(-1);
     assert.ok(stored !== undefined);
     assert.deepEqual(stored.encoded, encodeBatch(PRINCIPAL, stored.version, before.head, [event]));
@@ -188,8 +194,8 @@ describe('semantic provenance of a narrowing (7D.2)', () => {
   it('the committed proof names the exact ModuleRef, and decodes back to it', async () => {
     const { store, ledger } = ledgerWith(rulesWith(byteOrdering()));
     committed(await ledger.registerPolicy(policy(), T0, ONCE));
-    committed(await ledger.registerGrant(parentGrant, T0, ONCE));
-    committed(await ledger.registerGrant(child(parentGrant, { terms: [ALL_MODULES, leverage('0x03')] }), T0, ONCE, [PROOF]));
+    committed(await ledger.registerGrant(parentGrant, T0, ONCE, BOUND));
+    committed(await ledger.registerGrant(child(parentGrant, { terms: [ALL_MODULES, leverage('0x03')] }), T0, ONCE, PROVEN));
     const last = (await store.history(PRINCIPAL)).at(-1);
     assert.ok(last !== undefined);
     const decoded = decodeBatch(last.encoded);
@@ -219,26 +225,28 @@ describe('semantic provenance of a narrowing (7D.2)', () => {
     const other = proof(definition(moduleRef(PERP_V1_OTHER_DIGEST)));
     const { store, ledger } = ledgerWith(rulesWith(byteOrdering()));
     committed(await ledger.registerPolicy(policy(), T0, ONCE));
-    committed(await ledger.registerGrant(parentGrant, T0, ONCE));
+    committed(await ledger.registerGrant(parentGrant, T0, ONCE, BOUND));
     const narrow = child(parentGrant, { terms: [ALL_MODULES, leverage('0x03')] });
-    assert.equal(refused(await ledger.registerGrant(narrow, T0, ONCE, [other])).code, 'MODULE_DIGEST_MISMATCH');
-    // Straight into the store: the ordering knows only PERP_V1's digest, so the narrowing is unproven.
+    assert.equal(refused(await ledger.registerGrant(narrow, T0, ONCE, { bindings: [BINDING], proofs: [other] })).code, 'MODULE_DIGEST_MISMATCH');
+    // Straight into the store: a proof under another digest than the term's binding is refused outright (7D.3)…
     const s = await store.read(PRINCIPAL);
-    const direct = await store.compareAndAppend(PRINCIPAL, s.version, s.head, [{ kind: 'REGISTER_GRANT', at: T0, grant: narrow, proofs: [other] }]);
-    assert.equal(direct.status, 'REFUSED');
-    if (direct.status === 'REFUSED') assert.deepEqual(violations(direct.refusal), ['DELEGATION_NARROWING_UNPROVEN']);
+    const direct = await store.compareAndAppend(PRINCIPAL, s.version, s.head, [{ kind: 'REGISTER_GRANT', at: T0, grant: narrow, bindings: [BINDING], proofs: [other] }]);
+    assert.equal(direct.status === 'REFUSED' ? direct.refusal.code : direct.status, 'SEMANTIC_BINDING_MISMATCH');
+    // …and rebinding the child's term to that digest too departs from the parent's meaning.
+    const rebound = await store.compareAndAppend(PRINCIPAL, s.version, s.head, [{ kind: 'REGISTER_GRANT', at: T0, grant: narrow, bindings: [{ ...BINDING, definition: other.definition }], proofs: [other] }]);
+    assert.equal(rebound.status === 'REFUSED' ? rebound.refusal.code : rebound.status, 'SEMANTIC_BINDING_MISMATCH');
     // A retiring module cannot prove a new narrowing either.
     const retired = proof(definition(moduleRef(RETIRED_V0), LEVERAGE, 0));
-    assert.equal(refused(await ledger.registerGrant(narrow, T0, ONCE, [retired])).code, 'MODULE_RETIRING');
+    assert.equal(refused(await ledger.registerGrant(narrow, T0, ONCE, { bindings: [BINDING], proofs: [retired] })).code, 'MODULE_RETIRING');
   });
 
   it('refuses a proof for a term that needs none, a duplicate, a proof out of order, and an owner that cannot define the invariant', async () => {
     const { store, ledger } = ledgerWith(rulesWith(byteOrdering()));
     committed(await ledger.registerPolicy(policy(), T0, ONCE));
-    committed(await ledger.registerGrant(parentGrant, T0, ONCE));
+    committed(await ledger.registerGrant(parentGrant, T0, ONCE, BOUND));
     const s = await store.read(PRINCIPAL);
     const attempt = async (grant: typeof parentGrant, proofs: readonly SemanticProofRef[]) => {
-      const r = await store.compareAndAppend(PRINCIPAL, s.version, s.head, [{ kind: 'REGISTER_GRANT', at: T0, grant, proofs }]);
+      const r = await store.compareAndAppend(PRINCIPAL, s.version, s.head, [{ kind: 'REGISTER_GRANT', at: T0, grant, bindings: [BINDING], proofs }]);
       return r.status === 'REFUSED' ? r.refusal.code : r.status;
     };
     const narrow = child(parentGrant, { terms: [ALL_MODULES, leverage('0x03')] });

@@ -15,7 +15,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { AuthorityGrant, StateInvariantInput } from '@mandate/core';
 import { AuthorityLedger, CORE_RULES, replay, replayEncoded, type LedgerOutcome } from '@mandate/ledger';
-import { ControlEngine, ModuleCatalog, controlRules } from '../src/index.ts';
+import { ControlEngine, ModuleCatalog, controlRules, type RegistrationOutcome } from '../src/index.ts';
 import {
   AGENT_A,
   AGENT_B,
@@ -49,13 +49,15 @@ import {
   type World,
 } from './support/world.ts';
 
-function committed(o: LedgerOutcome): void {
-  if (o.status !== 'COMMITTED') assert.fail(`expected COMMITTED, got ${o.status}${o.status === 'REFUSED' ? ` ${o.refusal.code} at ${o.refusal.path}` : ''}`);
+function committed(o: RegistrationOutcome | LedgerOutcome): void {
+  if (o.status === 'REGISTERED' || o.status === 'COMMITTED') return;
+  assert.fail(`expected it committed, got ${o.status}${'refusal' in o ? ` ${o.refusal.code} at ${o.refusal.path}` : ''}`);
 }
 
-function refusedUpdate(o: LedgerOutcome): string {
+/** The ledger rule that refused the update. */
+function refusedUpdate(o: RegistrationOutcome): string {
   if (o.status !== 'REFUSED') assert.fail(`expected REFUSED, got ${o.status}`);
-  return o.refusal.code;
+  return o.refusal.reason;
 }
 
 interface Fixture {

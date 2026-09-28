@@ -222,7 +222,7 @@ function noWiderThan(e: Pick<EffectiveAuthority, 'sets' | 'rights' | 'delegateDe
       const cmp = boundCmp(mine, t);
       if ((t.polarity === 'MAX' && cmp > 0) || (t.polarity === 'MIN' && cmp < 0)) return `bound ${t.boundId} wider`;
     }
-    if (t.kind === 'STATE_INVARIANT' && !e.invariants.some((i) => termKey(i) === termKey(t) && i.params === t.params)) return 'invariant dropped';
+    if (t.kind === 'STATE_INVARIANT' && !e.invariants.some((i) => termKey(i.term) === termKey(t) && i.term.params === t.params)) return 'invariant dropped';
     if (t.kind === 'TIME_WINDOW') {
       const w = e.timeWindows.find((x) => x.domain === t.domain);
       if (w === undefined || (!w.empty && (w.notBefore < t.notBefore || w.expiresAt > t.expiresAt))) return 'window';
@@ -250,7 +250,7 @@ function ownTermsAsEffective(g: AuthorityGrant): Pick<EffectiveAuthority, 'sets'
     delegateDepth: depth !== undefined && depth.kind === 'RIGHT' && depth.right === 'DELEGATE' ? depth.maxDepth : 0,
     validity: { notBefore: g.notBefore, expiresAt: g.expiresAt, empty: false },
     bounds: g.terms.filter((t): t is PerActionBoundTerm => t.kind === 'BOUND'),
-    invariants: g.terms.filter((t) => t.kind === 'STATE_INVARIANT'),
+    invariants: g.terms.filter((t) => t.kind === 'STATE_INVARIANT').map((term) => ({ term, binding: null })),
     timeWindows: g.terms.flatMap((t) => (t.kind === 'TIME_WINDOW' ? [{ domain: t.domain, notBefore: t.notBefore, expiresAt: t.expiresAt, empty: false }] : [])),
   };
 }
@@ -262,7 +262,7 @@ describe('AUTH-2, meet half (property over random lineages with registration byp
     for (let seed = 1; seed <= 150; seed += 1) {
       const rand = prng(5000 + seed);
       const pol = policy();
-      let state: LedgerState = { ...emptyLedgerState(PRINCIPAL), policy: { id: principalPolicyId(pol), policy: pol, registeredAt: 1n as LedgerVersion } };
+      let state: LedgerState = { ...emptyLedgerState(PRINCIPAL), policy: { id: principalPolicyId(pol), policy: pol, bindings: [], registeredAt: 1n as LedgerVersion } };
       const specs: Spec[] = [];
       const grants: AuthorityGrant[] = [];
       const depth = int(rand, 2, 5);
@@ -280,7 +280,7 @@ describe('AUTH-2, meet half (property over random lineages with registration byp
         }
         const g = grantOf(spec, parent, address((60 + level).toString(16).padStart(2, '0')), BigInt(seed));
         // Inject directly: the registration check is bypassed on purpose.
-        state = { ...state, nodes: state.nodes.set(authorityId(g), { id: authorityId(g), grant: g, depth: level, registeredAt: 1n as LedgerVersion, revokedAt: null, revocation: null }) };
+        state = { ...state, nodes: state.nodes.set(authorityId(g), { id: authorityId(g), grant: g, depth: level, bindings: [], registeredAt: 1n as LedgerVersion, revokedAt: null, revocation: null }) };
         specs.push(spec);
         grants.push(g);
         if (widened) injected += 1;
@@ -317,9 +317,9 @@ describe('the meet refuses to form over incomparable terms', () => {
     assert.deepEqual(checkDelegationSubset(parent, forged, 1).map((v) => v.code), ['DELEGATION_TERM_INCOMPARABLE']);
     // …and if it were in the state anyway, no effective authority can be formed for it.
     const pol = policy();
-    let state: LedgerState = { ...emptyLedgerState(PRINCIPAL), policy: { id: principalPolicyId(pol), policy: pol, registeredAt: 1n as LedgerVersion } };
+    let state: LedgerState = { ...emptyLedgerState(PRINCIPAL), policy: { id: principalPolicyId(pol), policy: pol, bindings: [], registeredAt: 1n as LedgerVersion } };
     for (const [g, depth] of [[parent, 0], [forged, 1]] as const) {
-      state = { ...state, nodes: state.nodes.set(authorityId(g), { id: authorityId(g), grant: g, depth, registeredAt: 1n as LedgerVersion, revokedAt: null, revocation: null }) };
+      state = { ...state, nodes: state.nodes.set(authorityId(g), { id: authorityId(g), grant: g, depth, bindings: [], registeredAt: 1n as LedgerVersion, revokedAt: null, revocation: null }) };
     }
     const e = effectiveAuthority(must(resolveLineage(state, authorityId(forged))), pol);
     assert.ok(!e.ok && e.error.code === 'LINEAGE_TERMS_INCOMPARABLE');

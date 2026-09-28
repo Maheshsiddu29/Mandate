@@ -22,6 +22,12 @@
  * The effective invariants and state policy are data here: they are
  * evaluated in 7D. Only the module set is enforced by the ledger in 7C
  * (DOM-2); the other coverage checks need the action's parameters.
+ *
+ * **Bound invariants (7D.3).** Each effective invariant travels with the
+ * binding its own node — or the principal policy — committed: the exact
+ * definition it is to be evaluated under, or `null` for a Core term. The
+ * meet never looks a definition up; an evaluator receives the term and its
+ * committed meaning together, so no current registry state can stand in.
  */
 
 import { ok } from '@mandate/kernel';
@@ -51,6 +57,7 @@ import {
 } from '@mandate/core';
 import { refuse, type LedgerResult } from './errors.ts';
 import { effectiveDepths } from './graph.ts';
+import { bindingOf, type SemanticTermBinding } from './semantic.ts';
 import type { NodeRecord } from './state.ts';
 import { compareBoundValues, setMemberKeys } from './subset.ts';
 
@@ -73,6 +80,12 @@ export interface EffectiveStatePolicy {
   readonly requirements: readonly StateRequirement[];
 }
 
+/** An effective invariant and the exact definition its registration bound it to (`null`: a Core term, which needs none). */
+export interface BoundInvariant {
+  readonly term: StateInvariantTerm;
+  readonly binding: SemanticTermBinding | null;
+}
+
 export interface EffectiveAuthority {
   readonly leaf: AuthorityId;
   /** Leaf to root: the nodes whose ledger dimensions form the lineage part of the charging path. */
@@ -85,9 +98,9 @@ export interface EffectiveAuthority {
   readonly delegateDepth: number;
   readonly bounds: readonly PerActionBoundTerm[];
   readonly timeWindows: readonly EffectiveTimeWindow[];
-  readonly invariants: readonly StateInvariantTerm[];
+  readonly invariants: readonly BoundInvariant[];
   /** Principal-global invariants: constraints, never grants; evaluated in 7D over all of the principal's state. */
-  readonly principalInvariants: readonly StateInvariantTerm[];
+  readonly principalInvariants: readonly BoundInvariant[];
   readonly statePolicies: readonly EffectiveStatePolicy[];
 }
 
@@ -114,7 +127,12 @@ function filterMembers(t: SetConstraintTerm, keep: (key: string) => boolean): Se
 
 const RIGHTS: readonly Exclude<Right, 'DELEGATE'>[] = ['OPEN_RISK', 'REDUCE_RISK', 'TRANSFER_OUT'];
 
-export function effectiveAuthority(lineage: readonly NodeRecord[], policy: PrincipalPolicy, path = 'authority'): LedgerResult<EffectiveAuthority> {
+/**
+ * `policyBindings` are the bindings the principal policy was registered with
+ * (`PolicyRecord.bindings`). Omitted, a module-defined policy term is carried
+ * unbound — which no evaluator may interpret (fail closed).
+ */
+export function effectiveAuthority(lineage: readonly NodeRecord[], policy: PrincipalPolicy, path = 'authority', policyBindings: readonly SemanticTermBinding[] = []): LedgerResult<EffectiveAuthority> {
   const leaf = lineage[0] as NodeRecord;
   const grants = lineage.map((n) => n.grant);
 
@@ -179,15 +197,18 @@ export function effectiveAuthority(lineage: readonly NodeRecord[], policy: Princ
     }
   }
 
-  const invariants: StateInvariantTerm[] = [];
+  const invariants: BoundInvariant[] = [];
   const invariantSeen = new Set<string>();
-  for (const g of grants) {
-    for (const t of g.terms) {
+  for (const n of lineage) {
+    for (const t of n.grant.terms) {
       if (t.kind !== 'STATE_INVARIANT') continue;
-      const k = `${termKey(t)}${t.params}`;
+      const binding = bindingOf(n.bindings, t);
+      // One entry per (term, parameters, meaning): the same name under another definition is another constraint.
+      // A binding matches its term's id, version and scope, so its owner is all that can differ.
+      const k = JSON.stringify([termKey(t), t.params, binding === null ? null : ownerKey(binding)]);
       if (invariantSeen.has(k)) continue;
       invariantSeen.add(k);
-      invariants.push(t);
+      invariants.push({ term: t, binding });
     }
   }
 
@@ -217,7 +238,7 @@ export function effectiveAuthority(lineage: readonly NodeRecord[], policy: Princ
     bounds: [...bounds.values()],
     timeWindows: [...windows.values()].map((w) => ({ ...w, empty: w.notBefore >= w.expiresAt })),
     invariants,
-    principalInvariants: policyInvariants(policy),
+    principalInvariants: policyInvariants(policy).map((term) => ({ term, binding: bindingOf(policyBindings, term) })),
     statePolicies: [...statePolicies.values()].map((p) => ({
       domain: p.domain,
       stateKind: p.stateKind,
@@ -225,6 +246,11 @@ export function effectiveAuthority(lineage: readonly NodeRecord[], policy: Princ
       requirements: [...p.requirements.values()],
     })),
   });
+}
+
+function ownerKey(b: SemanticTermBinding): readonly string[] {
+  const o = b.definition.owner;
+  return o.kind === 'MODULE' ? [o.module.domainId, o.module.moduleId, String(o.module.moduleVersion), o.module.moduleDigest] : ['CORE'];
 }
 
 /** DOM-2: the exact `ModuleRef`, digest included, is in the effective module set. */

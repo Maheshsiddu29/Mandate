@@ -28,34 +28,50 @@
  * and only after the engine itself has found revalidation failing, with no
  * consumption on the reservation. A projection never moves authority (brief
  * §53).
+ *
+ * **Registration derives its own semantics (7D.3).** `registerDelegation`
+ * (roots and delegations) and `registerPolicy` take the grant or policy, a
+ * time and a retry policy — nothing else. The exact definition of every
+ * module-defined term (`termBindings`) and every narrowing proof
+ * (`narrowingProofs`, `policyProofs`) are derived here from the catalog's
+ * current, active implementations and committed with the registration; no
+ * argument, field or option lets a caller name a module, supply a proof or
+ * assert a verdict. The ledger's own registration methods, which accept
+ * already-derived `RegistrationSemantics`, are infrastructure, not this
+ * surface.
  */
 
 import {
-  authorityId,
   keccakDigest,
+  policyInvariants,
   writeDigest,
   type AuthorityGrant,
   type LedgerVersion,
   type ObservationId,
   type PrincipalId,
+  type PrincipalPolicy,
+  type StateInvariantTerm,
 } from '@mandate/core';
 import {
   MAX_COMMIT_ATTEMPTS,
   applyBatch,
-  checkGrantRegistration,
-  committedProver,
+  applyEvent,
+  grantInvariants,
   type DemandRecord,
   type LedgerEvent,
   type LedgerSnapshot,
   type LedgerStore,
   type ModuleRegistry,
   type RetryPolicy,
+  type SemanticProofRef,
+  type SemanticTermBinding,
 } from '@mandate/ledger';
 import { authorizationRecordOf, type AuthorizationRecord } from './authorization.ts';
+import { termBindings } from './binding.ts';
 import { controlRules, type ModuleCatalog } from './catalog.ts';
 import { ControlTag, controlWriter } from './encoding.ts';
 import { fromLedger, refusal, type ControlRefusal, type ControlResult } from './errors.ts';
-import { narrowingProofs, semanticProofRefs, type NarrowingProof } from './narrowing.ts';
+import { narrowingProofs, policyProofs, semanticProofRefs, type NarrowingProof } from './narrowing.ts';
 import { PRODUCTION_PIPELINE, decideWith, type AuthorizationRequest, type Decision, type DecisionEnv } from './pipeline.ts';
 import { revalidateWith, type RevalidationRequest, type RevalidationResult } from './revalidation.ts';
 
@@ -73,7 +89,14 @@ export type CloseOutcome =
   | { readonly status: 'CONFLICT'; readonly refusal: ControlRefusal; readonly attempts: number };
 
 export type RegistrationOutcome =
-  | { readonly status: 'REGISTERED'; readonly proofs: readonly NarrowingProof[]; readonly snapshot: LedgerSnapshot; readonly attempts: number }
+  | {
+      readonly status: 'REGISTERED';
+      readonly proofs: readonly NarrowingProof[];
+      /** The exact definition each module-defined term was bound to, as committed (7D.3). */
+      readonly bindings: readonly SemanticTermBinding[];
+      readonly snapshot: LedgerSnapshot;
+      readonly attempts: number;
+    }
   | { readonly status: 'REFUSED'; readonly refusal: ControlRefusal; readonly attempts: number }
   | { readonly status: 'CONFLICT'; readonly refusal: ControlRefusal; readonly attempts: number };
 
@@ -213,37 +236,76 @@ export class ControlEngine {
   }
 
   /**
-   * Register a grant, proving any restated invariant with different
-   * parameters no weaker by its owning definition (narrowing.ts). The caller
-   * supplies only the grant; the verdicts are the catalog's, and the store's
-   * reducer re-derives them at commit.
+   * Register a grant — a root or a delegation — binding each module-defined
+   * term to its current, active definition (binding.ts) and proving any
+   * restated invariant with different parameters no weaker by that same
+   * definition (narrowing.ts). The caller supplies only the grant; the
+   * bindings and verdicts are the catalog's, and the store's reducer
+   * re-checks them at commit.
    */
   async registerDelegation(grant: AuthorityGrant, at: bigint, retry: RetryPolicy): Promise<RegistrationOutcome> {
+    return this.#register(grant.principal, retry, grantInvariants(grant), 'grant.terms', (snapshot, bindings) => {
+      const parent = grant.lineage.kind === 'DELEGATION' ? snapshot.state.nodes.get(grant.lineage.parent) : undefined;
+      return parent === undefined ? [] : narrowingProofs(parent.grant, grant, this.#catalog, { parent: parent.bindings, child: bindings });
+    }, (bindings, refs) => ({ kind: 'REGISTER_GRANT', at, grant, ...semanticsOf(bindings, refs) }));
+  }
+
+  /**
+   * Register the principal policy, or replace it, under the ledger's
+   * baseline rules: each module-defined principal-global term is bound to its
+   * current, active definition, and each one restated after activity is
+   * proven no stronger under that definition (7D.1). An existing policy's
+   * terms keep their committed meaning until a policy registered here
+   * replaces them.
+   */
+  async registerPolicy(policy: PrincipalPolicy, at: bigint, retry: RetryPolicy): Promise<RegistrationOutcome> {
+    return this.#register(policy.principal, retry, policyInvariants(policy), 'policy.terms', (snapshot, bindings) => policyProofs(snapshot.state, policy, this.#catalog, bindings), (bindings, refs) => ({
+      kind: 'REGISTER_POLICY',
+      at,
+      policy,
+      ...semanticsOf(bindings, refs),
+    }));
+  }
+
+  async #register(
+    principal: PrincipalId,
+    retry: RetryPolicy,
+    invariants: readonly StateInvariantTerm[],
+    termsPath: string,
+    prove: (snapshot: LedgerSnapshot, bindings: readonly SemanticTermBinding[]) => readonly NarrowingProof[],
+    eventOf: (bindings: readonly SemanticTermBinding[], proofs: readonly SemanticProofRef[]) => LedgerEvent,
+  ): Promise<RegistrationOutcome> {
     const bad = retryRefusal(retry);
     if (bad !== null) return { status: 'REFUSED', refusal: bad, attempts: 0 };
-    const id = authorityId(grant);
+    // What each term means: the current, active owner of its definition, fixed from now on (7D.3).
+    const bindings = termBindings(invariants, this.#catalog, termsPath);
+    if (!bindings.ok) return { status: 'REFUSED', refusal: bindings.error, attempts: 0 };
     for (let attempt = 1; attempt <= retry.maxAttempts; attempt += 1) {
-      const snapshot = await this.#store.read(grant.principal);
-      const parent = grant.lineage.kind === 'DELEGATION' ? snapshot.state.nodes.get(grant.lineage.parent) : undefined;
-      const proofs = parent === undefined ? [] : narrowingProofs(parent.grant, grant, this.#catalog);
-      // Committed with the grant: exactly whose semantics proved each narrowing (7D.2).
-      const refs = semanticProofRefs(proofs, grant.terms.filter((t) => t.kind === 'STATE_INVARIANT'));
-      const checked = checkGrantRegistration(snapshot.state, id, grant, at, 'grant', committedProver(this.#env.rules.invariantOrdering, refs));
+      const snapshot = await this.#store.read(principal);
+      const proofs = prove(snapshot, bindings.value);
+      // Committed with the registration: exactly whose semantics proved each narrowing (7D.2).
+      const refs = semanticProofRefs(proofs, invariants);
+      const event = eventOf(bindings.value, refs);
+      // The reducer's own rules, against this snapshot, before anything is written.
+      const checked = applyEvent(snapshot.state, event, (snapshot.version + 1n) as LedgerVersion, this.#env.rules);
       if (!checked.ok) {
         const r = fromLedger(checked.error, '');
         const detail = checked.error.code === 'DELEGATION_REFUSED' ? { kind: 'DELEGATION' as const, violations: checked.error.violations, proofs } : r.detail;
         return { status: 'REFUSED', refusal: { ...r, detail }, attempts: attempt };
       }
-      // A retiring owner may still order replayed history, but cannot prove a new narrowing.
+      // Defence in depth: only an active comparator's NO_WEAKER is ever committed as a new proof.
       const unproven = proofs.find((p) => p.verdict !== 'NO_WEAKER');
       if (unproven !== undefined) {
-        return { status: 'REFUSED', refusal: refusal('SEMANTIC_NARROWING_UNPROVABLE', 'COMPARATOR_NOT_ACTIVE', `grant.terms.${unproven.invariantId}`, { detail: { kind: 'DELEGATION', violations: [], proofs } }), attempts: attempt };
+        return { status: 'REFUSED', refusal: refusal('SEMANTIC_NARROWING_UNPROVABLE', 'COMPARATOR_NOT_ACTIVE', `${termsPath}.${unproven.invariantId}`, { detail: { kind: 'DELEGATION', violations: [], proofs } }), attempts: attempt };
       }
-      const event: LedgerEvent = { kind: 'REGISTER_GRANT', at, grant, ...(refs.length > 0 ? { proofs: refs } : {}) };
       const result = await this.#store.compareAndAppend(snapshot.principal, snapshot.version, snapshot.head, [event]);
-      if (result.status === 'COMMITTED') return { status: 'REGISTERED', proofs, snapshot: result.snapshot, attempts: attempt };
+      if (result.status === 'COMMITTED') return { status: 'REGISTERED', proofs, bindings: bindings.value, snapshot: result.snapshot, attempts: attempt };
       if (result.status === 'REFUSED') return { status: 'REFUSED', refusal: { ...fromLedger(result.refusal, 'commit'), code: 'LEDGER_CONFLICT' }, attempts: attempt };
     }
     return { status: 'CONFLICT', refusal: exhausted(), attempts: retry.maxAttempts };
   }
+}
+
+function semanticsOf(bindings: readonly SemanticTermBinding[], proofs: readonly SemanticProofRef[]): { bindings?: readonly SemanticTermBinding[]; proofs?: readonly SemanticProofRef[] } {
+  return { ...(bindings.length > 0 ? { bindings } : {}), ...(proofs.length > 0 ? { proofs } : {}) };
 }

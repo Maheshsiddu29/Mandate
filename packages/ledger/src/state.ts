@@ -12,7 +12,9 @@
  * What it holds:
  *
  * - **nodes** — every registered grant, never mutated: registration version,
- *   depth, and revocation (version and `RevocationId`) once revoked.
+ *   depth, the exact semantic binding of each module-defined term (7D.3),
+ *   and revocation (version and `RevocationId`) once revoked. The principal
+ *   policy likewise keeps the bindings it was registered with.
  * - **targets** — one balance per charge target: every ledger dimension of
  *   every node, and every principal-global dimension the policy has had.
  *   A node target's capacity comes from its signed grant; a policy target's
@@ -63,12 +65,19 @@ import type { Contribution } from './charge-plan.ts';
 import type { TargetRef } from './errors.ts';
 import { PMap } from './pmap.ts';
 import type { RevocationId } from './revocation.ts';
+import { writeSemanticTermBinding, type SemanticTermBinding } from './semantic.ts';
 
 export interface NodeRecord {
   readonly id: AuthorityId;
   readonly grant: AuthorityGrant;
   /** 0 for a root. */
   readonly depth: number;
+  /**
+   * The exact definition each module-defined term means, as committed by the
+   * registration (7D.3), in canonical order. Fixed for the node's life: no
+   * later registry state reinterprets it.
+   */
+  readonly bindings: readonly SemanticTermBinding[];
   readonly registeredAt: LedgerVersion;
   /** The version whose batch recorded this node's own revocation. An ancestor's revocation is not copied here. */
   readonly revokedAt: LedgerVersion | null;
@@ -145,6 +154,8 @@ export interface ActionRecord {
 export interface PolicyRecord {
   readonly id: PrincipalPolicyId;
   readonly policy: PrincipalPolicy;
+  /** The exact definition each module-defined principal-global term means (7D.3), in canonical order. */
+  readonly bindings: readonly SemanticTermBinding[];
   readonly registeredAt: LedgerVersion;
 }
 
@@ -267,6 +278,11 @@ export function writeTargetRef(w: ByteWriter, ref: TargetRef): void {
 }
 
 
+function writeBindings(w: ByteWriter, bindings: readonly SemanticTermBinding[]): void {
+  w.u16(bindings.length);
+  for (const b of bindings) writeSemanticTermBinding(w, b);
+}
+
 /**
  * One canonical byte string for a whole ledger state: every map in ascending
  * key order, every field written. Two states are the same logical state iff
@@ -281,6 +297,7 @@ export function encodeLedgerState(s: LedgerState): Uint8Array {
   writeNullable(w, s.lastAt, (x, t) => x.i64(t));
   writeNullable(w, s.policy, (x, p) => {
     writeSegment(x, encodePrincipalPolicy(p.policy));
+    writeBindings(x, p.bindings);
     x.u64(p.registeredAt);
   });
   w.u8(s.everReserved ? 1 : 0);
@@ -290,6 +307,7 @@ export function encodeLedgerState(s: LedgerState): Uint8Array {
   for (const k of nodes) {
     const n = s.nodes.get(k) as NodeRecord;
     writeSegment(w, encodeAuthorityGrant(n.grant));
+    writeBindings(w, n.bindings);
     w.u8(n.depth).u64(n.registeredAt);
     writeNullable(w, n.revokedAt, (x, v) => x.u64(v));
     writeNullable(w, n.revocation, (x, r) => writeDigest(x, r));
