@@ -10,9 +10,11 @@ and what it depends on.
 > is architecture-accepted, with the Phase 7B.1 representation hardening
 > implemented locally and awaiting review. Phase 7C — the authority graph and
 > global authority ledger ([implementation-7c.md](core-v1/implementation-7c.md))
-> — is implemented locally and awaiting review. Phase 7D is not started.** No
-> domain module, reservation engine or later Phase 7 mechanism exists, and
-> nothing has been deployed.
+> — is implemented locally and awaiting review. Phase 7D — the invariant and
+> reservation engine ([implementation-7d.md](core-v1/implementation-7d.md)) —
+> is implemented locally and awaiting review.** No production domain module,
+> venue integration, observation reconciliation or later Phase 7 mechanism
+> exists, and nothing has been deployed.
 > Rationale for the phase ordering is in
 > [mandate-design.md §25](mandate-design.md#25-phased-engineering-roadmap);
 > scope boundaries are in
@@ -501,7 +503,7 @@ are folded without observation validation, which is 7D's. AUTH-GLOBAL-2 is not
 established: a new principal-global dimension is refused once anything was
 reserved.
 
-### Phase 7D — Invariant + Reservation Engine
+### Phase 7D — Invariant + Reservation Engine — IMPLEMENTED, awaiting review
 
 **Delivers** the executable `DomainModule` interface (decode, resources,
 required state, risk direction, projection, contributions, settle, positions,
@@ -509,6 +511,21 @@ invariants), invariant dispatch, conservative projection, the reservation
 state machine and reconciliation rules.
 **Exit:** RECON-1…5, TIME-1 and REPLAY-1 established by randomized
 reconciliation properties with duplicated, reordered and stale observations.
+
+**As built** ([implementation-7d.md](core-v1/implementation-7d.md),
+ADRs [0024](adr/0024-version-bound-domain-module-interface.md)–[0026](adr/0026-worst-case-projection-over-pending-reservations.md)):
+`packages/control` — the version-bound `DomainModule` interface and exact
+module resolution with conformance; state requirements, admission and
+bindings over an explicit evaluation context; worst-case projection over
+every unresolved reservation; lineage and principal-global invariant
+evaluation, including Core's cross-module aggregate; semantic delegation
+narrowing through a configured ledger ordering; ledger demands into charge
+plans; atomic reservation by CAS with full re-projection on conflict; pure
+revalidation and `NEVER_ISSUED` closure. The phase brief excluded
+venue-driven transitions, so observation reconciliation — and with it the
+exit criteria RECON-1…5, TIME-1 and REPLAY-1 — is **not** built; it moves
+with the reconciliation work (7F). `settle` and `positions` are not part of
+the interface yet. No production domain module exists.
 
 ### Phase 7E — PerpPolicy v1 and Venue Signer
 
@@ -585,7 +602,7 @@ to the product, and belongs in the design documents before it belongs in code.
 | 7A | Mandate Core v1 specification | 6 | **FROZEN ✓** — specification only, hardened |
 | 7B | Core types and generic action/state model | 7A | ✅ architecture accepted; 7B.1 representation hardening implemented locally (meet and AUTH-2 → 7C; module interface → 7D) |
 | 7C | Authority Graph + Global Authority Ledger (meet, effective lineage, AUTH-2) | 7B | ✅ implemented locally, awaiting review |
-| 7D | Invariant + Reservation Engine (executable `DomainModule` interface) | 7C | planned |
+| 7D | Invariant + Reservation Engine (executable `DomainModule` interface) | 7C | ✅ implemented locally, awaiting review (observation reconciliation deferred) |
 | 7E | PerpPolicy v1 and Venue Signer | 7D | planned; blocked on venue evidence |
 | 7F | Cross-domain reconciliation: EVM fixture and perps | 7E | planned |
 | 7G | Developer SDK and simulator | 7F | planned |

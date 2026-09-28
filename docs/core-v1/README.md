@@ -9,7 +9,9 @@
 > described in [implementation-7b.md](implementation-7b.md), which lists where
 > this specification could not be followed literally. The Phase 7C authority
 > graph and global authority ledger are in `packages/ledger`, described in
-> [implementation-7c.md](implementation-7c.md). This specification is
+> [implementation-7c.md](implementation-7c.md). The Phase 7D invariant and
+> reservation engine is in `packages/control`, described in
+> [implementation-7d.md](implementation-7d.md). This specification is
 > unchanged.
 
 Mandate Core v1 is the domain-independent economic control layer that Spot,

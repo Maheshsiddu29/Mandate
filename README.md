@@ -3,14 +3,17 @@
 **Intent-aware execution infrastructure for AI agents transacting in tokenized
 financial assets.**
 
-> **Current: Phase 7C — the authority graph and principal-wide global
-> authority ledger (`packages/ledger`,
-> [docs/core-v1/implementation-7c.md](docs/core-v1/implementation-7c.md)) — is
-> implemented locally and awaiting review, on Phase 7B's Core types
-> (`packages/core`, [implementation-7b.md](docs/core-v1/implementation-7b.md))
+> **Current: Phase 7D — the invariant and reservation engine
+> (`packages/control`,
+> [docs/core-v1/implementation-7d.md](docs/core-v1/implementation-7d.md)) — is
+> implemented locally and awaiting review, on Phase 7C's authority graph and
+> global authority ledger (`packages/ledger`,
+> [implementation-7c.md](docs/core-v1/implementation-7c.md)), Phase 7B's Core
+> types (`packages/core`, [implementation-7b.md](docs/core-v1/implementation-7b.md))
 > and the frozen Phase 7A Mandate Core v1 specification
-> ([docs/core-v1](docs/core-v1/README.md)). No domain module, reservation
-> engine, venue integration or durable store exists yet. Phase 6 is frozen at
+> ([docs/core-v1](docs/core-v1/README.md)). Its only domain module is a
+> test-only synthetic market; no production domain module, venue integration,
+> observation reconciliation or durable store exists yet. Phase 6 is frozen at
 > `dc98df5`.**
 >
 > **Status: Phase 6R.2B (secure gas optimization) implemented locally and awaiting independent security and gas review ([report](docs/phase-6r2b-report.md): normal BUY 401,684 → 246,963 execution gas, worst case 6,724,561 → 425,922, no semantic change), after the Phase 6R.2A gas attribution benchmark ([report](docs/phase-6r2a-gas-profile.md)) and Phase 6R.1b — an onchain execution
@@ -294,9 +297,11 @@ See [MVP scope](docs/mandate-design.md#20-buildathon-mvp-scope) and
 ├── packages/execution-gate/ offchain half of the Phase 6 gate: commitment, reference model, reconciliation
 ├── packages/core/         Mandate Core v1 types, canonical encodings and validators (Phase 7B; no ledger)
 ├── packages/ledger/       authority graph, meet and principal-wide CAS ledger over Core (Phase 7C; in-memory store only)
+├── packages/control/      invariant and reservation engine: domain-module contract, admission, projection, reservation (Phase 7D)
 ├── contracts/             Solidity: the execution gate, codec, labelled fixture venue, Foundry tests
 ├── corpus/gate-v1/        TypeScript ↔ Solidity execution-gate vectors
 ├── corpus/core-v1/        Mandate Core v1 canonical-encoding vectors
+├── corpus/control-v1/     Phase 7D authorization decision vectors (synthetic module)
 ├── corpus/v2/             cross-implementation verifier decision vectors
 ├── corpus/registry-v1/    cross-implementation registry decision vectors
 ├── corpus/mainnet-v1/     recorded mainnet replay vectors and metrics

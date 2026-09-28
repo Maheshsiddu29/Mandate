@@ -159,6 +159,10 @@ as `DELEGATION_NARROWING_UNPROVEN` — neither weaker nor stricter is provable.
 Exact restatement is accepted. So Example D's good D2 (`accountLeverage ≤ 3x`
 under a parent's `≤ 4x`) is refused in 7C: proving that 3x is no weaker needs
 the invariant definition's `noWeaker`, which arrives with domain modules (7D).
+*(Update, Phase 7D: the reducer now accepts a configured `InvariantOrdering`,
+and with the owning module's comparator Example D's good D2 registers —
+[implementation-7d.md §8](implementation-7d.md#8-semantic-noweaker). Without
+one, the behaviour above is unchanged.)*
 A different measure under the same identifier is
 `DELEGATION_TERM_INCOMPARABLE`, never converted.
 

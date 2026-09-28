@@ -35,6 +35,9 @@ Status values: `Proposed`, `Accepted`, `Superseded by ADR NNNN`, `Rejected`.
 | [0021](0021-authority-ledger-package-boundary.md) | Authority ledger package boundary | Proposed |
 | [0022](0022-principal-event-log-and-derived-state.md) | Principal event log, hash chain and derived ledger state | Proposed |
 | [0023](0023-ledger-store-contract.md) | Ledger store contract and the in-memory reference store | Proposed |
+| [0024](0024-version-bound-domain-module-interface.md) | A pure, version-bound DomainModule interface | Proposed |
+| [0025](0025-control-package-and-authorization-boundary.md) | The control package and the authorization orchestration boundary | Proposed |
+| [0026](0026-worst-case-projection-over-pending-reservations.md) | Worst-case projection over every unresolved reservation | Proposed |
 
 The canonical product specification remains
 [docs/mandate-design.md](../mandate-design.md). ADRs record *how* a specified

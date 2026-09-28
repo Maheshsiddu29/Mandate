@@ -32,7 +32,14 @@ validators
 graph and principal-wide global authority ledger, with an in-memory reference
 store only
 ([docs/core-v1/implementation-7c.md](docs/core-v1/implementation-7c.md),
-ADRs [0021](docs/adr/0021-authority-ledger-package-boundary.md)–[0023](docs/adr/0023-ledger-store-contract.md)). **Phase 6 is
+ADRs [0021](docs/adr/0021-authority-ledger-package-boundary.md)–[0023](docs/adr/0023-ledger-store-contract.md)) — and **Phase
+7D implemented locally, awaiting review**: `packages/control`, the invariant
+and reservation engine — the version-bound `DomainModule` interface, state
+admission, worst-case projection, invariant evaluation, semantic delegation
+narrowing and atomic reservation through the ledger, with a test-only
+synthetic module and no venue
+([docs/core-v1/implementation-7d.md](docs/core-v1/implementation-7d.md),
+ADRs [0024](docs/adr/0024-version-bound-domain-module-interface.md)–[0026](docs/adr/0026-worst-case-projection-over-pending-reservations.md)). **Phase 6 is
 frozen at `dc98df5`**; nothing in Phase 7 may modify
 MCE v2, Candidate V3, the gate, its libraries, fixture or replay semantics, or
 any canonical vector. Before it came **Phase 6R.2B** (secure gas optimization:
@@ -82,7 +89,7 @@ authorization.
 
 The dependency directions are `adapter → registry → kernel`,
 `router → registry → kernel`, `jev → router → registry → kernel`,
-`execution-gate → kernel`, `core → kernel` and `ledger → core → kernel`, never the reverse, and it is enforced by structural tests
+`execution-gate → kernel`, `core → kernel`, `ledger → core → kernel` and `control → ledger → core → kernel`, never the reverse, and it is enforced by structural tests
 ([ADR 0004](docs/adr/0004-registry-package-boundary.md),
 [ADR 0012](docs/adr/0012-jev-closed-set-authority-boundary.md)). The kernel,
 registry and router perform no I/O; the Robinhood adapter and the Jev client
@@ -295,6 +302,18 @@ module and declares no `any`, `unknown` or `Record` type; its store is an
 interface with an in-memory reference implementation only.
 `structure.test.ts` enforces all of it. `npm run ledger:benchmark` measures its
 hot paths.
+
+The control package's runtime dependencies are fixed to `@mandate/ledger`,
+`@mandate/core` and `@mandate/kernel`
+([ADR 0025](docs/adr/0025-control-package-and-authorization-boundary.md)). It
+performs no I/O, reads no clock, randomness or environment, names no venue,
+contains no production domain module, declares no `any`, `unknown` or
+`Record` type, and exports no raw accounting (consume, release, restore);
+`structure.test.ts` enforces all of it, including over the test-only synthetic
+module. Its store must be constructed with `controlRules(catalog)`.
+`npm run control-corpus:generate` regenerates `corpus/control-v1` (part of
+`generated:check`), and `npm run control:benchmark` measures the
+authorization hot path.
 
 The execution-gate package's runtime dependencies are fixed to
 `@mandate/kernel`, `@noble/curves` and `@noble/hashes` at the kernel's pinned
