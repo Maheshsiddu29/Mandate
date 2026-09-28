@@ -3,8 +3,9 @@
  *
  * Two objects, kept apart on purpose:
  *
- * - a `StateEnvelope` says *this observation exists*: which domain and state
- *   kind, which subject, from which configured source at which trust class,
+ * - a `StateEnvelope` says *this observation exists*, normalized and
+ *   interpreted under one exact semantic module (`ModuleRef`, digest
+ *   included): which state kind, which subject, from which configured source at which trust class,
  *   when, at which sequence and finality, with which payload. Its digest is
  *   the `StateId` (`StateDigest`). The payload is the domain's and is committed
  *   by digest only; there is no universal state struct.
@@ -34,7 +35,6 @@ import {
   validateResourceId,
   writeResourceId,
   type ArtifactField,
-  type DomainId,
   type FinalityLadderId,
   type FinalityLevel,
   type ResourceId,
@@ -56,6 +56,14 @@ import {
   parseUnixSeconds,
   type IntegerInput,
 } from './primitives.ts';
+import {
+  moduleRefInputOf,
+  readModuleRefInput,
+  validateModuleRef,
+  writeModuleRef,
+  type ModuleRef,
+  type ModuleRefInput,
+} from './module.ts';
 import {
   CoreTag,
   decodeTagged,
@@ -399,7 +407,7 @@ function validateValidity(observedAt: bigint, validUntil: IntegerInput | null, p
 // --- StateEnvelope ---------------------------------------------------------------
 
 export interface StateEnvelopeInput {
-  readonly domain: string;
+  readonly module: ModuleRefInput;
   readonly stateKind: string;
   readonly subject: ResourceIdInput;
   readonly sourceId: string;
@@ -413,8 +421,12 @@ export interface StateEnvelopeInput {
 
 export type StateEnvelope = Tagged<
   {
-    /** The interpreting module's manifest fixes the payload schema for `(domain, stateKind)`. */
-    readonly domain: DomainId;
+    /**
+     * The exact semantic module the normalized observation is interpreted under; its manifest fixes the
+     * payload schema for `stateKind`. A raw external observation may be module-independent evidence, but
+     * a `StateEnvelope` is not: the same observation normalized under two modules is two states (DOM-2).
+     */
+    readonly module: ModuleRef;
     readonly stateKind: StateKind;
     readonly subject: ResourceId;
     readonly sourceId: StateSourceId;
@@ -431,7 +443,7 @@ export type StateEnvelope = Tagged<
 >;
 
 const STATE_ENVELOPE_FIELDS = [
-  'domain',
+  'module',
   'stateKind',
   'subject',
   'sourceId',
@@ -446,8 +458,8 @@ const STATE_ENVELOPE_FIELDS = [
 export function validateStateEnvelope(input: StateEnvelopeInput, path = 'state'): CoreResult<StateEnvelope> {
   const shape = checkFields(input, STATE_ENVELOPE_FIELDS, path);
   if (!shape.ok) return shape;
-  const domain = parseIdentifierAs<DomainId>(input.domain, at(path, 'domain'));
-  if (!domain.ok) return domain;
+  const module = validateModuleRef(input.module, at(path, 'module'));
+  if (!module.ok) return module;
   const stateKind = parseIdentifierAs<StateKind>(input.stateKind, at(path, 'stateKind'));
   if (!stateKind.ok) return stateKind;
   const subject = validateResourceId(input.subject, RESOURCE_KINDS, at(path, 'subject'));
@@ -467,7 +479,7 @@ export function validateStateEnvelope(input: StateEnvelopeInput, path = 'state')
   const payloadDigest = parseDigest<StatePayloadDigest>(input.payloadDigest, at(path, 'payloadDigest'));
   if (!payloadDigest.ok) return payloadDigest;
   return ok({
-    domain: domain.value,
+    module: module.value,
     stateKind: stateKind.value,
     subject: subject.value,
     sourceId: sourceId.value,
@@ -490,7 +502,8 @@ function readI64(r: CoreReader): bigint {
 
 export function encodeStateEnvelope(s: StateEnvelope): Uint8Array {
   const w = taggedWriter(CoreTag.STATE);
-  w.str(s.domain).str(s.stateKind);
+  writeModuleRef(w, s.module);
+  w.str(s.stateKind);
   writeResourceId(w, s.subject);
   w.str(s.sourceId);
   writeCode(w, TRUST_CLASS_CODE, s.trustClass);
@@ -503,7 +516,7 @@ export function encodeStateEnvelope(s: StateEnvelope): Uint8Array {
 }
 
 function readStateEnvelopeInput(r: CoreReader): StateEnvelopeInput {
-  const domain = r.str();
+  const module = readModuleRefInput(r);
   const stateKind = r.str();
   const subject = readResourceIdInput(r);
   const sourceId = r.str();
@@ -513,7 +526,7 @@ function readStateEnvelopeInput(r: CoreReader): StateEnvelopeInput {
   const validUntil = readNullable(r, readI64);
   const finality = readFinalityInput(r);
   const payloadDigest = r.digest();
-  return { domain, stateKind, subject, sourceId, trustClass, observedAt, sequence, validUntil, finality, payloadDigest };
+  return { module, stateKind, subject, sourceId, trustClass, observedAt, sequence, validUntil, finality, payloadDigest };
 }
 
 export function decodeStateEnvelope(bytes: Uint8Array): CoreResult<StateEnvelope> {
@@ -527,7 +540,7 @@ export function stateId(s: StateEnvelope): StateId {
 
 export function stateEnvelopeInputOf(s: StateEnvelope): StateEnvelopeInput {
   return {
-    domain: s.domain,
+    module: moduleRefInputOf(s.module),
     stateKind: s.stateKind,
     subject: resourceIdInputOf(s.subject),
     sourceId: s.sourceId,

@@ -125,7 +125,10 @@ suite(validateActionEnvelope, actionId)('ActionEnvelope', sampleActionInput(), {
 // --- StateEnvelope and StateBinding ----------------------------------------------
 
 suite(validateStateEnvelope, stateId)('StateEnvelope', sampleStateInput(), {
-  domain: (s) => ({ ...s, domain: 'perp-x' }),
+  'module.domainId': (s) => ({ ...s, module: { ...s.module, domainId: 'perp-x' } }),
+  'module.moduleId': (s) => ({ ...s, module: { ...s.module, moduleId: 'perp-policy-x' } }),
+  'module.moduleVersion': (s) => ({ ...s, module: { ...s.module, moduleVersion: s.module.moduleVersion + 1 } }),
+  'module.moduleDigest': (s) => ({ ...s, module: { ...s.module, moduleDigest: other('module') } }),
   stateKind: (s) => ({ ...s, stateKind: 'perp.indexPrice' }),
   subject: (s) => ({ ...s, subject: ETH_PERP_L }),
   sourceId: (s) => ({ ...s, sourceId: 'venue-l-ws' }),

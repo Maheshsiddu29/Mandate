@@ -179,7 +179,7 @@ export function sampleActionInput(): ActionEnvelopeInput {
 
 export function sampleStateInput(): StateEnvelopeInput {
   return {
-    domain: 'perp',
+    module: PERP_V1,
     stateKind: 'perp.markPrice',
     subject: BTC_PERP_L,
     sourceId: 'venue-l-api',

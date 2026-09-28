@@ -220,7 +220,11 @@ function positives(): Vector[] {
     vector('action/perp-order', 'ActionEnvelope', 'A perp order envelope: no perp field in it; the payload is a module-bound digest.', sampleActionInput()),
     vector('action/spot-buy', 'ActionEnvelope', 'A spot buy envelope: the same Core fields as the perp order.', spotBuy),
 
-    vector('state/mark-price', 'StateEnvelope', 'A venue mark-price observation at a venue sequence.', sampleStateInput()),
+    vector('state/mark-price', 'StateEnvelope', 'A venue mark-price observation at a venue sequence, normalized under perp-policy v1.', sampleStateInput()),
+    vector('state/mark-price-under-v2', 'StateEnvelope', 'The same observation normalized under perp-policy v2: same domain, different module, different state identity.', {
+      ...sampleStateInput(),
+      module: PERP_V2,
+    }),
     vector('state/account-with-validity', 'StateEnvelope', 'An account snapshot with a source-declared validUntil.', {
       ...sampleStateInput(),
       stateKind: 'perp.account',

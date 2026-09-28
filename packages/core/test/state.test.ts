@@ -21,14 +21,14 @@ import {
   type StateEnvelopeInput,
   type StateRequirementInput,
 } from '../src/index.ts';
-import { BTC_PERP_L, digestOf, must } from './support/basics.ts';
+import { BTC_PERP_L, PERP_V1, PERP_V2, digestOf, must } from './support/basics.ts';
 
 function code<T>(r: CoreResult<T>): string {
   return r.ok ? 'OK' : r.error.code;
 }
 
 const MARK: StateEnvelopeInput = {
-  domain: 'perp',
+  module: PERP_V1,
   stateKind: 'perp.markPrice',
   subject: BTC_PERP_L,
   sourceId: 'venue-l-api',
@@ -52,8 +52,8 @@ describe('StateEnvelope', () => {
   it('records provenance, sequence, validity, finality and a payload digest; no payload', () => {
     const s = must(validateStateEnvelope(MARK));
     assert.deepEqual(Object.keys(s).sort(), [
-      'domain',
       'finality',
+      'module',
       'observedAt',
       'payloadDigest',
       'sequence',
@@ -63,6 +63,38 @@ describe('StateEnvelope', () => {
       'trustClass',
       'validUntil',
     ]);
+  });
+
+  it('is interpreted under one exact ModuleRef: changing moduleVersion changes its identity', () => {
+    const base = stateId(must(validateStateEnvelope(MARK)));
+    const nextVersion = stateId(must(validateStateEnvelope({ ...MARK, module: { ...PERP_V1, moduleVersion: PERP_V1.moduleVersion + 1 } })));
+    assert.notEqual(nextVersion, base);
+  });
+
+  it('changing moduleDigest alone changes its identity', () => {
+    const base = stateId(must(validateStateEnvelope(MARK)));
+    const otherDigest = stateId(must(validateStateEnvelope({ ...MARK, module: { ...PERP_V1, moduleDigest: digestOf('manifest:perp-policy:1:other') } })));
+    assert.notEqual(otherDigest, base);
+  });
+
+  it('the same observation in the same domain under two different modules is two states', () => {
+    const underV1 = must(validateStateEnvelope(MARK));
+    const underV2 = must(validateStateEnvelope({ ...MARK, module: PERP_V2 }));
+    const otherModule = must(validateStateEnvelope({ ...MARK, module: { ...PERP_V1, moduleId: 'perp-risk', moduleDigest: digestOf('manifest:perp-risk:1') } }));
+    assert.equal(underV1.module.domainId, underV2.module.domainId);
+    assert.equal(underV1.module.domainId, otherModule.module.domainId);
+    assert.equal(new Set([stateId(underV1), stateId(underV2), stateId(otherModule)]).size, 3);
+    // And so are their bindings, whose stateDigest names the envelope.
+    assert.notEqual(stateBindingId(must(bindState(underV1, RECHECK_MARK))), stateBindingId(must(bindState(underV2, RECHECK_MARK))));
+  });
+
+  it('refuses a bare domain, a module name, or a module without its digest', () => {
+    const { module: _m, ...noModule } = MARK;
+    assert.deepEqual(validateStateEnvelope({ ...noModule, domain: 'perp' } as never), { ok: false, error: { code: 'UNKNOWN_FIELD', path: 'state.domain' } });
+    assert.deepEqual(validateStateEnvelope(noModule as never), { ok: false, error: { code: 'MISSING_FIELD', path: 'state.module' } });
+    assert.deepEqual(validateStateEnvelope({ ...MARK, module: 'perp-policy@1' as never }), { ok: false, error: { code: 'WRONG_TYPE', path: 'state.module' } });
+    const { moduleDigest: _d, ...noDigest } = PERP_V1;
+    assert.deepEqual(validateStateEnvelope({ ...MARK, module: noDigest as never }), { ok: false, error: { code: 'MISSING_FIELD', path: 'state.module.moduleDigest' } });
   });
 
   it('records any trust class: admission, not the envelope, refuses advisory state', () => {

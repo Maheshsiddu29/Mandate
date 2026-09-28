@@ -478,7 +478,7 @@ describe('F — external state changes after the ledger CAS', () => {
   const order = action({ authority: authorityId(root), actor: PERP_AGENT, target: BTC_PERP_L, resources: [L_SUB] });
 
   const snapshot = (kind: 'perp.markPrice' | 'perp.account', subject: ResourceIdInput, observedAt: bigint, sequence: bigint, payload: string): StateEnvelopeInput => ({
-    domain: 'perp',
+    module: PERP_V1,
     stateKind: kind,
     subject,
     sourceId: 'venue-l-api',
@@ -645,7 +645,7 @@ describe('I — domain-module version binding', () => {
 describe('J — drift', () => {
   const snapshot = must(
     validateStateEnvelope({
-      domain: 'perp',
+      module: PERP_V1,
       stateKind: 'perp.account',
       subject: L_SUB,
       sourceId: 'venue-l-api',
