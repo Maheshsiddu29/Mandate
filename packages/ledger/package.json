@@ -1,0 +1,17 @@
+{
+  "name": "@mandate/ledger",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Mandate Core v1 authority graph and principal-wide global authority ledger: lineage, the delegation meet, an append-only hash-chained event log, a pure reducer, atomic path charging and the compare-and-swap store contract.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "dependencies": {
+    "@mandate/core": "0.1.0",
+    "@mandate/kernel": "0.1.0"
+  }
+}

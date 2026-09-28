@@ -77,7 +77,7 @@ authorization.
 
 The dependency directions are `adapter → registry → kernel`,
 `router → registry → kernel`, `jev → router → registry → kernel`,
-`execution-gate → kernel` and `core → kernel`, never the reverse, and it is enforced by structural tests
+`execution-gate → kernel`, `core → kernel` and `ledger → core → kernel`, never the reverse, and it is enforced by structural tests
 ([ADR 0004](docs/adr/0004-registry-package-boundary.md),
 [ADR 0012](docs/adr/0012-jev-closed-set-authority-boundary.md)). The kernel,
 registry and router perform no I/O; the Robinhood adapter and the Jev client
@@ -282,6 +282,13 @@ no I/O, names no venue, and declares no `any`, `unknown` or `Record` type;
 `structure.test.ts` enforces all of it. `npm run core-corpus:generate`
 regenerates `corpus/core-v1` (part of `generated:check`), and
 `npm run core:benchmark` measures encoding cost.
+
+The ledger package's runtime dependencies are fixed to `@mandate/core` and
+`@mandate/kernel` ([ADR 0021](docs/adr/0021-authority-ledger-package-boundary.md)).
+It performs no I/O, reads no clock, names no venue, implements no domain
+module and declares no `any`, `unknown` or `Record` type; its store is an
+interface with an in-memory reference implementation only.
+`structure.test.ts` enforces all of it.
 
 The execution-gate package's runtime dependencies are fixed to
 `@mandate/kernel`, `@noble/curves` and `@noble/hashes` at the kernel's pinned
