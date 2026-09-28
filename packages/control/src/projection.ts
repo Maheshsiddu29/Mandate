@@ -42,7 +42,7 @@ import {
   type StateId,
   type Tagged,
 } from '@mandate/core';
-import { ControlTag, controlDigest, controlWriter, sortCanonical, writeDigestList, writeMeasure, writeStrList } from './encoding.ts';
+import { ControlTag, controlDigest, controlWriter, sortCanonical, writeCanonicalSet, writeDigestList, writeMeasure, writeStrList } from './encoding.ts';
 import type { EconomicFact, InvariantFact, ModuleProjection } from './module.ts';
 
 export type ProjectionDigest = Tagged<Digest32, 'ProjectionDigest'>;
@@ -69,15 +69,9 @@ export function writeInvariantFact(w: ByteWriter, f: InvariantFact): void {
 
 /** A module projection in canonical form: every list a set in encoded order, the payload as given. */
 export function writeModuleProjection(w: ByteWriter, p: ModuleProjection): void {
-  const facts = sortCanonical(p.facts, writeFact);
-  w.u32(facts.length);
-  for (const f of facts) writeFact(w, f);
-  const inv = sortCanonical(p.invariantFacts, writeInvariantFact);
-  w.u32(inv.length);
-  for (const f of inv) writeInvariantFact(w, f);
-  const resources = sortCanonical(p.resources, writeResourceId);
-  w.u32(resources.length);
-  for (const r of resources) writeResourceId(w, r);
+  writeCanonicalSet(w, p.facts, writeFact);
+  writeCanonicalSet(w, p.invariantFacts, writeInvariantFact);
+  writeCanonicalSet(w, p.resources, writeResourceId);
   writeStrList(w, [...p.assumptions].sort());
   w.u32(p.payload.length).raw(p.payload);
 }

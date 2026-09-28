@@ -112,6 +112,17 @@ export function sortCanonical<T>(items: readonly T[], write: (w: ByteWriter, ite
     .map((x) => x.item);
 }
 
+/**
+ * A set written in canonical order: each item encoded once, the encodings
+ * sorted, then written as they are. Byte-identical to sorting the items and
+ * writing each, at half the encoding work.
+ */
+export function writeCanonicalSet<T>(w: ByteWriter, items: readonly T[], write: (w: ByteWriter, item: T) => void): void {
+  const encoded = items.map((item) => bytesOf(write, item)).sort(compareBytes);
+  w.u32(encoded.length);
+  for (const b of encoded) w.raw(b);
+}
+
 /** A sorted, de-duplicated list of digests. */
 export function digestSet<T extends Digest32>(items: Iterable<T>): T[] {
   return [...new Set(items)].sort();
