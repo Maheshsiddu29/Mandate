@@ -82,7 +82,8 @@ export const ONCE: RetryPolicy = { maxAttempts: 1 };
 export const RETRY: RetryPolicy = { maxAttempts: 32 };
 
 export const CHAIN = LIGHTER_TESTNET_CHAIN_ID;
-export const SUB_ACCOUNT = 281_474_976_710_700n;
+/** A sub-account index: ≥ 2^47 and ≤ 2^48 − 2 (lighter-go `MinSubAccountIndex`, `MaxAccountIndex`). */
+export const SUB_ACCOUNT = 281_474_976_710_600n;
 export const API_KEY_INDEX = 5;
 export const MARKET_SOURCE = 'lighter.api' as StateSourceId;
 export const PRICE_SOURCE = 'synth.feed' as StateSourceId;

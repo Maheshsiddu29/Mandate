@@ -6,7 +6,8 @@ const forbidden = [
   /(^|\/)(?:dist|build|out|coverage|artifacts|broadcast|cache)\//,
   /(^|\/)\.env(?:\.|$)/,
   /\.(?:pem|key|log|tsbuildinfo|swp|swo)$/,
-  /(^|\/)(?:keystore|secrets|tmp|scratch)\//,
+  /(^|\/)(?:keystore|secrets|tmp|scratch|\.lighter-testnet)\//,
+  /(^|\/)custody\/bin\//,
   /(^|\/)\.DS_Store$/,
 ];
 const findings = files.filter((file) => forbidden.some((pattern) => pattern.test(file)));

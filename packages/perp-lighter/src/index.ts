@@ -24,3 +24,4 @@ export { HttpVenueClient, TESTNET_HOSTS, VenueHostRefused, type RegisteredKey, t
 export { credentialScope, credentialSubject, highestAdmittedSlot, nonceSlot } from './evidence.ts';
 export { buildCancelTx, buildOrderTx, checkAllowed, checkBinding, type SignerIdentity } from './tx.ts';
 export { VenueSigner, type IssueOutcome, type IssueRequest, type IssueStage, type RecoveryReport, type SignerConfig, type SignerDeps } from './signer.ts';
+export { ORDER_STATUS, marketStaticOf, parseJson, txRecordOf, type OrderEvent, type OrderStatus, type TxRecord } from './normalize.ts';

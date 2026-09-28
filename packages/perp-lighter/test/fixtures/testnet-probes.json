@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "network": "Lighter testnet (L2 chain id 300)",
+    "note": "our only write: a create-order signed by a disposable key for an account index that does not exist; it cannot execute"
+  },
+  "sendTx": {
+    "at": "2026-09-28T23:33:48.951Z",
+    "endpoint": "sendTx",
+    "txHash": "0b2f7c981fc94aa9c72086835913423b956a61ad101294005f4fc4dc04b1459a97f6402d16c77891",
+    "response": {
+      "code": 21100,
+      "message": "account not found"
+    }
+  },
+  "nextNonceOfNonexistentAccount": {
+    "at": "2026-09-28T23:33:40.478Z",
+    "endpoint": "nextNonce?account_index=281474976700001&api_key_index=5",
+    "response": {
+      "code": 200,
+      "nonce": 0
+    }
+  },
+  "heights": {
+    "first": {
+      "at": "2026-09-28T23:33:39.083Z",
+      "response": {
+        "code": 200,
+        "height": 274
+      }
+    },
+    "second": {
+      "at": "2026-09-28T23:33:48.609Z",
+      "response": {
+        "code": 200,
+        "height": 275
+      }
+    }
+  }
+}

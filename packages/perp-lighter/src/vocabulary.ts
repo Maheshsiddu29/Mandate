@@ -76,10 +76,15 @@ export function venueResource(chainId: number): ResourceIdInput {
   return { domain: DOMAIN_ID, kind: 'VENUE', localId: `lighter:${chainId}` };
 }
 
-/** `lighter:<chain>:account:<index>` → the account index, or `null`. */
+/** Lighter's largest account index, 2^48 − 2 (lighter-go `MaxAccountIndex`). */
+export const MAX_ACCOUNT_INDEX = 281_474_976_710_654n;
+
+/** `lighter:<chain>:account:<index>` → the account index, or `null` — including for an index Lighter cannot have. */
 export function accountIndexOf(r: ResourceId, chainId: number): bigint | null {
   const m = /^lighter:(\d+):account:(\d+)$/.exec(r.localId);
-  return r.domain === DOMAIN_ID && r.kind === 'ACCOUNT' && m !== null && Number(m[1]) === chainId ? BigInt(m[2] as string) : null;
+  if (r.domain !== DOMAIN_ID || r.kind !== 'ACCOUNT' || m === null || Number(m[1]) !== chainId) return null;
+  const index = BigInt(m[2] as string);
+  return index <= MAX_ACCOUNT_INDEX ? index : null;
 }
 
 /** `lighter:<chain>:market:<index>` → the market index, or `null`. */

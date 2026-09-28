@@ -53,7 +53,10 @@
     "router:benchmark": "node packages/router/scripts/benchmark.ts",
     "routing-simulation:generate": "node packages/router/scripts/generate-simulation-report.ts",
     "test": "node --test \"packages/**/test/*.test.ts\"",
-    "typecheck": "tsc --project tsconfig.json"
+    "typecheck": "tsc --project tsconfig.json",
+    "lighter:custody:build": "cd packages/perp-lighter/custody && go build -trimpath -o bin/lighter-custody .",
+    "lighter:custody:check": "node packages/perp-lighter/scripts/custody-check.ts",
+    "lighter:testnet:evidence": "node packages/perp-lighter/scripts/testnet-evidence.ts"
   },
   "devDependencies": {
     "@openzeppelin/contracts": "5.6.1",

@@ -293,3 +293,11 @@ describe('cross-domain cancel/replace (perp-policy-v1.md §10)', () => {
     void BTC_MARKET;
   });
 });
+
+describe('PerpPolicy v1 — account identity', () => {
+  it('refuses an account index Lighter cannot have (above 2^48 − 2)', async () => {
+    const { w, g } = await world();
+    const out = await w.engine.authorizeAndReserve(request(order(w, g, { account: { domain: 'lighter-perp', kind: 'ACCOUNT', localId: 'lighter:300:account:281474976710700' } }), states(w)), ONCE);
+    assert.equal(refusedWith(out).reason, 'ACCOUNT_NOT_ON_CHAIN');
+  });
+});

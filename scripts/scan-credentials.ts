@@ -14,10 +14,13 @@ const patterns: readonly [string, RegExp][] = [
   ['TypeSafe key assignment', /TYPESAFE_API_KEY\s*[:=]\s*["'`][^"'`\s]{8,}["'`]/],
   ['TypeSafe-shaped token', /\bts[kp]?[_-][A-Za-z0-9]{24,}\b/],
   ['literal bearer token', /\bBearer\s+[A-Za-z0-9._~+/-]{20,}={0,2}(?![>\w])/],
+  // Phase 7E.1: a Lighter API private key is 40 bytes (80 hex); transaction hashes have the same length,
+  // so only a named assignment is flagged, never a bare hash.
+  ['Lighter private key assignment', /(?:private[_-]?key|api[_-]?private[_-]?keys?|PRIVATE_KEY)\s*[:=]\s*\{?\s*(?:\d+\s*:\s*)?["'`]?(?:0x)?[0-9a-fA-F]{80}\b/],
 ];
 const findings: string[] = [];
 for (const file of files) {
-  if (/(^|\/)\.env(?:\.|$)/.test(file) || /\.(?:pem|key)$/.test(file) || /(^|\/)(?:keystore|secrets)\//.test(file)) {
+  if (/(^|\/)\.env(?:\.|$)/.test(file) || /\.(?:pem|key|lighter-key)$/.test(file) || /(^|\/)(?:keystore|secrets|\.lighter-testnet)\//.test(file)) {
     findings.push(`${file}: forbidden credential-bearing path`);
     continue;
   }

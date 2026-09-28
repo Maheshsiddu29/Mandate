@@ -26,7 +26,7 @@ const REPO = new URL('../../../', import.meta.url);
 const SRC = fileURLToPath(new URL('src/', ROOT));
 const strip = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
 const SOURCES = readdirSync(SRC).filter((f) => f.endsWith('.ts')).map((f) => ({ file: f, text: strip(readFileSync(join(SRC, f), 'utf8')) }));
-const PURE = ['vocabulary.ts', 'market.ts', 'identity.ts', 'adapter.ts', 'policy.ts', 'evidence.ts', 'tx.ts'];
+const PURE = ['vocabulary.ts', 'market.ts', 'identity.ts', 'adapter.ts', 'policy.ts', 'evidence.ts', 'tx.ts', 'normalize.ts'];
 
 describe('perp-lighter structural boundary', () => {
   it('depends only on Core, the kernel, the ledger, the control engine and the SQLite reference store', () => {
