@@ -3,10 +3,12 @@
 **Intent-aware execution infrastructure for AI agents transacting in tokenized
 financial assets.**
 
-> **Current: Phase 7A — the Mandate Core v1 specification
-> ([docs/core-v1](docs/core-v1/README.md)) — is FROZEN; Phase 7B (Core types
-> and generic action/state model) is next and not started. Phase 6 is frozen
-> at `dc98df5`.**
+> **Current: Phase 7B — Core types, canonical encodings and the generic
+> action/state model (`packages/core`,
+> [docs/core-v1/implementation-7b.md](docs/core-v1/implementation-7b.md)) — is
+> implemented locally and awaiting review, on the frozen Phase 7A Mandate Core
+> v1 specification ([docs/core-v1](docs/core-v1/README.md)). No ledger exists
+> yet. Phase 6 is frozen at `dc98df5`.**
 >
 > **Status: Phase 6R.2B (secure gas optimization) implemented locally and awaiting independent security and gas review ([report](docs/phase-6r2b-report.md): normal BUY 401,684 → 246,963 execution gas, worst case 6,724,561 → 425,922, no semantic change), after the Phase 6R.2A gas attribution benchmark ([report](docs/phase-6r2a-gas-profile.md)) and Phase 6R.1b — an onchain execution
 > gate, tested against a labelled settlement fixture and not deployed.** The
@@ -287,8 +289,10 @@ See [MVP scope](docs/mandate-design.md#20-buildathon-mvp-scope) and
 │   ├── src/               adapters, provenance, exact price and epoch semantics
 │   └── test/              recorded fixtures, offline replay and failure tests
 ├── packages/execution-gate/ offchain half of the Phase 6 gate: commitment, reference model, reconciliation
+├── packages/core/         Mandate Core v1 types, canonical encodings and validators (Phase 7B; no ledger)
 ├── contracts/             Solidity: the execution gate, codec, labelled fixture venue, Foundry tests
 ├── corpus/gate-v1/        TypeScript ↔ Solidity execution-gate vectors
+├── corpus/core-v1/        Mandate Core v1 canonical-encoding vectors
 ├── corpus/v2/             cross-implementation verifier decision vectors
 ├── corpus/registry-v1/    cross-implementation registry decision vectors
 ├── corpus/mainnet-v1/     recorded mainnet replay vectors and metrics
@@ -309,7 +313,8 @@ See [MVP scope](docs/mandate-design.md#20-buildathon-mvp-scope) and
 
 Directories are created when they hold real code. The dependency direction is
 `adapter → registry → kernel`, never the reverse, and structural tests enforce
-it from all three packages. `execution-gate → kernel` is enforced the same way.
+it from all three packages. `execution-gate → kernel` and `core → kernel` are
+enforced the same way.
 
 ## Contributing
 

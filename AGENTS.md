@@ -23,8 +23,12 @@ either the change is wrong or the document needs updating first — resolve whic
 before writing code.
 
 The repository has **Phase 7A frozen** — the Mandate Core v1 specification
-([docs/core-v1](docs/core-v1/README.md)), specification only, no code — and
-**Phase 7B next, not started**, with **Phase 6 frozen at `dc98df5`**; nothing in Phase 7 may modify
+([docs/core-v1](docs/core-v1/README.md)) — and **Phase 7B implemented locally,
+awaiting review**: `packages/core`, the Core types, canonical encodings and
+validators, with no ledger
+([docs/core-v1/implementation-7b.md](docs/core-v1/implementation-7b.md),
+[ADR 0020](docs/adr/0020-mandate-core-package-and-encoding.md)). **Phase 6 is
+frozen at `dc98df5`**; nothing in Phase 7 may modify
 MCE v2, Candidate V3, the gate, its libraries, fixture or replay semantics, or
 any canonical vector. Before it came **Phase 6R.2B** (secure gas optimization:
 word-level identifier validation and a single-buffer encoder, externally
@@ -72,8 +76,8 @@ explicitly opened, and never deploy or send a transaction without explicit
 authorization.
 
 The dependency directions are `adapter → registry → kernel`,
-`router → registry → kernel`, `jev → router → registry → kernel` and
-`execution-gate → kernel`, never the reverse, and it is enforced by structural tests
+`router → registry → kernel`, `jev → router → registry → kernel`,
+`execution-gate → kernel` and `core → kernel`, never the reverse, and it is enforced by structural tests
 ([ADR 0004](docs/adr/0004-registry-package-boundary.md),
 [ADR 0012](docs/adr/0012-jev-closed-set-authority-boundary.md)). The kernel,
 registry and router perform no I/O; the Robinhood adapter and the Jev client
@@ -270,6 +274,14 @@ Run Slither after tests: its build skips test contracts and leaves a cache that
 `forge test` then treats as fresh (`forge build --force` recovers). No command
 deploys; `contracts/script/DeployMandateGate.s.sol` is manual only and refuses
 every known mainnet.
+
+The Core package's runtime dependencies are fixed to `@mandate/kernel` and
+`@noble/hashes` at the kernel's pinned version
+([ADR 0020](docs/adr/0020-mandate-core-package-and-encoding.md)). It performs
+no I/O, names no venue, and declares no `any`, `unknown` or `Record` type;
+`structure.test.ts` enforces all of it. `npm run core-corpus:generate`
+regenerates `corpus/core-v1` (part of `generated:check`), and
+`npm run core:benchmark` measures encoding cost.
 
 The execution-gate package's runtime dependencies are fixed to
 `@mandate/kernel`, `@noble/curves` and `@noble/hashes` at the kernel's pinned

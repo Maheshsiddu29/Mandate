@@ -3,6 +3,12 @@
 > **Status: Phase 7A specification, FROZEN (after the hardening checkpoint). Nothing here is
 > implemented.** Phase 6 is frozen as of `dc98df5` and is not modified by
 > anything in this directory. No code accompanies this specification.
+>
+> **Implementation pointer:** the Phase 7B representation layer — types,
+> canonical encodings and validators, no ledger — is in `packages/core` and
+> described in [implementation-7b.md](implementation-7b.md), which lists where
+> this specification could not be followed literally. This specification is
+> unchanged.
 
 Mandate Core v1 is the domain-independent economic control layer that Spot,
 Perp, Options, Prediction, Lending, Liquidity, Payment, Treasury and Governance

@@ -5,8 +5,10 @@ and what it depends on.
 
 > **Status: Phase 6 is FROZEN at `dc98df5`. Phase 7A — the Mandate Core v1
 > specification ([core-v1/](core-v1/README.md)) — is FROZEN after its hardening
-> checkpoint. Phase 7B is NEXT and not started.** Nothing has been
-> implemented for Phase 7, and nothing has been deployed.
+> checkpoint. Phase 7B — Core types, canonical encodings and the generic
+> action/state model ([implementation-7b.md](core-v1/implementation-7b.md)) —
+> is implemented locally and awaiting review.** No ledger or later Phase 7
+> mechanism exists, and nothing has been deployed.
 > Rationale for the phase ordering is in
 > [mandate-design.md §25](mandate-design.md#25-phased-engineering-roadmap);
 > scope boundaries are in
@@ -448,7 +450,7 @@ The remaining open questions are implementation choices assigned to 7B–7H.
 
 **Depends on:** Phase 6 (frozen).
 
-### Phase 7B — Core types and generic action/state model — NEXT
+### Phase 7B — Core types and generic action/state model — IMPLEMENTED, awaiting review
 
 **Delivers** a Core package with canonical encodings and strict parsers for
 grants, intents, snapshots and quantities; typed economic quantities; the
@@ -456,6 +458,16 @@ authority meet; `ModuleRef`, `StateBinding`, `PrincipalPolicy` and the
 authority vocabulary as types; the domain module interface. No ledger.
 **Exit:** UNIT-1 and AUTH-2 established by property tests; encodings pinned by
 a corpus; Phase 6 generated artifacts byte-identical.
+
+**As built** ([implementation-7b.md](core-v1/implementation-7b.md),
+[ADR 0020](adr/0020-mandate-core-package-and-encoding.md)): `packages/core`
+with every Core object above as a validated, canonically encoded,
+domain-separated type; UNIT-1 established for Core arithmetic by type-level
+and runtime tests; encodings pinned by `corpus/core-v1`; Phase 6 artifacts
+byte-identical. By the Phase 7B brief, **the authority meet, AUTH-2 and the
+domain module interface were not built** (no subset or later-phase logic).
+They need assigning, to 7C or a 7B follow-up, together with the specification
+gaps listed in implementation-7b.md §9.
 
 ### Phase 7C — Global Authority Ledger
 
@@ -544,7 +556,7 @@ to the product, and belongs in the design documents before it belongs in code.
 | 6R.2A | Gas attribution and architecture benchmark (measurement only) | 6R.1b | ✅ measured locally; recommendation awaiting review; no production change |
 | 6R.2B | Gas optimization, path chosen from the 6R.2A measurements | 6R.2A | ✅ implemented locally; awaiting independent security and gas review; not deployed |
 | 7A | Mandate Core v1 specification | 6 | **FROZEN ✓** — specification only, hardened |
-| 7B | Core types and generic action/state model | 7A | **NEXT** — not started |
+| 7B | Core types and generic action/state model | 7A | ✅ implemented locally; awaiting review (meet, AUTH-2 and module interface deferred) |
 | 7C | Global Authority Ledger | 7B | planned |
 | 7D | Invariant and reservation engine | 7C | planned |
 | 7E | PerpPolicy v1 and Venue Signer | 7D | planned; blocked on venue evidence |
