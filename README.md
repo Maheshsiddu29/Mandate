@@ -3,12 +3,15 @@
 **Intent-aware execution infrastructure for AI agents transacting in tokenized
 financial assets.**
 
-> **Current: Phase 7B — Core types, canonical encodings and the generic
-> action/state model (`packages/core`,
-> [docs/core-v1/implementation-7b.md](docs/core-v1/implementation-7b.md)) — is
-> implemented locally and awaiting review, on the frozen Phase 7A Mandate Core
-> v1 specification ([docs/core-v1](docs/core-v1/README.md)). No ledger exists
-> yet. Phase 6 is frozen at `dc98df5`.**
+> **Current: Phase 7C — the authority graph and principal-wide global
+> authority ledger (`packages/ledger`,
+> [docs/core-v1/implementation-7c.md](docs/core-v1/implementation-7c.md)) — is
+> implemented locally and awaiting review, on Phase 7B's Core types
+> (`packages/core`, [implementation-7b.md](docs/core-v1/implementation-7b.md))
+> and the frozen Phase 7A Mandate Core v1 specification
+> ([docs/core-v1](docs/core-v1/README.md)). No domain module, reservation
+> engine, venue integration or durable store exists yet. Phase 6 is frozen at
+> `dc98df5`.**
 >
 > **Status: Phase 6R.2B (secure gas optimization) implemented locally and awaiting independent security and gas review ([report](docs/phase-6r2b-report.md): normal BUY 401,684 → 246,963 execution gas, worst case 6,724,561 → 425,922, no semantic change), after the Phase 6R.2A gas attribution benchmark ([report](docs/phase-6r2a-gas-profile.md)) and Phase 6R.1b — an onchain execution
 > gate, tested against a labelled settlement fixture and not deployed.** The
@@ -290,6 +293,7 @@ See [MVP scope](docs/mandate-design.md#20-buildathon-mvp-scope) and
 │   └── test/              recorded fixtures, offline replay and failure tests
 ├── packages/execution-gate/ offchain half of the Phase 6 gate: commitment, reference model, reconciliation
 ├── packages/core/         Mandate Core v1 types, canonical encodings and validators (Phase 7B; no ledger)
+├── packages/ledger/       authority graph, meet and principal-wide CAS ledger over Core (Phase 7C; in-memory store only)
 ├── contracts/             Solidity: the execution gate, codec, labelled fixture venue, Foundry tests
 ├── corpus/gate-v1/        TypeScript ↔ Solidity execution-gate vectors
 ├── corpus/core-v1/        Mandate Core v1 canonical-encoding vectors

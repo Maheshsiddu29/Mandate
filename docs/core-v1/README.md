@@ -7,7 +7,9 @@
 > **Implementation pointer:** the Phase 7B representation layer — types,
 > canonical encodings and validators, no ledger — is in `packages/core` and
 > described in [implementation-7b.md](implementation-7b.md), which lists where
-> this specification could not be followed literally. This specification is
+> this specification could not be followed literally. The Phase 7C authority
+> graph and global authority ledger are in `packages/ledger`, described in
+> [implementation-7c.md](implementation-7c.md). This specification is
 > unchanged.
 
 Mandate Core v1 is the domain-independent economic control layer that Spot,

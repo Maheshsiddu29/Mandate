@@ -8,8 +8,11 @@ and what it depends on.
 > checkpoint. Phase 7B — Core types, canonical encodings and the generic
 > action/state model ([implementation-7b.md](core-v1/implementation-7b.md)) —
 > is architecture-accepted, with the Phase 7B.1 representation hardening
-> implemented locally and awaiting review. Phase 7C is not started.** No ledger or later Phase 7
-> mechanism exists, and nothing has been deployed.
+> implemented locally and awaiting review. Phase 7C — the authority graph and
+> global authority ledger ([implementation-7c.md](core-v1/implementation-7c.md))
+> — is implemented locally and awaiting review. Phase 7D is not started.** No
+> domain module, reservation engine or later Phase 7 mechanism exists, and
+> nothing has been deployed.
 > Rationale for the phase ordering is in
 > [mandate-design.md §25](mandate-design.md#25-phased-engineering-roadmap);
 > scope boundaries are in
@@ -472,7 +475,7 @@ Phase 7B.1 (representation hardening) bound `StateEnvelope` to a full
 and assigned the deferred items: the meet and AUTH-2 to 7C, the executable
 `DomainModule` interface to 7D.
 
-### Phase 7C — Authority Graph + Global Authority Ledger
+### Phase 7C — Authority Graph + Global Authority Ledger — IMPLEMENTED, awaiting review
 
 **Delivers** the authority graph: the authority meet and effective-lineage
 computation (child ⊆ parent at registration and at every action), with AUTH-2
@@ -482,6 +485,21 @@ an event log, the compare-and-swap store contract and a reference store.
 (including the mutation of each half separately); LEDGER-1…6 and CONC-1
 established by stateful tests with concurrent agents, including the mutation
 that removes compare-and-swap.
+
+**As built** ([implementation-7c.md](core-v1/implementation-7c.md),
+ADRs [0021](adr/0021-authority-ledger-package-boundary.md),
+[0022](adr/0022-principal-event-log-and-derived-state.md),
+[0023](adr/0023-ledger-store-contract.md)): `packages/ledger` — registration,
+lineage validity, revocation, the subset check and the meet; a closed,
+hash-chained event log folded by one pure reducer; atomic charging of every
+leg of the lineage-then-policy path; the compare-and-swap store contract with
+an in-memory reference store; module-registry conformance; and a bounded-retry
+engine. AUTH-2, AUTH-4, AUTH-GLOBAL-1 (dimensions), LEDGER-1, -4, -5, -6 and
+CONC-1 (with the read-then-write mutation) are established; LEDGER-2, -3 and
+LEDGER-RESTORE-1 only partly, because consumption, release and restoration
+are folded without observation validation, which is 7D's. AUTH-GLOBAL-2 is not
+established: a new principal-global dimension is refused once anything was
+reserved.
 
 ### Phase 7D — Invariant + Reservation Engine
 
@@ -566,7 +584,7 @@ to the product, and belongs in the design documents before it belongs in code.
 | 6R.2B | Gas optimization, path chosen from the 6R.2A measurements | 6R.2A | ✅ implemented locally; awaiting independent security and gas review; not deployed |
 | 7A | Mandate Core v1 specification | 6 | **FROZEN ✓** — specification only, hardened |
 | 7B | Core types and generic action/state model | 7A | ✅ architecture accepted; 7B.1 representation hardening implemented locally (meet and AUTH-2 → 7C; module interface → 7D) |
-| 7C | Authority Graph + Global Authority Ledger (meet, effective lineage, AUTH-2) | 7B | planned |
+| 7C | Authority Graph + Global Authority Ledger (meet, effective lineage, AUTH-2) | 7B | ✅ implemented locally, awaiting review |
 | 7D | Invariant + Reservation Engine (executable `DomainModule` interface) | 7C | planned |
 | 7E | PerpPolicy v1 and Venue Signer | 7D | planned; blocked on venue evidence |
 | 7F | Cross-domain reconciliation: EVM fixture and perps | 7E | planned |
