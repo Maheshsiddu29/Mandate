@@ -1,6 +1,6 @@
 # Mandate Core v1 — Phase 7D implementation: invariant and reservation engine
 
-> **Status: Phase 7D — FROZEN**, with its 7D.1 hardening ([§22](#22-phase-7d1-semantic-hardening)) and 7D.2 historical semantic provenance ([§23](#23-phase-7d2-historical-semantic-provenance-and-freeze)). Phase 7E is next. This document
+> **Status: Phase 7D — FROZEN**, with its 7D.1 hardening ([§22](#22-phase-7d1-semantic-hardening)), 7D.2 historical semantic provenance ([§23](#23-phase-7d2-historical-semantic-provenance-and-freeze)) and 7D.3 immutable authority semantics ([§24](#24-phase-7d3-immutable-authority-semantics-and-final-freeze)), its final hardening. Phase 7E is next. This document
 > describes code in `packages/control` and one extension point added to
 > `packages/ledger`. It does not change the frozen Phase 7A specification in
 > this directory or the Phase 7B representation in `packages/core`; both
@@ -63,6 +63,7 @@ before anything would be issued.
 21. [Open questions and what is next](#21-open-questions-and-what-is-next)
 22. [Phase 7D.1 semantic hardening](#22-phase-7d1-semantic-hardening)
 23. [Phase 7D.2 historical semantic provenance and freeze](#23-phase-7d2-historical-semantic-provenance-and-freeze)
+24. [Phase 7D.3 immutable authority semantics and final freeze](#24-phase-7d3-immutable-authority-semantics-and-final-freeze)
 
 ## 1. What was built
 
@@ -706,7 +707,8 @@ Every choice is the fail-closed one; none changes a frozen decision.
 | **CONC-1** (projected state) | **Established**: a lost CAS forces full re-projection; of two actions valid alone and invalid together at most one reserves | `concurrency.test.ts`, `mutation.test.ts` |
 | **CORE-CONC-1** | **Not regressed**: nothing argues market state from CAS; state is bound and rechecked | — |
 | **DOM-1** | **Partly**: modules are pure (structure, conformance), cannot authorize or choose targets, and their outputs are re-validated; the only module is test-only | `structure.test.ts`, `conformance.test.ts` |
-| **DOM-2** | **Established** at decision and revalidation: exact `ModuleRef` resolution, no fallback, the module fixed on the reservation and the authorization. **7D.2:** also for history — every committed narrowing names its exact definition, and replay resolves it by digest (§23) | `catalog.test.ts`, `engine.test.ts`, `mutation.test.ts`, `provenance.test.ts` |
+| **DOM-2** | **Established** at decision and revalidation: exact `ModuleRef` resolution, no fallback, the module fixed on the reservation and the authorization. **7D.2:** also for history — every committed narrowing names its exact definition, and replay resolves it by digest (§23). **7D.3:** also for existing authority — every module-defined term is evaluated under the definition bound at registration (§24) | `catalog.test.ts`, `engine.test.ts`, `mutation.test.ts`, `provenance.test.ts`, `semantics.test.ts` |
+| **SEMANTIC-AUTH-1…3** (7D.3) | **Established**: a registered term's meaning is immutable; no registry lookup redefines it; an unavailable committed definition fails closed (§24.15) | `semantics.test.ts`, `binding.test.ts`, `mutation.test.ts` |
 | **SCOPE-1** | **Partly**: facts and demands carry typed canonical assets and scopes; aggregates match assets exactly | `global.test.ts` |
 | **EXEC-3/EXEC-6** foundations | the attempt ceiling is the lifetime, bounded by every dependency | `engine.test.ts` |
 | **RECON-2** | **Partly**: facts and closure are generation-exact | `engine.test.ts` |
@@ -752,16 +754,14 @@ Every choice is the fail-closed one; none changes a frozen decision.
 7. **Hot-path cost** at many open reservations (§17, known scaling item).
 8. **Finality ordering** for delegated state policies (7C open question 2,
    second half).
-9. **Action-time invariant binding** (§23.5): a grant's or policy's invariant
-   term names `(invariantId, version)`, so a *new* decision evaluates it under
-   the module currently registered for that name. History is bound by digest;
-   future evaluation of an existing term still follows the registry's
-   one-digest-per-name rule.
+9. ~~**Action-time invariant binding** (§23.5)~~ — closed in 7D.3 (§24):
+   every module-defined term is bound at registration to its exact
+   definition, and future evaluation resolves the binding, never the name.
 10. **Risk-reducing exceptions to `UNKNOWN`** (§23.6): none exists; any
     design is domain-specific and deferred.
 
 **Next: Phase 7E**, the first real domain module and its enforcement
-adapter. Not started; 7D is frozen and 7D.1/7D.2 did not begin 7E.
+adapter. Not started; 7D is frozen and 7D.1–7D.3 did not begin 7E.
 
 ## 22. Phase 7D.1 semantic hardening
 
@@ -1227,7 +1227,9 @@ Evaluation at action time therefore relies on the registry's
 one-digest-per-name rule. Binding each term's owner at registration, so that
 a remap makes future evaluation `UNKNOWN`, would need either Core or ledger
 node state to carry the binding. It is recorded as open question 9 (§21) and
-not built here.
+not built here. *(Closed by 7D.3: the binding is committed in the
+registration event and kept on the ledger node and policy record, with Core
+unchanged — §24.)*
 
 ### 23.6 Rulings frozen with 7D
 
@@ -1316,7 +1318,8 @@ mutation suite kills 14: the 9 of 7D, the 4 of 7D.1 and E.
 | **REPLAY-1**, execution/artifact part | **Not established**, 7E |
 
 **Phase 7D is FROZEN** with 7D.1 and 7D.2, after `npm run check` and
-`npm run generated:check`. Phase 7E is next and not started.
+`npm run generated:check`. Phase 7E is next and not started. *(7D.3, §24,
+adds the final hardening of existing authority's semantics before 7E.)*
 
 ### 23.10 Explicit answers
 
@@ -1328,5 +1331,357 @@ mutation suite kills 14: the 9 of 7D, the 4 of 7D.1 and E.
 | Do committed fills at different valid execution prices require one common mark? | **No** |
 | Do marked principal-global exposures require one admitted valuation context per canonical asset? | **Yes** |
 | Does `UNKNOWN` currently allow a generic risk-reducing exception? | **No** |
+| Is AUTH-GLOBAL-2 established? | **No** |
+| Are RECON-1…5 established? | **No** |
+
+## 24. Phase 7D.3 immutable authority semantics and final freeze
+
+7D.3 is the final hardening of Phase 7D. It closes one semantic-identity gap
+before real market integration and adds nothing that belongs to 7E: no perp
+policy, Lighter, venue signer, `ADMIT_ATTEMPT`, external execution, HTTP,
+WebSocket, RPC, custody or reconciliation. Phase 6, `packages/core`, the
+frozen 7A specification (including `security-invariants.md`) and every
+Solidity source are unchanged.
+
+### 24.1 The gap
+
+7D.2 bound *history* to exact semantics: every committed narrowing names the
+exact `ModuleRef` whose comparator decided it, and replay resolves it by
+digest. It left one path open, recorded as open question 9 (§21, §23.5).
+
+```text
+safe (7D.2)    delegation → exact proof → ModuleRef/digest committed → replay by digest
+unsafe (≤7D.2) existing grant's module-defined term → future action → owner found by the term's NAME
+               → whichever module the registry maps that name to now
+```
+
+A grant's `StateInvariantTerm` names `(invariantId, version)`, not a digest.
+So a new decision evaluated an existing term under the module currently
+registered for that name (`catalog.invariantOwner` → `resolveForLifecycle`,
+pipeline step 5). If the registry later pointed `(perp, 1)` at digest B, a
+grant the principal signed when the name meant A would be reinterpreted
+under B. Its meaning would change without the principal ever signing again.
+
+### 24.2 The principle
+
+**Module-defined authority semantics are immutable after registration.**
+Every term whose meaning is delegated to a domain module is bound, at
+registration, to the exact definition that owns it. Future authorization
+evaluates the term under the committed definition and never through a
+mutable name-to-module lookup. The registry decides which definition *new*
+authority binds to. It never redefines *existing* authority.
+
+### 24.3 Representation
+
+One ledger structure (`packages/ledger/src/semantic.ts`), reusing 7D.2's
+`SemanticInvariantRef`:
+
+```text
+SemanticTermBinding {                  the meaning of one registered term
+  definition   SemanticInvariantRef      always MODULE(ModuleRef { domainId, moduleId, moduleVersion, moduleDigest })
+                                          + local invariantId + version
+  scope        ResourceId[]              the term's scope
+}
+  encoding  SemanticInvariantRef ‖ u16(n) ‖ ResourceId₁ … ₙ            (the same body layout as a proof)
+  identity  semanticBindingId = keccak-256(str("mandate-core/v1/semantic-binding") ‖ u16(1) ‖ encoding)
+```
+
+- **Which term.** `(definition.invariantId, definition.version, scope)` is
+  the term's Core `termKey` (less its kind), unique within one grant or
+  policy. The grant or policy itself is the registration event's, so the
+  binding belongs to exactly one term of exactly one authority object.
+- **Which semantics.** The exact owner (`ModuleRef` with digest), the local
+  invariant identifier and its version.
+- **Proof versus binding.** A `SemanticProofRef` is *evidence that one term
+  is no weaker than another*. A `SemanticTermBinding` is *the identity of the
+  semantics under which the term itself must always be interpreted*. Every
+  module-defined term has a binding, whether or not any narrowing was ever
+  proven for it. The two share an encoding body but carry different
+  domain-separation tags, so one can never stand in for the other (tested).
+
+### 24.4 Which terms are bound
+
+| Term | Bound? | Reason |
+| --- | --- | --- |
+| `STATE_INVARIANT` outside `core.*` | **Yes** | interpretation, evaluation, state requirements and ordering are all a module's |
+| `STATE_INVARIANT` in `core.*` (the aggregate) | No | Core's own definition, fixed by Core's version; no module may claim `core.*` (7D.1) |
+| `STATE_POLICY` | No | Core-typed sources and `StateRequirement`, compared and enforced by Core's admission |
+| `BOUND` | No | a Core-typed value compared by Core. The action's parameter is read by the *acting* module, which the action names by exact `ModuleRef` and the `MODULES` set admits by exact `ModuleRef` (DOM-2) |
+| `SET`, `RIGHT`, `TIME_WINDOW`, `LEDGER_DIMENSION`, validity | No | Core semantics throughout. `MODULES` members are already exact `ModuleRef`s |
+
+The boundary is `isModuleDefined(t) = !t.invariantId.startsWith("core.")`.
+Nothing Core-native is bound merely for consistency.
+
+### 24.5 Registration
+
+`ControlEngine.registerDelegation` (roots and delegations) and the new
+`ControlEngine.registerPolicy` derive every binding themselves
+(`packages/control/src/binding.ts`):
+
+```text
+term (invariantId, version, scope) → catalog.bindingFor → the one current owner by name,
+                                     which must resolve for a new decision: registered, exact digest,
+                                     conforming implementation, ACTIVE
+                                   → SemanticTermBinding
+```
+
+`bindingFor` is the only place a name is mapped to a module for authority
+semantics, and only for authority being created. Registration refuses
+(`SEMANTIC_BINDING_REFUSED`) when:
+
+| Condition | Reason |
+| --- | --- |
+| no module owns the invariant | `INVARIANT_OWNER_UNKNOWN` |
+| the owner is not registered, or its registered digest differs | `MODULE_UNREGISTERED`, `MODULE_DIGEST_MISMATCH` |
+| the owner is retiring | `MODULE_RETIRING` |
+| no conforming implementation is loaded | `NO_CONFORMING_IMPLEMENTATION` |
+| two modules claim one invariant | impossible: the catalog refuses to be built (`INVARIANT_OWNED_TWICE`) |
+| the owner does not define the term (namespace, version) | the ledger refuses the binding (`SEMANTIC_BINDING_INVALID`) |
+| a module-defined term has no binding | the ledger refuses the registration (`SEMANTIC_BINDING_MISSING`) |
+| a restated term, or a proof, disagrees with a committed binding | the ledger refuses (`SEMANTIC_BINDING_MISMATCH`) |
+
+A registration is pre-checked against the snapshot with the reducer's own
+`applyEvent` before the compare-and-swap. The reducer applies the same
+rules again at commit and at every replay.
+
+### 24.6 The reducer's rules
+
+All rules are in `packages/ledger/src/semantic.ts` and are applied by
+`reducer.ts` at commit and at replay alike:
+
+1. **Exact binding set** (`checkBindingSet`): canonical order; at most one
+   binding per term; every owner a `MODULE` able to define its invariant
+   (`<moduleId>.*` at the module's own version); a binding only for a
+   module-defined term the registration carries (`SEMANTIC_BINDING_UNEXPECTED`);
+   and every module-defined term bound (`SEMANTIC_BINDING_MISSING`).
+   Duplicates, disorder, a `CORE` owner or an inconsistent owner are
+   `SEMANTIC_BINDING_INVALID`.
+2. **A restated term restates its meaning** (`checkRestatedBindings`): a
+   child's term with the parent's `termKey` must carry the parent term's
+   exact binding, whatever its parameters. A new meaning needs new authority.
+3. **A proof agrees with the term it orders** (`checkProofsBound`): a
+   module-owned proof must name exactly its term's binding. Together with
+   rule 2, the proof, the parent term and the child term are one definition.
+   This check runs before any comparator is asked.
+4. **A policy term keeps its meaning.** Once anything has been reserved, a
+   restated principal-global term whose binding differs is a new constraint,
+   whatever its parameters, and needs the baseline that AUTH-GLOBAL-2 does not
+   provide (`POLICY_UPDATE_REQUIRES_BASELINE`). Before any activity, a
+   replacement policy may bind to the current definition.
+
+The node (`NodeRecord.bindings`) and the policy (`PolicyRecord.bindings`)
+keep their bindings for life. `encodeLedgerState` now includes them. That
+encoding is not a wire format and no corpus pins it.
+
+The ledger never consults a registry in the reducer. Because the
+infrastructure `AuthorityLedger.registerGrant` / `registerPolicy` accept
+already-derived `RegistrationSemantics { bindings, proofs }`, they check
+that each named module is the registry's current, active one
+(`checkBindingOwnersCurrent`, alongside 7D.2's `checkProofOwnersCurrent`).
+
+### 24.7 Event and wire changes
+
+```text
+REGISTER_POLICY          u8(1)  ‖ i64(at) ‖ segment(policy)                                     unchanged
+REGISTER_GRANT           u8(2)  ‖ i64(at) ‖ segment(grant)                                      unchanged
+REGISTER_POLICY+proofs   u8(8)  ‖ … ‖ u16(n ≥ 1) ‖ SemanticProofRef…                            unchanged (7D.2)
+REGISTER_GRANT+proofs    u8(9)  ‖ … ‖ u16(n ≥ 1) ‖ SemanticProofRef…                            unchanged (7D.2)
+REGISTER_POLICY+bindings u8(10) ‖ i64(at) ‖ segment(policy) ‖ u16(m ≥ 1) ‖ SemanticTermBinding… ‖ u16(n ≥ 0) ‖ SemanticProofRef…
+REGISTER_GRANT+bindings  u8(11) ‖ i64(at) ‖ segment(grant)  ‖ u16(m ≥ 1) ‖ SemanticTermBinding… ‖ u16(n ≥ 0) ‖ SemanticProofRef…
+```
+
+Every registration has exactly one encoding. No binding and no proof is
+code 1 or 2. Proofs only is 8 or 9, which now arises only for Core-owned
+narrowings, such as the aggregate. Any binding is 10 or 11. An empty
+binding list in the bound form is not a valid encoding (tested). An event
+whose terms are all Core's keeps its earlier bytes, so every Core-only
+history and head is unchanged.
+
+### 24.8 Future authorization
+
+Pipeline step 5 now receives each invariant together with its binding.
+`EffectiveAuthority.invariants` and `principalInvariants` are
+`BoundInvariant { term, binding }`. The meet takes each lineage term's
+binding from its own node, and each policy term's binding from
+`PolicyRecord.bindings`. It deduplicates on `(termKey, params,
+semanticBindingId)`, so the same name under two definitions is two
+constraints. Step 11 resolves the definition through a `Pipeline` stage,
+`semantics`, whose production form is `committedSemantics`:
+
+```text
+allowed    committed SemanticTermBinding → exact ModuleRef/moduleDigest → catalog.resolveDefinition
+           (loaded or archived implementation that declares the invariant) → evaluateInvariant
+forbidden  term name → catalog.invariantOwner → current registry mapping
+```
+
+| Situation | Result |
+| --- | --- |
+| module-defined term, binding resolves | evaluated by exactly that `ModuleRef`. The result's `evaluator` names it |
+| committed definition not loaded and not archived | `UNKNOWN / SEMANTIC_DEFINITION_UNAVAILABLE` → the action refuses (SEMANTIC-AUTH-3) |
+| module-defined term with no binding (impossible for a committed state; tested by injection) | `UNKNOWN / SEMANTIC_BINDING_MISSING` → refuses |
+| `core.*` term other than the aggregate | `UNKNOWN / INVARIANT_DEFINITION_UNRESOLVED` → refuses |
+
+`catalog.invariantOwner` (the name lookup) remains only for deciding which
+definition *new* authority binds to. Revalidation uses the same
+`evaluateState`, so it follows the same path. Aggregate contributors were
+already exact `ModuleRef`s in Core's aggregate parameters. They are unchanged.
+
+### 24.9 Module archive and retirement
+
+The 7D.2 `ModuleArchive` is reused unchanged. `resolveDefinition` looks up
+the exact `ModuleRef` among loaded implementations, then archived ones
+(`resolveExact`, keyed by the full `ModuleRef` digest), and requires the
+module to declare the invariant. There is no registry lookup, and no
+substitute: not B, not a newer version, not an impostor claiming A's ref.
+
+Semantic identity is kept separate from lifecycle:
+
+- **An existing term bound to a retiring module** is still evaluated under
+  exactly that module for new actions. This preserves the 7D behaviour,
+  where a retiring invariant owner still evaluated its terms (it resolved
+  for lifecycle). Evaluating a constraint can only refuse more, never grant.
+  A committed digest never changes on retirement (tested).
+- **An existing term bound to a remapped module** (A archived, B current) is
+  evaluated under archived A. If A is neither loaded nor archived, the term
+  is `UNKNOWN` and the action refuses.
+- **New authority** cannot bind to a retiring module (`MODULE_RETIRING`).
+  This is new in 7D.3: it follows from "no new decisions under `RETIRING`"
+  and extends 7D.1's rule that a retiring comparator proves no new
+  narrowing. It also means a delegation cannot restate a term whose
+  definition is retiring, and a policy cannot restate one after activity.
+  The only other choice would be to carry the retiring binding forward.
+  That policy question is left open (§24.15) and fails closed here.
+
+### 24.10 Caller trust boundary
+
+- `ControlEngine.registerDelegation(grant, at, retry)` and
+  `registerPolicy(policy, at, retry)` take nothing else. Their exact
+  signatures are asserted against the source. Extra arguments, and extra
+  fields on the grant (`bindings`, `proofs`, `semanticNarrowing: true`), are
+  ignored: the committed bindings are the catalog's (tested).
+- `narrowingProofs` and `policyProofs` now receive the committed bindings of
+  both sides. They ask a comparator only when both sides are one
+  definition. Otherwise nothing is asked and the ledger refuses the
+  restatement.
+- `policyProofs`, `semanticProofRefs` and the new `termBindings` stay
+  exported as infrastructure and test helpers. The control test world now
+  registers every policy and grant through the engine
+  (`support/world.ts`), so no test path hand-assembles semantics except
+  those testing the boundary itself.
+- The ledger's `RegistrationSemantics` input is infrastructure. It accepts
+  only current, active modules, and the reducer re-checks the structure.
+
+### 24.11 Legacy and ambiguous history
+
+No event is reinterpreted. A pre-7D.3 `REGISTER_GRANT` or `REGISTER_POLICY`
+that carries a module-defined term and no binding is refused. At commit it
+is `SEMANTIC_BINDING_MISSING`. In replayed history (`replay`,
+`replayEncoded`) it is `HISTORICAL_SEMANTICS_UNBOUND`. A history whose terms
+are all Core's replays unchanged. The development corpus was migrated
+(option A): `corpus/control-v1` was regenerated, and exactly the five
+vectors whose grants carry module-defined terms changed:
+`valid-authorization`, `pending-reservation-refusal`,
+`semantic-narrowing-pass`, `cas-conflict-reprojection` and
+`never-issued-closure`. Their heads change because the registration events
+now carry bindings. Their authorization identities, and the `NEVER_ISSUED`
+evidence and revalidation identities derived from them, change with the
+heads. Execution-authorization digests, reservation identities and charge
+plans are unchanged. The four vectors that commit no module-defined term
+are byte-identical. No Phase 6 artifact changed.
+
+### 24.12 Rulings carried forward unchanged
+
+- **Committed prices** (§23.6). Committed notional aggregates commitments at
+  their own valid execution or limit prices. Only marked principal-global
+  aggregates require one valuation context per canonical asset. No
+  common-price requirement is added to historical fills.
+- **`UNKNOWN` refuses** every action in Core v1. There is no risk-reducing
+  exception.
+- **Performance.** Reservation aggregation is not optimized. The 7D.2
+  baseline (20 ≈ 2.2 ms, 100 ≈ 7.1 ms, 1,000 ≈ 60.8 ms, 4,096 ≈ 250.7 ms) is
+  linear and accepted. Indexing is future optimization work, not a blocker.
+  Re-measured after 7D.3 (`npm run control:benchmark`, same machine, median of
+  7), the global-aggregate totals are 2.4, 6.8, 61.0 and 254.4 ms: the same
+  within noise, and still linear. The five-invariant case is 1.37 ms, against
+  1.29 ms in §23.7. A first run measured about 1.6 ms because the meet
+  computed a keccak identity per bound term just to deduplicate. It now keys
+  on the owner's exact `ModuleRef` fields instead, which is equivalent
+  because a binding's id, version and scope are the term's own.
+
+### 24.13 Tests and mutants
+
+| File | 7D.3 coverage |
+| --- | --- |
+| `ledger/test/binding.test.ts` (new, 12) | missing binding (root, delegation, policy); Core terms unbound; unexpected, invalid, duplicate, out-of-order, Core-owned and inconsistent owners; restated-binding mismatch; proof/binding mismatch refused before any comparator is asked; the meet carries bindings and treats one name under two definitions as two constraints; policy rebinding before and after activity; bound wire form round-trip, unchanged unbound bytes, empty list refused; identity per field and domain-separated from a proof; `HISTORICAL_SEMANTICS_UNBOUND` on replay; infrastructure owner checks and byte-identical replay |
+| `control/test/semantics.test.ts` (new, 13) | the committed binding to A; registry drift (A holds 3x and refuses 5x; B, which would read 4x as 8x, is never called); A unavailable → `SEMANTIC_DEFINITION_UNAVAILABLE`; new grant with the byte-identical term binds to B while the old one still means A, both auditable, whole history replays; same name, different identity; narrowing across two meanings refused without asking a comparator; proof B for an A-bound term refused at commit; policy term kept at A, rebinding after activity refused, explicit new policy before activity binds to B; retirement keeps meaning; caller trust boundary |
+| `control/test/mutation.test.ts` | mutants F, G, H, I |
+| updated | `narrowing`, `retirement`, `provenance`, `global`, `engine`, `scope`, `structure` tests and the ledger `graph`, `ordering`, `subset` tests, for bound registrations. §24.14 lists the behaviour changes |
+
+| Mutant | Change | Killed by |
+| --- | --- | --- |
+| **F** | evaluate an old grant under the catalog's current owner of the name (`invariantOwner`) instead of its binding | the drift probe: production refuses 5x under A (`INVARIANT_FAILED`), the mutant authorizes it under B |
+| **G** | accept a module-defined term with no binding, at registration (a binding-set rule that forgets unbound terms) or at evaluation (fall back to the name) | the gate probe, and the store refusing `SEMANTIC_BINDING_MISSING`. Evaluation probe: production is `INVARIANT_UNKNOWN` on an injected unbound node; the mutant authorizes |
+| **H** | order a restatement under comparator B while the term is bound to A | the agreement-rule probe. Without it, lenient B would pass a 5x child under a 4x parent (shown), and production refuses it at commit (`SEMANTIC_BINDING_MISMATCH`) |
+| **I** | commit caller-supplied semantics | the committed binding probe: through the engine, a caller's forged binding never reaches the ledger; the trusting path commits it. Structurally, the engine's API has no parameter for it |
+
+Totals: 163 ledger tests (from 151) and 145 control tests (from 127). The
+mutation suite kills 18: the 9 of 7D, the 4 of 7D.1, E of 7D.2, and F–I.
+`npm run check` passes 1,380 tests (from 1,350).
+
+### 24.14 Behaviour changes, recorded
+
+- A grant or policy naming an invariant that no loaded module owns can no
+  longer be registered (`SEMANTIC_BINDING_REFUSED / INVARIANT_OWNER_UNKNOWN`).
+  Before 7D.3 it registered and every action under it was `UNKNOWN`. The
+  "undefined invariant is `UNKNOWN`" test now uses a `core.*` name that Core
+  does not define.
+- New authority naming a retiring module's invariant is refused at
+  binding (`MODULE_RETIRING`). Before 7D.3 a narrowing was refused
+  (`COMPARATOR_NOT_ACTIVE`) but an exact restatement registered.
+- A forged history that re-points only a proof is now refused as
+  `SEMANTIC_BINDING_MISMATCH`. A forger must re-point bindings too, and then
+  the child departs from its parent's binding, or the whole chain, and so
+  the attested head, changes.
+- The ledger's `AuthorityLedger.registerGrant` / `registerPolicy` fourth
+  argument is now `RegistrationSemantics { bindings?, proofs? }` instead of
+  a proof array.
+
+### 24.15 Security properties, status and freeze
+
+| Property | Status |
+| --- | --- |
+| **SEMANTIC-AUTH-1** — the semantic meaning of a registered authority or policy term is immutable: a future authorization evaluates a module-defined term under the exact definition committed when the authority or policy was registered | **Established** (§24.5–24.8; `semantics.test.ts`, mutants F, G) |
+| **SEMANTIC-AUTH-2** — no mutable registry lookup may redefine an already-registered authority term | **Established**: the name lookup serves only new registrations; evaluation, revalidation and replay resolve by exact identity (mutant F; the drift test's B is never called) |
+| **SEMANTIC-AUTH-3** — if the exact committed semantic definition is unavailable, authorization fails closed | **Established**: `SEMANTIC_DEFINITION_UNAVAILABLE` → `INVARIANT_UNKNOWN`; nothing substitutes |
+| **DOM-2** | Established for decisions, history (7D.2) and now existing authority's terms |
+| **AUTH-GLOBAL-2** | **Not established** |
+| **RECON-1…5**, TIME-1's external/finality part | **Not established**, 7F |
+| **REPLAY-1**, execution/artifact part | **Not established**, 7E |
+
+Open questions after 7D.3 (§21 item 9 is closed):
+
+- **Carrying a retiring binding forward.** Whether a delegation, or a
+  policy after activity, may restate a term whose committed definition is
+  retiring, keeping that exact binding, is a lifecycle policy question.
+  7D.3 fails closed.
+- **Archive governance** (open question 16, §21 item 6) now also governs
+  which definitions existing authority can still be evaluated under.
+
+**Phase 7D is FROZEN** with 7D.1, 7D.2 and 7D.3, after `npm run check` and
+`npm run generated:check`. Phase 7E is next and not started.
+
+### 24.16 Explicit answers
+
+| Question | Answer |
+| --- | --- |
+| Can an existing grant's invariant meaning change because the registry changes? | **No** |
+| Does every module-defined authority term bind its exact `ModuleRef`/`moduleDigest`? | **Yes** |
+| Can future authorization resolve an old authority term by current module name? | **No** |
+| Can an unavailable historical semantic definition be replaced by a newer one? | **No** |
+| Can an agent supply its own trusted semantic verdict? | **No** |
+| Can two grants created at different times intentionally bind different semantic module versions? | **Yes** |
+| Does the naming convention alone define security identity? | **No** |
+| Do committed fills at different valid execution prices require one shared mark? | **No** |
+| Do marked principal-global exposures require one valuation context per canonical asset? | **Yes** |
 | Is AUTH-GLOBAL-2 established? | **No** |
 | Are RECON-1…5 established? | **No** |

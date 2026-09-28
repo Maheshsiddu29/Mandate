@@ -6,8 +6,8 @@ financial assets.**
 > **Current: Phase 7D — the invariant and reservation engine
 > (`packages/control`,
 > [docs/core-v1/implementation-7d.md](docs/core-v1/implementation-7d.md)), with
-> its Phase 7D.1 semantic hardening and Phase 7D.2 historical semantic
-> provenance — is FROZEN, as are Phase 7C's authority graph and
+> its Phase 7D.1 semantic hardening, Phase 7D.2 historical semantic
+> provenance and Phase 7D.3 immutable authority semantics — is FROZEN, as are Phase 7C's authority graph and
 > global authority ledger (`packages/ledger`,
 > [implementation-7c.md](docs/core-v1/implementation-7c.md)), Phase 7B's Core
 > types (`packages/core`, [implementation-7b.md](docs/core-v1/implementation-7b.md))

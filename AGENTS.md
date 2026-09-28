@@ -42,7 +42,9 @@ ADRs [0024](docs/adr/0024-version-bound-domain-module-interface.md)–[0026](doc
 with the **Phase 7D.1** semantic hardening
 ([§22](docs/core-v1/implementation-7d.md#22-phase-7d1-semantic-hardening)) and the
 **Phase 7D.2** historical semantic provenance
-([§23](docs/core-v1/implementation-7d.md#23-phase-7d2-historical-semantic-provenance-and-freeze)).
+([§23](docs/core-v1/implementation-7d.md#23-phase-7d2-historical-semantic-provenance-and-freeze)) and the
+**Phase 7D.3** immutable authority semantics, its final hardening
+([§24](docs/core-v1/implementation-7d.md#24-phase-7d3-immutable-authority-semantics-and-final-freeze)).
 **Phase 7E is next and not started**; it must not begin until explicitly opened. **Phase 6 is
 frozen at `dc98df5`**; nothing in Phase 7 may modify
 MCE v2, Candidate V3, the gate, its libraries, fixture or replay semantics, or

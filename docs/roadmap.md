@@ -11,7 +11,8 @@ and what it depends on.
 > global authority ledger ([implementation-7c.md](core-v1/implementation-7c.md))
 > — is FROZEN. Phase 7D — the invariant and reservation engine
 > ([implementation-7d.md](core-v1/implementation-7d.md)), with its 7D.1
-> semantic hardening and 7D.2 historical semantic provenance — is FROZEN.
+> semantic hardening, 7D.2 historical semantic provenance and 7D.3 immutable
+> authority semantics — is FROZEN.
 > Phase 7E is NEXT and not started.** No production domain module,
 > venue integration, observation reconciliation or later Phase 7 mechanism
 > exists, and nothing has been deployed.
@@ -566,8 +567,18 @@ proved it — Core, or the full `ModuleRef` with its digest — in the
 registration event. Replay resolves that exact artifact from the loaded or
 archived modules, never through the registry's current name mapping, and
 refuses without it. Benchmarks were re-run after 7D.1, up to the
-4,096-reservation bound, and scale linearly. Phase 7D is frozen after this
-checkpoint.
+4,096-reservation bound, and scale linearly.
+
+**Phase 7D.3 — immutable authority semantics and final freeze**
+([implementation-7d.md §24](core-v1/implementation-7d.md#24-phase-7d3-immutable-authority-semantics-and-final-freeze)).
+A registered grant or policy is bound, in its registration event, to the
+exact definition — `ModuleRef` with digest — of each module-defined term.
+Future authorization evaluates the term under that committed definition,
+loaded or archived, and never under whichever module the registry maps the
+name to later. If that definition is unavailable, the action refuses. New
+authority binds to the current, active definition. SEMANTIC-AUTH-1…3 are
+established. Semantic drift of already-registered authority is closed, and
+Phase 7D is frozen after this checkpoint.
 
 ### Phase 7E — PerpPolicy v1 and Venue Signer — NEXT
 
@@ -655,7 +666,7 @@ to the product, and belongs in the design documents before it belongs in code.
 | 7A | Mandate Core v1 specification | 6 | **FROZEN ✓** — specification only, hardened |
 | 7B | Core types and generic action/state model | 7A | **FROZEN ✓** — with 7B.1 representation hardening (meet and AUTH-2 → 7C; module interface → 7D) |
 | 7C | Authority Graph + Global Authority Ledger (meet, effective lineage, AUTH-2) | 7B | **FROZEN ✓** |
-| 7D | Invariant + Reservation Engine (executable `DomainModule` interface) | 7C | **FROZEN ✓** — with 7D.1 hardening and 7D.2 provenance (observation reconciliation → 7F, issuance → 7E) |
+| 7D | Invariant + Reservation Engine (executable `DomainModule` interface) | 7C | **FROZEN ✓** — with 7D.1 hardening, 7D.2 provenance and 7D.3 immutable authority semantics (observation reconciliation → 7F, issuance → 7E) |
 | 7E | PerpPolicy v1 and Venue Signer | 7D | **NEXT** — not started; blocked on venue evidence |
 | 7F | Cross-domain reconciliation: EVM fixture and perps | 7E | planned |
 | 7G | Developer SDK and simulator | 7F | planned |
