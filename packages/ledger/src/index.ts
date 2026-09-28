@@ -52,3 +52,6 @@ export {
 export { checkDelegationSubset, compareBoundValues, delegateDepth, dimensionsComparable, setMemberKeys } from './subset.ts';
 export { checkGrantRegistration, checkLineageValid, checkRevocation, effectiveDepths, resolveLineage } from './graph.ts';
 export * from './meet.ts';
+export { checkAvailability, contributionMatches, deriveLegs, type LegDraft } from './charging.ts';
+export * from './events.ts';
+export * from './reducer.ts';
