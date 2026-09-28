@@ -23,3 +23,4 @@ export * from './module.ts';
 export * from './state.ts';
 export * from './terms.ts';
 export * from './authority.ts';
+export * from './action.ts';
