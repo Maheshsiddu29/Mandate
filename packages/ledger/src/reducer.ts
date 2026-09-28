@@ -46,6 +46,7 @@ import {
   type ReservationId,
   type StateInvariantTerm,
 } from '@mandate/core';
+import { applyAdmitAttempt } from './attempt.ts';
 import { planReservationId, type ChargePlan } from './charge-plan.ts';
 import { checkAvailability, deriveLegs, legRecordOf, policyDimsOf, type LegDraft } from './charging.ts';
 import { rescaleExact } from './encoding.ts';
@@ -477,6 +478,9 @@ export function applyEvent(s: LedgerState, e: LedgerEvent, version: LedgerVersio
       break;
     case 'RESTORE':
       next = applyRestore(s, e);
+      break;
+    case 'ADMIT_ATTEMPT':
+      next = applyAdmitAttempt(s, e.admission, e.at, version);
       break;
   }
   return next.ok ? ok({ ...next.value, lastAt: e.at }) : next;

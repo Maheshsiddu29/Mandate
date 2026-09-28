@@ -12,6 +12,22 @@
  *
  * and refuses new decisions under a module marked `RETIRING`.
  *
+ * **Lifecycle (7E.1).** Three statuses, which must not be confused:
+ *
+ * - `ACTIVE` — current; new decisions and new authority bindings.
+ * - `RETIRING` — trusted semantics retired for new use: no new decisions or
+ *   bindings, but existing reservations and bound authority continue under
+ *   exactly it (7D.1, 7D.3), and it stays resolvable for replay.
+ * - `DISABLED` — no longer trusted. Nothing new of any kind: no decision, no
+ *   binding, no revalidation, no issuance attempt, and a term bound to it is
+ *   `UNKNOWN`. Its artifact stays archived and resolvable by exact digest for
+ *   historical replay and audit only.
+ *
+ * Enforcement adapters get the same three statuses in an `AdapterRegistry`,
+ * keyed by name and content-addressed by `adapterDigest`: a `RETIRING`
+ * adapter authorizes nothing new but may still issue under an existing
+ * authorization; a `DISABLED` one issues nothing.
+ *
  * Registry *governance* — who may register a module or a conforming
  * implementation, and how reproducible builds are verified — is open question
  * 16 and is not solved here. There is deliberately no method to add, change or
@@ -24,11 +40,11 @@
  */
 
 import { ok } from '@mandate/kernel';
-import { moduleRefsEqual, type ImplementationDigest, type ModuleRef } from '@mandate/core';
+import { adapterRefsEqual, moduleRefsEqual, type AdapterRef, type ImplementationDigest, type ModuleRef } from '@mandate/core';
 import { refuse, type LedgerResult } from './errors.ts';
 import type { SemanticInvariantRef, SemanticProofRef, SemanticTermBinding } from './semantic.ts';
 
-export type ModuleStatus = 'ACTIVE' | 'RETIRING';
+export type ModuleStatus = 'ACTIVE' | 'RETIRING' | 'DISABLED';
 
 export interface ModuleRegistration {
   readonly module: ModuleRef;
@@ -75,6 +91,7 @@ export function checkModuleConformance(registry: ModuleRegistry, module: ModuleR
   const entry = registry.lookup(module.moduleId, module.moduleVersion);
   if (entry === null) return refuse('MODULE_UNREGISTERED', path);
   if (!moduleRefsEqual(entry.module, module)) return refuse('MODULE_DIGEST_MISMATCH', path);
+  if (entry.status === 'DISABLED') return refuse('MODULE_DISABLED', path);
   if (entry.status === 'RETIRING') return refuse('MODULE_RETIRING', path);
   if (!entry.implementations.includes(implementation)) return refuse('MODULE_IMPLEMENTATION_UNREGISTERED', 'plan.implementation');
   return ok(true);
@@ -109,7 +126,70 @@ function checkOwnersCurrent(registry: ModuleRegistry, xs: readonly { readonly de
     const at = `${path}[${i}].definition.owner`;
     if (entry === null) return refuse('MODULE_UNREGISTERED', at);
     if (!moduleRefsEqual(entry.module, owner.module)) return refuse('MODULE_DIGEST_MISMATCH', at);
+    if (entry.status === 'DISABLED') return refuse('MODULE_DISABLED', at);
     if (entry.status === 'RETIRING') return refuse('MODULE_RETIRING', at);
   }
+  return ok(true);
+}
+
+// --- Enforcement adapters (7E.1) --------------------------------------------------------
+
+export type AdapterStatus = 'ACTIVE' | 'RETIRING' | 'DISABLED';
+
+export interface AdapterRegistration {
+  readonly adapter: AdapterRef;
+  readonly status: AdapterStatus;
+}
+
+export interface AdapterRegistry {
+  /** The registration for an adapter name, or `null`. */
+  lookup(adapterId: string, adapterVersion: number): AdapterRegistration | null;
+}
+
+/** An immutable adapter registry seeded at construction. Status changes are governance, which is not built. */
+export class ReferenceAdapterRegistry implements AdapterRegistry {
+  readonly #entries: ReadonlyMap<string, AdapterRegistration>;
+
+  private constructor(entries: ReadonlyMap<string, AdapterRegistration>) {
+    this.#entries = entries;
+  }
+
+  static create(registrations: readonly AdapterRegistration[]): LedgerResult<ReferenceAdapterRegistry> {
+    const entries = new Map<string, AdapterRegistration>();
+    for (let i = 0; i < registrations.length; i += 1) {
+      const r = registrations[i] as AdapterRegistration;
+      const key = nameKey(r.adapter.adapterId, r.adapter.adapterVersion);
+      if (entries.has(key)) return refuse('REGISTRY_DUPLICATE_ADAPTER', `registrations[${i}]`);
+      entries.set(key, Object.freeze({ adapter: r.adapter, status: r.status }));
+    }
+    return ok(new ReferenceAdapterRegistry(entries));
+  }
+
+  lookup(adapterId: string, adapterVersion: number): AdapterRegistration | null {
+    return this.#entries.get(nameKey(adapterId, adapterVersion)) ?? null;
+  }
+}
+
+/**
+ * Whether `adapter` may be used — for a new authorization (`DECISION`), or to
+ * admit an issuance attempt under an existing one (`ATTEMPT`). Exact by
+ * digest: an upgraded adapter is a different adapter and never reinterprets
+ * an existing authorization or attempt.
+ */
+export function checkAdapterUsable(registry: AdapterRegistry, adapter: AdapterRef, purpose: 'DECISION' | 'ATTEMPT', path = 'adapter'): LedgerResult<true> {
+  const entry = registry.lookup(adapter.adapterId, adapter.adapterVersion);
+  if (entry === null) return refuse('ADAPTER_UNREGISTERED', path);
+  if (!adapterRefsEqual(entry.adapter, adapter)) return refuse('ADAPTER_DIGEST_MISMATCH', path);
+  if (entry.status === 'DISABLED') return refuse('ADAPTER_DISABLED', path);
+  if (entry.status === 'RETIRING' && purpose === 'DECISION') return refuse('ADAPTER_RETIRING', path);
+  return ok(true);
+}
+
+/** Whether a module may carry an existing reservation to a new issuance attempt: `ACTIVE` or `RETIRING`, never `DISABLED`. */
+export function checkModuleIssuable(registry: ModuleRegistry, module: ModuleRef, path = 'module'): LedgerResult<true> {
+  const entry = registry.lookup(module.moduleId, module.moduleVersion);
+  if (entry === null) return refuse('MODULE_UNREGISTERED', path);
+  if (!moduleRefsEqual(entry.module, module)) return refuse('MODULE_DIGEST_MISMATCH', path);
+  if (entry.status === 'DISABLED') return refuse('MODULE_DISABLED', path);
   return ok(true);
 }

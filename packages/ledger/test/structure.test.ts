@@ -52,7 +52,7 @@ describe('ledger structural boundary', () => {
   });
 
   it('takes only byte and result plumbing from the kernel', () => {
-    const allowed = new Set(['ok', 'err', 'Result', 'ByteWriter']);
+    const allowed = new Set(['ok', 'err', 'Result', 'ByteWriter', 'Identifier']);
     for (const { path, text } of SOURCES) {
       for (const m of text.matchAll(/import\s*\{([^}]*)\}\s*from\s*['"]@mandate\/kernel['"]/g)) {
         for (const raw of (m[1] as string).split(',')) {

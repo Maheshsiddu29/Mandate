@@ -36,6 +36,8 @@ export const LedgerTag = {
   SEMANTIC_PROOF: 'mandate-core/v1/semantic-proof',
   /** 7D.3: the exact definition one registered term is interpreted under (semantic.ts). */
   SEMANTIC_BINDING: 'mandate-core/v1/semantic-binding',
+  /** 7E.1: an issuance attempt's derived identity (attempt.ts). */
+  ATTEMPT: 'mandate-core/v1/attempt',
 } as const;
 export type LedgerTag = (typeof LedgerTag)[keyof typeof LedgerTag];
 

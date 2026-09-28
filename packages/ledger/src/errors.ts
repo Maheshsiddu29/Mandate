@@ -63,6 +63,7 @@ export const LEDGER_REFUSAL_CODES = [
   'MODULE_DIGEST_MISMATCH',
   'MODULE_IMPLEMENTATION_UNREGISTERED',
   'MODULE_RETIRING', // 7C: action-state-model.md §8.1 "RETIRING — no new decisions"
+  'MODULE_DISABLED', // 7E.1: no longer trusted; no new economic effect of any kind
   'RESERVATION_EXISTS', // 7C
   'GENERATION_OUT_OF_SEQUENCE', // 7C
   'PREVIOUS_GENERATION_OPEN', // 7C
@@ -83,6 +84,14 @@ export const LEDGER_REFUSAL_CODES = [
   'RELEASE_MISMATCH', // 7C
   'RESTORE_EXCEEDS_CONSUMED', // 7C: LEDGER-RESTORE-1
   'RESTORE_NOT_PERMITTED', // 7C: BUDGET dimensions never restore
+  // Issuance attempts (7E.1)
+  'ATTEMPT_SHAPE_INVALID', // an admission's ordinal, artifact identity or slot is out of range
+  'ATTEMPT_BINDING_MISMATCH', // the admission restates another action or module than its reservation's
+  'ATTEMPT_ID_MISMATCH', // the attempt id is not the derived one for the next ordinal
+  'ATTEMPT_UNRESOLVED', // a live attempt exists for the reservation; its outcome is not yet established
+  'ARTIFACT_REUSED', // the artifact identity was bound by an earlier attempt
+  'VENUE_SLOT_REUSED', // the venue replay slot was bound by an earlier attempt
+  'ATTEMPT_EXPIRED', // the artifact would not be valid after the admission time
   // Log and time
   'EVALUATION_TIME_REGRESSED', // 7C
   'BATCH_EMPTY', // 7C
@@ -90,6 +99,11 @@ export const LEDGER_REFUSAL_CODES = [
   'LEDGER_CHAIN_BROKEN', // 7C: a replayed batch does not extend the previous head
   // Registry
   'REGISTRY_DUPLICATE_MODULE', // 7C
+  'REGISTRY_DUPLICATE_ADAPTER', // 7E.1
+  'ADAPTER_UNREGISTERED', // 7E.1
+  'ADAPTER_DIGEST_MISMATCH', // 7E.1: the same adapter name under another descriptor digest
+  'ADAPTER_RETIRING', // 7E.1: no new authorizations; existing ones may still issue
+  'ADAPTER_DISABLED', // 7E.1: no longer trusted; nothing new is issued through it
   // Engine
   'RETRY_POLICY_INVALID', // 7C
 ] as const;

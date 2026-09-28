@@ -26,6 +26,9 @@
  *   restoration credits exactly these legs.
  * - **actions** — per `ActionId`, the last generation reserved and the open
  *   one, so generations are strictly sequential and never overlap.
+ * - **attempts** (7E.1) — every admitted issuance attempt, with the indexes
+ *   that keep an artifact identity and a venue replay slot bound to at most
+ *   one attempt ever, and the attempts of each reservation in order.
  *
  * Balances are cumulative: nothing consumed or restored is ever decremented
  * (§4: `C` and `Rs` are monotone). Available authority is derived, never
@@ -60,6 +63,7 @@ import {
   type Tagged,
   type Digest32,
 } from '@mandate/core';
+import { writeAttemptAdmission, type AttemptId, type AttemptRecord } from './attempt.ts';
 import { LedgerTag, ledgerDigest, ledgerWriter, writeSegment } from './encoding.ts';
 import type { Contribution } from './charge-plan.ts';
 import type { TargetRef } from './errors.ts';
@@ -172,6 +176,14 @@ export interface LedgerState {
   readonly targets: PMap<TargetBalance>;
   readonly reservations: PMap<ReservationRecord>;
   readonly actions: PMap<ActionRecord>;
+  /** 7E.1: by `AttemptId`. */
+  readonly attempts: PMap<AttemptRecord>;
+  /** 7E.1: artifact identity key → the one attempt that bound it. */
+  readonly attemptArtifacts: PMap<AttemptId>;
+  /** 7E.1: venue slot key → the one attempt that bound it. */
+  readonly attemptSlots: PMap<AttemptId>;
+  /** 7E.1: reservation → its attempts, in admission order. */
+  readonly reservationAttempts: PMap<readonly AttemptId[]>;
 }
 
 // --- Genesis -------------------------------------------------------------------
@@ -195,6 +207,10 @@ export function emptyLedgerState(principal: PrincipalId): LedgerState {
     targets: PMap.empty(),
     reservations: PMap.empty(),
     actions: PMap.empty(),
+    attempts: PMap.empty(),
+    attemptArtifacts: PMap.empty(),
+    attemptSlots: PMap.empty(),
+    reservationAttempts: PMap.empty(),
   };
 }
 
@@ -360,6 +376,18 @@ export function encodeLedgerState(s: LedgerState): Uint8Array {
     const a = s.actions.get(k) as ActionRecord;
     w.str(k).u64(a.lastGeneration);
     writeNullable(w, a.open, (x, id) => writeDigest(x, id));
+  }
+
+  // 7E.1: written only when an attempt exists, so every earlier state keeps its exact encoding.
+  // The artifact, slot and reservation indexes are functions of the attempts, so the attempts alone are canonical.
+  const attempts = s.attempts.sortedKeys();
+  if (attempts.length > 0) {
+    w.str('attempts').u32(attempts.length);
+    for (const k of attempts) {
+      const a = s.attempts.get(k) as AttemptRecord;
+      writeAttemptAdmission(w, a);
+      w.u64(a.admittedAt).i64(a.admittedTime).str(a.status);
+    }
   }
   return w.finish();
 }

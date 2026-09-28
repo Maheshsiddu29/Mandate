@@ -14,6 +14,7 @@
  * | `CONSUME`         | reserved → consumed, per contribution, on every leg                 |
  * | `CLOSE`           | the remainder of every leg is released; the reservation is closed   |
  * | `RESTORE`         | consumed capacity is restored to the legs it was charged to         |
+ * | `ADMIT_ATTEMPT`   | one exact artifact may be created for a reservation (7E.1)          |
  *
  * `CONSUME`, `CLOSE` and `RESTORE` are accounting effects. Each names the
  * observation it is the effect of (an `ObservationId`), because the
@@ -109,6 +110,7 @@ import {
   keccakDigest,
   parseIdentifierAs,
 } from '@mandate/core';
+import { readAttemptAdmission, writeAttemptAdmission, type AttemptAdmission } from './attempt.ts';
 import { readChargePlanInput, validateChargePlan, writeChargePlan, type ChargePlan } from './charge-plan.ts';
 import { LedgerTag, ledgerWriter, readSegment, writeSegment } from './encoding.ts';
 import type { TargetRef } from './errors.ts';
@@ -165,7 +167,9 @@ export type LedgerEvent =
     }
   | AccountingEvent<'CONSUME'>
   | AccountingEvent<'CLOSE'>
-  | AccountingEvent<'RESTORE'>;
+  | AccountingEvent<'RESTORE'>
+  /** 7E.1: one exact external artifact may now be created for this reservation generation (attempt.ts). */
+  | { readonly kind: 'ADMIT_ATTEMPT'; readonly at: bigint; readonly admission: AttemptAdmission };
 
 export interface AccountingEvent<K extends 'CONSUME' | 'CLOSE' | 'RESTORE'> {
   readonly kind: K;
@@ -196,6 +200,7 @@ const EVENT_CODE: WireCodes<WireKind> = {
   REGISTER_GRANT_PROVEN: 9,
   REGISTER_POLICY_BOUND: 10,
   REGISTER_GRANT_BOUND: 11,
+  ADMIT_ATTEMPT: 12,
 };
 
 function wireKind(e: LedgerEvent): WireKind {
@@ -262,6 +267,9 @@ export function writeEventBody(w: ByteWriter, e: LedgerEvent): void {
       writeDigest(w, e.evidence);
       w.u16(e.amounts.length);
       for (const a of e.amounts) w.u256(a);
+      return;
+    case 'ADMIT_ATTEMPT':
+      writeAttemptAdmission(w, e.admission);
       return;
   }
 }
@@ -379,6 +387,8 @@ function readEventBody(r: CoreReader): LedgerEvent {
       const amounts = r.list(MAX_PLAN_CONTRIBUTIONS, (x) => x.u256(), false);
       return { kind, at, reservation, generation, evidence, amounts };
     }
+    case 'ADMIT_ATTEMPT':
+      return { kind, at, admission: readAttemptAdmission(r) };
   }
 }
 
