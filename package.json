@@ -14,7 +14,8 @@
     "packages/execution-gate",
     "packages/core",
     "packages/ledger",
-    "packages/control"
+    "packages/control",
+    "packages/ledger-sqlite"
   ],
   "scripts": {
     "audit:security": "npm audit --audit-level=high",

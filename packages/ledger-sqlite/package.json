@@ -1,0 +1,17 @@
+{
+  "name": "@mandate/ledger-sqlite",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "REFERENCE / SINGLE-NODE TESTNET STORE: a durable implementation of the Mandate ledger store contract on SQLite (node:sqlite, WAL, synchronous FULL), plus the issuance journal an enforcement adapter keeps in the same database. Not a horizontally scalable production deployment.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "dependencies": {
+    "@mandate/core": "0.1.0",
+    "@mandate/ledger": "0.1.0"
+  }
+}
