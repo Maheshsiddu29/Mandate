@@ -1,0 +1,1257 @@
+{
+  "corpusVersion": 1,
+  "encoding": "Mandate Core v1 canonical encoding, keccak-256 (docs/adr/0020-mandate-core-package-and-encoding.md)",
+  "note": "Integers are decimal strings; the validators accept exactly that form. `canonical` is the tagged top-level encoding; `digest` is keccak-256 of it.",
+  "tags": {
+    "ModuleRef": "mandate-core/v1/module-ref",
+    "AdapterRef": "mandate-core/v1/adapter-ref",
+    "EconomicQuantity": "mandate-core/v1/quantity",
+    "PrincipalPolicy": "mandate-core/v1/principal-policy",
+    "AuthorityGrant": "mandate-core/v1/authority",
+    "ActionEnvelope": "mandate-core/v1/action",
+    "StateEnvelope": "mandate-core/v1/state",
+    "StateBinding": "mandate-core/v1/state-binding",
+    "ReservationRef": "mandate-core/v1/reservation-ref",
+    "ExecutionAuthorization": "mandate-core/v1/authorization",
+    "ExecutionBindingRef": "mandate-core/v1/execution-binding",
+    "ReceiptHeader": "mandate-core/v1/receipt-header",
+    "ReceiptReferences": "mandate-core/v1/receipt-references"
+  },
+  "vectorCount": 30,
+  "vectors": [
+    {
+      "id": "module-ref/perp-policy-v1",
+      "type": "ModuleRef",
+      "description": "A semantic module: name, version and manifest digest.",
+      "input": {
+        "domainId": "perp",
+        "moduleId": "perp-policy",
+        "moduleVersion": 1,
+        "moduleDigest": "0xc889f09b6e41dae6f5e281c6bcd8a3cc4fd2e42ee8af9226f0ec69fcf31c5ab0"
+      },
+      "canonical": "0x001a6d616e646174652d636f72652f76312f6d6f64756c652d7265660001000470657270000b706572702d706f6c69637900000001c889f09b6e41dae6f5e281c6bcd8a3cc4fd2e42ee8af9226f0ec69fcf31c5ab0",
+      "digest": "0xb4a9a97ba974bc784cc9fa1dc2366ff4e3173b3f98deb8be1d4ac605b6c68dab"
+    },
+    {
+      "id": "module-ref/perp-policy-v2",
+      "type": "ModuleRef",
+      "description": "The next version: a new version and a new digest.",
+      "input": {
+        "domainId": "perp",
+        "moduleId": "perp-policy",
+        "moduleVersion": 2,
+        "moduleDigest": "0xa9fa1e59900e38e26a1ac8928cdd48acc4e46e2e9acf0bf9979fc86d0cde822d"
+      },
+      "canonical": "0x001a6d616e646174652d636f72652f76312f6d6f64756c652d7265660001000470657270000b706572702d706f6c69637900000002a9fa1e59900e38e26a1ac8928cdd48acc4e46e2e9acf0bf9979fc86d0cde822d",
+      "digest": "0x9d9d47413882ec6fad9a14838b3c48be48c880a06ea61d999b9a55ab7313f3d8"
+    },
+    {
+      "id": "module-ref/perp-policy-v2-other-digest",
+      "type": "ModuleRef",
+      "description": "Same name and version as v2, different digest: a different semantic module (DOM-2).",
+      "input": {
+        "domainId": "perp",
+        "moduleId": "perp-policy",
+        "moduleVersion": 2,
+        "moduleDigest": "0xdb20ea6d3dc7d6a16fbd8cb2e6c5408e0928c3b733a3c2adb51c1794a2b53d37"
+      },
+      "canonical": "0x001a6d616e646174652d636f72652f76312f6d6f64756c652d7265660001000470657270000b706572702d706f6c69637900000002db20ea6d3dc7d6a16fbd8cb2e6c5408e0928c3b733a3c2adb51c1794a2b53d37",
+      "digest": "0xa87236b8056769fa373c3f90fd8fc01465f80ab6a67d4aa0b83cc2d8070756c2"
+    },
+    {
+      "id": "adapter-ref/evm-gate-v1",
+      "type": "AdapterRef",
+      "description": "An enforcement adapter bound by digest.",
+      "input": {
+        "adapterId": "evm-gate",
+        "adapterVersion": 1,
+        "adapterDigest": "0x5820391017775c4e7f1943ec84fefda8c06abdb0335cb7ddff362e415eb2633d"
+      },
+      "canonical": "0x001b6d616e646174652d636f72652f76312f616461707465722d7265660001000865766d2d67617465000000015820391017775c4e7f1943ec84fefda8c06abdb0335cb7ddff362e415eb2633d",
+      "digest": "0x6e71b92ae2a752b4d759f9958d650c89ec8bb08bd39658d6f3e60d6df9c3b067"
+    },
+    {
+      "id": "quantity/capital",
+      "type": "EconomicQuantity",
+      "description": "600.000000 USDG of capital, funding asset USDG.",
+      "input": {
+        "kind": "CAPITAL",
+        "unit": "USDG",
+        "decimals": 6,
+        "atoms": "600000000",
+        "asset": {
+          "domain": "evm-spot",
+          "kind": "REPRESENTATION_ASSET",
+          "localId": "arbitrum:erc20:usdg"
+        },
+        "valuation": null
+      },
+      "canonical": "0x00186d616e646174652d636f72652f76312f7175616e74697479000102000455534447060000000000000000000000000000000000000000000000000000000023c3460001000865766d2d73706f74030013617262697472756d3a65726332303a7573646700",
+      "digest": "0xbbf307c2d2d964f1084a71b6e44c1ae4daaaf58bcd80610760252c086003e435"
+    },
+    {
+      "id": "quantity/margin",
+      "type": "EconomicQuantity",
+      "description": "600.000000 USDG of margin: same number and unit as the capital vector, different kind and identity.",
+      "input": {
+        "kind": "MARGIN",
+        "unit": "USDG",
+        "decimals": 6,
+        "atoms": "600000000",
+        "asset": {
+          "domain": "perp",
+          "kind": "REPRESENTATION_ASSET",
+          "localId": "venue-l:collateral:usdg"
+        },
+        "valuation": null
+      },
+      "canonical": "0x00186d616e646174652d636f72652f76312f7175616e74697479000107000455534447060000000000000000000000000000000000000000000000000000000023c346000100047065727003001776656e75652d6c3a636f6c6c61746572616c3a7573646700",
+      "digest": "0xee153bf01563fc80026062c3415634f623cf36a081b46109914519ec14606da2"
+    },
+    {
+      "id": "quantity/position-long",
+      "type": "EconomicQuantity",
+      "description": "+0.03 BTC position size, exposure to canonical BTC.",
+      "input": {
+        "kind": "POSITION_SIZE",
+        "unit": "BTC",
+        "decimals": 8,
+        "atoms": "3000000",
+        "asset": {
+          "domain": "registry",
+          "kind": "CANONICAL_ASSET",
+          "localId": "crypto:btc"
+        },
+        "valuation": null
+      },
+      "canonical": "0x00186d616e646174652d636f72652f76312f7175616e7469747900010300034254430800000000000000000000000000000000000000000000000000000000002dc6c0010008726567697374727902000a63727970746f3a62746300",
+      "digest": "0xa48ad0c545b9988bf166ecea7cde4ebb800bef612497fec9b6b748c84939db1b"
+    },
+    {
+      "id": "quantity/position-short",
+      "type": "EconomicQuantity",
+      "description": "−0.01 BTC: a signed kind, encoded as int256.",
+      "input": {
+        "kind": "POSITION_SIZE",
+        "unit": "BTC",
+        "decimals": 8,
+        "atoms": "-1000000",
+        "asset": {
+          "domain": "registry",
+          "kind": "CANONICAL_ASSET",
+          "localId": "crypto:btc"
+        },
+        "valuation": null
+      },
+      "canonical": "0x00186d616e646174652d636f72652f76312f7175616e74697479000103000342544308fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0bdc0010008726567697374727902000a63727970746f3a62746300",
+      "digest": "0xb986d5e181f689b6a2c7966758ef8b5d110212fc47beddd1c94510f3cdacc8a2"
+    },
+    {
+      "id": "quantity/notional-at-limit",
+      "type": "EconomicQuantity",
+      "description": "4,000.00 USD committed notional valued at an order's limit price, sourced from the action.",
+      "input": {
+        "kind": "NOTIONAL",
+        "unit": "USD",
+        "decimals": 2,
+        "atoms": "400000",
+        "asset": {
+          "domain": "registry",
+          "kind": "CANONICAL_ASSET",
+          "localId": "crypto:btc"
+        },
+        "valuation": {
+          "price": {
+            "numeratorUnit": "USD",
+            "denominatorUnit": "BTC",
+            "decimals": 2,
+            "atoms": "10000000"
+          },
+          "basis": "LIMIT",
+          "source": {
+            "kind": "ACTION",
+            "actionId": "0x96ee7c5a3f64553f55375a7bbdcb644a63e55b4f437dd88966f6184d11d3757f"
+          },
+          "observedAt": "1790813800"
+        }
+      },
+      "canonical": "0x00186d616e646174652d636f72652f76312f7175616e746974790001040003555344020000000000000000000000000000000000000000000000000000000000061a80010008726567697374727902000a63727970746f3a6274630100035553440003425443020000000000000000000000000000000000000000000000000000000000989680020396ee7c5a3f64553f55375a7bbdcb644a63e55b4f437dd88966f6184d11d3757f000000006abda668",
+      "digest": "0x57f162288ae98af66072f47407ab79b7515772bc8b1c5c2a98d78d0d6699d7f2"
+    },
+    {
+      "id": "quantity/notional-at-execution",
+      "type": "EconomicQuantity",
+      "description": "2,997.00 USD committed notional valued at the fill price, sourced from an observation.",
+      "input": {
+        "kind": "NOTIONAL",
+        "unit": "USD",
+        "decimals": 2,
+        "atoms": "299700",
+        "asset": {
+          "domain": "registry",
+          "kind": "CANONICAL_ASSET",
+          "localId": "crypto:btc"
+        },
+        "valuation": {
+          "price": {
+            "numeratorUnit": "USD",
+            "denominatorUnit": "BTC",
+            "decimals": 2,
+            "atoms": "9990000"
+          },
+          "basis": "EXECUTION",
+          "source": {
+            "kind": "OBSERVATION",
+            "observationId": "0xe58de0e815c781903522a72d617f1800b2ec0f6f87f9edaf7c7c89c0525aee9c"
+          },
+          "observedAt": "1790813806"
+        }
+      },
+      "canonical": "0x00186d616e646174652d636f72652f76312f7175616e7469747900010400035553440200000000000000000000000000000000000000000000000000000000000492b4010008726567697374727902000a63727970746f3a6274630100035553440003425443020000000000000000000000000000000000000000000000000000000000986f700102e58de0e815c781903522a72d617f1800b2ec0f6f87f9edaf7c7c89c0525aee9c000000006abda66e",
+      "digest": "0xc9a27d55b16ae41ede39979c7d90b4af5ce34bb75684ac46d1b4ff7c70f7908e"
+    },
+    {
+      "id": "quantity/gross-exposure-at-mark",
+      "type": "EconomicQuantity",
+      "description": "19,000.00 USD marked gross exposure: an invariant value at an admitted mark, never a ledger counter.",
+      "input": {
+        "kind": "GROSS_EXPOSURE",
+        "unit": "USD",
+        "decimals": 2,
+        "atoms": "1900000",
+        "asset": {
+          "domain": "registry",
+          "kind": "CANONICAL_ASSET",
+          "localId": "crypto:btc"
+        },
+        "valuation": {
+          "price": {
+            "numeratorUnit": "USD",
+            "denominatorUnit": "BTC",
+            "decimals": 2,
+            "atoms": "10000000"
+          },
+          "basis": "MARK",
+          "source": {
+            "kind": "STATE",
+            "stateId": "0x40ea669e1dd43e5c4a861a3a769720cfda3f2bc1e5d43cb1f91ce5a0e628a182"
+          },
+          "observedAt": "1790813800"
+        }
+      },
+      "canonical": "0x00186d616e646174652d636f72652f76312f7175616e7469747900010500035553440200000000000000000000000000000000000000000000000000000000001cfde0010008726567697374727902000a63727970746f3a6274630100035553440003425443020000000000000000000000000000000000000000000000000000000000989680030140ea669e1dd43e5c4a861a3a769720cfda3f2bc1e5d43cb1f91ce5a0e628a182000000006abda668",
+      "digest": "0x702e0f0b623ebca23f166f9642bb3a54bdbae8f9f10e7e884641027c7047e089"
+    },
+    {
+      "id": "quantity/pnl-realized",
+      "type": "EconomicQuantity",
+      "description": "−35.000000 USDG realized PnL: signed, no asset, no valuation.",
+      "input": {
+        "kind": "PNL",
+        "unit": "USDG",
+        "decimals": 6,
+        "atoms": "-35000000",
+        "asset": null,
+        "valuation": null
+      },
+      "canonical": "0x00186d616e646174652d636f72652f76312f7175616e7469747900010a00045553444706fffffffffffffffffffffffffffffffffffffffffffffffffffffffffde9f1400000",
+      "digest": "0x2af753211c792b3111c9729d9416c22407a8bcfd335ec05a8a7faaea47fb87ab"
+    },
+    {
+      "id": "quantity/count",
+      "type": "EconomicQuantity",
+      "description": "3 actions.",
+      "input": {
+        "kind": "COUNT",
+        "unit": "COUNT",
+        "decimals": 0,
+        "atoms": "3",
+        "asset": null,
+        "valuation": null
+      },
+      "canonical": "0x00186d616e646174652d636f72652f76312f7175616e7469747900010b0005434f554e540000000000000000000000000000000000000000000000000000000000000000030000",
+      "digest": "0xe86a3ef8d6397a422611a632d86ec64ff74f59ade3d88d438015002fad321558"
+    },
+    {
+      "id": "principal-policy/sample",
+      "type": "PrincipalPolicy",
+      "description": "A global BTC notional dimension, a global marked-exposure invariant and a global mark-price state policy.",
+      "input": {
+        "principal": {
+          "kind": "eip155-address",
+          "value": "0x1111111111111111111111111111111111111111"
+        },
+        "sequence": "1",
+        "terms": [
+          {
+            "kind": "LEDGER_DIMENSION",
+            "dimensionId": "btc-notional-global",
+            "limit": {
+              "kind": "NOTIONAL",
+              "unit": "USD",
+              "decimals": 2,
+              "atoms": "1000000"
+            },
+            "accounting": "CAPACITY",
+            "restoration": "AS_CHARGED",
+            "epoch": null,
+            "sign": "UNSIGNED",
+            "scope": {
+              "asset": {
+                "domain": "registry",
+                "kind": "CANONICAL_ASSET",
+                "localId": "crypto:btc"
+              },
+              "market": null,
+              "domain": null,
+              "account": null
+            }
+          },
+          {
+            "kind": "STATE_INVARIANT",
+            "invariantId": "core.markedExposure",
+            "version": 1,
+            "scope": [
+              {
+                "domain": "registry",
+                "kind": "CANONICAL_ASSET",
+                "localId": "crypto:btc"
+              }
+            ],
+            "params": "0x01"
+          },
+          {
+            "kind": "STATE_POLICY",
+            "domain": "perp",
+            "stateKind": "perp.markPrice",
+            "admittedSources": [
+              "venue-l-api",
+              "venue-m-api"
+            ],
+            "requirement": {
+              "freshness": {
+                "kind": "AGE",
+                "maxAgeSeconds": "5"
+              },
+              "minTrust": "VERIFIED",
+              "minFinality": {
+                "ladder": "venue-l.market-data",
+                "level": "PUBLISHED"
+              },
+              "atIssue": "RECHECK",
+              "atExecution": {
+                "kind": "ENFORCED_BY_ARTIFACT",
+                "field": "limitPrice"
+              }
+            }
+          }
+        ],
+        "nonce": "1"
+      },
+      "canonical": "0x00206d616e646174652d636f72652f76312f7072696e636970616c2d706f6c6963790001000e6569703135352d61646472657373002a307831313131313131313131313131313131313131313131313131313131313131313131313131313131000000000000000100030500136274632d6e6f74696f6e616c2d676c6f62616c0400035553440200000000000000000000000000000000000000000000000000000000000f424002030001010008726567697374727902000a63727970746f3a627463000000060013636f72652e6d61726b65644578706f737572650000000100010008726567697374727902000a63727970746f3a62746300010107000470657270000e706572702e6d61726b50726963650002000b76656e75652d6c2d617069000b76656e75652d6d2d617069010000000502001376656e75652d6c2e6d61726b65742d6461746100095055424c49534845440202000a6c696d697450726963650000000000000001",
+      "digest": "0x7c927ef5a772c69504120d967c1ed97088be8e7cb20aaa1c06589cfd224e9a13"
+    },
+    {
+      "id": "principal-policy/empty",
+      "type": "PrincipalPolicy",
+      "description": "The explicitly empty policy: roots are independent, by the principal's statement.",
+      "input": {
+        "principal": {
+          "kind": "eip155-address",
+          "value": "0x1111111111111111111111111111111111111111"
+        },
+        "sequence": "1",
+        "terms": [],
+        "nonce": "1"
+      },
+      "canonical": "0x00206d616e646174652d636f72652f76312f7072696e636970616c2d706f6c6963790001000e6569703135352d61646472657373002a307831313131313131313131313131313131313131313131313131313131313131313131313131313131000000000000000100000000000000000001",
+      "digest": "0xecb5cff69dd7d7760bc3b7713edd1394722017448ee556a207d3efe722f75184"
+    },
+    {
+      "id": "authority/root",
+      "type": "AuthorityGrant",
+      "description": "A root grant (Core mandate) carrying all seven term kinds.",
+      "input": {
+        "lineage": {
+          "kind": "ROOT",
+          "issuer": {
+            "kind": "eip155-address",
+            "value": "0x1111111111111111111111111111111111111111"
+          }
+        },
+        "principal": {
+          "kind": "eip155-address",
+          "value": "0x1111111111111111111111111111111111111111"
+        },
+        "holder": {
+          "kind": "eip155-address",
+          "value": "0x2121212121212121212121212121212121212121"
+        },
+        "notBefore": "1790812800",
+        "expiresAt": "1798761600",
+        "terms": [
+          {
+            "kind": "SET",
+            "vocabulary": "MODULES",
+            "members": [
+              {
+                "domainId": "perp",
+                "moduleId": "perp-policy",
+                "moduleVersion": 1,
+                "moduleDigest": "0xc889f09b6e41dae6f5e281c6bcd8a3cc4fd2e42ee8af9226f0ec69fcf31c5ab0"
+              },
+              {
+                "domainId": "evm-spot",
+                "moduleId": "evm-spot",
+                "moduleVersion": 1,
+                "moduleDigest": "0xf9ea0e6feb1847d0cd861d819ab2e00759ddb96e16e78023924553aa41e66566"
+              }
+            ]
+          },
+          {
+            "kind": "SET",
+            "vocabulary": "ADAPTERS",
+            "members": [
+              {
+                "adapterId": "venue-signer-l",
+                "adapterVersion": 1,
+                "adapterDigest": "0x8a616788e33cff199f825494d9afae2e02dd5a8426de8c06e404c2fb2f3bcdd3"
+              },
+              {
+                "adapterId": "evm-gate",
+                "adapterVersion": 1,
+                "adapterDigest": "0x5820391017775c4e7f1943ec84fefda8c06abdb0335cb7ddff362e415eb2633d"
+              }
+            ]
+          },
+          {
+            "kind": "SET",
+            "vocabulary": "MARKETS",
+            "members": [
+              {
+                "domain": "perp",
+                "kind": "MARKET",
+                "localId": "venue-l:BTC-PERP"
+              },
+              {
+                "domain": "perp",
+                "kind": "MARKET",
+                "localId": "venue-l:ETH-PERP"
+              },
+              {
+                "domain": "evm-spot",
+                "kind": "MARKET",
+                "localId": "fixture:fAAPL"
+              }
+            ]
+          },
+          {
+            "kind": "SET",
+            "vocabulary": "RECIPIENTS",
+            "members": [
+              {
+                "domain": "evm-spot",
+                "kind": "ACCOUNT",
+                "localId": "arbitrum:0x1111111111111111111111111111111111111111"
+              },
+              {
+                "domain": "perp",
+                "kind": "ACCOUNT",
+                "localId": "venue-l:sub-1"
+              }
+            ]
+          },
+          {
+            "kind": "RIGHT",
+            "right": "OPEN_RISK"
+          },
+          {
+            "kind": "RIGHT",
+            "right": "REDUCE_RISK"
+          },
+          {
+            "kind": "RIGHT",
+            "right": "DELEGATE",
+            "maxDepth": 2
+          },
+          {
+            "kind": "BOUND",
+            "boundId": "perp.orderLeverage",
+            "polarity": "MAX",
+            "value": {
+              "type": "RATIO",
+              "ratio": {
+                "numerator": "5",
+                "scale": 0
+              }
+            }
+          },
+          {
+            "kind": "STATE_INVARIANT",
+            "invariantId": "perp.accountLeverage",
+            "version": 1,
+            "scope": [
+              {
+                "domain": "perp",
+                "kind": "ACCOUNT",
+                "localId": "venue-l:sub-1"
+              }
+            ],
+            "params": "0x0400"
+          },
+          {
+            "kind": "STATE_POLICY",
+            "domain": "perp",
+            "stateKind": "perp.markPrice",
+            "admittedSources": [
+              "venue-l-api"
+            ],
+            "requirement": {
+              "freshness": {
+                "kind": "AGE",
+                "maxAgeSeconds": "10"
+              },
+              "minTrust": "VERIFIED",
+              "minFinality": {
+                "ladder": "venue-l.market-data",
+                "level": "PUBLISHED"
+              },
+              "atIssue": "RECHECK",
+              "atExecution": {
+                "kind": "ENFORCED_BY_ARTIFACT",
+                "field": "limitPrice"
+              }
+            }
+          },
+          {
+            "kind": "LEDGER_DIMENSION",
+            "dimensionId": "capital",
+            "limit": {
+              "kind": "CAPITAL",
+              "unit": "USDG",
+              "decimals": 6,
+              "atoms": "10000000000"
+            },
+            "accounting": "CAPACITY",
+            "restoration": "AS_CHARGED",
+            "epoch": null,
+            "sign": "UNSIGNED",
+            "scope": {
+              "asset": null,
+              "market": null,
+              "domain": null,
+              "account": null
+            }
+          }
+        ],
+        "nonce": "1"
+      },
+      "canonical": "0x00196d616e646174652d636f72652f76312f617574686f72697479000101000e6569703135352d61646472657373002a307831313131313131313131313131313131313131313131313131313131313131313131313131313131000e6569703135352d61646472657373002a307831313131313131313131313131313131313131313131313131313131313131313131313131313131000e6569703135352d61646472657373002a307832313231323132313231323132313231323132313231323132313231323132313231323132313231000000006abda280000000006b36ec80000b01010002000470657270000b706572702d706f6c69637900000001c889f09b6e41dae6f5e281c6bcd8a3cc4fd2e42ee8af9226f0ec69fcf31c5ab0000865766d2d73706f74000865766d2d73706f7400000001f9ea0e6feb1847d0cd861d819ab2e00759ddb96e16e78023924553aa41e6656601020002000865766d2d67617465000000015820391017775c4e7f1943ec84fefda8c06abdb0335cb7ddff362e415eb2633d000e76656e75652d7369676e65722d6c000000018a616788e33cff199f825494d9afae2e02dd5a8426de8c06e404c2fb2f3bcdd30103000300047065727001001076656e75652d6c3a4254432d5045525000047065727001001076656e75652d6c3a4554482d50455250000865766d2d73706f7401000d666978747572653a664141504c0106000200047065727004000d76656e75652d6c3a7375622d31000865766d2d73706f74040033617262697472756d3a30783131313131313131313131313131313131313131313131313131313131313131313131313131313102010202020402030012706572702e6f726465724c6576657261676501020000000000000000000000000000000000000000000000000000000000000005000500076361706974616c020004555344470600000000000000000000000000000000000000000000000000000002540be4000203000100000000060014706572702e6163636f756e744c6576657261676500000001000100047065727004000d76656e75652d6c3a7375622d310002040007000470657270000e706572702e6d61726b50726963650001000b76656e75652d6c2d617069010000000a02001376656e75652d6c2e6d61726b65742d6461746100095055424c49534845440202000a6c696d697450726963650000000000000001",
+      "digest": "0x1c70e43cb296dfef3c7e87dcfdc76b64392f297bd40e1c8f65a6e2761be27b89"
+    },
+    {
+      "id": "authority/delegation",
+      "type": "AuthorityGrant",
+      "description": "A delegation: parent by AuthorityId, issued by the parent's holder.",
+      "input": {
+        "lineage": {
+          "kind": "DELEGATION",
+          "parent": "0xd411f64d2d540768ad2e85ed5f7a8a5b4c2f288fedfb4f97fd21d8bbe7cc6450",
+          "issuer": {
+            "kind": "eip155-address",
+            "value": "0x2121212121212121212121212121212121212121"
+          }
+        },
+        "principal": {
+          "kind": "eip155-address",
+          "value": "0x1111111111111111111111111111111111111111"
+        },
+        "holder": {
+          "kind": "eip155-address",
+          "value": "0x2222222222222222222222222222222222222222"
+        },
+        "notBefore": "1790812800",
+        "expiresAt": "1798761600",
+        "terms": [
+          {
+            "kind": "SET",
+            "vocabulary": "MODULES",
+            "members": [
+              {
+                "domainId": "perp",
+                "moduleId": "perp-policy",
+                "moduleVersion": 1,
+                "moduleDigest": "0xc889f09b6e41dae6f5e281c6bcd8a3cc4fd2e42ee8af9226f0ec69fcf31c5ab0"
+              }
+            ]
+          },
+          {
+            "kind": "RIGHT",
+            "right": "OPEN_RISK"
+          },
+          {
+            "kind": "STATE_INVARIANT",
+            "invariantId": "perp.accountLeverage",
+            "version": 1,
+            "scope": [
+              {
+                "domain": "perp",
+                "kind": "ACCOUNT",
+                "localId": "venue-l:sub-1"
+              }
+            ],
+            "params": "0x0300"
+          }
+        ],
+        "nonce": "1"
+      },
+      "canonical": "0x00196d616e646174652d636f72652f76312f617574686f72697479000102d411f64d2d540768ad2e85ed5f7a8a5b4c2f288fedfb4f97fd21d8bbe7cc6450000e6569703135352d61646472657373002a307832313231323132313231323132313231323132313231323132313231323132313231323132313231000e6569703135352d61646472657373002a307831313131313131313131313131313131313131313131313131313131313131313131313131313131000e6569703135352d61646472657373002a307832323232323232323232323232323232323232323232323232323232323232323232323232323232000000006abda280000000006b36ec80000301010001000470657270000b706572702d706f6c69637900000001c889f09b6e41dae6f5e281c6bcd8a3cc4fd2e42ee8af9226f0ec69fcf31c5ab00201060014706572702e6163636f756e744c6576657261676500000001000100047065727004000d76656e75652d6c3a7375622d31000203000000000000000001",
+      "digest": "0x1ba15356030e7066fa8ad727650808fdfa4f9a021c731127f091eabaad911f6e"
+    },
+    {
+      "id": "action/perp-order",
+      "type": "ActionEnvelope",
+      "description": "A perp order envelope: no perp field in it; the payload is a module-bound digest.",
+      "input": {
+        "principal": {
+          "kind": "eip155-address",
+          "value": "0x1111111111111111111111111111111111111111"
+        },
+        "authority": "0xde95c117216bcc6c9b877af54270b31aba733d7a9442ecd988723e4c7868521d",
+        "actor": {
+          "kind": "eip155-address",
+          "value": "0x2222222222222222222222222222222222222222"
+        },
+        "module": {
+          "domainId": "perp",
+          "moduleId": "perp-policy",
+          "moduleVersion": 1,
+          "moduleDigest": "0xc889f09b6e41dae6f5e281c6bcd8a3cc4fd2e42ee8af9226f0ec69fcf31c5ab0"
+        },
+        "actionType": "perp.order",
+        "adapter": {
+          "adapterId": "venue-signer-l",
+          "adapterVersion": 1,
+          "adapterDigest": "0x8a616788e33cff199f825494d9afae2e02dd5a8426de8c06e404c2fb2f3bcdd3"
+        },
+        "target": {
+          "domain": "perp",
+          "kind": "MARKET",
+          "localId": "venue-l:BTC-PERP"
+        },
+        "resources": [
+          {
+            "domain": "perp",
+            "kind": "ACCOUNT",
+            "localId": "venue-l:sub-1"
+          },
+          {
+            "domain": "perp",
+            "kind": "REPRESENTATION_ASSET",
+            "localId": "venue-l:collateral:usdg"
+          }
+        ],
+        "payloadDigest": "0x8a6a12616c77b5b02e6bfcd36bd687fd52fe479707cc01b13e7c12b48723733c",
+        "validFrom": "1790813800",
+        "expiresAt": "1790814100",
+        "nonce": "7"
+      },
+      "canonical": "0x00166d616e646174652d636f72652f76312f616374696f6e0001000e6569703135352d61646472657373002a307831313131313131313131313131313131313131313131313131313131313131313131313131313131de95c117216bcc6c9b877af54270b31aba733d7a9442ecd988723e4c7868521d000e6569703135352d61646472657373002a307832323232323232323232323232323232323232323232323232323232323232323232323232323232000470657270000b706572702d706f6c69637900000001c889f09b6e41dae6f5e281c6bcd8a3cc4fd2e42ee8af9226f0ec69fcf31c5ab0000a706572702e6f72646572000e76656e75652d7369676e65722d6c000000018a616788e33cff199f825494d9afae2e02dd5a8426de8c06e404c2fb2f3bcdd300047065727001001076656e75652d6c3a4254432d50455250000200047065727003001776656e75652d6c3a636f6c6c61746572616c3a7573646700047065727004000d76656e75652d6c3a7375622d318a6a12616c77b5b02e6bfcd36bd687fd52fe479707cc01b13e7c12b48723733c000000006abda668000000006abda7940000000000000007",
+      "digest": "0x96ee7c5a3f64553f55375a7bbdcb644a63e55b4f437dd88966f6184d11d3757f"
+    },
+    {
+      "id": "action/spot-buy",
+      "type": "ActionEnvelope",
+      "description": "A spot buy envelope: the same Core fields as the perp order.",
+      "input": {
+        "principal": {
+          "kind": "eip155-address",
+          "value": "0x1111111111111111111111111111111111111111"
+        },
+        "authority": "0xde95c117216bcc6c9b877af54270b31aba733d7a9442ecd988723e4c7868521d",
+        "actor": {
+          "kind": "eip155-address",
+          "value": "0x2222222222222222222222222222222222222222"
+        },
+        "module": {
+          "domainId": "evm-spot",
+          "moduleId": "evm-spot",
+          "moduleVersion": 1,
+          "moduleDigest": "0xf9ea0e6feb1847d0cd861d819ab2e00759ddb96e16e78023924553aa41e66566"
+        },
+        "actionType": "evm-spot.buy",
+        "adapter": {
+          "adapterId": "evm-gate",
+          "adapterVersion": 1,
+          "adapterDigest": "0x5820391017775c4e7f1943ec84fefda8c06abdb0335cb7ddff362e415eb2633d"
+        },
+        "target": {
+          "domain": "evm-spot",
+          "kind": "MARKET",
+          "localId": "fixture:fAAPL"
+        },
+        "resources": [
+          {
+            "domain": "evm-spot",
+            "kind": "REPRESENTATION_ASSET",
+            "localId": "arbitrum:erc20:usdg"
+          }
+        ],
+        "payloadDigest": "0x8a6a12616c77b5b02e6bfcd36bd687fd52fe479707cc01b13e7c12b48723733c",
+        "validFrom": "1790813800",
+        "expiresAt": "1790814100",
+        "nonce": "7"
+      },
+      "canonical": "0x00166d616e646174652d636f72652f76312f616374696f6e0001000e6569703135352d61646472657373002a307831313131313131313131313131313131313131313131313131313131313131313131313131313131de95c117216bcc6c9b877af54270b31aba733d7a9442ecd988723e4c7868521d000e6569703135352d61646472657373002a307832323232323232323232323232323232323232323232323232323232323232323232323232323232000865766d2d73706f74000865766d2d73706f7400000001f9ea0e6feb1847d0cd861d819ab2e00759ddb96e16e78023924553aa41e66566000c65766d2d73706f742e627579000865766d2d67617465000000015820391017775c4e7f1943ec84fefda8c06abdb0335cb7ddff362e415eb2633d000865766d2d73706f7401000d666978747572653a664141504c0001000865766d2d73706f74030013617262697472756d3a65726332303a757364678a6a12616c77b5b02e6bfcd36bd687fd52fe479707cc01b13e7c12b48723733c000000006abda668000000006abda7940000000000000007",
+      "digest": "0xe8ce8341b84836cd5e11ab006ccdbee20c880d544ffdc4a3f04fad03b8ce2bb9"
+    },
+    {
+      "id": "state/mark-price",
+      "type": "StateEnvelope",
+      "description": "A venue mark-price observation at a venue sequence.",
+      "input": {
+        "domain": "perp",
+        "stateKind": "perp.markPrice",
+        "subject": {
+          "domain": "perp",
+          "kind": "MARKET",
+          "localId": "venue-l:BTC-PERP"
+        },
+        "sourceId": "venue-l-api",
+        "trustClass": "VERIFIED",
+        "observedAt": "1790813800",
+        "sequence": {
+          "kind": "VENUE_SEQUENCE",
+          "value": "1040"
+        },
+        "validUntil": null,
+        "finality": {
+          "ladder": "venue-l.market-data",
+          "level": "PUBLISHED"
+        },
+        "payloadDigest": "0x0a2560f8fb4914a2345cdee815dba6a855382f415eb6e0201e659bbc5712bec2"
+      },
+      "canonical": "0x00156d616e646174652d636f72652f76312f73746174650001000470657270000e706572702e6d61726b507269636500047065727001001076656e75652d6c3a4254432d50455250000b76656e75652d6c2d61706902000000006abda66803000000000000041000001376656e75652d6c2e6d61726b65742d6461746100095055424c49534845440a2560f8fb4914a2345cdee815dba6a855382f415eb6e0201e659bbc5712bec2",
+      "digest": "0x40ea669e1dd43e5c4a861a3a769720cfda3f2bc1e5d43cb1f91ce5a0e628a182"
+    },
+    {
+      "id": "state/account-with-validity",
+      "type": "StateEnvelope",
+      "description": "An account snapshot with a source-declared validUntil.",
+      "input": {
+        "domain": "perp",
+        "stateKind": "perp.account",
+        "subject": {
+          "domain": "perp",
+          "kind": "ACCOUNT",
+          "localId": "venue-l:sub-1"
+        },
+        "sourceId": "venue-l-api",
+        "trustClass": "VERIFIED",
+        "observedAt": "1790813800",
+        "sequence": {
+          "kind": "VENUE_SEQUENCE",
+          "value": "1040"
+        },
+        "validUntil": "1790813830",
+        "finality": {
+          "ladder": "venue-l.account",
+          "level": "ACKNOWLEDGED"
+        },
+        "payloadDigest": "0x88177547be1fca3d77441e4cbffa0866477d474aa651dc2a47ca38fa42746c28"
+      },
+      "canonical": "0x00156d616e646174652d636f72652f76312f73746174650001000470657270000c706572702e6163636f756e7400047065727004000d76656e75652d6c3a7375622d31000b76656e75652d6c2d61706902000000006abda66803000000000000041001000000006abda686000f76656e75652d6c2e6163636f756e74000c41434b4e4f574c454447454488177547be1fca3d77441e4cbffa0866477d474aa651dc2a47ca38fa42746c28",
+      "digest": "0xd18a2d245b66aa4eb71ae77d3e41d6142456d194b25d1c49c45b39b5fe66a752"
+    },
+    {
+      "id": "state-binding/mark-recheck",
+      "type": "StateBinding",
+      "description": "A mark-price binding: AGE 5 s, RECHECK at issue, enforced at execution by the limit price.",
+      "input": {
+        "stateKind": "perp.markPrice",
+        "subject": {
+          "domain": "perp",
+          "kind": "MARKET",
+          "localId": "venue-l:BTC-PERP"
+        },
+        "sourceId": "venue-l-api",
+        "trustClass": "VERIFIED",
+        "sequence": {
+          "kind": "VENUE_SEQUENCE",
+          "value": "1040"
+        },
+        "observedAt": "1790813800",
+        "validUntil": null,
+        "finality": {
+          "ladder": "venue-l.market-data",
+          "level": "PUBLISHED"
+        },
+        "stateDigest": "0x40ea669e1dd43e5c4a861a3a769720cfda3f2bc1e5d43cb1f91ce5a0e628a182",
+        "requirement": {
+          "freshness": {
+            "kind": "AGE",
+            "maxAgeSeconds": "5"
+          },
+          "minTrust": "VERIFIED",
+          "minFinality": {
+            "ladder": "venue-l.market-data",
+            "level": "PUBLISHED"
+          },
+          "atIssue": "RECHECK",
+          "atExecution": {
+            "kind": "ENFORCED_BY_ARTIFACT",
+            "field": "limitPrice"
+          }
+        }
+      },
+      "canonical": "0x001d6d616e646174652d636f72652f76312f73746174652d62696e64696e670001000e706572702e6d61726b507269636500047065727001001076656e75652d6c3a4254432d50455250000b76656e75652d6c2d61706902030000000000000410000000006abda66800001376656e75652d6c2e6d61726b65742d6461746100095055424c495348454440ea669e1dd43e5c4a861a3a769720cfda3f2bc1e5d43cb1f91ce5a0e628a182010000000502001376656e75652d6c2e6d61726b65742d6461746100095055424c49534845440202000a6c696d69745072696365",
+      "digest": "0xde651c1c09c3069147d591180179c589da0008b8a3034b6885379d8261e7f128"
+    },
+    {
+      "id": "state-binding/account-sequence",
+      "type": "StateBinding",
+      "description": "An account binding: SEQUENCE freshness, WITHIN_POLICY, pre-trade only.",
+      "input": {
+        "stateKind": "perp.markPrice",
+        "subject": {
+          "domain": "perp",
+          "kind": "MARKET",
+          "localId": "venue-l:BTC-PERP"
+        },
+        "sourceId": "venue-l-api",
+        "trustClass": "VERIFIED",
+        "sequence": {
+          "kind": "VENUE_SEQUENCE",
+          "value": "1040"
+        },
+        "observedAt": "1790813800",
+        "validUntil": null,
+        "finality": {
+          "ladder": "venue-l.market-data",
+          "level": "PUBLISHED"
+        },
+        "stateDigest": "0x40ea669e1dd43e5c4a861a3a769720cfda3f2bc1e5d43cb1f91ce5a0e628a182",
+        "requirement": {
+          "freshness": {
+            "kind": "SEQUENCE"
+          },
+          "minTrust": "VERIFIED",
+          "minFinality": {
+            "ladder": "venue-l.account",
+            "level": "ACKNOWLEDGED"
+          },
+          "atIssue": "WITHIN_POLICY",
+          "atExecution": {
+            "kind": "NOT_REQUIRED"
+          }
+        }
+      },
+      "canonical": "0x001d6d616e646174652d636f72652f76312f73746174652d62696e64696e670001000e706572702e6d61726b507269636500047065727001001076656e75652d6c3a4254432d50455250000b76656e75652d6c2d61706902030000000000000410000000006abda66800001376656e75652d6c2e6d61726b65742d6461746100095055424c495348454440ea669e1dd43e5c4a861a3a769720cfda3f2bc1e5d43cb1f91ce5a0e628a1820302000f76656e75652d6c2e6163636f756e74000c41434b4e4f574c45444745440101",
+      "digest": "0x9711b259398eed3cd04462f414eccaf3e6c95a1315049125cf056c0be2e51b66"
+    },
+    {
+      "id": "state-binding/bounded-by-freshness",
+      "type": "StateBinding",
+      "description": "A binding whose artifact must expire with the state (AGE + BOUNDED_BY_FRESHNESS).",
+      "input": {
+        "stateKind": "perp.markPrice",
+        "subject": {
+          "domain": "perp",
+          "kind": "MARKET",
+          "localId": "venue-l:BTC-PERP"
+        },
+        "sourceId": "venue-l-api",
+        "trustClass": "VERIFIED",
+        "sequence": {
+          "kind": "VENUE_SEQUENCE",
+          "value": "1040"
+        },
+        "observedAt": "1790813800",
+        "validUntil": null,
+        "finality": {
+          "ladder": "venue-l.market-data",
+          "level": "PUBLISHED"
+        },
+        "stateDigest": "0x40ea669e1dd43e5c4a861a3a769720cfda3f2bc1e5d43cb1f91ce5a0e628a182",
+        "requirement": {
+          "freshness": {
+            "kind": "AGE",
+            "maxAgeSeconds": "5"
+          },
+          "minTrust": "VERIFIED",
+          "minFinality": {
+            "ladder": "venue-l.market-data",
+            "level": "PUBLISHED"
+          },
+          "atIssue": "RECHECK",
+          "atExecution": {
+            "kind": "BOUNDED_BY_FRESHNESS"
+          }
+        }
+      },
+      "canonical": "0x001d6d616e646174652d636f72652f76312f73746174652d62696e64696e670001000e706572702e6d61726b507269636500047065727001001076656e75652d6c3a4254432d50455250000b76656e75652d6c2d61706902030000000000000410000000006abda66800001376656e75652d6c2e6d61726b65742d6461746100095055424c495348454440ea669e1dd43e5c4a861a3a769720cfda3f2bc1e5d43cb1f91ce5a0e628a182010000000502001376656e75652d6c2e6d61726b65742d6461746100095055424c49534845440203",
+      "digest": "0xc625693a24837e40d6603f63f0840ecd299a279c0d804e1f18ecd0a1c2918955"
+    },
+    {
+      "id": "reservation-ref/generation-1",
+      "type": "ReservationRef",
+      "description": "Generation 1 of the sample action.",
+      "input": {
+        "action": "0x96ee7c5a3f64553f55375a7bbdcb644a63e55b4f437dd88966f6184d11d3757f",
+        "generation": "1",
+        "principal": {
+          "kind": "eip155-address",
+          "value": "0x1111111111111111111111111111111111111111"
+        },
+        "lineage": [
+          "0xde95c117216bcc6c9b877af54270b31aba733d7a9442ecd988723e4c7868521d",
+          "0xd411f64d2d540768ad2e85ed5f7a8a5b4c2f288fedfb4f97fd21d8bbe7cc6450",
+          "0xb721bcbc92aa86641588bf238e1e5d270885300443d7e5172a91532a12e5cb92"
+        ],
+        "policy": "0x30964c12723c1cf878fc91e06d09631baceed622f98f2327be33a45546ab4ea3",
+        "module": {
+          "domainId": "perp",
+          "moduleId": "perp-policy",
+          "moduleVersion": 1,
+          "moduleDigest": "0xc889f09b6e41dae6f5e281c6bcd8a3cc4fd2e42ee8af9226f0ec69fcf31c5ab0"
+        },
+        "implementation": "0x917b3cd55f292be84c42e9abe1d7e8cecbf4aaa795bb82f9cef103dd6ebb762b",
+        "adapter": {
+          "adapterId": "venue-signer-l",
+          "adapterVersion": 1,
+          "adapterDigest": "0x8a616788e33cff199f825494d9afae2e02dd5a8426de8c06e404c2fb2f3bcdd3"
+        },
+        "ledgerVersion": "58"
+      },
+      "canonical": "0x001f6d616e646174652d636f72652f76312f7265736572766174696f6e2d726566000196ee7c5a3f64553f55375a7bbdcb644a63e55b4f437dd88966f6184d11d3757f0000000000000001000e6569703135352d61646472657373002a3078313131313131313131313131313131313131313131313131313131313131313131313131313131310003de95c117216bcc6c9b877af54270b31aba733d7a9442ecd988723e4c7868521dd411f64d2d540768ad2e85ed5f7a8a5b4c2f288fedfb4f97fd21d8bbe7cc6450b721bcbc92aa86641588bf238e1e5d270885300443d7e5172a91532a12e5cb9230964c12723c1cf878fc91e06d09631baceed622f98f2327be33a45546ab4ea3000470657270000b706572702d706f6c69637900000001c889f09b6e41dae6f5e281c6bcd8a3cc4fd2e42ee8af9226f0ec69fcf31c5ab0917b3cd55f292be84c42e9abe1d7e8cecbf4aaa795bb82f9cef103dd6ebb762b000e76656e75652d7369676e65722d6c000000018a616788e33cff199f825494d9afae2e02dd5a8426de8c06e404c2fb2f3bcdd3000000000000003a",
+      "digest": "0x51bcffacdde0e059f618d81c88777d665d50c448f920902dcb9958a184280b87"
+    },
+    {
+      "id": "reservation-ref/generation-2",
+      "type": "ReservationRef",
+      "description": "Generation 2 of the same action: a different reservation.",
+      "input": {
+        "action": "0x96ee7c5a3f64553f55375a7bbdcb644a63e55b4f437dd88966f6184d11d3757f",
+        "generation": "2",
+        "principal": {
+          "kind": "eip155-address",
+          "value": "0x1111111111111111111111111111111111111111"
+        },
+        "lineage": [
+          "0xde95c117216bcc6c9b877af54270b31aba733d7a9442ecd988723e4c7868521d",
+          "0xd411f64d2d540768ad2e85ed5f7a8a5b4c2f288fedfb4f97fd21d8bbe7cc6450",
+          "0xb721bcbc92aa86641588bf238e1e5d270885300443d7e5172a91532a12e5cb92"
+        ],
+        "policy": "0x30964c12723c1cf878fc91e06d09631baceed622f98f2327be33a45546ab4ea3",
+        "module": {
+          "domainId": "perp",
+          "moduleId": "perp-policy",
+          "moduleVersion": 1,
+          "moduleDigest": "0xc889f09b6e41dae6f5e281c6bcd8a3cc4fd2e42ee8af9226f0ec69fcf31c5ab0"
+        },
+        "implementation": "0x917b3cd55f292be84c42e9abe1d7e8cecbf4aaa795bb82f9cef103dd6ebb762b",
+        "adapter": {
+          "adapterId": "venue-signer-l",
+          "adapterVersion": 1,
+          "adapterDigest": "0x8a616788e33cff199f825494d9afae2e02dd5a8426de8c06e404c2fb2f3bcdd3"
+        },
+        "ledgerVersion": "61"
+      },
+      "canonical": "0x001f6d616e646174652d636f72652f76312f7265736572766174696f6e2d726566000196ee7c5a3f64553f55375a7bbdcb644a63e55b4f437dd88966f6184d11d3757f0000000000000002000e6569703135352d61646472657373002a3078313131313131313131313131313131313131313131313131313131313131313131313131313131310003de95c117216bcc6c9b877af54270b31aba733d7a9442ecd988723e4c7868521dd411f64d2d540768ad2e85ed5f7a8a5b4c2f288fedfb4f97fd21d8bbe7cc6450b721bcbc92aa86641588bf238e1e5d270885300443d7e5172a91532a12e5cb9230964c12723c1cf878fc91e06d09631baceed622f98f2327be33a45546ab4ea3000470657270000b706572702d706f6c69637900000001c889f09b6e41dae6f5e281c6bcd8a3cc4fd2e42ee8af9226f0ec69fcf31c5ab0917b3cd55f292be84c42e9abe1d7e8cecbf4aaa795bb82f9cef103dd6ebb762b000e76656e75652d7369676e65722d6c000000018a616788e33cff199f825494d9afae2e02dd5a8426de8c06e404c2fb2f3bcdd3000000000000003d",
+      "digest": "0xc3b0926f257eefe59274bfe175b5827b0fe62d8ca63a68306c64795ac5d7a187"
+    },
+    {
+      "id": "execution-authorization/sample",
+      "type": "ExecutionAuthorization",
+      "description": "An authorization of generation 1 with the state binding it relied on.",
+      "input": {
+        "reservation": {
+          "action": "0x96ee7c5a3f64553f55375a7bbdcb644a63e55b4f437dd88966f6184d11d3757f",
+          "generation": "1",
+          "principal": {
+            "kind": "eip155-address",
+            "value": "0x1111111111111111111111111111111111111111"
+          },
+          "lineage": [
+            "0xde95c117216bcc6c9b877af54270b31aba733d7a9442ecd988723e4c7868521d",
+            "0xd411f64d2d540768ad2e85ed5f7a8a5b4c2f288fedfb4f97fd21d8bbe7cc6450",
+            "0xb721bcbc92aa86641588bf238e1e5d270885300443d7e5172a91532a12e5cb92"
+          ],
+          "policy": "0x30964c12723c1cf878fc91e06d09631baceed622f98f2327be33a45546ab4ea3",
+          "module": {
+            "domainId": "perp",
+            "moduleId": "perp-policy",
+            "moduleVersion": 1,
+            "moduleDigest": "0xc889f09b6e41dae6f5e281c6bcd8a3cc4fd2e42ee8af9226f0ec69fcf31c5ab0"
+          },
+          "implementation": "0x917b3cd55f292be84c42e9abe1d7e8cecbf4aaa795bb82f9cef103dd6ebb762b",
+          "adapter": {
+            "adapterId": "venue-signer-l",
+            "adapterVersion": 1,
+            "adapterDigest": "0x8a616788e33cff199f825494d9afae2e02dd5a8426de8c06e404c2fb2f3bcdd3"
+          },
+          "ledgerVersion": "58"
+        },
+        "stateBindings": [
+          {
+            "stateKind": "perp.markPrice",
+            "subject": {
+              "domain": "perp",
+              "kind": "MARKET",
+              "localId": "venue-l:BTC-PERP"
+            },
+            "sourceId": "venue-l-api",
+            "trustClass": "VERIFIED",
+            "sequence": {
+              "kind": "VENUE_SEQUENCE",
+              "value": "1040"
+            },
+            "observedAt": "1790813800",
+            "validUntil": null,
+            "finality": {
+              "ladder": "venue-l.market-data",
+              "level": "PUBLISHED"
+            },
+            "stateDigest": "0x40ea669e1dd43e5c4a861a3a769720cfda3f2bc1e5d43cb1f91ce5a0e628a182",
+            "requirement": {
+              "freshness": {
+                "kind": "AGE",
+                "maxAgeSeconds": "5"
+              },
+              "minTrust": "VERIFIED",
+              "minFinality": {
+                "ladder": "venue-l.market-data",
+                "level": "PUBLISHED"
+              },
+              "atIssue": "RECHECK",
+              "atExecution": {
+                "kind": "ENFORCED_BY_ARTIFACT",
+                "field": "limitPrice"
+              }
+            }
+          }
+        ],
+        "attemptCeiling": "1790814000"
+      },
+      "canonical": "0x001d6d616e646174652d636f72652f76312f617574686f72697a6174696f6e000196ee7c5a3f64553f55375a7bbdcb644a63e55b4f437dd88966f6184d11d3757f0000000000000001000e6569703135352d61646472657373002a3078313131313131313131313131313131313131313131313131313131313131313131313131313131310003de95c117216bcc6c9b877af54270b31aba733d7a9442ecd988723e4c7868521dd411f64d2d540768ad2e85ed5f7a8a5b4c2f288fedfb4f97fd21d8bbe7cc6450b721bcbc92aa86641588bf238e1e5d270885300443d7e5172a91532a12e5cb9230964c12723c1cf878fc91e06d09631baceed622f98f2327be33a45546ab4ea3000470657270000b706572702d706f6c69637900000001c889f09b6e41dae6f5e281c6bcd8a3cc4fd2e42ee8af9226f0ec69fcf31c5ab0917b3cd55f292be84c42e9abe1d7e8cecbf4aaa795bb82f9cef103dd6ebb762b000e76656e75652d7369676e65722d6c000000018a616788e33cff199f825494d9afae2e02dd5a8426de8c06e404c2fb2f3bcdd3000000000000003a0001000e706572702e6d61726b507269636500047065727001001076656e75652d6c3a4254432d50455250000b76656e75652d6c2d61706902030000000000000410000000006abda66800001376656e75652d6c2e6d61726b65742d6461746100095055424c495348454440ea669e1dd43e5c4a861a3a769720cfda3f2bc1e5d43cb1f91ce5a0e628a182010000000502001376656e75652d6c2e6d61726b65742d6461746100095055424c49534845440202000a6c696d69745072696365000000006abda730",
+      "digest": "0xb8801e8aa6912ba57b6df10e8df0ef746a384fefb8cd20ca87edcbbd021cf6eb"
+    },
+    {
+      "id": "execution-binding/sample",
+      "type": "ExecutionBindingRef",
+      "description": "The adapter's binding of execution parameters to that authorization.",
+      "input": {
+        "authorization": "0xb8801e8aa6912ba57b6df10e8df0ef746a384fefb8cd20ca87edcbbd021cf6eb",
+        "action": "0x96ee7c5a3f64553f55375a7bbdcb644a63e55b4f437dd88966f6184d11d3757f",
+        "generation": "1",
+        "module": {
+          "domainId": "perp",
+          "moduleId": "perp-policy",
+          "moduleVersion": 1,
+          "moduleDigest": "0xc889f09b6e41dae6f5e281c6bcd8a3cc4fd2e42ee8af9226f0ec69fcf31c5ab0"
+        },
+        "adapter": {
+          "adapterId": "venue-signer-l",
+          "adapterVersion": 1,
+          "adapterDigest": "0x8a616788e33cff199f825494d9afae2e02dd5a8426de8c06e404c2fb2f3bcdd3"
+        },
+        "stateBindings": [
+          "0xde651c1c09c3069147d591180179c589da0008b8a3034b6885379d8261e7f128"
+        ],
+        "parameters": "0x4851b72751ef46236cc4e6ce701be0490ccbad58284ab51cbf5542ffe6630d91"
+      },
+      "canonical": "0x00216d616e646174652d636f72652f76312f657865637574696f6e2d62696e64696e670001b8801e8aa6912ba57b6df10e8df0ef746a384fefb8cd20ca87edcbbd021cf6eb96ee7c5a3f64553f55375a7bbdcb644a63e55b4f437dd88966f6184d11d3757f0000000000000001000470657270000b706572702d706f6c69637900000001c889f09b6e41dae6f5e281c6bcd8a3cc4fd2e42ee8af9226f0ec69fcf31c5ab0000e76656e75652d7369676e65722d6c000000018a616788e33cff199f825494d9afae2e02dd5a8426de8c06e404c2fb2f3bcdd30001de651c1c09c3069147d591180179c589da0008b8a3034b6885379d8261e7f1284851b72751ef46236cc4e6ce701be0490ccbad58284ab51cbf5542ffe6630d91",
+      "digest": "0xaefb3b8618971345796663057913e72ef4484dd8877af9ee8b18a160283e0b6b"
+    },
+    {
+      "id": "receipt-header/decision",
+      "type": "ReceiptHeader",
+      "description": "A decision receipt header that wrote ledger version 58.",
+      "input": {
+        "kind": "DECISION",
+        "coreVersion": "mandate-core-1",
+        "principal": {
+          "kind": "eip155-address",
+          "value": "0x1111111111111111111111111111111111111111"
+        },
+        "ledgerBefore": {
+          "version": "57",
+          "headDigest": "0xe3a9fe688d2f4f386613b1f8ce83b98f8b5bbc3fc2328cb45b89f7cd14fe94d4"
+        },
+        "ledgerAfter": {
+          "version": "58",
+          "headDigest": "0xfc6a082a5324c7bbab671eca523205907c1dd0edc10c43ae040048396e7cce8d"
+        },
+        "previousReceipt": null,
+        "evaluatedAt": "1790813801"
+      },
+      "canonical": "0x001e6d616e646174652d636f72652f76312f726563656970742d686561646572000104000e6d616e646174652d636f72652d31000e6569703135352d61646472657373002a3078313131313131313131313131313131313131313131313131313131313131313131313131313131310000000000000039e3a9fe688d2f4f386613b1f8ce83b98f8b5bbc3fc2328cb45b89f7cd14fe94d401000000000000003afc6a082a5324c7bbab671eca523205907c1dd0edc10c43ae040048396e7cce8d00000000006abda669",
+      "digest": null
+    },
+    {
+      "id": "receipt-references/sample",
+      "type": "ReceiptReferences",
+      "description": "Every lifecycle object a receipt names, by digest.",
+      "input": {
+        "lineage": [
+          "0xde95c117216bcc6c9b877af54270b31aba733d7a9442ecd988723e4c7868521d",
+          "0xd411f64d2d540768ad2e85ed5f7a8a5b4c2f288fedfb4f97fd21d8bbe7cc6450",
+          "0xb721bcbc92aa86641588bf238e1e5d270885300443d7e5172a91532a12e5cb92"
+        ],
+        "policy": "0x30964c12723c1cf878fc91e06d09631baceed622f98f2327be33a45546ab4ea3",
+        "action": "0x96ee7c5a3f64553f55375a7bbdcb644a63e55b4f437dd88966f6184d11d3757f",
+        "module": {
+          "domainId": "perp",
+          "moduleId": "perp-policy",
+          "moduleVersion": 1,
+          "moduleDigest": "0xc889f09b6e41dae6f5e281c6bcd8a3cc4fd2e42ee8af9226f0ec69fcf31c5ab0"
+        },
+        "implementation": "0x917b3cd55f292be84c42e9abe1d7e8cecbf4aaa795bb82f9cef103dd6ebb762b",
+        "adapter": {
+          "adapterId": "venue-signer-l",
+          "adapterVersion": 1,
+          "adapterDigest": "0x8a616788e33cff199f825494d9afae2e02dd5a8426de8c06e404c2fb2f3bcdd3"
+        },
+        "stateBindings": [
+          "0xde651c1c09c3069147d591180179c589da0008b8a3034b6885379d8261e7f128"
+        ],
+        "reservation": {
+          "reservationId": "0x65b576ce7eaab387816b676c893818b2fc47b4ecd3305a1ec23c9ed0aa291dc3",
+          "generation": "1"
+        },
+        "executionBinding": "0xaefb3b8618971345796663057913e72ef4484dd8877af9ee8b18a160283e0b6b",
+        "observation": "0x536455b8e3f27e408bd7381c69d954bb72675cc537ad19715314892e4fb79783"
+      },
+      "canonical": "0x00226d616e646174652d636f72652f76312f726563656970742d7265666572656e63657300010003de95c117216bcc6c9b877af54270b31aba733d7a9442ecd988723e4c7868521dd411f64d2d540768ad2e85ed5f7a8a5b4c2f288fedfb4f97fd21d8bbe7cc6450b721bcbc92aa86641588bf238e1e5d270885300443d7e5172a91532a12e5cb9230964c12723c1cf878fc91e06d09631baceed622f98f2327be33a45546ab4ea396ee7c5a3f64553f55375a7bbdcb644a63e55b4f437dd88966f6184d11d3757f000470657270000b706572702d706f6c69637900000001c889f09b6e41dae6f5e281c6bcd8a3cc4fd2e42ee8af9226f0ec69fcf31c5ab0917b3cd55f292be84c42e9abe1d7e8cecbf4aaa795bb82f9cef103dd6ebb762b000e76656e75652d7369676e65722d6c000000018a616788e33cff199f825494d9afae2e02dd5a8426de8c06e404c2fb2f3bcdd30001de651c1c09c3069147d591180179c589da0008b8a3034b6885379d8261e7f1280165b576ce7eaab387816b676c893818b2fc47b4ecd3305a1ec23c9ed0aa291dc3000000000000000101aefb3b8618971345796663057913e72ef4484dd8877af9ee8b18a160283e0b6b01536455b8e3f27e408bd7381c69d954bb72675cc537ad19715314892e4fb79783",
+      "digest": null
+    }
+  ],
+  "derivations": [
+    {
+      "id": "reservation-id/generation-1",
+      "derives": "ReservationId",
+      "description": "H(\"mandate-core/v1/reservation\", actionId, generation 1).",
+      "input": {
+        "actionId": "0x96ee7c5a3f64553f55375a7bbdcb644a63e55b4f437dd88966f6184d11d3757f",
+        "generation": "1"
+      },
+      "digest": "0x65b576ce7eaab387816b676c893818b2fc47b4ecd3305a1ec23c9ed0aa291dc3"
+    },
+    {
+      "id": "reservation-id/generation-2",
+      "derives": "ReservationId",
+      "description": "H(\"mandate-core/v1/reservation\", actionId, generation 2).",
+      "input": {
+        "actionId": "0x96ee7c5a3f64553f55375a7bbdcb644a63e55b4f437dd88966f6184d11d3757f",
+        "generation": "2"
+      },
+      "digest": "0xc64a3966ed89314463e03b9a7bd94b932d309088824204cd0b1674f19634cfa6"
+    },
+    {
+      "id": "payload-digest/perp-policy-v1",
+      "derives": "ActionPayloadDigest",
+      "description": "One payload under module v1: the module digest is inside the hash.",
+      "input": {
+        "moduleDigest": "0xc889f09b6e41dae6f5e281c6bcd8a3cc4fd2e42ee8af9226f0ec69fcf31c5ab0",
+        "payload": "0x6f70617175652070657270206f72646572207061796c6f6164"
+      },
+      "digest": "0x4bab853fa620b4b6284c8079bec68a09d9d3039332f7f9a57d82cc1dd0999650"
+    },
+    {
+      "id": "payload-digest/perp-policy-v2",
+      "derives": "ActionPayloadDigest",
+      "description": "One payload under module v2: the module digest is inside the hash.",
+      "input": {
+        "moduleDigest": "0xa9fa1e59900e38e26a1ac8928cdd48acc4e46e2e9acf0bf9979fc86d0cde822d",
+        "payload": "0x6f70617175652070657270206f72646572207061796c6f6164"
+      },
+      "digest": "0xb466f272609b757eb41e6a623c8e01352e229eefe87d5d4ffaafe91a95e1420a"
+    }
+  ],
+  "negative": [
+    {
+      "id": "truncated",
+      "type": "ActionEnvelope",
+      "description": "The sample action with its last byte removed.",
+      "bytes": "0x00166d616e646174652d636f72652f76312f616374696f6e0001000e6569703135352d61646472657373002a307831313131313131313131313131313131313131313131313131313131313131313131313131313131de95c117216bcc6c9b877af54270b31aba733d7a9442ecd988723e4c7868521d000e6569703135352d61646472657373002a307832323232323232323232323232323232323232323232323232323232323232323232323232323232000470657270000b706572702d706f6c69637900000001c889f09b6e41dae6f5e281c6bcd8a3cc4fd2e42ee8af9226f0ec69fcf31c5ab0000a706572702e6f72646572000e76656e75652d7369676e65722d6c000000018a616788e33cff199f825494d9afae2e02dd5a8426de8c06e404c2fb2f3bcdd300047065727001001076656e75652d6c3a4254432d50455250000200047065727003001776656e75652d6c3a636f6c6c61746572616c3a7573646700047065727004000d76656e75652d6c3a7375622d318a6a12616c77b5b02e6bfcd36bd687fd52fe479707cc01b13e7c12b48723733c000000006abda668000000006abda79400000000000000",
+      "error": "ENCODING_MALFORMED"
+    },
+    {
+      "id": "trailing-bytes",
+      "type": "ActionEnvelope",
+      "description": "The sample action with one extra zero byte.",
+      "bytes": "0x00166d616e646174652d636f72652f76312f616374696f6e0001000e6569703135352d61646472657373002a307831313131313131313131313131313131313131313131313131313131313131313131313131313131de95c117216bcc6c9b877af54270b31aba733d7a9442ecd988723e4c7868521d000e6569703135352d61646472657373002a307832323232323232323232323232323232323232323232323232323232323232323232323232323232000470657270000b706572702d706f6c69637900000001c889f09b6e41dae6f5e281c6bcd8a3cc4fd2e42ee8af9226f0ec69fcf31c5ab0000a706572702e6f72646572000e76656e75652d7369676e65722d6c000000018a616788e33cff199f825494d9afae2e02dd5a8426de8c06e404c2fb2f3bcdd300047065727001001076656e75652d6c3a4254432d50455250000200047065727003001776656e75652d6c3a636f6c6c61746572616c3a7573646700047065727004000d76656e75652d6c3a7375622d318a6a12616c77b5b02e6bfcd36bd687fd52fe479707cc01b13e7c12b48723733c000000006abda668000000006abda794000000000000000700",
+      "error": "ENCODING_TRAILING_BYTES"
+    },
+    {
+      "id": "wrong-tag",
+      "type": "AuthorityGrant",
+      "description": "A principal policy decoded as a grant: domain separation.",
+      "bytes": "0x00206d616e646174652d636f72652f76312f7072696e636970616c2d706f6c6963790001000e6569703135352d61646472657373002a307831313131313131313131313131313131313131313131313131313131313131313131313131313131000000000000000100030500136274632d6e6f74696f6e616c2d676c6f62616c0400035553440200000000000000000000000000000000000000000000000000000000000f424002030001010008726567697374727902000a63727970746f3a627463000000060013636f72652e6d61726b65644578706f737572650000000100010008726567697374727902000a63727970746f3a62746300010107000470657270000e706572702e6d61726b50726963650002000b76656e75652d6c2d617069000b76656e75652d6d2d617069010000000502001376656e75652d6c2e6d61726b65742d6461746100095055424c49534845440202000a6c696d697450726963650000000000000001",
+      "error": "ENCODING_WRONG_TAG"
+    },
+    {
+      "id": "unsupported-version",
+      "type": "ActionEnvelope",
+      "description": "The sample action with schema version 2.",
+      "bytes": "0x00166d616e646174652d636f72652f76312f616374696f6e0002000e6569703135352d61646472657373002a307831313131313131313131313131313131313131313131313131313131313131313131313131313131de95c117216bcc6c9b877af54270b31aba733d7a9442ecd988723e4c7868521d000e6569703135352d61646472657373002a307832323232323232323232323232323232323232323232323232323232323232323232323232323232000470657270000b706572702d706f6c69637900000001c889f09b6e41dae6f5e281c6bcd8a3cc4fd2e42ee8af9226f0ec69fcf31c5ab0000a706572702e6f72646572000e76656e75652d7369676e65722d6c000000018a616788e33cff199f825494d9afae2e02dd5a8426de8c06e404c2fb2f3bcdd300047065727001001076656e75652d6c3a4254432d50455250000200047065727003001776656e75652d6c3a636f6c6c61746572616c3a7573646700047065727004000d76656e75652d6c3a7375622d318a6a12616c77b5b02e6bfcd36bd687fd52fe479707cc01b13e7c12b48723733c000000006abda668000000006abda7940000000000000007",
+      "error": "ENCODING_UNSUPPORTED_VERSION"
+    },
+    {
+      "id": "non-canonical-set-order",
+      "type": "ActionEnvelope",
+      "description": "Resources out of canonical order: refused, not re-sorted.",
+      "bytes": "0x00166d616e646174652d636f72652f76312f616374696f6e0001000e6569703135352d61646472657373002a307831313131313131313131313131313131313131313131313131313131313131313131313131313131de95c117216bcc6c9b877af54270b31aba733d7a9442ecd988723e4c7868521d000e6569703135352d61646472657373002a307832323232323232323232323232323232323232323232323232323232323232323232323232323232000470657270000b706572702d706f6c69637900000001c889f09b6e41dae6f5e281c6bcd8a3cc4fd2e42ee8af9226f0ec69fcf31c5ab0000a706572702e6f72646572000e76656e75652d7369676e65722d6c000000018a616788e33cff199f825494d9afae2e02dd5a8426de8c06e404c2fb2f3bcdd300047065727001001076656e75652d6c3a4254432d50455250000200047065727004000d76656e75652d6c3a7375622d3100047065727003001776656e75652d6c3a636f6c6c61746572616c3a757364678a6a12616c77b5b02e6bfcd36bd687fd52fe479707cc01b13e7c12b48723733c000000006abda668000000006abda7940000000000000007",
+      "error": "ENCODING_NON_CANONICAL"
+    },
+    {
+      "id": "invalid-presence-flag",
+      "type": "StateBinding",
+      "description": "A presence flag of 2: only 0 and 1 decode.",
+      "bytes": "0x001d6d616e646174652d636f72652f76312f73746174652d62696e64696e670001000e706572702e6d61726b507269636500047065727001001076656e75652d6c3a4254432d50455250000b76656e75652d6c2d61706902030000000000000410000000006abda66802001376656e75652d6c2e6d61726b65742d6461746100095055424c495348454440ea669e1dd43e5c4a861a3a769720cfda3f2bc1e5d43cb1f91ce5a0e628a182010000000502001376656e75652d6c2e6d61726b65742d6461746100095055424c49534845440202000a6c696d69745072696365",
+      "error": "ENCODING_INVALID_FLAG"
+    },
+    {
+      "id": "unknown-enum-code",
+      "type": "PrincipalPolicy",
+      "description": "A term-kind wire code that does not exist.",
+      "bytes": "0x00206d616e646174652d636f72652f76312f7072696e636970616c2d706f6c6963790001000e6569703135352d61646472657373002a30783131313131313131313131313131313131313131313131313131313131313131313131313131313100000000000000010003ee00136274632d6e6f74696f6e616c2d676c6f62616c0400035553440200000000000000000000000000000000000000000000000000000000000f424002030001010008726567697374727902000a63727970746f3a627463000000060013636f72652e6d61726b65644578706f737572650000000100010008726567697374727902000a63727970746f3a62746300010107000470657270000e706572702e6d61726b50726963650002000b76656e75652d6c2d617069000b76656e75652d6d2d617069010000000502001376656e75652d6c2e6d61726b65742d6461746100095055424c49534845440202000a6c696d697450726963650000000000000001",
+      "error": "ENCODING_UNKNOWN_CODE"
+    },
+    {
+      "id": "policy-with-right",
+      "type": "PrincipalPolicy",
+      "description": "A principal policy carrying an OPEN_RISK right: it grants nothing.",
+      "bytes": "0x00206d616e646174652d636f72652f76312f7072696e636970616c2d706f6c6963790001000e6569703135352d61646472657373002a3078313131313131313131313131313131313131313131313131313131313131313131313131313131310000000000000001000102010000000000000001",
+      "error": "PRINCIPAL_POLICY_GRANTS_AUTHORITY"
+    },
+    {
+      "id": "generation-zero",
+      "type": "ReservationRef",
+      "description": "A reservation ref at generation 0: no reservation has generation 0.",
+      "bytes": "0x001f6d616e646174652d636f72652f76312f7265736572766174696f6e2d726566000196ee7c5a3f64553f55375a7bbdcb644a63e55b4f437dd88966f6184d11d3757f0000000000000000000e6569703135352d61646472657373002a3078313131313131313131313131313131313131313131313131313131313131313131313131313131310003de95c117216bcc6c9b877af54270b31aba733d7a9442ecd988723e4c7868521dd411f64d2d540768ad2e85ed5f7a8a5b4c2f288fedfb4f97fd21d8bbe7cc6450b721bcbc92aa86641588bf238e1e5d270885300443d7e5172a91532a12e5cb9230964c12723c1cf878fc91e06d09631baceed622f98f2327be33a45546ab4ea3000470657270000b706572702d706f6c69637900000001c889f09b6e41dae6f5e281c6bcd8a3cc4fd2e42ee8af9226f0ec69fcf31c5ab0917b3cd55f292be84c42e9abe1d7e8cecbf4aaa795bb82f9cef103dd6ebb762b000e76656e75652d7369676e65722d6c000000018a616788e33cff199f825494d9afae2e02dd5a8426de8c06e404c2fb2f3bcdd3000000000000003a",
+      "error": "GENERATION_ZERO"
+    },
+    {
+      "id": "module-digest-zero",
+      "type": "ModuleRef",
+      "description": "A ModuleRef whose digest is the all-zero placeholder.",
+      "bytes": "0x001a6d616e646174652d636f72652f76312f6d6f64756c652d7265660001000470657270000b706572702d706f6c696379000000010000000000000000000000000000000000000000000000000000000000000000",
+      "error": "ZERO_DIGEST"
+    },
+    {
+      "id": "binding-untrusted",
+      "type": "StateBinding",
+      "description": "A binding at trust class UNTRUSTED: never admissible.",
+      "bytes": "0x001d6d616e646174652d636f72652f76312f73746174652d62696e64696e670001000e706572702e6d61726b507269636500047065727001001076656e75652d6c3a4254432d50455250000b76656e75652d6c2d61706904030000000000000410000000006abda66800001376656e75652d6c2e6d61726b65742d6461746100095055424c495348454440ea669e1dd43e5c4a861a3a769720cfda3f2bc1e5d43cb1f91ce5a0e628a182010000000502001376656e75652d6c2e6d61726b65742d6461746100095055424c49534845440202000a6c696d69745072696365",
+      "error": "TRUST_CLASS_NOT_ADMISSIBLE"
+    },
+    {
+      "id": "bounded-by-sequence",
+      "type": "StateBinding",
+      "description": "BOUNDED_BY_FRESHNESS with SEQUENCE freshness: sequence distance has no expiry time.",
+      "bytes": "0x001d6d616e646174652d636f72652f76312f73746174652d62696e64696e670001000e706572702e6d61726b507269636500047065727001001076656e75652d6c3a4254432d50455250000b76656e75652d6c2d61706902030000000000000410000000006abda66800001376656e75652d6c2e6d61726b65742d6461746100095055424c495348454440ea669e1dd43e5c4a861a3a769720cfda3f2bc1e5d43cb1f91ce5a0e628a1820302001376656e75652d6c2e6d61726b65742d6461746100095055424c49534845440203",
+      "error": "EXECUTION_DEPENDENCE_INCOMPATIBLE"
+    }
+  ]
+}
