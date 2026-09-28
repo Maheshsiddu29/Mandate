@@ -11,7 +11,8 @@
     "packages/adapter-robinhood",
     "packages/router",
     "packages/jev",
-    "packages/execution-gate"
+    "packages/execution-gate",
+    "packages/core"
   ],
   "scripts": {
     "audit:security": "npm audit --audit-level=high",

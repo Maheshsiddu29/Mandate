@@ -31,6 +31,7 @@ Status values: `Proposed`, `Accepted`, `Superseded by ADR NNNN`, `Rejected`.
 | [0017](0017-layered-candidate-state-commitments.md) | Layered candidate state commitments | Accepted |
 | [0018](0018-observed-execution-outcomes.md) | Observed execution outcomes as the only replay resolution | Accepted |
 | [0019](0019-onchain-execution-gate.md) | The onchain execution gate | Accepted |
+| [0020](0020-mandate-core-package-and-encoding.md) | Mandate Core package boundary and canonical encoding | Proposed |
 
 The canonical product specification remains
 [docs/mandate-design.md](../mandate-design.md). ADRs record *how* a specified
