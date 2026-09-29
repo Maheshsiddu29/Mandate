@@ -1,0 +1,504 @@
+{
+  "corpusVersion": 1,
+  "evaluatedAt": "1800001000",
+  "vectorCount": 30,
+  "vectors": [
+    {
+      "id": "stock/approved",
+      "agent": "stock",
+      "proposal": "0x1103deeac0559db7afc8936cb0679e1bab49cc9dd2cd4dadf93662abf5074039",
+      "outcome": "PASS",
+      "reasons": [],
+      "registry": {
+        "status": "ADMISSIBLE",
+        "codes": []
+      },
+      "child": {
+        "approved": [
+          {
+            "resource": "spot-capital",
+            "atoms": "500000000"
+          },
+          {
+            "resource": "portfolio-notional",
+            "atoms": "500000000"
+          }
+        ]
+      }
+    },
+    {
+      "id": "stock/same-ticker-lookalike",
+      "agent": "stock",
+      "proposal": "0x549be3e4252d86d1d072b9c85899fe9491bc01615ae3df71f975c486cc885eea",
+      "outcome": "REFUSED",
+      "reasons": [
+        {
+          "code": "REGISTRY:ISSUER_NOT_ALLOWED",
+          "subject": "eip155:46630/erc20:0xa7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7"
+        },
+        {
+          "code": "REGISTRY:SYNTHETIC_NOT_ALLOWED",
+          "subject": "eip155:46630/erc20:0xa7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7"
+        }
+      ],
+      "registry": {
+        "status": "EXCLUDED",
+        "codes": [
+          "ISSUER_NOT_ALLOWED",
+          "SYNTHETIC_NOT_ALLOWED"
+        ]
+      },
+      "child": null
+    },
+    {
+      "id": "stock/unregistered-counterfeit",
+      "agent": "stock",
+      "proposal": "0x3bc656bc082fbfc775e523f740a84e10df1f760f445ca2a6f2b9616941d7b7f0",
+      "outcome": "REFUSED",
+      "reasons": [
+        {
+          "code": "REGISTRY:REPRESENTATION_UNKNOWN",
+          "subject": "eip155:46630/erc20:0xfefefefefefefefefefefefefefefefefefefefe"
+        }
+      ],
+      "registry": {
+        "status": "EXCLUDED",
+        "codes": [
+          "REPRESENTATION_UNKNOWN"
+        ]
+      },
+      "child": null
+    },
+    {
+      "id": "stock/false-issuer-claim",
+      "agent": "stock",
+      "proposal": "0xe654d8857781bf28bce85164b76e79f3b27cfbb8fe2ba19ff65f1c20b55c2e75",
+      "outcome": "REFUSED",
+      "reasons": [
+        {
+          "code": "IDENTITY_CLAIM_MISMATCH",
+          "subject": "issuer"
+        }
+      ],
+      "registry": {
+        "status": "ADMISSIBLE",
+        "codes": []
+      },
+      "child": null
+    },
+    {
+      "id": "stock/other-recipient",
+      "agent": "stock",
+      "proposal": "0x29accaa66ffd47dbece738a40781d1fd7c51ee37a13b67d6ea19a74170025f82",
+      "outcome": "REFUSED",
+      "reasons": [
+        {
+          "code": "RECIPIENT_NOT_ALLOWED",
+          "subject": "recipients:eip155:46630/account:0x9999999999999999999999999999999999999999"
+        }
+      ],
+      "registry": {
+        "status": "ADMISSIBLE",
+        "codes": []
+      },
+      "child": null
+    },
+    {
+      "id": "stock/beyond-hard-maximum",
+      "agent": "stock",
+      "proposal": "0x29705ceb378454630d0cf3a25449a61a94a459997aeba45ca6442aa5dd36405c",
+      "outcome": "REDUCE",
+      "reasons": [
+        {
+          "code": "AGENT_LIMIT_EXCEEDED",
+          "subject": "portfolio-notional"
+        },
+        {
+          "code": "AGENT_LIMIT_EXCEEDED",
+          "subject": "spot-capital"
+        },
+        {
+          "code": "PORTFOLIO_LIMIT_EXCEEDED",
+          "subject": "spot-capital"
+        }
+      ],
+      "registry": {
+        "status": "ADMISSIBLE",
+        "codes": []
+      },
+      "child": null
+    },
+    {
+      "id": "swap/approved",
+      "agent": "swap",
+      "proposal": "0x1b320336eefe1b6409ad9f14cdcb925a02002cd8799861b24a083cfefda4c369",
+      "outcome": "PASS",
+      "reasons": [],
+      "registry": null,
+      "child": {
+        "approved": [
+          {
+            "resource": "portfolio-notional",
+            "atoms": "300000000"
+          }
+        ]
+      }
+    },
+    {
+      "id": "swap/unknown-router",
+      "agent": "swap",
+      "proposal": "0xfdca6873404e1099144e1c6b82921cc3c09ec867447ccee8b5eb611d8aa412e8",
+      "outcome": "REFUSED",
+      "reasons": [
+        {
+          "code": "VENUE_NOT_ALLOWED",
+          "subject": "venues:eip155:421614/router:0x000000000000000000000000000000000000bad0"
+        }
+      ],
+      "registry": null,
+      "child": null
+    },
+    {
+      "id": "swap/unreviewed-pool",
+      "agent": "swap",
+      "proposal": "0xa3d8b8b48910457ee4a225f2842de05cdce5cc73753896c0b017de0f99582848",
+      "outcome": "REFUSED",
+      "reasons": [
+        {
+          "code": "ROUTE_NOT_ALLOWED",
+          "subject": "route:eip155:421614/pool:0x000000000000000000000000000000000000dead"
+        }
+      ],
+      "registry": null,
+      "child": null
+    },
+    {
+      "id": "swap/recipient-substituted",
+      "agent": "swap",
+      "proposal": "0x71d857589f6529aac39d354377fee916014f309b3bb2ccc37f33d8208aae5011",
+      "outcome": "REFUSED",
+      "reasons": [
+        {
+          "code": "RECIPIENT_NOT_ALLOWED",
+          "subject": "recipients:eip155:421614/account:0x9999999999999999999999999999999999999999"
+        }
+      ],
+      "registry": null,
+      "child": null
+    },
+    {
+      "id": "swap/slippage",
+      "agent": "swap",
+      "proposal": "0xc93d515c5cc09d61108463abe7a13c1782dfd4ed4507007b99e67525a66e0bc2",
+      "outcome": "REFUSED",
+      "reasons": [
+        {
+          "code": "SLIPPAGE_NOT_ALLOWED",
+          "subject": "maxSlippageBps"
+        }
+      ],
+      "registry": null,
+      "child": null
+    },
+    {
+      "id": "swap/stale-quote",
+      "agent": "swap",
+      "proposal": "0xad294f6a414547a31a44ff486738f597354ff5e389f3ece488a50b933f18bcfd",
+      "outcome": "REFUSED",
+      "reasons": [
+        {
+          "code": "QUOTE_STALE",
+          "subject": "quote"
+        }
+      ],
+      "registry": null,
+      "child": null
+    },
+    {
+      "id": "swap/foreign-funding-token",
+      "agent": "swap",
+      "proposal": "0x53b288eeb1f49b1bdde035f68880139fd3bf115a22a687f5a320eb142182bfeb",
+      "outcome": "REFUSED",
+      "reasons": [
+        {
+          "code": "INSTRUMENT_UNKNOWN",
+          "subject": "tokenIn:eip155:421614/erc20:0x0000000000000000000000000000000000000bad"
+        }
+      ],
+      "registry": null,
+      "child": null
+    },
+    {
+      "id": "nft/genuine",
+      "agent": "nft",
+      "proposal": "0x0bb898fb0dd547576ea05c8cbb2aa5f810fe62fece7decd7ae414137d6fe9320",
+      "outcome": "PASS",
+      "reasons": [],
+      "registry": null,
+      "child": {
+        "approved": [
+          {
+            "resource": "illiquid-notional",
+            "atoms": "250000000"
+          },
+          {
+            "resource": "portfolio-notional",
+            "atoms": "250000000"
+          }
+        ]
+      }
+    },
+    {
+      "id": "nft/same-name-impostor",
+      "agent": "nft",
+      "proposal": "0x72836b0082cb45b1138874b86f6f7a0881c74af8bb7b458bfc0eaf8ece56869d",
+      "outcome": "REFUSED",
+      "reasons": [
+        {
+          "code": "ASSET_NOT_ALLOWED",
+          "subject": "assets:nft:mandate-core:nft:impostor-genesis"
+        },
+        {
+          "code": "REPRESENTATION_NOT_ALLOWED",
+          "subject": "representations:eip155:421614/erc721:0x000000000000000000000000000000000000fa4e"
+        }
+      ],
+      "registry": null,
+      "child": null
+    },
+    {
+      "id": "nft/unreviewed-contract",
+      "agent": "nft",
+      "proposal": "0x9020307a072e170aeaef6dab3765a059442c66ba81858d1a79c8cf44c7419dec",
+      "outcome": "REFUSED",
+      "reasons": [
+        {
+          "code": "INSTRUMENT_UNKNOWN",
+          "subject": "eip155:421614/erc721:0x0000000000000000000000000000000000000077"
+        }
+      ],
+      "registry": null,
+      "child": null
+    },
+    {
+      "id": "yield/approved-5.20",
+      "agent": "yield",
+      "proposal": "0xe6f49938e4986c8861264a208e8e02b6a525540e48be8400ededb95beaa1ea61",
+      "outcome": "PASS",
+      "reasons": [],
+      "registry": null,
+      "child": {
+        "approved": [
+          {
+            "resource": "portfolio-notional",
+            "atoms": "500000000"
+          }
+        ]
+      }
+    },
+    {
+      "id": "yield/unvetted-12.60",
+      "agent": "yield",
+      "proposal": "0x0520188edfb84d16b8c179eefcf5ad017dd7ea06184723e1c341b19c14981b88",
+      "outcome": "REFUSED",
+      "reasons": [
+        {
+          "code": "ASSET_NOT_ALLOWED",
+          "subject": "assets:fund:mandate-core:fund:unvetted-high-yield"
+        },
+        {
+          "code": "ISSUER_NOT_ALLOWED",
+          "subject": "issuers:issuer.fixture.unvetted"
+        },
+        {
+          "code": "REPRESENTATION_NOT_ALLOWED",
+          "subject": "representations:eip155:421614/erc4626:0x0000000000000000000000000000000000001260"
+        },
+        {
+          "code": "VENUE_NOT_ALLOWED",
+          "subject": "venues:eip155:421614/yield-protocol:0x0000000000000000000000000000000000001260"
+        }
+      ],
+      "registry": null,
+      "child": null
+    },
+    {
+      "id": "yield/stale-quote",
+      "agent": "yield",
+      "proposal": "0x6c15078063a4d0b86577a0ef18e306209f3120b2e4d34d7d9829ab50ec3e5a68",
+      "outcome": "REFUSED",
+      "reasons": [
+        {
+          "code": "QUOTE_STALE",
+          "subject": "quote"
+        }
+      ],
+      "registry": null,
+      "child": null
+    },
+    {
+      "id": "perps/400-at-2x",
+      "agent": "perps",
+      "proposal": "0xae6995103c564000120bbcfe62f1ed2a386695e103b277b1f5dc1f22e112edab",
+      "outcome": "PASS",
+      "reasons": [],
+      "registry": null,
+      "child": {
+        "approved": [
+          {
+            "resource": "perp-margin",
+            "atoms": "200400000"
+          },
+          {
+            "resource": "portfolio-notional",
+            "atoms": "400000000"
+          },
+          {
+            "resource": "derivative-notional",
+            "atoms": "400000000"
+          }
+        ]
+      }
+    },
+    {
+      "id": "perps/600-over-derivative-exposure",
+      "agent": "perps",
+      "proposal": "0x9abfbb6f2134befa32346bb6961bafd14db4c21b2db727305eaedba1bb548742",
+      "outcome": "REDUCE",
+      "reasons": [
+        {
+          "code": "PORTFOLIO_LIMIT_EXCEEDED",
+          "subject": "derivative-notional"
+        }
+      ],
+      "registry": null,
+      "child": null
+    },
+    {
+      "id": "perps/5x-leverage",
+      "agent": "perps",
+      "proposal": "0xc00e3824d394f48e928568c15a947f00ec5f30db35691bbcc5bf2801dd72c6d9",
+      "outcome": "REFUSED",
+      "reasons": [
+        {
+          "code": "LEVERAGE_NOT_ALLOWED",
+          "subject": "maxLeverage"
+        }
+      ],
+      "registry": null,
+      "child": null
+    },
+    {
+      "id": "perps/unclaimed-market",
+      "agent": "perps",
+      "proposal": "0xc81502b1ba01ea70874065fc1895eedb8a4b60f9d6537d095d9a75cc19b0c37e",
+      "outcome": "REFUSED",
+      "reasons": [
+        {
+          "code": "INSTRUMENT_UNKNOWN",
+          "subject": "lighter:300/perp:9999"
+        }
+      ],
+      "registry": null,
+      "child": null
+    },
+    {
+      "id": "auth/outsider",
+      "agent": "outsider",
+      "proposal": "0x58d3ab9158d70a7da444142e94ec638644de0cad97019616fbfe98d9bfea0657",
+      "outcome": "REFUSED",
+      "reasons": [
+        {
+          "code": "AGENT_UNKNOWN",
+          "subject": "0xd5fc13f1bc387ad4713cdb4ce10b8a26a81275d7"
+        }
+      ],
+      "registry": null,
+      "child": null
+    },
+    {
+      "id": "auth/signed-by-another-agent",
+      "agent": "swap",
+      "proposal": "0x1b320336eefe1b6409ad9f14cdcb925a02002cd8799861b24a083cfefda4c369",
+      "outcome": "REFUSED",
+      "reasons": [
+        {
+          "code": "AGENT_SIGNATURE_INVALID",
+          "subject": "0x82b836ee81df078196f21d53af66bcb5623bf9a8"
+        }
+      ],
+      "registry": null,
+      "child": null
+    },
+    {
+      "id": "auth/other-mandate",
+      "agent": "swap",
+      "proposal": "0xd8e6dde12ef938e8e3531cfa0ef8d74043927b3510bfb920e1ef060fa2e21a7f",
+      "outcome": "REFUSED",
+      "reasons": [
+        {
+          "code": "PORTFOLIO_MANDATE_DIGEST_MISMATCH",
+          "subject": ""
+        }
+      ],
+      "registry": null,
+      "child": null
+    },
+    {
+      "id": "form/unknown-critical-extension",
+      "agent": "swap",
+      "proposal": "0x118d21f5492ef36c49a1dbbf20aa95a9eb4e1a957831280d194aa83fa59621ce",
+      "outcome": "REFUSED",
+      "reasons": [
+        {
+          "code": "PROPOSAL_EXTENSION_UNKNOWN",
+          "subject": "mev-protection"
+        }
+      ],
+      "registry": null,
+      "child": null
+    },
+    {
+      "id": "form/understated-demand",
+      "agent": "swap",
+      "proposal": "0xf327b10253a5dd0187f8176bc0d4d4a734d7221a974356ccbb6e69d81e914968",
+      "outcome": "REFUSED",
+      "reasons": [
+        {
+          "code": "PROPOSAL_RESOURCES_MISDECLARED",
+          "subject": "requested"
+        }
+      ],
+      "registry": null,
+      "child": null
+    },
+    {
+      "id": "form/minimum-above-request",
+      "agent": "swap",
+      "proposal": "0x3d89e4113493617c42116c24555ccfe32a33b0335880f6349ae1d5a4ce5480d8",
+      "outcome": "REFUSED",
+      "reasons": [
+        {
+          "code": "PROPOSAL_MINIMUM_INVALID",
+          "subject": "portfolio-notional"
+        }
+      ],
+      "registry": null,
+      "child": null
+    },
+    {
+      "id": "time/expired-proposal",
+      "agent": "swap",
+      "proposal": "0x3fc0c992c94039e11400423e6e9554b5048307dfb55af00ab2ea2afd6cd3a326",
+      "outcome": "REFUSED",
+      "reasons": [
+        {
+          "code": "PROPOSAL_EXPIRED",
+          "subject": ""
+        }
+      ],
+      "registry": null,
+      "child": null
+    }
+  ]
+}

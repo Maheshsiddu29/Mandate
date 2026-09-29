@@ -1,0 +1,662 @@
+{
+  "corpusVersion": 1,
+  "view": {
+    "receiptDigest": "0xfdd562a9c124b3ca2a9acf7ffa5f874a6b67a9e9971cb0b8cdb86acd09f436c6",
+    "headline": {
+      "agents": 5,
+      "markets": 5,
+      "principals": 1,
+      "proposals": 10,
+      "refusals": 6,
+      "transactions": 0
+    },
+    "status": "COMPLETE",
+    "timeline": [
+      {
+        "step": 0,
+        "phase": "START",
+        "portfolio": "ACTIVE",
+        "agents": [
+          {
+            "agent": "0x3a6ac233b054ca0e1ac23e0d156133b033bac800",
+            "label": "nft",
+            "status": "SEARCHING"
+          },
+          {
+            "agent": "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe",
+            "label": "stock",
+            "status": "SEARCHING"
+          },
+          {
+            "agent": "0x82b836ee81df078196f21d53af66bcb5623bf9a8",
+            "label": "swap",
+            "status": "SEARCHING"
+          },
+          {
+            "agent": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325",
+            "label": "yield",
+            "status": "SEARCHING"
+          },
+          {
+            "agent": "0xc1de956ecedb0f0040723820d248e999d5c2271c",
+            "label": "perps",
+            "status": "SEARCHING"
+          }
+        ]
+      },
+      {
+        "step": 1,
+        "phase": "ROUND",
+        "portfolio": "NEGOTIATING",
+        "agents": [
+          {
+            "agent": "0x3a6ac233b054ca0e1ac23e0d156133b033bac800",
+            "label": "nft",
+            "status": "BLOCKED"
+          },
+          {
+            "agent": "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe",
+            "label": "stock",
+            "status": "BLOCKED"
+          },
+          {
+            "agent": "0x82b836ee81df078196f21d53af66bcb5623bf9a8",
+            "label": "swap",
+            "status": "BLOCKED"
+          },
+          {
+            "agent": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325",
+            "label": "yield",
+            "status": "BLOCKED"
+          },
+          {
+            "agent": "0xc1de956ecedb0f0040723820d248e999d5c2271c",
+            "label": "perps",
+            "status": "RENEGOTIATING"
+          }
+        ]
+      },
+      {
+        "step": 2,
+        "phase": "ROUND",
+        "portfolio": "NEGOTIATING",
+        "agents": [
+          {
+            "agent": "0x3a6ac233b054ca0e1ac23e0d156133b033bac800",
+            "label": "nft",
+            "status": "RELEASING"
+          },
+          {
+            "agent": "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe",
+            "label": "stock",
+            "status": "AUTHORIZED"
+          },
+          {
+            "agent": "0x82b836ee81df078196f21d53af66bcb5623bf9a8",
+            "label": "swap",
+            "status": "AUTHORIZED"
+          },
+          {
+            "agent": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325",
+            "label": "yield",
+            "status": "RENEGOTIATING"
+          },
+          {
+            "agent": "0xc1de956ecedb0f0040723820d248e999d5c2271c",
+            "label": "perps",
+            "status": "AUTHORIZED"
+          }
+        ]
+      },
+      {
+        "step": 3,
+        "phase": "ROUND",
+        "portfolio": "NEGOTIATING",
+        "agents": [
+          {
+            "agent": "0x3a6ac233b054ca0e1ac23e0d156133b033bac800",
+            "label": "nft",
+            "status": "RELEASING"
+          },
+          {
+            "agent": "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe",
+            "label": "stock",
+            "status": "AUTHORIZED"
+          },
+          {
+            "agent": "0x82b836ee81df078196f21d53af66bcb5623bf9a8",
+            "label": "swap",
+            "status": "AUTHORIZED"
+          },
+          {
+            "agent": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325",
+            "label": "yield",
+            "status": "AUTHORIZED"
+          },
+          {
+            "agent": "0xc1de956ecedb0f0040723820d248e999d5c2271c",
+            "label": "perps",
+            "status": "AUTHORIZED"
+          }
+        ]
+      },
+      {
+        "step": 4,
+        "phase": "VERIFY_AND_RESERVE",
+        "portfolio": "AUTHORIZED",
+        "agents": [
+          {
+            "agent": "0x3a6ac233b054ca0e1ac23e0d156133b033bac800",
+            "label": "nft",
+            "status": "RELEASING"
+          },
+          {
+            "agent": "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe",
+            "label": "stock",
+            "status": "AUTHORIZED"
+          },
+          {
+            "agent": "0x82b836ee81df078196f21d53af66bcb5623bf9a8",
+            "label": "swap",
+            "status": "AUTHORIZED"
+          },
+          {
+            "agent": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325",
+            "label": "yield",
+            "status": "AUTHORIZED"
+          },
+          {
+            "agent": "0xc1de956ecedb0f0040723820d248e999d5c2271c",
+            "label": "perps",
+            "status": "AUTHORIZED"
+          }
+        ]
+      },
+      {
+        "step": 5,
+        "phase": "EXECUTE",
+        "portfolio": "EXECUTING",
+        "agents": [
+          {
+            "agent": "0x3a6ac233b054ca0e1ac23e0d156133b033bac800",
+            "label": "nft",
+            "status": "RELEASING"
+          },
+          {
+            "agent": "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe",
+            "label": "stock",
+            "status": "AUTHORIZED"
+          },
+          {
+            "agent": "0x82b836ee81df078196f21d53af66bcb5623bf9a8",
+            "label": "swap",
+            "status": "EXECUTING"
+          },
+          {
+            "agent": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325",
+            "label": "yield",
+            "status": "EXECUTING"
+          },
+          {
+            "agent": "0xc1de956ecedb0f0040723820d248e999d5c2271c",
+            "label": "perps",
+            "status": "AUTHORIZED"
+          }
+        ]
+      },
+      {
+        "step": 6,
+        "phase": "DONE",
+        "portfolio": "COMPLETE",
+        "agents": [
+          {
+            "agent": "0x3a6ac233b054ca0e1ac23e0d156133b033bac800",
+            "label": "nft",
+            "status": "RELEASING"
+          },
+          {
+            "agent": "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe",
+            "label": "stock",
+            "status": "AUTHORIZED"
+          },
+          {
+            "agent": "0x82b836ee81df078196f21d53af66bcb5623bf9a8",
+            "label": "swap",
+            "status": "SETTLED"
+          },
+          {
+            "agent": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325",
+            "label": "yield",
+            "status": "SETTLED"
+          },
+          {
+            "agent": "0xc1de956ecedb0f0040723820d248e999d5c2271c",
+            "label": "perps",
+            "status": "AUTHORIZED"
+          }
+        ]
+      }
+    ],
+    "proposals": [
+      {
+        "proposal": "0x3551e2f0b10d72f51d8cf0e47cabd41c66263376a0ddf71b556cc5518591c1d8",
+        "round": 1,
+        "agent": "0x82b836ee81df078196f21d53af66bcb5623bf9a8",
+        "label": "swap",
+        "domain": "swap-fixture",
+        "kind": "SWAP_EXACT_IN",
+        "asset": null,
+        "representation": "eip155:421614/erc20:0x00000000000000000000000000000000000e7401",
+        "venue": "eip155:421614/router:0x000000000000000000000000000000000000bad0",
+        "requested": [
+          {
+            "resource": "portfolio-notional",
+            "unit": "USDC",
+            "amount": "300.000000"
+          }
+        ],
+        "approved": [],
+        "outcome": "REJECTED",
+        "reasons": [
+          "VENUE_NOT_ALLOWED"
+        ],
+        "registry": null,
+        "execution": "NOT_AUTHORIZED",
+        "evidence": null,
+        "integrationEvidence": "FIXTURE",
+        "transactions": 0
+      },
+      {
+        "proposal": "0x49bbc360eef0f7703a0a7245ac965d3a32dd5a1641f8940d7c59237d7c2b2728",
+        "round": 1,
+        "agent": "0xc1de956ecedb0f0040723820d248e999d5c2271c",
+        "label": "perps",
+        "domain": "lighter-perp",
+        "kind": "PERP_OPEN",
+        "asset": null,
+        "representation": "lighter:300/perp:4096",
+        "venue": null,
+        "requested": [
+          {
+            "resource": "perp-margin",
+            "unit": "USDC",
+            "amount": "300.600000"
+          },
+          {
+            "resource": "portfolio-notional",
+            "unit": "USDC",
+            "amount": "600.000000"
+          },
+          {
+            "resource": "derivative-notional",
+            "unit": "USDC",
+            "amount": "600.000000"
+          }
+        ],
+        "approved": [],
+        "outcome": "REDUCE_REQUESTED",
+        "reasons": [
+          "PORTFOLIO_LIMIT_EXCEEDED"
+        ],
+        "registry": null,
+        "execution": "NOT_AUTHORIZED",
+        "evidence": null,
+        "integrationEvidence": "OFFCHAIN_ONLY",
+        "transactions": 0
+      },
+      {
+        "proposal": "0x4cd8c36d900717616e00714bf3089946391087dfc6c12a895d8c06967ad57485",
+        "round": 1,
+        "agent": "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe",
+        "label": "stock",
+        "domain": "robinhood-evm",
+        "kind": "STOCK_BUY",
+        "asset": null,
+        "representation": "eip155:46630/erc20:0xa7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7",
+        "venue": null,
+        "requested": [
+          {
+            "resource": "portfolio-notional",
+            "unit": "USDC",
+            "amount": "600.000000"
+          }
+        ],
+        "approved": [],
+        "outcome": "REJECTED",
+        "reasons": [
+          "REGISTRY:ISSUER_NOT_ALLOWED",
+          "REGISTRY:SYNTHETIC_NOT_ALLOWED"
+        ],
+        "registry": {
+          "status": "EXCLUDED",
+          "codes": [
+            "ISSUER_NOT_ALLOWED",
+            "SYNTHETIC_NOT_ALLOWED"
+          ]
+        },
+        "execution": "NOT_AUTHORIZED",
+        "evidence": null,
+        "integrationEvidence": "LIVE_TESTNET",
+        "transactions": 0
+      },
+      {
+        "proposal": "0x9dba7a61e4fb09801773e46fc329fa7af1f934199769a684f6f28151221fb08a",
+        "round": 1,
+        "agent": "0x3a6ac233b054ca0e1ac23e0d156133b033bac800",
+        "label": "nft",
+        "domain": "nft-fixture",
+        "kind": "NFT_BUY",
+        "asset": null,
+        "representation": "eip155:421614/erc721:0x000000000000000000000000000000000000fa4e",
+        "venue": "eip155:421614/marketplace:0x000000000000000000000000000000000000b0b0",
+        "requested": [
+          {
+            "resource": "illiquid-notional",
+            "unit": "USDC",
+            "amount": "350.000000"
+          },
+          {
+            "resource": "portfolio-notional",
+            "unit": "USDC",
+            "amount": "350.000000"
+          }
+        ],
+        "approved": [],
+        "outcome": "REJECTED",
+        "reasons": [
+          "ASSET_NOT_ALLOWED",
+          "REPRESENTATION_NOT_ALLOWED"
+        ],
+        "registry": null,
+        "execution": "NOT_AUTHORIZED",
+        "evidence": null,
+        "integrationEvidence": "FIXTURE",
+        "transactions": 0
+      },
+      {
+        "proposal": "0xa89fcf71041a530b6d357f4b82e4b9b060098266b740545f9dfba25cfeebe88a",
+        "round": 1,
+        "agent": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325",
+        "label": "yield",
+        "domain": "yield-fixture",
+        "kind": "YIELD_DEPOSIT",
+        "asset": null,
+        "representation": "eip155:421614/erc4626:0x0000000000000000000000000000000000001260",
+        "venue": null,
+        "requested": [
+          {
+            "resource": "portfolio-notional",
+            "unit": "USDC",
+            "amount": "700.000000"
+          }
+        ],
+        "approved": [],
+        "outcome": "REJECTED",
+        "reasons": [
+          "ASSET_NOT_ALLOWED",
+          "ISSUER_NOT_ALLOWED",
+          "REPRESENTATION_NOT_ALLOWED",
+          "VENUE_NOT_ALLOWED"
+        ],
+        "registry": null,
+        "execution": "NOT_AUTHORIZED",
+        "evidence": null,
+        "integrationEvidence": "FIXTURE",
+        "transactions": 0
+      },
+      {
+        "proposal": "0x7d5f8933dedbc608867f7528b5b6c4acf3649ffe969b32b9c7cecfd5c5c57de4",
+        "round": 2,
+        "agent": "0xc1de956ecedb0f0040723820d248e999d5c2271c",
+        "label": "perps",
+        "domain": "lighter-perp",
+        "kind": "PERP_OPEN",
+        "asset": "crypto:mandate-core:crypto:btc",
+        "representation": "lighter:300/perp:4096",
+        "venue": null,
+        "requested": [
+          {
+            "resource": "perp-margin",
+            "unit": "USDC",
+            "amount": "200.400000"
+          },
+          {
+            "resource": "portfolio-notional",
+            "unit": "USDC",
+            "amount": "400.000000"
+          },
+          {
+            "resource": "derivative-notional",
+            "unit": "USDC",
+            "amount": "400.000000"
+          }
+        ],
+        "approved": [
+          {
+            "resource": "perp-margin",
+            "unit": "USDC",
+            "amount": "200.400000"
+          },
+          {
+            "resource": "portfolio-notional",
+            "unit": "USDC",
+            "amount": "400.000000"
+          },
+          {
+            "resource": "derivative-notional",
+            "unit": "USDC",
+            "amount": "400.000000"
+          }
+        ],
+        "outcome": "ACCEPTED",
+        "reasons": [],
+        "registry": null,
+        "execution": "AWAITING_DOMAIN_SIGNER",
+        "evidence": "OFFCHAIN_ONLY",
+        "integrationEvidence": "OFFCHAIN_ONLY",
+        "transactions": 0
+      },
+      {
+        "proposal": "0x88cb44c7dc996afad6147d8224113b354df580fa900e50842eb6967e318a2128",
+        "round": 2,
+        "agent": "0x82b836ee81df078196f21d53af66bcb5623bf9a8",
+        "label": "swap",
+        "domain": "swap-fixture",
+        "kind": "SWAP_EXACT_IN",
+        "asset": "crypto:mandate-core:crypto:eth",
+        "representation": "eip155:421614/erc20:0x00000000000000000000000000000000000e7401",
+        "venue": "eip155:421614/router:0x0000000000000000000000000000000000005a01",
+        "requested": [
+          {
+            "resource": "portfolio-notional",
+            "unit": "USDC",
+            "amount": "300.000000"
+          }
+        ],
+        "approved": [
+          {
+            "resource": "portfolio-notional",
+            "unit": "USDC",
+            "amount": "300.000000"
+          }
+        ],
+        "outcome": "ACCEPTED",
+        "reasons": [],
+        "registry": null,
+        "execution": "SETTLED",
+        "evidence": "SIMULATED",
+        "integrationEvidence": "FIXTURE",
+        "transactions": 0
+      },
+      {
+        "proposal": "0xc078c6e67f3fd883baaca954cef7030ebc09de8f376b89fed8f8e16242962150",
+        "round": 2,
+        "agent": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325",
+        "label": "yield",
+        "domain": "yield-fixture",
+        "kind": "YIELD_DEPOSIT",
+        "asset": null,
+        "representation": "eip155:421614/erc4626:0x000000000000000000000000000000000000a110",
+        "venue": null,
+        "requested": [
+          {
+            "resource": "portfolio-notional",
+            "unit": "USDC",
+            "amount": "700.000000"
+          }
+        ],
+        "approved": [],
+        "outcome": "REDUCE_REQUESTED",
+        "reasons": [
+          "ALLOCATION_INSUFFICIENT"
+        ],
+        "registry": null,
+        "execution": "NOT_AUTHORIZED",
+        "evidence": null,
+        "integrationEvidence": "FIXTURE",
+        "transactions": 0
+      },
+      {
+        "proposal": "0xf784a3ecf2d6ce03b54b64ba9e01312e982e4404e3f1178412520c4cf46853ea",
+        "round": 2,
+        "agent": "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe",
+        "label": "stock",
+        "domain": "robinhood-evm",
+        "kind": "STOCK_BUY",
+        "asset": "equity:figi:BBG000BBJQV0",
+        "representation": "eip155:46630/erc20:0xb1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "venue": null,
+        "requested": [
+          {
+            "resource": "spot-capital",
+            "unit": "USDC",
+            "amount": "600.000000"
+          },
+          {
+            "resource": "portfolio-notional",
+            "unit": "USDC",
+            "amount": "600.000000"
+          }
+        ],
+        "approved": [
+          {
+            "resource": "spot-capital",
+            "unit": "USDC",
+            "amount": "600.000000"
+          },
+          {
+            "resource": "portfolio-notional",
+            "unit": "USDC",
+            "amount": "600.000000"
+          }
+        ],
+        "outcome": "ACCEPTED",
+        "reasons": [],
+        "registry": {
+          "status": "ADMISSIBLE",
+          "codes": []
+        },
+        "execution": "AWAITING_DOMAIN_SIGNER",
+        "evidence": "OFFCHAIN_ONLY",
+        "integrationEvidence": "LIVE_TESTNET",
+        "transactions": 0
+      },
+      {
+        "proposal": "0x31323068e9e9b8c401a73364ce80ffe780cd99d307002a3a45ff895fe6597859",
+        "round": 3,
+        "agent": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325",
+        "label": "yield",
+        "domain": "yield-fixture",
+        "kind": "YIELD_DEPOSIT",
+        "asset": "fund:mandate-core:fund:alpha-usd-vault",
+        "representation": "eip155:421614/erc4626:0x000000000000000000000000000000000000a110",
+        "venue": null,
+        "requested": [
+          {
+            "resource": "portfolio-notional",
+            "unit": "USDC",
+            "amount": "600.000000"
+          }
+        ],
+        "approved": [
+          {
+            "resource": "portfolio-notional",
+            "unit": "USDC",
+            "amount": "600.000000"
+          }
+        ],
+        "outcome": "ACCEPTED",
+        "reasons": [],
+        "registry": null,
+        "execution": "SETTLED",
+        "evidence": "SIMULATED",
+        "integrationEvidence": "FIXTURE",
+        "transactions": 0
+      }
+    ],
+    "resources": [
+      {
+        "resource": "perp-margin",
+        "unit": "USDC",
+        "limit": "400.000000",
+        "reservedBefore": "0.000000",
+        "reservedAfter": "200.400000"
+      },
+      {
+        "resource": "spot-capital",
+        "unit": "USDC",
+        "limit": "800.000000",
+        "reservedBefore": "0.000000",
+        "reservedAfter": "600.000000"
+      },
+      {
+        "resource": "illiquid-notional",
+        "unit": "USDC",
+        "limit": "400.000000",
+        "reservedBefore": "0.000000",
+        "reservedAfter": "0.000000"
+      },
+      {
+        "resource": "portfolio-notional",
+        "unit": "USDC",
+        "limit": "2000.000000",
+        "reservedBefore": "0.000000",
+        "reservedAfter": "1900.000000"
+      },
+      {
+        "resource": "derivative-notional",
+        "unit": "USDC",
+        "limit": "400.000000",
+        "reservedBefore": "0.000000",
+        "reservedAfter": "400.000000"
+      }
+    ],
+    "domains": [
+      {
+        "domain": "robinhood-evm",
+        "integration": "robinhood-gate-signer.v1",
+        "evidence": "LIVE_TESTNET"
+      },
+      {
+        "domain": "swap-fixture",
+        "integration": "swap-fixture.v1",
+        "evidence": "FIXTURE"
+      },
+      {
+        "domain": "nft-fixture",
+        "integration": "nft-fixture.v1",
+        "evidence": "FIXTURE"
+      },
+      {
+        "domain": "yield-fixture",
+        "integration": "yield-fixture.v1",
+        "evidence": "FIXTURE"
+      },
+      {
+        "domain": "lighter-perp",
+        "integration": "lighter-perp-policy.v1",
+        "evidence": "OFFCHAIN_ONLY"
+      }
+    ]
+  }
+}

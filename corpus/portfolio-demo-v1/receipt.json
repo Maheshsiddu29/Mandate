@@ -1,0 +1,1347 @@
+{
+  "corpusVersion": 1,
+  "schema": "PORTFOLIO_RECEIPT.V1",
+  "receiptDigest": "0xfdd562a9c124b3ca2a9acf7ffa5f874a6b67a9e9971cb0b8cdb86acd09f436c6",
+  "receipt": {
+    "principal": "0x51f0ff0faae50fa64f0a74a2ff2fee3055765904",
+    "portfolioMandate": "0x489abf9f157735aa5b2fe689e45f472f789ef9af47bcb9383f28656cbc8eda3c",
+    "policyVersion": "1",
+    "allocationMode": "HYBRID",
+    "rounds": 3,
+    "agents": [
+      {
+        "agent": "0x3a6ac233b054ca0e1ac23e0d156133b033bac800",
+        "label": "nft",
+        "status": "RELEASING"
+      },
+      {
+        "agent": "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe",
+        "label": "stock",
+        "status": "AUTHORIZED"
+      },
+      {
+        "agent": "0x82b836ee81df078196f21d53af66bcb5623bf9a8",
+        "label": "swap",
+        "status": "SETTLED"
+      },
+      {
+        "agent": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325",
+        "label": "yield",
+        "status": "SETTLED"
+      },
+      {
+        "agent": "0xc1de956ecedb0f0040723820d248e999d5c2271c",
+        "label": "perps",
+        "status": "AUTHORIZED"
+      }
+    ],
+    "proposals": [
+      {
+        "proposal": "0x3551e2f0b10d72f51d8cf0e47cabd41c66263376a0ddf71b556cc5518591c1d8",
+        "agent": "0x82b836ee81df078196f21d53af66bcb5623bf9a8",
+        "round": 1,
+        "kind": "SWAP_EXACT_IN",
+        "domain": "swap-fixture",
+        "representation": "eip155:421614/erc20:0x00000000000000000000000000000000000e7401",
+        "venue": "eip155:421614/router:0x000000000000000000000000000000000000bad0",
+        "requested": [
+          {
+            "resource": "portfolio-notional",
+            "atoms": "300000000"
+          }
+        ]
+      },
+      {
+        "proposal": "0x49bbc360eef0f7703a0a7245ac965d3a32dd5a1641f8940d7c59237d7c2b2728",
+        "agent": "0xc1de956ecedb0f0040723820d248e999d5c2271c",
+        "round": 1,
+        "kind": "PERP_OPEN",
+        "domain": "lighter-perp",
+        "representation": "lighter:300/perp:4096",
+        "venue": null,
+        "requested": [
+          {
+            "resource": "perp-margin",
+            "atoms": "300600000"
+          },
+          {
+            "resource": "portfolio-notional",
+            "atoms": "600000000"
+          },
+          {
+            "resource": "derivative-notional",
+            "atoms": "600000000"
+          }
+        ]
+      },
+      {
+        "proposal": "0x4cd8c36d900717616e00714bf3089946391087dfc6c12a895d8c06967ad57485",
+        "agent": "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe",
+        "round": 1,
+        "kind": "STOCK_BUY",
+        "domain": "robinhood-evm",
+        "representation": "eip155:46630/erc20:0xa7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7",
+        "venue": null,
+        "requested": [
+          {
+            "resource": "portfolio-notional",
+            "atoms": "600000000"
+          }
+        ]
+      },
+      {
+        "proposal": "0x9dba7a61e4fb09801773e46fc329fa7af1f934199769a684f6f28151221fb08a",
+        "agent": "0x3a6ac233b054ca0e1ac23e0d156133b033bac800",
+        "round": 1,
+        "kind": "NFT_BUY",
+        "domain": "nft-fixture",
+        "representation": "eip155:421614/erc721:0x000000000000000000000000000000000000fa4e",
+        "venue": "eip155:421614/marketplace:0x000000000000000000000000000000000000b0b0",
+        "requested": [
+          {
+            "resource": "illiquid-notional",
+            "atoms": "350000000"
+          },
+          {
+            "resource": "portfolio-notional",
+            "atoms": "350000000"
+          }
+        ]
+      },
+      {
+        "proposal": "0xa89fcf71041a530b6d357f4b82e4b9b060098266b740545f9dfba25cfeebe88a",
+        "agent": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325",
+        "round": 1,
+        "kind": "YIELD_DEPOSIT",
+        "domain": "yield-fixture",
+        "representation": "eip155:421614/erc4626:0x0000000000000000000000000000000000001260",
+        "venue": null,
+        "requested": [
+          {
+            "resource": "portfolio-notional",
+            "atoms": "700000000"
+          }
+        ]
+      },
+      {
+        "proposal": "0x7d5f8933dedbc608867f7528b5b6c4acf3649ffe969b32b9c7cecfd5c5c57de4",
+        "agent": "0xc1de956ecedb0f0040723820d248e999d5c2271c",
+        "round": 2,
+        "kind": "PERP_OPEN",
+        "domain": "lighter-perp",
+        "representation": "lighter:300/perp:4096",
+        "venue": null,
+        "requested": [
+          {
+            "resource": "perp-margin",
+            "atoms": "200400000"
+          },
+          {
+            "resource": "portfolio-notional",
+            "atoms": "400000000"
+          },
+          {
+            "resource": "derivative-notional",
+            "atoms": "400000000"
+          }
+        ]
+      },
+      {
+        "proposal": "0x88cb44c7dc996afad6147d8224113b354df580fa900e50842eb6967e318a2128",
+        "agent": "0x82b836ee81df078196f21d53af66bcb5623bf9a8",
+        "round": 2,
+        "kind": "SWAP_EXACT_IN",
+        "domain": "swap-fixture",
+        "representation": "eip155:421614/erc20:0x00000000000000000000000000000000000e7401",
+        "venue": "eip155:421614/router:0x0000000000000000000000000000000000005a01",
+        "requested": [
+          {
+            "resource": "portfolio-notional",
+            "atoms": "300000000"
+          }
+        ]
+      },
+      {
+        "proposal": "0xc078c6e67f3fd883baaca954cef7030ebc09de8f376b89fed8f8e16242962150",
+        "agent": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325",
+        "round": 2,
+        "kind": "YIELD_DEPOSIT",
+        "domain": "yield-fixture",
+        "representation": "eip155:421614/erc4626:0x000000000000000000000000000000000000a110",
+        "venue": null,
+        "requested": [
+          {
+            "resource": "portfolio-notional",
+            "atoms": "700000000"
+          }
+        ]
+      },
+      {
+        "proposal": "0xf784a3ecf2d6ce03b54b64ba9e01312e982e4404e3f1178412520c4cf46853ea",
+        "agent": "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe",
+        "round": 2,
+        "kind": "STOCK_BUY",
+        "domain": "robinhood-evm",
+        "representation": "eip155:46630/erc20:0xb1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "venue": null,
+        "requested": [
+          {
+            "resource": "spot-capital",
+            "atoms": "600000000"
+          },
+          {
+            "resource": "portfolio-notional",
+            "atoms": "600000000"
+          }
+        ]
+      },
+      {
+        "proposal": "0x31323068e9e9b8c401a73364ce80ffe780cd99d307002a3a45ff895fe6597859",
+        "agent": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325",
+        "round": 3,
+        "kind": "YIELD_DEPOSIT",
+        "domain": "yield-fixture",
+        "representation": "eip155:421614/erc4626:0x000000000000000000000000000000000000a110",
+        "venue": null,
+        "requested": [
+          {
+            "resource": "portfolio-notional",
+            "atoms": "600000000"
+          }
+        ]
+      }
+    ],
+    "decisions": [
+      {
+        "proposal": "0x3551e2f0b10d72f51d8cf0e47cabd41c66263376a0ddf71b556cc5518591c1d8",
+        "round": 1,
+        "outcome": "REJECTED",
+        "reasons": [
+          {
+            "code": "VENUE_NOT_ALLOWED",
+            "subject": "venues:eip155:421614/router:0x000000000000000000000000000000000000bad0"
+          }
+        ],
+        "target": [],
+        "refusal": "OFFCHAIN_REFUSAL"
+      },
+      {
+        "proposal": "0x49bbc360eef0f7703a0a7245ac965d3a32dd5a1641f8940d7c59237d7c2b2728",
+        "round": 1,
+        "outcome": "REDUCE_REQUESTED",
+        "reasons": [
+          {
+            "code": "PORTFOLIO_LIMIT_EXCEEDED",
+            "subject": "derivative-notional"
+          }
+        ],
+        "target": [
+          {
+            "resource": "perp-margin",
+            "atoms": "400000000"
+          },
+          {
+            "resource": "portfolio-notional",
+            "atoms": "500000000"
+          },
+          {
+            "resource": "derivative-notional",
+            "atoms": "400000000"
+          }
+        ],
+        "refusal": "OFFCHAIN_REFUSAL"
+      },
+      {
+        "proposal": "0x4cd8c36d900717616e00714bf3089946391087dfc6c12a895d8c06967ad57485",
+        "round": 1,
+        "outcome": "REJECTED",
+        "reasons": [
+          {
+            "code": "REGISTRY:ISSUER_NOT_ALLOWED",
+            "subject": "eip155:46630/erc20:0xa7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7"
+          },
+          {
+            "code": "REGISTRY:SYNTHETIC_NOT_ALLOWED",
+            "subject": "eip155:46630/erc20:0xa7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7"
+          }
+        ],
+        "target": [],
+        "refusal": "OFFCHAIN_REFUSAL"
+      },
+      {
+        "proposal": "0x9dba7a61e4fb09801773e46fc329fa7af1f934199769a684f6f28151221fb08a",
+        "round": 1,
+        "outcome": "REJECTED",
+        "reasons": [
+          {
+            "code": "ASSET_NOT_ALLOWED",
+            "subject": "assets:nft:mandate-core:nft:impostor-genesis"
+          },
+          {
+            "code": "REPRESENTATION_NOT_ALLOWED",
+            "subject": "representations:eip155:421614/erc721:0x000000000000000000000000000000000000fa4e"
+          }
+        ],
+        "target": [],
+        "refusal": "OFFCHAIN_REFUSAL"
+      },
+      {
+        "proposal": "0xa89fcf71041a530b6d357f4b82e4b9b060098266b740545f9dfba25cfeebe88a",
+        "round": 1,
+        "outcome": "REJECTED",
+        "reasons": [
+          {
+            "code": "ASSET_NOT_ALLOWED",
+            "subject": "assets:fund:mandate-core:fund:unvetted-high-yield"
+          },
+          {
+            "code": "ISSUER_NOT_ALLOWED",
+            "subject": "issuers:issuer.fixture.unvetted"
+          },
+          {
+            "code": "REPRESENTATION_NOT_ALLOWED",
+            "subject": "representations:eip155:421614/erc4626:0x0000000000000000000000000000000000001260"
+          },
+          {
+            "code": "VENUE_NOT_ALLOWED",
+            "subject": "venues:eip155:421614/yield-protocol:0x0000000000000000000000000000000000001260"
+          }
+        ],
+        "target": [],
+        "refusal": "OFFCHAIN_REFUSAL"
+      },
+      {
+        "proposal": "0xf784a3ecf2d6ce03b54b64ba9e01312e982e4404e3f1178412520c4cf46853ea",
+        "round": 2,
+        "outcome": "ACCEPTED",
+        "reasons": [],
+        "target": [],
+        "refusal": "NONE"
+      },
+      {
+        "proposal": "0x88cb44c7dc996afad6147d8224113b354df580fa900e50842eb6967e318a2128",
+        "round": 2,
+        "outcome": "ACCEPTED",
+        "reasons": [],
+        "target": [],
+        "refusal": "NONE"
+      },
+      {
+        "proposal": "0x7d5f8933dedbc608867f7528b5b6c4acf3649ffe969b32b9c7cecfd5c5c57de4",
+        "round": 2,
+        "outcome": "ACCEPTED",
+        "reasons": [],
+        "target": [],
+        "refusal": "NONE"
+      },
+      {
+        "proposal": "0xc078c6e67f3fd883baaca954cef7030ebc09de8f376b89fed8f8e16242962150",
+        "round": 2,
+        "outcome": "REDUCE_REQUESTED",
+        "reasons": [
+          {
+            "code": "ALLOCATION_INSUFFICIENT",
+            "subject": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325"
+          }
+        ],
+        "target": [
+          {
+            "resource": "portfolio-notional",
+            "atoms": "600000000"
+          }
+        ],
+        "refusal": "OFFCHAIN_REFUSAL"
+      },
+      {
+        "proposal": "0x31323068e9e9b8c401a73364ce80ffe780cd99d307002a3a45ff895fe6597859",
+        "round": 3,
+        "outcome": "ACCEPTED",
+        "reasons": [],
+        "target": [],
+        "refusal": "NONE"
+      }
+    ],
+    "releases": [
+      {
+        "release": "0x8eb61a334c298d0010719d838ea0f6381c9da64e2f8504d43c6db59265495986",
+        "agent": "0x3a6ac233b054ca0e1ac23e0d156133b033bac800",
+        "round": 2,
+        "applied": true,
+        "reasons": []
+      }
+    ],
+    "allocationBefore": {
+      "mode": "HYBRID",
+      "entries": [
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x3a6ac233b054ca0e1ac23e0d156133b033bac800"
+          },
+          "resource": "perp-margin",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x3a6ac233b054ca0e1ac23e0d156133b033bac800"
+          },
+          "resource": "spot-capital",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x3a6ac233b054ca0e1ac23e0d156133b033bac800"
+          },
+          "resource": "illiquid-notional",
+          "allocated": "400000000",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x3a6ac233b054ca0e1ac23e0d156133b033bac800"
+          },
+          "resource": "portfolio-notional",
+          "allocated": "250000000",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x3a6ac233b054ca0e1ac23e0d156133b033bac800"
+          },
+          "resource": "derivative-notional",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe"
+          },
+          "resource": "perp-margin",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe"
+          },
+          "resource": "spot-capital",
+          "allocated": "800000000",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe"
+          },
+          "resource": "illiquid-notional",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe"
+          },
+          "resource": "portfolio-notional",
+          "allocated": "500000000",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe"
+          },
+          "resource": "derivative-notional",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x82b836ee81df078196f21d53af66bcb5623bf9a8"
+          },
+          "resource": "perp-margin",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x82b836ee81df078196f21d53af66bcb5623bf9a8"
+          },
+          "resource": "spot-capital",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x82b836ee81df078196f21d53af66bcb5623bf9a8"
+          },
+          "resource": "illiquid-notional",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x82b836ee81df078196f21d53af66bcb5623bf9a8"
+          },
+          "resource": "portfolio-notional",
+          "allocated": "250000000",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x82b836ee81df078196f21d53af66bcb5623bf9a8"
+          },
+          "resource": "derivative-notional",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325"
+          },
+          "resource": "perp-margin",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325"
+          },
+          "resource": "spot-capital",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325"
+          },
+          "resource": "illiquid-notional",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325"
+          },
+          "resource": "portfolio-notional",
+          "allocated": "500000000",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325"
+          },
+          "resource": "derivative-notional",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0xc1de956ecedb0f0040723820d248e999d5c2271c"
+          },
+          "resource": "perp-margin",
+          "allocated": "400000000",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0xc1de956ecedb0f0040723820d248e999d5c2271c"
+          },
+          "resource": "spot-capital",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0xc1de956ecedb0f0040723820d248e999d5c2271c"
+          },
+          "resource": "illiquid-notional",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0xc1de956ecedb0f0040723820d248e999d5c2271c"
+          },
+          "resource": "portfolio-notional",
+          "allocated": "500000000",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0xc1de956ecedb0f0040723820d248e999d5c2271c"
+          },
+          "resource": "derivative-notional",
+          "allocated": "0",
+          "committed": "0"
+        }
+      ],
+      "lots": [
+        {
+          "id": "lot/unallocated/portfolio/derivative-notional",
+          "resource": "derivative-notional",
+          "from": null,
+          "amount": "400000000",
+          "remaining": "400000000"
+        }
+      ],
+      "log": []
+    },
+    "allocationAfter": {
+      "mode": "HYBRID",
+      "entries": [
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x3a6ac233b054ca0e1ac23e0d156133b033bac800"
+          },
+          "resource": "perp-margin",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x3a6ac233b054ca0e1ac23e0d156133b033bac800"
+          },
+          "resource": "spot-capital",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x3a6ac233b054ca0e1ac23e0d156133b033bac800"
+          },
+          "resource": "illiquid-notional",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x3a6ac233b054ca0e1ac23e0d156133b033bac800"
+          },
+          "resource": "portfolio-notional",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x3a6ac233b054ca0e1ac23e0d156133b033bac800"
+          },
+          "resource": "derivative-notional",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe"
+          },
+          "resource": "perp-margin",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe"
+          },
+          "resource": "spot-capital",
+          "allocated": "800000000",
+          "committed": "600000000"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe"
+          },
+          "resource": "illiquid-notional",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe"
+          },
+          "resource": "portfolio-notional",
+          "allocated": "600000000",
+          "committed": "600000000"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe"
+          },
+          "resource": "derivative-notional",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x82b836ee81df078196f21d53af66bcb5623bf9a8"
+          },
+          "resource": "perp-margin",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x82b836ee81df078196f21d53af66bcb5623bf9a8"
+          },
+          "resource": "spot-capital",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x82b836ee81df078196f21d53af66bcb5623bf9a8"
+          },
+          "resource": "illiquid-notional",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x82b836ee81df078196f21d53af66bcb5623bf9a8"
+          },
+          "resource": "portfolio-notional",
+          "allocated": "300000000",
+          "committed": "300000000"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x82b836ee81df078196f21d53af66bcb5623bf9a8"
+          },
+          "resource": "derivative-notional",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325"
+          },
+          "resource": "perp-margin",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325"
+          },
+          "resource": "spot-capital",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325"
+          },
+          "resource": "illiquid-notional",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325"
+          },
+          "resource": "portfolio-notional",
+          "allocated": "600000000",
+          "committed": "600000000"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325"
+          },
+          "resource": "derivative-notional",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0xc1de956ecedb0f0040723820d248e999d5c2271c"
+          },
+          "resource": "perp-margin",
+          "allocated": "400000000",
+          "committed": "200400000"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0xc1de956ecedb0f0040723820d248e999d5c2271c"
+          },
+          "resource": "spot-capital",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0xc1de956ecedb0f0040723820d248e999d5c2271c"
+          },
+          "resource": "illiquid-notional",
+          "allocated": "0",
+          "committed": "0"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0xc1de956ecedb0f0040723820d248e999d5c2271c"
+          },
+          "resource": "portfolio-notional",
+          "allocated": "500000000",
+          "committed": "400000000"
+        },
+        {
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0xc1de956ecedb0f0040723820d248e999d5c2271c"
+          },
+          "resource": "derivative-notional",
+          "allocated": "400000000",
+          "committed": "400000000"
+        }
+      ],
+      "lots": [
+        {
+          "id": "lot/unallocated/portfolio/derivative-notional",
+          "resource": "derivative-notional",
+          "from": null,
+          "amount": "400000000",
+          "remaining": "0"
+        },
+        {
+          "id": "lot/release/release/0x8eb61a334c298d0010719d838ea0f6381c9da64e2f8504d43c6db59265495986/illiquid-notional",
+          "resource": "illiquid-notional",
+          "from": {
+            "kind": "eip155-address",
+            "value": "0x3a6ac233b054ca0e1ac23e0d156133b033bac800"
+          },
+          "amount": "400000000",
+          "remaining": "400000000"
+        },
+        {
+          "id": "lot/release/release/0x8eb61a334c298d0010719d838ea0f6381c9da64e2f8504d43c6db59265495986/portfolio-notional",
+          "resource": "portfolio-notional",
+          "from": {
+            "kind": "eip155-address",
+            "value": "0x3a6ac233b054ca0e1ac23e0d156133b033bac800"
+          },
+          "amount": "250000000",
+          "remaining": "0"
+        }
+      ],
+      "log": [
+        {
+          "kind": "RELEASE",
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x3a6ac233b054ca0e1ac23e0d156133b033bac800"
+          },
+          "id": "release/0x8eb61a334c298d0010719d838ea0f6381c9da64e2f8504d43c6db59265495986",
+          "amounts": [
+            {
+              "resource": "illiquid-notional",
+              "atoms": "400000000"
+            },
+            {
+              "resource": "portfolio-notional",
+              "atoms": "250000000"
+            }
+          ]
+        },
+        {
+          "kind": "CLAIM",
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe"
+          },
+          "id": "claim/0xf784a3ecf2d6ce03b54b64ba9e01312e982e4404e3f1178412520c4cf46853ea/portfolio-notional/0",
+          "lot": "lot/release/release/0x8eb61a334c298d0010719d838ea0f6381c9da64e2f8504d43c6db59265495986/portfolio-notional",
+          "amount": "100000000"
+        },
+        {
+          "kind": "COMMIT",
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe"
+          },
+          "id": "0xf784a3ecf2d6ce03b54b64ba9e01312e982e4404e3f1178412520c4cf46853ea",
+          "amounts": [
+            {
+              "resource": "spot-capital",
+              "atoms": "600000000"
+            },
+            {
+              "resource": "portfolio-notional",
+              "atoms": "600000000"
+            }
+          ]
+        },
+        {
+          "kind": "CLAIM",
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x82b836ee81df078196f21d53af66bcb5623bf9a8"
+          },
+          "id": "claim/0x88cb44c7dc996afad6147d8224113b354df580fa900e50842eb6967e318a2128/portfolio-notional/0",
+          "lot": "lot/release/release/0x8eb61a334c298d0010719d838ea0f6381c9da64e2f8504d43c6db59265495986/portfolio-notional",
+          "amount": "50000000"
+        },
+        {
+          "kind": "COMMIT",
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0x82b836ee81df078196f21d53af66bcb5623bf9a8"
+          },
+          "id": "0x88cb44c7dc996afad6147d8224113b354df580fa900e50842eb6967e318a2128",
+          "amounts": [
+            {
+              "resource": "portfolio-notional",
+              "atoms": "300000000"
+            }
+          ]
+        },
+        {
+          "kind": "CLAIM",
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0xc1de956ecedb0f0040723820d248e999d5c2271c"
+          },
+          "id": "claim/0x7d5f8933dedbc608867f7528b5b6c4acf3649ffe969b32b9c7cecfd5c5c57de4/derivative-notional/0",
+          "lot": "lot/unallocated/portfolio/derivative-notional",
+          "amount": "400000000"
+        },
+        {
+          "kind": "COMMIT",
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0xc1de956ecedb0f0040723820d248e999d5c2271c"
+          },
+          "id": "0x7d5f8933dedbc608867f7528b5b6c4acf3649ffe969b32b9c7cecfd5c5c57de4",
+          "amounts": [
+            {
+              "resource": "perp-margin",
+              "atoms": "200400000"
+            },
+            {
+              "resource": "portfolio-notional",
+              "atoms": "400000000"
+            },
+            {
+              "resource": "derivative-notional",
+              "atoms": "400000000"
+            }
+          ]
+        },
+        {
+          "kind": "CLAIM",
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325"
+          },
+          "id": "claim/0x31323068e9e9b8c401a73364ce80ffe780cd99d307002a3a45ff895fe6597859/portfolio-notional/0",
+          "lot": "lot/release/release/0x8eb61a334c298d0010719d838ea0f6381c9da64e2f8504d43c6db59265495986/portfolio-notional",
+          "amount": "100000000"
+        },
+        {
+          "kind": "COMMIT",
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325"
+          },
+          "id": "0x31323068e9e9b8c401a73364ce80ffe780cd99d307002a3a45ff895fe6597859",
+          "amounts": [
+            {
+              "resource": "portfolio-notional",
+              "atoms": "600000000"
+            }
+          ]
+        }
+      ]
+    },
+    "resourcesBefore": {
+      "ledgerVersion": "7",
+      "portfolio": [
+        {
+          "resource": "perp-margin",
+          "atoms": "400000000"
+        },
+        {
+          "resource": "spot-capital",
+          "atoms": "800000000"
+        },
+        {
+          "resource": "illiquid-notional",
+          "atoms": "400000000"
+        },
+        {
+          "resource": "portfolio-notional",
+          "atoms": "2000000000"
+        },
+        {
+          "resource": "derivative-notional",
+          "atoms": "400000000"
+        }
+      ],
+      "agents": {
+        "0x3a6ac233b054ca0e1ac23e0d156133b033bac800": [
+          {
+            "resource": "illiquid-notional",
+            "atoms": "400000000"
+          },
+          {
+            "resource": "portfolio-notional",
+            "atoms": "400000000"
+          }
+        ],
+        "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe": [
+          {
+            "resource": "spot-capital",
+            "atoms": "800000000"
+          },
+          {
+            "resource": "portfolio-notional",
+            "atoms": "800000000"
+          }
+        ],
+        "0x82b836ee81df078196f21d53af66bcb5623bf9a8": [
+          {
+            "resource": "portfolio-notional",
+            "atoms": "500000000"
+          }
+        ],
+        "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325": [
+          {
+            "resource": "portfolio-notional",
+            "atoms": "800000000"
+          }
+        ],
+        "0xc1de956ecedb0f0040723820d248e999d5c2271c": [
+          {
+            "resource": "perp-margin",
+            "atoms": "400000000"
+          },
+          {
+            "resource": "portfolio-notional",
+            "atoms": "600000000"
+          }
+        ]
+      },
+      "reserved": [
+        {
+          "resource": "perp-margin",
+          "atoms": "0"
+        },
+        {
+          "resource": "spot-capital",
+          "atoms": "0"
+        },
+        {
+          "resource": "illiquid-notional",
+          "atoms": "0"
+        },
+        {
+          "resource": "portfolio-notional",
+          "atoms": "0"
+        },
+        {
+          "resource": "derivative-notional",
+          "atoms": "0"
+        }
+      ]
+    },
+    "resourcesAfter": {
+      "ledgerVersion": "13",
+      "portfolio": [
+        {
+          "resource": "perp-margin",
+          "atoms": "199600000"
+        },
+        {
+          "resource": "spot-capital",
+          "atoms": "200000000"
+        },
+        {
+          "resource": "illiquid-notional",
+          "atoms": "400000000"
+        },
+        {
+          "resource": "portfolio-notional",
+          "atoms": "100000000"
+        },
+        {
+          "resource": "derivative-notional",
+          "atoms": "0"
+        }
+      ],
+      "agents": {
+        "0x3a6ac233b054ca0e1ac23e0d156133b033bac800": [
+          {
+            "resource": "illiquid-notional",
+            "atoms": "400000000"
+          },
+          {
+            "resource": "portfolio-notional",
+            "atoms": "400000000"
+          }
+        ],
+        "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe": [
+          {
+            "resource": "spot-capital",
+            "atoms": "200000000"
+          },
+          {
+            "resource": "portfolio-notional",
+            "atoms": "200000000"
+          }
+        ],
+        "0x82b836ee81df078196f21d53af66bcb5623bf9a8": [
+          {
+            "resource": "portfolio-notional",
+            "atoms": "200000000"
+          }
+        ],
+        "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325": [
+          {
+            "resource": "portfolio-notional",
+            "atoms": "200000000"
+          }
+        ],
+        "0xc1de956ecedb0f0040723820d248e999d5c2271c": [
+          {
+            "resource": "perp-margin",
+            "atoms": "199600000"
+          },
+          {
+            "resource": "portfolio-notional",
+            "atoms": "200000000"
+          }
+        ]
+      },
+      "reserved": [
+        {
+          "resource": "perp-margin",
+          "atoms": "200400000"
+        },
+        {
+          "resource": "spot-capital",
+          "atoms": "600000000"
+        },
+        {
+          "resource": "illiquid-notional",
+          "atoms": "0"
+        },
+        {
+          "resource": "portfolio-notional",
+          "atoms": "1900000000"
+        },
+        {
+          "resource": "derivative-notional",
+          "atoms": "400000000"
+        }
+      ]
+    },
+    "verification": {
+      "status": "VERIFIED",
+      "reasons": []
+    },
+    "childAuthorizations": [
+      {
+        "child": "0x468c59b53c7078140be95d5f4a3cd9b91217beed7aea586cea75f0800611c216",
+        "agent": "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe",
+        "proposal": "0xf784a3ecf2d6ce03b54b64ba9e01312e982e4404e3f1178412520c4cf46853ea",
+        "approved": [
+          {
+            "resource": "spot-capital",
+            "atoms": "600000000"
+          },
+          {
+            "resource": "portfolio-notional",
+            "atoms": "600000000"
+          }
+        ]
+      },
+      {
+        "child": "0x6983229fbdc2d294a271fad748e0370268bc2bbe07ffdb48abc67e8faa090b5c",
+        "agent": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325",
+        "proposal": "0x31323068e9e9b8c401a73364ce80ffe780cd99d307002a3a45ff895fe6597859",
+        "approved": [
+          {
+            "resource": "portfolio-notional",
+            "atoms": "600000000"
+          }
+        ]
+      },
+      {
+        "child": "0x853169f0a8fd313b67b624fe948c049a898c5d01fe416e1d80a4483ddb6d1953",
+        "agent": "0xc1de956ecedb0f0040723820d248e999d5c2271c",
+        "proposal": "0x7d5f8933dedbc608867f7528b5b6c4acf3649ffe969b32b9c7cecfd5c5c57de4",
+        "approved": [
+          {
+            "resource": "perp-margin",
+            "atoms": "200400000"
+          },
+          {
+            "resource": "portfolio-notional",
+            "atoms": "400000000"
+          },
+          {
+            "resource": "derivative-notional",
+            "atoms": "400000000"
+          }
+        ]
+      },
+      {
+        "child": "0xb616bdcb2604560c480f0e856d3521f5121d840923eedf9b9484cc7f02d69c96",
+        "agent": "0x82b836ee81df078196f21d53af66bcb5623bf9a8",
+        "proposal": "0x88cb44c7dc996afad6147d8224113b354df580fa900e50842eb6967e318a2128",
+        "approved": [
+          {
+            "resource": "portfolio-notional",
+            "atoms": "300000000"
+          }
+        ]
+      }
+    ],
+    "representationDecisions": [
+      {
+        "representation": "eip155:46630/erc20:0xa7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7",
+        "status": "EXCLUDED",
+        "codes": [
+          "ISSUER_NOT_ALLOWED",
+          "SYNTHETIC_NOT_ALLOWED"
+        ],
+        "proposal": "0x4cd8c36d900717616e00714bf3089946391087dfc6c12a895d8c06967ad57485"
+      },
+      {
+        "representation": "eip155:46630/erc20:0xb1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+        "status": "ADMISSIBLE",
+        "codes": [],
+        "proposal": "0xf784a3ecf2d6ce03b54b64ba9e01312e982e4404e3f1178412520c4cf46853ea"
+      }
+    ],
+    "reservations": [
+      {
+        "child": "0x468c59b53c7078140be95d5f4a3cd9b91217beed7aea586cea75f0800611c216",
+        "status": "RESERVED",
+        "reservation": "0x919e60ab4de49b3e62ecc52de25b30b1ef13bd2211803b3511c0622a295b253c",
+        "authorization": "0x81d72eb42efc5a8d4ca85e02cd5935db1cd9fd4894d83560445282f125596752",
+        "executionAuthorization": "0x82b70f4eda07f3ad349717d2cbc62368031cf0135bff713b657e52397d0df588",
+        "ledgerVersion": "8",
+        "reasons": []
+      },
+      {
+        "child": "0x6983229fbdc2d294a271fad748e0370268bc2bbe07ffdb48abc67e8faa090b5c",
+        "status": "RESERVED",
+        "reservation": "0x73b98ea8fcc2a6a8eb8dd737702aaccebdc5c0fc7a21108a6d6831ba6ac57f2a",
+        "authorization": "0x44cacf65914179acc1c6157afad8f90048be7bd28bbf1823d81a5b218e729343",
+        "executionAuthorization": "0x54aed9f44f2c6e6dbacc750eb3ffc3160a2cf4259a217e4dae37f120c5ca64a4",
+        "ledgerVersion": "9",
+        "reasons": []
+      },
+      {
+        "child": "0x853169f0a8fd313b67b624fe948c049a898c5d01fe416e1d80a4483ddb6d1953",
+        "status": "RESERVED",
+        "reservation": "0x2af30a48c82bea4d5b5345591f704d0a75e9dfced46d4821ceb597ff132798f7",
+        "authorization": "0xad3e8c5475bb42c406deb1b4749b0d20632bdfb3ad628ef9811260bc8d71accc",
+        "executionAuthorization": "0x302c0b4c0debb3214de6558e339eb234ca435116bbaac7593ab12c53d963a155",
+        "ledgerVersion": "10",
+        "reasons": []
+      },
+      {
+        "child": "0xb616bdcb2604560c480f0e856d3521f5121d840923eedf9b9484cc7f02d69c96",
+        "status": "RESERVED",
+        "reservation": "0xb064c6d0590ab0a11164d5e774cbfc04dfb6f536d27ef01ff91459d2e3d552b7",
+        "authorization": "0x9e63a14b728120392eb19991542d48d794a02cad1002e4d503ef2f67a238a811",
+        "executionAuthorization": "0x96236a477b76e73ceafcaf3286a9a3326de7d18b9b6621c95ea4d5337be31e72",
+        "ledgerVersion": "11",
+        "reasons": []
+      }
+    ],
+    "executions": [
+      {
+        "child": "0x468c59b53c7078140be95d5f4a3cd9b91217beed7aea586cea75f0800611c216",
+        "integration": "robinhood-gate-signer.v1",
+        "integrationEvidence": "LIVE_TESTNET",
+        "status": "AWAITING_DOMAIN_SIGNER",
+        "evidence": "OFFCHAIN_ONLY",
+        "attempt": null,
+        "artifact": null,
+        "transactions": 0,
+        "reasons": []
+      },
+      {
+        "child": "0x6983229fbdc2d294a271fad748e0370268bc2bbe07ffdb48abc67e8faa090b5c",
+        "integration": "yield-fixture.v1",
+        "integrationEvidence": "FIXTURE",
+        "status": "SETTLED",
+        "evidence": "SIMULATED",
+        "attempt": "0xd2dc32cb7a6e07564544707d80d0b60a5891396ac28c5b24e3c0d8c643e6a181",
+        "artifact": "0x7fb8f5b46d32a7551b6c5a103dfe9d4cace7fc78c6356b35f6777eec158f405a",
+        "transactions": 0,
+        "reasons": []
+      },
+      {
+        "child": "0x853169f0a8fd313b67b624fe948c049a898c5d01fe416e1d80a4483ddb6d1953",
+        "integration": "lighter-perp-policy.v1",
+        "integrationEvidence": "OFFCHAIN_ONLY",
+        "status": "AWAITING_DOMAIN_SIGNER",
+        "evidence": "OFFCHAIN_ONLY",
+        "attempt": null,
+        "artifact": null,
+        "transactions": 0,
+        "reasons": []
+      },
+      {
+        "child": "0xb616bdcb2604560c480f0e856d3521f5121d840923eedf9b9484cc7f02d69c96",
+        "integration": "swap-fixture.v1",
+        "integrationEvidence": "FIXTURE",
+        "status": "SETTLED",
+        "evidence": "SIMULATED",
+        "attempt": "0x2c0cd529ab234b4dd6100187518a9d52e2997cab2ea332d3d1cf560f7ccb0ef3",
+        "artifact": "0xe199e0ffc7acc68609807f6b7ecf0743968bf6f528b765aefb49e4129e2c2067",
+        "transactions": 0,
+        "reasons": []
+      }
+    ],
+    "transactions": 0
+  }
+}

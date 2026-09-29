@@ -41,3 +41,4 @@ export * from './status.ts';
 export * from './run.ts';
 export * from './domains/executors.ts';
 export * from './domains/stock-custody.ts';
+export * from './view.ts';
