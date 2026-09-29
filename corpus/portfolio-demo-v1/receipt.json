@@ -1,7 +1,7 @@
 {
   "corpusVersion": 1,
   "schema": "PORTFOLIO_RECEIPT.V2",
-  "receiptDigest": "0xa6e88a57b9dcdde75d3731d0b6a33927ffb685bfb469b0d049f50ce010e7778a",
+  "receiptDigest": "0x6d47bd67ee0431991a9c4412ad3215421455f9882fa0793a2f6365fb2641e1ad",
   "receipt": {
     "principal": "0x51f0ff0faae50fa64f0a74a2ff2fee3055765904",
     "portfolioMandate": "0x489abf9f157735aa5b2fe689e45f472f789ef9af47bcb9383f28656cbc8eda3c",
@@ -1735,7 +1735,7 @@
           "notBefore": "1800000990",
           "expiresAt": "1800001291"
         },
-        "action": "0x5dce0584eb3cf50020c7863d4c2f26a0d6addd9bce626deb623e9fa2b6aa7ba6",
+        "action": "0x173a8e84e58ef118414425bce2bf13c466800e63c0ec0bf06627a624cf189a58",
         "approved": [
           {
             "resource": "portfolio-notional",
@@ -1827,7 +1827,7 @@
           "notBefore": "1800000990",
           "expiresAt": "1800004600"
         },
-        "action": "0xa9503f202fe1ee81c9b54fb6a161bd5e49d2a1444ace4e5f1a2ab339e060854d",
+        "action": "0x73d4a3262d3e2d8e374ce71cbb85e9b72dd5011518bd09099908c82e4b0dda15",
         "approved": [
           {
             "resource": "spot-capital",
@@ -1923,7 +1923,7 @@
           "notBefore": "1800000990",
           "expiresAt": "1800004600"
         },
-        "action": "0x7f4e417cebf4b8ad33184315a48bd305610ab9a4a9f6cc11846ebaf7dc1fd918",
+        "action": "0xf6579fc8b6072f864453288dcdee0fd807d21b29ca391861d01d760deed0926a",
         "approved": [
           {
             "resource": "perp-margin",
@@ -2017,7 +2017,7 @@
           "notBefore": "1800000990",
           "expiresAt": "1800001051"
         },
-        "action": "0x771d375a24bfe806b00c7e959822baa39bdb7d6d028131918f395416455f582f",
+        "action": "0x735877ef8085e3ecce42bee84edac294d8326a9965aef76b72a28cb930d1e73f",
         "approved": [
           {
             "resource": "portfolio-notional",
@@ -2049,10 +2049,10 @@
       {
         "child": "0x3aad99d55d8ca738e15b56061bc596e21d66393a398dd82fb8ca767990ff9897",
         "status": "RESERVED",
-        "reservation": "0xa0350d7f11957f8a2d3a0e5a8781fc3990cd626c93ea44cd994f8d2216db6af5",
-        "authorization": "0x35f3fd3df75b23d4acff8ab03254118a80ab53426433fc046ae6b9a7f4aaf83e",
-        "executionAuthorization": "0x0cf917fe16c66956ec6f20402d6d80b6b9cf9db425e91689e8360a116d149630",
-        "action": "0x5dce0584eb3cf50020c7863d4c2f26a0d6addd9bce626deb623e9fa2b6aa7ba6",
+        "reservation": "0x4b87683326ee4f2fc88aff4ac7fd7a045a989ce826982598bad0720c0fb4dcab",
+        "authorization": "0x275a9348595396544bb8be146ba1be9a36708646363dac6c60740fc5fb95717b",
+        "executionAuthorization": "0xc4878b37ec346f0a0f4ecfe37a8b6e16af6b03839e75f215958cc37a89bd02e3",
+        "action": "0x173a8e84e58ef118414425bce2bf13c466800e63c0ec0bf06627a624cf189a58",
         "generation": "1",
         "ledgerVersion": "8",
         "reasons": []
@@ -2060,10 +2060,10 @@
       {
         "child": "0x468c59b53c7078140be95d5f4a3cd9b91217beed7aea586cea75f0800611c216",
         "status": "RESERVED",
-        "reservation": "0x919e60ab4de49b3e62ecc52de25b30b1ef13bd2211803b3511c0622a295b253c",
-        "authorization": "0x93b70f5ef4a6e534040fb11e4432143952a9abceecd45dbf3016130ee7c300fd",
-        "executionAuthorization": "0x1149f2193fd73c31c3685d86c653b578b339b143290d5208de49da8daa31860d",
-        "action": "0xa9503f202fe1ee81c9b54fb6a161bd5e49d2a1444ace4e5f1a2ab339e060854d",
+        "reservation": "0x1bec02e33d4b1464aee643644910aad7c764288c37f9a59a7878286ded783eb4",
+        "authorization": "0x5ffae240ef131e5cac9f125921721d1645410d3ece9c15cd46d4cdb819797bfa",
+        "executionAuthorization": "0x878aad2739247826a5202472f12df3de693c63913342ccaebf736074923a1756",
+        "action": "0x73d4a3262d3e2d8e374ce71cbb85e9b72dd5011518bd09099908c82e4b0dda15",
         "generation": "1",
         "ledgerVersion": "9",
         "reasons": []
@@ -2071,10 +2071,10 @@
       {
         "child": "0x853169f0a8fd313b67b624fe948c049a898c5d01fe416e1d80a4483ddb6d1953",
         "status": "RESERVED",
-        "reservation": "0x2af30a48c82bea4d5b5345591f704d0a75e9dfced46d4821ceb597ff132798f7",
-        "authorization": "0xd4dc7d08de2af13de5617ae9f27b7ec95f2d4e61f7ebadaf02980a963e379210",
-        "executionAuthorization": "0x302c0b4c0debb3214de6558e339eb234ca435116bbaac7593ab12c53d963a155",
-        "action": "0x7f4e417cebf4b8ad33184315a48bd305610ab9a4a9f6cc11846ebaf7dc1fd918",
+        "reservation": "0x63db7851c532d043193f798a0357dd2cd67709359062d6b87364ed3f1fa021db",
+        "authorization": "0xc9e3c39ab67439d129f8a3f4ccc52a237bcd335d9a0e3adf7658ea8aa5d79d55",
+        "executionAuthorization": "0xe9dd5d28decf374cd33b6d217017a495c8eb184820ecd8f8309e1bc626b1725f",
+        "action": "0xf6579fc8b6072f864453288dcdee0fd807d21b29ca391861d01d760deed0926a",
         "generation": "1",
         "ledgerVersion": "10",
         "reasons": []
@@ -2082,10 +2082,10 @@
       {
         "child": "0x88cc891a34c03ab0f9ec63143243d4cecc48338ffc7a9dd18716cda15c387a52",
         "status": "RESERVED",
-        "reservation": "0x8c120220a726a1c04b5ef36fdc84a16dd803f99e0c8a61e8feb76dc82421c970",
-        "authorization": "0x796c0d26d5d367cd241543b062639ee67ad4498ad8223d68f147a62cd79a0e43",
-        "executionAuthorization": "0x9e79f725ba196a6b8b176560ff22337e6927732acf4d70209e6a40d216c206d3",
-        "action": "0x771d375a24bfe806b00c7e959822baa39bdb7d6d028131918f395416455f582f",
+        "reservation": "0x0929f235fbdfad9215918e3e6fb4a08ad73d33540ca0180b084ffbfd9c7f5d0a",
+        "authorization": "0xb1a99bc81e649054a40d6ccafdaf2d234c3c3d94b431c392753b2e4668dd18b5",
+        "executionAuthorization": "0x1c386a39c21b95fc0d152955e3609261ef1eb724fe41d7aea96d526447cbea04",
+        "action": "0x735877ef8085e3ecce42bee84edac294d8326a9965aef76b72a28cb930d1e73f",
         "generation": "1",
         "ledgerVersion": "11",
         "reasons": []
@@ -2098,8 +2098,8 @@
         "integrationEvidence": "FIXTURE",
         "status": "SETTLED",
         "evidence": "SIMULATED",
-        "attempt": "0xffe446280cd7032a766e1bc98fe6e2de17058e6815f3fef197cb9a0b80b8a479",
-        "artifact": "0xe27d5e8e86cd5f970b403af95b3483943c5448b7c37e73effe4fbaac9b45a36e",
+        "attempt": "0x0d87ee74e16226ef36a2f187048e4a41622981ab7b275ad8e0fdf3a4a0d4d856",
+        "artifact": "0xa17e1bef79ead68c5a26e73bba98a5a7a5095b64a05d1d07f28d56ebcf6129f5",
         "transactions": 0,
         "reasons": []
       },
@@ -2131,8 +2131,8 @@
         "integrationEvidence": "FIXTURE",
         "status": "SETTLED",
         "evidence": "SIMULATED",
-        "attempt": "0xcdc415c16f1d633e0f8af6048e346c0e4426a95d653e6077b03862d897b63738",
-        "artifact": "0xf6482e4f40971a79a2b211b4582960252ded0396706b95114feef08f973a76c9",
+        "attempt": "0x5cb53716035b90a4d94cc2ace1dab17152da373e94f2d3e343794afb677eec0d",
+        "artifact": "0x90f8993f561812d110014004ae85b021e1a7f001b72ac83efe335911e9f7aa07",
         "transactions": 0,
         "reasons": []
       }

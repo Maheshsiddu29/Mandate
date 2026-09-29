@@ -471,9 +471,15 @@ signed proposal at reservation time. It does not accept a caller-created
 child or a claimed verifier-membership set. Each verified
 `ChildExecutionAuthorization` is then mapped by its domain binding to one
 Core action envelope — principal, the agent's delegation, the agent as actor,
-the exact module, adapter, market and payload, a nonce derived from the child
-authorization digest, its window — and reserved with
-`ControlEngine.authorizeAndReserve`. Before reserving, the engine's pure
+the exact module, adapter, market and payload, a nonce derived from the
+signed proposal's digest (its first eight bytes), its window — and reserved
+at generation 1 with `ControlEngine.authorizeAndReserve`. The action identity
+is therefore the proposal's: one signed proposal is at most one Core action,
+and the ledger refuses a second reservation of it — whatever state the first
+is in — as `RESERVATION_EXISTS`. (A FIXTURE payload additionally commits the
+child digest; stock and perps payloads are the candidate's, so their action
+identity does not depend even on time-dependent resolution such as registry
+claim freshness.) Before reserving, the engine's pure
 `decide` is run and its ledger demands are compared with the child's
 approved resources (`RESERVATION_DEMAND_MISMATCH` otherwise). The reservation
 is the ledger's single atomic compare-and-swap: five agents reserving at once

@@ -23,8 +23,18 @@
  * Each `ChildExecutionAuthorization` maps to exactly one Core action: the
  * agent's delegation, the agent as actor, the binding's exact module,
  * adapter, target, resources and payload, the child's window, and a nonce
- * taken from the child's digest — so the action's identity commits to the
- * child, and a child cannot be reserved as another.
+ * taken from the digest of the signed proposal it was derived from.
+ *
+ * **One signed proposal, one Core action (F7F1-01).** The proposal digest is
+ * the stable, domain-separated identity of the agent's signed intent — the
+ * mandate, the agent, its sequence and the exact candidate — and never of
+ * when or by whom it was verified. The child is itself a function of the
+ * proposal alone (child.ts), and the FIXTURE payload still commits the
+ * child's digest; taking the nonce from the proposal additionally makes the
+ * action identity of a stock or perps child — whose payload is the
+ * candidate's — independent of any time-dependent resolution (the registry's
+ * claim freshness). The ledger refuses a second reservation of that action
+ * (`RESERVATION_EXISTS`), whatever state the first is in.
  */
 
 import { err, ok, type Result } from '@mandate/kernel';
@@ -163,9 +173,14 @@ export function compilePortfolio(m: PortfolioMandate, bindings: readonly DomainB
   return ok({ mandate: m, policy: policy.value, root: root.value, delegations, bindings, modules: used.map((b) => b.module), adapters: used.map((b) => b.adapter) });
 }
 
-/** The child's nonce: the first eight bytes of its digest. The action's identity therefore commits to the child. */
-export function childNonce(child: ChildExecutionAuthorization): bigint {
-  const bytes = hexToBytes(childAuthorizationDigest(child));
+/**
+ * The Core action nonce of a child: the first eight bytes of the digest of
+ * the signed proposal it was derived from. Never the child digest, never
+ * random and never chosen by the room: the action's identity is the
+ * proposal's.
+ */
+export function actionNonce(child: ChildExecutionAuthorization): bigint {
+  const bytes = hexToBytes(child.proposal);
   let n = 0n;
   for (let i = 0; i < 8; i += 1) n = (n << 8n) | BigInt(bytes[i] as number);
   return n;
@@ -211,7 +226,7 @@ export function compileAction(c: CompiledPortfolio, child: ChildExecutionAuthori
     payloadDigest: payloadDigest.value,
     validFrom: child.notBefore,
     expiresAt: child.expiresAt,
-    nonce: childNonce(child),
+    nonce: actionNonce(child),
   });
   if (!envelope.ok) return err(reason('INSTRUMENT_UNKNOWN', `envelope:${envelope.error.code}@${envelope.error.path}`));
   return ok({ envelope: envelope.value, payload: core.payload, binding: b, delegation, agent });

@@ -6,12 +6,15 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { authorityId, validateAuthorityGrant, type AuthorityTermInput } from '@mandate/core';
+import { actionId, authorityId, validateAuthorityGrant, type AuthorityTermInput } from '@mandate/core';
 import {
+  actionNonce,
   amountOf,
+  authorityScopeInputOf,
   availabilityFrom,
   checkBeforeSign,
   childAuthorizationDigest,
+  childExecutionAuthorizationInputOf,
   compileAction,
   compilePortfolio,
   createPortfolioCore,
@@ -19,6 +22,7 @@ import {
   registerPortfolio,
   reservationPhase,
   reserveChild,
+  validateChildExecutionAuthorization,
   type ChildAuthorizationDigest,
   type CompiledPortfolio,
 } from '../src/index.ts';
@@ -143,7 +147,7 @@ describe('reservation through the control engine', () => {
     assert.ok(again.status === 'REFUSED' && again.reasons.some((x) => x.code.startsWith('LEDGER:') && x.code.includes('RESERVATION_EXISTS')), JSON.stringify(again.status === 'REFUSED' ? again.reasons : []));
   });
 
-  it('the compiled action’s nonce commits to the child: two children never compile to one action', async () => {
+  it('the compiled action’s nonce is its signed proposal’s: two proposals never compile to one action', async () => {
     const w = await world();
     const a = childFor(w.m, 'swap', swap({ amount: USDC(100n) }));
     const b = childFor(w.m, 'swap', swap({ amount: USDC(101n) }));
@@ -151,6 +155,24 @@ describe('reservation through the control engine', () => {
     const cb = compileAction(w.compiled as CompiledPortfolio, b, swap({ amount: USDC(101n) }));
     assert.ok(ca.ok && cb.ok);
     assert.notEqual(ca.value.envelope.nonce, cb.value.envelope.nonce);
+    assert.equal(ca.value.envelope.nonce, BigInt(a.proposal.slice(0, 18)));
+    assert.equal(actionNonce(a), BigInt(a.proposal.slice(0, 18)));
+  });
+
+  it('a stock child re-derived with different time-dependent facts still compiles to its proposal’s one action, and is never reserved', async () => {
+    const w = await world();
+    const candidate = stockBuy({ tenths: 48n });
+    const { child, transcript, record } = await reserved(w, 'stock', candidate);
+    // As if the registry's claim freshness had changed which rights resolve: another child of the same proposal.
+    const drifted = validateChildExecutionAuthorization({ ...childExecutionAuthorizationInputOf(child), scope: { ...authorityScopeInputOf(child.scope), requiredRights: [] } });
+    assert.ok(drifted.ok);
+    assert.notEqual(childAuthorizationDigest(drifted.value), childAuthorizationDigest(child));
+    const a = compileAction(w.compiled as CompiledPortfolio, drifted.value, candidate);
+    assert.ok(a.ok);
+    assert.equal(actionId(a.value.envelope), record.actionId);
+    const again = await reserveChild(w.core, transcript, childAuthorizationDigest(drifted.value), NOW + 1n);
+    assert.ok(again.status === 'REFUSED' && again.reasons.some((x) => x.code === 'CHILD_AUTHORIZATION_UNKNOWN'));
+    assert.equal((await w.core.engine.read(w.m.principal)).state.reservations.size, 1);
   });
 });
 
