@@ -35,3 +35,8 @@ export * from './reservation.ts';
 export * from './domains/fixture-execution.ts';
 export * from './screen.ts';
 export * from './room.ts';
+export * from './verifier.ts';
+export * from './receipt.ts';
+export * from './status.ts';
+export * from './run.ts';
+export * from './domains/executors.ts';

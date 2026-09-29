@@ -476,20 +476,24 @@ A deterministic, canonically encoded record (`PORTFOLIO_RECEIPT.V1`) of one
 portfolio run:
 
 ```text
-PortfolioReceipt {
-  principal, portfolioMandate, policyVersion, allocationMode
-  agents[]            agent, label, final status
-  proposals[]         digest, agent, round, kind, instrument, requested
-  decisions[]         proposal, outcome, target, reason codes (sorted)
-  releases[], claims[]
-  allocationBefore, allocationAfter
-  resourcesBefore, resourcesAfter          per resource: limit, reserved (ledger)
-  childAuthorizations[]                    digests
-  representationDecisions[]                stock candidates: registry verdict and codes
-  reservations[]                           child → reservation, authorization, ledger version
-  executionResults[]                       child → status, evidence class, references, transactions
-  receiptDigest                            keccak of the encoding above
+PortfolioReceipt {                                    PORTFOLIO_RECEIPT.V1
+  principal, portfolioMandate, policyVersion, allocationMode, rounds
+  agents[]                  agent, label, final status (derived, never reported)
+  proposals[]               digest, agent, round, kind, domain, exact representation, venue, requested
+  decisions[]               proposal, round, outcome, reason codes, reduce target,
+                            refusal = NONE | OFFCHAIN_REFUSAL (0 transactions, 0 gas)
+  releases[]                digest, agent, round, applied, reasons
+  allocationBefore/After    the book: entries, lots, operations
+  resourcesBefore/After     the ledger: headroom and reserved per resource, per agent
+  verification              VERIFIED | REFUSED, with reasons
+  childAuthorizations[]     digest, agent, proposal, approved resources
+  representationDecisions[] the registry's verdict and codes for every stock candidate
+  reservations[]            child → reservation, authorization, execution authorization, ledger version
+  executions[]              child → status, this run's evidence class, the integration and its evidence,
+                            attempt, artifact, transactions
+  transactions              onchain transactions the whole run sent
 }
+receiptDigest = keccak(encoding)
 ```
 
 Every list is in canonical order. No prose, no model output and no display
