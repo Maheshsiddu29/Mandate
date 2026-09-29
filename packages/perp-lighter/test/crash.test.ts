@@ -8,6 +8,10 @@
  * the existing attempt (no fresh one), and recovery marks it OUTCOME_UNKNOWN —
  * for an operator and, later, reconciliation. Before ADMIT_ATTEMPT: no attempt
  * exists, and when revalidation fails NEVER_ISSUED closes the reservation.
+ *
+ * Phase 7E.2: after the kill, custody's independent verification still finds
+ * the durable admission in the reopened file; once recovery records the
+ * attempt, custody refuses to sign it again.
  */
 
 import { describe, it } from 'node:test';
@@ -57,11 +61,19 @@ describe('issuance crash behaviour (real SIGKILL)', () => {
           const again = await x.signer.issueAuthorizedPerpOrder(rec, { payload: PAYLOAD, states: states(x.w, { at: T + 30n }), context: context(T + 30n) });
           assert.equal(again.status, 'EXISTING');
           assert.equal(x.custody.signs.length, 0);
+          // Custody's own check reads the admission from the reopened file (the committed artifact, its slot).
+          const admitted = state.attempts.get(attempts[0] as never);
+          assert.ok(admitted !== undefined && admitted.slot !== null);
+          const claim = { attempt: admitted.attempt, reservation: rec.reservation, generation: rec.generation, action: rec.actionId };
+          const committed = [...admitted.artifact.id].map((b) => b.toString(16).padStart(2, '0')).join('');
+          const tx = { type: 'CREATE_ORDER', chainId: 300, accountIndex: 0n, apiKeyIndex: 0, marketIndex: 4096, clientOrderIndex: 0n, baseAmount: 100n, price: BTC_PRICE_LIGHTER, isAsk: 0, orderType: 0, timeInForce: 0, reduceOnly: 0, orderExpiry: 0n, cancelIndex: 0n, expiredAt: admitted.validUntil * 1_000n, nonce: admitted.slot.sequence, selfTradeBehavior: 0, selfTradeEquality: 0 };
+          assert.equal(x.custody.verify(claim, tx, committed), mode === 'after-sign' ? null : 'ATTEMPT_ALREADY_ISSUED');
           // Recovery: the interrupted issuance is OUTCOME_UNKNOWN until evidence says otherwise.
           const report = x.signer.recover();
           assert.deepEqual(report, mode === 'after-sign' ? { unrecorded: 1, interrupted: 0 } : { unrecorded: 0, interrupted: 1 });
           assert.equal(x.journal.get(attempts[0] as never)?.state, 'OUTCOME_UNKNOWN');
           assert.deepEqual(x.signer.recover(), { unrecorded: 0, interrupted: 0 }, 'recovery is idempotent');
+          assert.equal(x.custody.verify(claim, tx, committed), 'ATTEMPT_ALREADY_ISSUED', 'once recorded, custody will not sign the attempt again');
           // Time does not release it.
           const later = await x.w.engine.closeNeverIssued(rec, { payload: PAYLOAD, states: states(x.w, { at: T + 86_400n }), context: context(T + 86_400n) }, ONCE);
           assert.ok(later.status === 'REFUSED' && later.refusal.code === 'NEVER_ISSUED_FORBIDDEN');
