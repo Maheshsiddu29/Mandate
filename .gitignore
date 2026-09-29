@@ -67,3 +67,6 @@ contracts/generated/
 packages/perp-lighter/custody/bin/
 .lighter-testnet/
 *.lighter-key
+
+# Phase 7E.3: disposable Robinhood Chain testnet keys and local run state (never committed)
+.robinhood-testnet/

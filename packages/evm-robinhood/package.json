@@ -1,0 +1,23 @@
+{
+  "name": "@mandate/evm-robinhood",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Robinhood Chain EVM execution domain for Mandate: GateSpotPolicy v1 (a domain module over the frozen Phase 6 MandateExecutionGate), the Robinhood gate signer's adapter descriptor, exact gate-artifact construction, ADMIT_ATTEMPT before key use, and a testnet-only JSON-RPC client. Testnet only in Phase 7E.3.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "dependencies": {
+    "@mandate/control": "0.1.0",
+    "@mandate/core": "0.1.0",
+    "@mandate/execution-gate": "0.1.0",
+    "@mandate/kernel": "0.1.0",
+    "@mandate/ledger": "0.1.0",
+    "@mandate/ledger-sqlite": "0.1.0",
+    "@noble/curves": "2.4.0",
+    "@noble/hashes": "2.4.0"
+  }
+}

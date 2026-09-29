@@ -16,7 +16,8 @@
     "packages/ledger",
     "packages/control",
     "packages/ledger-sqlite",
-    "packages/perp-lighter"
+    "packages/perp-lighter",
+    "packages/evm-robinhood"
   ],
   "scripts": {
     "audit:security": "npm audit --audit-level=high",
