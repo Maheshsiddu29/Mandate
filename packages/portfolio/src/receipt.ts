@@ -7,11 +7,12 @@
  * every registry verdict, every reservation and every execution result with
  * its evidence class. Its digest is keccak-256 of `PORTFOLIO_RECEIPT.V2`.
  *
- * **Nothing in the digest depends on order or prose.** Every list is written
- * in a canonical order (by digest, identifier or party), so reordering the
- * candidate's selections, the proposals or the agents cannot change it; there
- * is no free text, no model output and no display string in it — labels are
- * the mandate's own identifiers, reasons are codes and subjects.
+ * **Only semantic order affects the digest.** Unordered sets are written in a
+ * canonical order (by digest, identifier or party), so reordering the
+ * candidate's selections, the proposals or the agents cannot change it. The
+ * allocation event log keeps its replay-significant order. There is no free
+ * text, model output or display string in the encoding — labels are the
+ * mandate's own identifiers, reasons are codes and subjects.
  */
 
 import { ByteWriter, type Identifier } from '@mandate/kernel';

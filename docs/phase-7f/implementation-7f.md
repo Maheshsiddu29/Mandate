@@ -149,8 +149,9 @@ Run on 2026-09-29 at the phase's final commits:
 
 | Command | Result |
 | --- | --- |
-| `npm run check` | **pass** — 1,740 TypeScript tests across all packages (1,576 before this phase + 164), fixtures, replays, cross-surface, credential scan (671 tracked files; the 3 disposable testnet keys checked by value), junk check |
+| `npm run check` | **pass** — 1,748 TypeScript tests in 714 suites across all packages, fixtures, replays, cross-surface (60 checks: 54 match, 5 not comparable, 1 unavailable, 0 mismatch), credential scan (675 tracked files; the 3 disposable testnet keys checked by value), junk check |
 | `npm run generated:check` | **pass** — every earlier corpus and generated document regenerates without drift (including frozen `core-v1`, `control-v1`, `gate-v1`); the new `portfolio-demo-v1` is reproduced byte for byte |
+| `npm run portfolio:demo` | **pass** — verification `VERIFIED`, four children reserved, exact Receipt V2 digest `0x4ab95270652f56891dc0bddedf2d90fb953c48db31e9053cfc839f23fa91a615`, 0 transactions |
 | `npm audit --audit-level=high` | **pass** — 0 vulnerabilities |
 | `git diff <phase start> -- packages/{kernel,core,ledger,control,registry,execution-gate,evm-robinhood,perp-lighter,ledger-sqlite,…} contracts docs/phase-7e docs/core-v1 corpus/<existing>` | **empty**: nothing frozen or deployed changed |
 | `forge fmt`, `forge build`, `forge test`, fuzz, invariants, `slither .` | **not run**: no contract, script or Solidity dependency was touched in this phase (the gate's behaviour here is exercised through the Phase 6 reference model the frozen differential corpus proves equal to it) |
