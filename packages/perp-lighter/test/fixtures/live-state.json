@@ -1,0 +1,150 @@
+{
+  "about": "Phase 7E.2 live state adapter fixtures. Each: endpoint, network, capture date, SDK/API version, how it was derived, the raw (sanitized) response body exactly as a string, and what the adapter normalizes it to.",
+  "fixtures": [
+    {
+      "name": "account-7-cross-position",
+      "meta": {
+        "endpoint": "GET /api/v1/account?by=index&value=7",
+        "network": "Lighter testnet (L2 chain id 300), https://testnet.zklighter.elliot.ai",
+        "capturedAt": "2026-09-29T03:51:04Z",
+        "sdkApi": "REST /api/v1; apidocs.lighter.xyz reference; lighter-go v1.0.10 (9d38261d); lighter-python 1.1.4 (a38b6405) models",
+        "derivation": "LIVE",
+        "sanitization": "l1_address replaced with the zero address; otherwise byte-for-byte"
+      },
+      "http": 200,
+      "raw": "{\"code\":200,\"total\":1,\"accounts\":[{\"code\":0,\"account_type\":0,\"index\":7,\"l1_address\":\"0x0000000000000000000000000000000000000000\",\"cancel_all_time\":0,\"total_order_count\":0,\"total_isolated_order_count\":0,\"pending_order_count\":0,\"available_balance\":\"9957.176234\",\"status\":1,\"collateral\":\"9997.578346\",\"transaction_time\":1790636901846252,\"account_trading_mode\":1,\"account_index\":7,\"name\":\"\",\"description\":\"\",\"can_invite\":true,\"referral_points_percentage\":\"\",\"can_rfq\":true,\"can_rfq_market_ids\":[],\"agent_enabled\":false,\"created_at\":0,\"metadata\":{\"color\":\"\"},\"positions\":[{\"market_id\":4095,\"symbol\":\"ETH\",\"initial_margin_fraction\":\"5.00\",\"open_order_count\":0,\"pending_order_count\":0,\"position_tied_order_count\":0,\"sign\":-1,\"position\":\"0.3715\",\"avg_entry_price\":\"2691.68\",\"position_value\":\"990.820220\",\"unrealized_pnl\":\"9.138900\",\"realized_pnl\":\"0.000000\",\"liquidation_price\":\"29252.03736853585\",\"total_funding_paid_out\":\"0.000000\",\"margin_mode\":0,\"margin_set_flag\":1,\"allocated_margin\":\"0.000000\"}],\"bo_positions\":[],\"assets\":[{\"symbol\":\"ETH\",\"asset_id\":1,\"balance\":\"3.00000000\",\"locked_balance\":\"0.00000000\",\"margin_mode\":\"disabled\",\"margin_balance\":\"0.00000000\",\"multiplier\":\"1.000000000000000000\"},{\"symbol\":\"LIT\",\"asset_id\":2,\"balance\":\"1000000.00000000\",\"locked_balance\":\"0.00000000\",\"margin_mode\":\"disabled\",\"margin_balance\":\"0.00000000\",\"multiplier\":\"1.000000000000000000\"},{\"symbol\":\"USDC\",\"asset_id\":3,\"balance\":\"0.000000\",\"locked_balance\":\"0.000000\",\"margin_mode\":\"enabled\",\"margin_balance\":\"9997.57834627459\",\"multiplier\":\"1.000000000000000000\"}],\"total_asset_value\":\"10006.717245\",\"cross_asset_value\":\"10006.717245\",\"cross_initial_margin_requirement\":\"49.541011\",\"cross_maintenance_margin_requirement\":\"11.889843\",\"shares\":[],\"pending_unlocks\":[]}]}",
+      "normalized": {
+        "ok": true,
+        "value": {
+          "accountIndex": "7",
+          "collateral": "9997578346",
+          "availableBalance": "9957176234",
+          "positions": [
+            {
+              "marketIndex": 4095,
+              "size": "-3715",
+              "marginMode": "CROSS",
+              "initialMarginFraction": 500,
+              "allocatedMargin": "0"
+            }
+          ],
+          "counts": {
+            "total": 0,
+            "pending": 0,
+            "perMarket": [
+              {
+                "marketIndex": 4095,
+                "open": 0,
+                "pending": 0
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "active-orders-no-auth",
+      "meta": {
+        "endpoint": "GET /api/v1/accountActiveOrders?account_index=7&market_id=4095 (no auth)",
+        "network": "Lighter testnet (L2 chain id 300), https://testnet.zklighter.elliot.ai",
+        "capturedAt": "2026-09-29T03:51:04Z",
+        "sdkApi": "REST /api/v1; apidocs.lighter.xyz reference; lighter-go v1.0.10 (9d38261d); lighter-python 1.1.4 (a38b6405) models",
+        "derivation": "LIVE",
+        "sanitization": "none"
+      },
+      "http": 400,
+      "raw": "{\"code\":20001,\"message\":\"invalid param : auth query param and Authorization header are empty\"}",
+      "normalized": {
+        "ok": false,
+        "reason": "ORDERS_AUTH_MISSING"
+      }
+    },
+    {
+      "name": "active-orders-invalid-token",
+      "meta": {
+        "endpoint": "GET /api/v1/accountActiveOrders?account_index=7&market_id=4095 (Authorization: an invalid ro: token)",
+        "network": "Lighter testnet (L2 chain id 300), https://testnet.zklighter.elliot.ai",
+        "capturedAt": "2026-09-29T04:10:51Z",
+        "sdkApi": "REST /api/v1; apidocs.lighter.xyz reference; lighter-go v1.0.10 (9d38261d); lighter-python 1.1.4 (a38b6405) models",
+        "derivation": "LIVE",
+        "sanitization": "none (the token sent was a deliberately invalid placeholder)"
+      },
+      "http": 401,
+      "raw": "{\"code\":20013,\"message\":\"invalid auth: invalid auth string\"}",
+      "normalized": {
+        "ok": false,
+        "reason": "ORDERS_AUTH_REJECTED"
+      }
+    },
+    {
+      "name": "active-orders-one-open",
+      "meta": {
+        "endpoint": "GET /api/v1/accountActiveOrders?account_index=281474976710600&market_id=4096 (read-only auth)",
+        "network": "Lighter testnet (L2 chain id 300), https://testnet.zklighter.elliot.ai",
+        "capturedAt": null,
+        "sdkApi": "REST /api/v1; apidocs.lighter.xyz reference; lighter-go v1.0.10 (9d38261d); lighter-python 1.1.4 (a38b6405) models",
+        "derivation": "SCHEMA_DERIVED: every field of lighter-python 1.1.4 models/order.py (Order) and models/orders.py (Orders); values illustrative. Not observed live: an authenticated read of a funded account with a resting order needs sanctioned testnet access (E-3)",
+        "sanitization": "n/a"
+      },
+      "http": 200,
+      "raw": "{\"code\":200,\"next_cursor\":\"\",\"orders\":[{\"order_index\":281474976710657,\"client_order_index\":912345,\"order_id\":\"281474976710657\",\"client_order_id\":\"912345\",\"market_index\":4096,\"owner_account_index\":281474976710600,\"initial_base_amount\":\"0.00100\",\"price\":\"83000.0\",\"nonce\":3,\"remaining_base_amount\":\"0.00100\",\"is_ask\":false,\"base_size\":100,\"base_price\":830000,\"filled_base_amount\":\"0.00000\",\"filled_quote_amount\":\"0.000000\",\"side\":\"buy\",\"type\":\"limit\",\"time_in_force\":\"good-till-time\",\"reduce_only\":false,\"trigger_price\":\"0.0\",\"order_expiry\":1790640000000,\"status\":\"open\",\"trigger_status\":\"na\",\"trigger_time\":0,\"parent_order_index\":0,\"parent_order_id\":\"0\",\"to_trigger_order_id_0\":\"0\",\"to_trigger_order_id_1\":\"0\",\"to_cancel_order_id_0\":\"0\",\"block_height\":1000,\"timestamp\":1790636900,\"created_at\":1790636900000,\"updated_at\":1790636900000,\"transaction_time\":1790636900000000,\"integrator_fee_collector_index\":\"0\",\"integrator_maker_fee\":\"0\",\"integrator_taker_fee\":\"0\",\"order_flags\":0}]}",
+      "normalized": {
+        "ok": true,
+        "value": [
+          {
+            "marketIndex": 4096,
+            "clientOrderIndex": "912345",
+            "isAsk": false,
+            "remainingBaseAmount": "100",
+            "price": "830000",
+            "reduceOnly": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "active-orders-empty",
+      "meta": {
+        "endpoint": "GET /api/v1/accountActiveOrders?account_index=281474976710600&market_id=4096 (read-only auth)",
+        "network": "Lighter testnet (L2 chain id 300), https://testnet.zklighter.elliot.ai",
+        "capturedAt": null,
+        "sdkApi": "REST /api/v1; apidocs.lighter.xyz reference; lighter-go v1.0.10 (9d38261d); lighter-python 1.1.4 (a38b6405) models",
+        "derivation": "SCHEMA_DERIVED: lighter-python 1.1.4 models/orders.py (Orders) with an empty list. Not observed live (E-3)",
+        "sanitization": "n/a"
+      },
+      "http": 200,
+      "raw": "{\"code\":200,\"next_cursor\":\"\",\"orders\":[]}",
+      "normalized": {
+        "ok": true,
+        "value": []
+      }
+    },
+    {
+      "name": "order-book-details-marks",
+      "meta": {
+        "endpoint": "GET /api/v1/orderBookDetails",
+        "network": "Lighter testnet (L2 chain id 300), https://testnet.zklighter.elliot.ai",
+        "capturedAt": "2026-09-28T23:33:38.850Z",
+        "sdkApi": "REST /api/v1; apidocs.lighter.xyz reference; lighter-go v1.0.10 (9d38261d); lighter-python 1.1.4 (a38b6405) models",
+        "derivation": "LIVE: the raw response is testnet-order-book-details.json (pinned there by digest); normalized here are its mark/index prices as USD at 2 decimals, rounded up, at a 100 bp divergence bound",
+        "sanitization": "none"
+      },
+      "http": 200,
+      "raw": null,
+      "normalized": {
+        "4095": {
+          "ok": true,
+          "value": "269106"
+        },
+        "4096": {
+          "ok": true,
+          "value": "8358890"
+        },
+        "4097": {
+          "ok": true,
+          "value": "11880"
+        }
+      }
+    }
+  ]
+}
