@@ -55,7 +55,7 @@ export function scope(o: Partial<AuthorityScopeInput> = {}): AuthorityScopeInput
     issuers: ['issuer.fixture.alpha'],
     recipients: [`eip155:46630/account:${PRINCIPAL.value}`, `eip155:421614/account:${PRINCIPAL.value}`, 'lighter:300/account:281474976710600'],
     syntheticPolicy: 'FORBIDDEN',
-    requiredRights: ['ECONOMIC_EXPOSURE'],
+    requiredRights: [],
     maxLeverage: { numerator: 3n, scale: 0 },
     maxSlippageBps: 100,
     maxQuoteAgeSeconds: 120n,
@@ -85,7 +85,7 @@ export function mandateInput(o: Partial<PortfolioMandateInput> = {}): PortfolioM
     ],
     agents: [
       agent(STOCK_KEY, 'stock', {
-        scope: scope({ domains: ['robinhood-evm'], actions: ['STOCK_BUY'], chains: ['eip155:46630'], venues: ['eip155:46630/gate:0x000000000000000000000000000000000000a7e0'], assets: [NVDA], representations: ['eip155:46630/erc20:0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1'], recipients: [`eip155:46630/account:${PRINCIPAL.value}`], maxLeverage: null, maxSlippageBps: null, maxQuoteAgeSeconds: null }),
+        scope: scope({ domains: ['robinhood-evm'], actions: ['STOCK_BUY'], chains: ['eip155:46630'], venues: ['eip155:46630/gate:0x000000000000000000000000000000000000a7e0'], assets: [NVDA], representations: ['eip155:46630/erc20:0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1'], recipients: [`eip155:46630/account:${PRINCIPAL.value}`], requiredRights: ['ECONOMIC_EXPOSURE'], maxLeverage: null, maxSlippageBps: null, maxQuoteAgeSeconds: null }),
         hardMaxima: [{ resource: 'portfolio-notional', atoms: USDC6(800n) }, { resource: 'spot-capital', atoms: USDC6(800n) }],
         preferred: [{ resource: 'portfolio-notional', atoms: USDC6(500n) }],
       }),

@@ -21,3 +21,5 @@ export * from './scope.ts';
 export * from './mandate.ts';
 export * from './candidate.ts';
 export * from './proposal.ts';
+export * from './authority.ts';
+export * from './child.ts';

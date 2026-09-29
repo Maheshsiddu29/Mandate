@@ -262,14 +262,24 @@ A resource the parent does not limit may be limited by a child — an added
 restriction — but never unlimited: an undeclared resource is refused. Every
 violation is reported, not only the first.
 
-`permits(scope, action)` is the one function that says whether a resolved
-action (§8) is inside a scope. It is monotone by construction, and the
-property tests establish:
+An execution is represented as the **singleton scope** of its one resolved
+action (§8): `{domain}`, `{kind}`, `{chain}`, `{venue}`, `{asset}`,
+`{representation}`, `{issuer}`, `{recipient}`, the synthetic policy its
+instrument needs, the rights it establishes, and its own leverage, slippage
+and quote age as bounds. So one function, `checkChildScope`, decides every
+level — portfolio ⊇ agent ⊇ execution — and `permits(scope, action)` is that
+same check under action-level names (`CHILD_WIDENS_VENUES` becomes
+`VENUE_NOT_ALLOWED`, and so on), plus each swap-route pool against the allowed
+venues. The property tests establish, over a seeded generator:
 
 - **subset soundness:** `checkChildScope(parent, child) = ∅ ∧ permits(child, a)
   ⇒ permits(parent, a)`;
 - **monotonic tightening:** adding any restriction to a scope never makes a
-  previously refused action permitted.
+  previously refused action permitted, and never removes a refusal;
+- **detection:** any single widening of a scope is caught, and a child drawn
+  inside its parent always checks clean;
+- **limits:** a child resource limit passes exactly when it is declared and
+  ≤ the parent's limit of the same resource.
 
 ## 8. Action candidates and identity resolution
 
@@ -530,11 +540,11 @@ refusals are carried verbatim with a `REGISTRY:` or `LEDGER:` prefix.
 
 | Group | Codes |
 | --- | --- |
-| mandate | `PORTFOLIO_MANDATE_MALFORMED`, `PORTFOLIO_MANDATE_SIGNATURE_INVALID`, `PORTFOLIO_MANDATE_DIGEST_MISMATCH`, `PORTFOLIO_MANDATE_NOT_YET_VALID`, `PORTFOLIO_MANDATE_EXPIRED` |
+| mandate | `PORTFOLIO_MANDATE_MALFORMED`, `PORTFOLIO_MANDATE_SIGNATURE_INVALID`, `PORTFOLIO_MANDATE_DIGEST_MISMATCH`, `PORTFOLIO_MANDATE_NOT_YET_VALID`, `PORTFOLIO_MANDATE_EXPIRED`, `PREFERRED_EXCEEDS_HARD_MAXIMUM`, `PREFERRED_EXCEEDS_PORTFOLIO_LIMIT`, `ALLOCATION_MODE_VIOLATION` |
 | agent | `AGENT_UNKNOWN`, `AGENT_SIGNATURE_INVALID`, `AGENT_NOT_YET_VALID`, `AGENT_EXPIRED` |
 | proposal | `PROPOSAL_MALFORMED`, `PROPOSAL_NOT_YET_VALID`, `PROPOSAL_EXPIRED`, `PROPOSAL_REPLAYED`, `PROPOSAL_EXTENSION_UNKNOWN`, `PROPOSAL_RESOURCES_MISDECLARED`, `PROPOSAL_MINIMUM_INVALID` |
 | identity | `INSTRUMENT_UNKNOWN`, `IDENTITY_CLAIM_MISMATCH`, `REGISTRY:<code>` |
-| scope | `DOMAIN_NOT_ALLOWED`, `ACTION_NOT_ALLOWED`, `CHAIN_NOT_ALLOWED`, `VENUE_NOT_ALLOWED`, `ROUTE_NOT_ALLOWED`, `ASSET_NOT_ALLOWED`, `REPRESENTATION_NOT_ALLOWED`, `ISSUER_NOT_ALLOWED`, `RECIPIENT_NOT_ALLOWED`, `SYNTHETIC_NOT_ALLOWED`, `LEVERAGE_NOT_ALLOWED`, `SLIPPAGE_NOT_ALLOWED`, `QUOTE_NOT_ALLOWED`, `QUOTE_STALE` |
+| scope | `DOMAIN_NOT_ALLOWED`, `ACTION_NOT_ALLOWED`, `CHAIN_NOT_ALLOWED`, `VENUE_NOT_ALLOWED`, `ROUTE_NOT_ALLOWED`, `ASSET_NOT_ALLOWED`, `REPRESENTATION_NOT_ALLOWED`, `ISSUER_NOT_ALLOWED`, `RECIPIENT_NOT_ALLOWED`, `SYNTHETIC_NOT_ALLOWED`, `REQUIRED_RIGHT_MISSING`, `LEVERAGE_NOT_ALLOWED`, `SLIPPAGE_NOT_ALLOWED`, `QUOTE_NOT_ALLOWED`, `QUOTE_STALE` |
 | resources | `RESOURCE_UNDECLARED`, `RESOURCE_INCOMPARABLE`, `AGENT_LIMIT_EXCEEDED`, `PORTFOLIO_LIMIT_EXCEEDED`, `ALLOCATION_INSUFFICIENT` |
 | allocation | `RELEASE_EXCEEDS_UNUSED`, `RELEASE_ALREADY_APPLIED`, `CLAIM_NOT_PERMITTED_IN_MODE`, `CLAIM_ALREADY_APPLIED`, `LOT_UNKNOWN`, `LOT_EXHAUSTED`, `COMMIT_EXCEEDS_ALLOCATION` |
 | derivation | `CHILD_WIDENS_DOMAINS`, `CHILD_WIDENS_ACTIONS`, `CHILD_WIDENS_CHAINS`, `CHILD_WIDENS_VENUES`, `CHILD_WIDENS_ASSETS`, `CHILD_WIDENS_REPRESENTATIONS`, `CHILD_WIDENS_ISSUERS`, `CHILD_WIDENS_RECIPIENTS`, `CHILD_WIDENS_SYNTHETIC_POLICY`, `CHILD_DROPS_REQUIRED_RIGHT`, `CHILD_WIDENS_LEVERAGE`, `CHILD_WIDENS_SLIPPAGE`, `CHILD_WIDENS_QUOTE_AGE`, `CHILD_WIDENS_WINDOW`, `CHILD_RESOURCE_UNDECLARED`, `CHILD_WIDENS_RESOURCE_LIMIT` |
