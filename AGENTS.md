@@ -60,8 +60,12 @@ testnet only, labelled fixtures only — is run on testnet and awaiting review.
 Testnet commands (`npm run robinhood:testnet:deploy|demo|verify`) are explicit
 only and need the gitignored disposable keys in `.robinhood-testnet/`; never
 run them, or any other chain write, without explicit authorization, and never
-against a mainnet (the package refuses one). **Phase 7F is not started**
-and must not begin until explicitly opened. **Phase 6 is
+against a mainnet (the package refuses one). **Phase 7F** — the Portfolio
+Mandate and multi-agent coordination layer, `packages/portfolio`
+([docs/phase-7f](docs/phase-7f/README.md),
+[ADR 0027](docs/adr/0027-portfolio-mandate-layer.md)) — was opened by the
+owner on 2026-09-29 and is in progress: offline only, above Core and compiled
+into it, changing nothing frozen. **Phase 6 is
 frozen at `dc98df5`**; nothing in Phase 7 may modify
 MCE v2, Candidate V3, the gate, its libraries, fixture or replay semantics, or
 any canonical vector. Before it came **Phase 6R.2B** (secure gas optimization:

@@ -38,6 +38,7 @@ Status values: `Proposed`, `Accepted`, `Superseded by ADR NNNN`, `Rejected`.
 | [0024](0024-version-bound-domain-module-interface.md) | A pure, version-bound DomainModule interface | Proposed |
 | [0025](0025-control-package-and-authorization-boundary.md) | The control package and the authorization orchestration boundary | Proposed |
 | [0026](0026-worst-case-projection-over-pending-reservations.md) | Worst-case projection over every unresolved reservation | Proposed |
+| [0027](0027-portfolio-mandate-layer.md) | A Portfolio Mandate layer above Core, compiled into Core | Proposed |
 
 The canonical product specification remains
 [docs/mandate-design.md](../mandate-design.md). ADRs record *how* a specified

@@ -634,14 +634,26 @@ committed-notional limit. USDG (official on testnet, but an upgradeable proxy
 the frozen token policy prohibits) is deferred to 7E.4. Reconciliation stays
 7F.
 
-### Phase 7F — Cross-domain reconciliation: EVM fixture and perps
+### Phase 7F — Portfolio Mandate and multi-agent coordination
 
-**Delivers** the EVM adapter over the frozen gate and one principal ledger
-shared across the EVM fixture and perps.
+**Opened by the owner on 2026-09-29, in progress.** One principal, five
+specialized agents (stock, swap, NFT, yield, perps), one authority: a
+principal-signed Portfolio Mandate with typed resources and three allocation
+modes, compiled into Core grants; a deterministic, authority-free Mandate
+Room; a Portfolio Verifier; reservation through the unchanged control engine;
+deterministic receipts and a UI data contract
+([phase-7f/](phase-7f/README.md), [ADR 0027](adr/0027-portfolio-mandate-layer.md)).
+Offline; nothing frozen changes.
+
+### Cross-domain reconciliation (previously planned as 7F) — unscheduled
+
+**Delivers** settlement reconciliation for the EVM gate and perps: consuming
+and releasing reservations on observed outcomes.
 **Exit:** examples A–C of [core-v1/examples.md](core-v1/examples.md) run as
 tests; and, from 7D (corrected in 7D.1), RECON-1…5 and TIME-1's
 external/finality part, established by randomized reconciliation properties
-with duplicated, reordered and stale observations.
+with duplicated, reordered and stale observations. Deferred when the owner
+opened 7F as the portfolio phase; its number is the owner's to assign.
 
 ### Phase 7G — Developer SDK and simulator
 
@@ -707,7 +719,8 @@ to the product, and belongs in the design documents before it belongs in code.
 | 7C | Authority Graph + Global Authority Ledger (meet, effective lineage, AUTH-2) | 7B | **FROZEN ✓** |
 | 7D | Invariant + Reservation Engine (executable `DomainModule` interface) | 7C | **FROZEN ✓** — with 7D.1 hardening, 7D.2 provenance and 7D.3 immutable authority semantics (observation reconciliation → 7F, issuance → 7E) |
 | 7E | PerpPolicy v1 and Venue Signer; Robinhood EVM domain | 7D | 7E.0–7E.2 accepted; **7E.3 run on Robinhood Chain testnet, awaiting review** (testnet only) |
-| 7F | Cross-domain reconciliation: EVM fixture and perps | 7E | planned |
+| 7F | Portfolio Mandate and multi-agent coordination | 7E | **opened 2026-09-29, in progress** (offline) |
+| — | Cross-domain reconciliation (formerly 7F) | 7E | unscheduled |
 | 7G | Developer SDK and simulator | 7F | planned |
 | 7H | Receipts and authority provenance | 7F | planned |
 | 8+ | Validated domain modules | 7H | future |
