@@ -264,14 +264,14 @@ async function main(): Promise<void> {
 
     log('4. replay: the byte-identical call, re-broadcast');
     const replayCall = await chain.call(gate, call.calldata);
-    const replay = await mined(chain, deployer, gate, call.calldata, 'replay', { gasLimit: 1_500_000n });
+    const replay = await mined(chain, deployer, gate, call.calldata, 'replay', { gasLimit: 3_000_000n });
     log(`   ${replay.receipt.status} — ${replayCall.ok ? 'UNEXPECTED SUCCESS' : errorName(replayCall.revert)}`);
 
     log('5. mutation: quantity + 1 with the original signatures');
     const at = call.attempt;
     const mutated = executeCalldata(at.mandate, at.principalSignature, { ...at.candidate, quantity: { ...at.candidate.quantity, atoms: at.candidate.quantity.atoms + 1n } }, at.terms, at.agentSignature);
     const mutatedCall = await chain.call(gate, mutated);
-    const mutatedTx = await mined(chain, deployer, gate, mutated, 'amount mutation', { gasLimit: 1_500_000n });
+    const mutatedTx = await mined(chain, deployer, gate, mutated, 'amount mutation', { gasLimit: 3_000_000n });
     log(`   ${mutatedTx.receipt.status} — ${mutatedCall.ok ? 'UNEXPECTED SUCCESS' : errorName(mutatedCall.revert)}`);
     const recipientCall = await chain.call(gate, executeCalldata(at.mandate, at.principalSignature, at.candidate, { ...at.terms, recipient: agent }, at.agentSignature));
     const targetCall = await chain.call(gate, executeCalldata(at.mandate, at.principalSignature, { ...at.candidate, representationId: `eip155:46630/erc20:${market.fundingToken}` }, at.terms, at.agentSignature));
