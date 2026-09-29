@@ -24,7 +24,7 @@ import { childAuthorizationDigest, type ChildAuthorizationDigest, type ChildExec
 import { compileAction } from '../compile.ts';
 import { FIXTURE_ARTIFACT_KIND } from './fixture.ts';
 import { reason, type Reason } from '../reasons.ts';
-import { checkBeforeSign, ledgerRefusal, type PortfolioCore } from '../reservation.ts';
+import { PORTFOLIO_GENERATION, checkBeforeSign, ledgerRefusal, type PortfolioCore } from '../reservation.ts';
 import type { ResourceVector } from '../resources.ts';
 import type { VerificationTranscript } from '../verifier.ts';
 
@@ -63,6 +63,8 @@ export async function executeFixtureChild(
   const b = bindingFor(core.compiled.bindings, candidate.kind);
   if ('refused' in b) return err([b.refused]);
   if (b.evidence !== 'FIXTURE') return err([reason('INSTRUMENT_UNKNOWN', `not-a-fixture:${b.domain}`)]);
+  // Refused before any attempt is admitted; checkBeforeSign enforces the same independently.
+  if (record.generation !== PORTFOLIO_GENERATION) return err([reason('RESERVATION_GENERATION_INVALID', `reservation:${record.generation}`)]);
   const adapter = validateAdapterRef(b.adapter);
   const account = validateResourceId({ domain: b.domain, kind: 'ACCOUNT', localId: child.scope.recipients[0] ?? 'none' }, ['ACCOUNT'] as const, 'venueAccount');
   if (!adapter.ok || !account.ok) return err([reason('INSTRUMENT_UNKNOWN', 'fixture-adapter')]);

@@ -9,14 +9,29 @@
  * therefore reserve generation 2 of a Portfolio child's exact action, outside
  * Portfolio's reservation path, and hand it to Portfolio's pre-sign check.
  *
- * This file first records the pre-fix behavior; the fixing commit turns each
- * assertion into the fail-closed property while keeping the same inputs.
+ * Generation 1 is Portfolio policy, not Core's: `checkBeforeSign` now
+ * requires both the claimed and the reserved generation to be
+ * `PORTFOLIO_GENERATION`, and `executeFixtureChild` refuses before admitting
+ * any attempt. Core's own generation semantics are unchanged — the direct
+ * generation 2 below is still AUTHORIZED by Core — and it can never be
+ * signed or settled as a Portfolio child.
  */
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { AuthorizationRecord } from '@mandate/control';
-import { compileAction, executeFixtureChild, requestFor, reserveChild, type ActionCandidate, type PortfolioCore, type VerifiedChild } from '../src/index.ts';
+import {
+  PORTFOLIO_GENERATION,
+  checkBeforeSign,
+  compileAction,
+  defaultExecutor,
+  executeFixtureChild,
+  requestFor,
+  reserveChild,
+  type ActionCandidate,
+  type PortfolioCore,
+  type VerifiedChild,
+} from '../src/index.ts';
 import { USDC } from '../src/demo/index.ts';
 import { NOW, stockBuy, yieldDeposit } from './support/candidates.ts';
 import { gateWorld } from './support/gate.ts';
@@ -43,33 +58,39 @@ async function directGenerationTwo(core: PortfolioCore, verified: VerifiedChild,
 }
 
 describe('LOW-1: a direct Core generation 2 of a Portfolio action at the signing boundary', () => {
-  it('yield (FIXTURE): Portfolio refuses the replay, but executeFixtureChild accepts a directly reserved generation 2', async () => {
+  it('yield (FIXTURE): the replay is RESERVATION_EXISTS; a directly reserved generation 2 is refused before any attempt, execution or settlement', async () => {
     const w = await world();
     const candidate = yieldDeposit({ amount: USDC(100n) });
     const signed = proposal(w.m, 'yield', candidate);
     const first = authorizationForSigned(w.m, 'yield', signed, NOW);
     const reserved = await reserveChild(w.core, first.transcript, first.verified.digest, NOW);
     assert.ok(reserved.status === 'RESERVED');
-    assert.equal(reserved.record.generation, 1n);
+    assert.equal(reserved.record.generation, PORTFOLIO_GENERATION);
     await closeNeverIssued(w.core, first.verified, reserved.record, NOW + 1n);
 
     // Through Portfolio the same signed proposal stays spent.
     const again = authorizationForSigned(w.m, 'yield', signed, NOW + 2n);
     assert.deepEqual(codes(await reserveChild(w.core, again.transcript, again.verified.digest, NOW + 2n)), ['LEDGER:REQUEST_INVALID/RESERVATION_EXISTS']);
 
-    // Directly through Core it does not: generation 2 of the same action.
+    // Directly through Core, generation 2 of the same action is still Core's to grant (unchanged)…
     const gen2 = await directGenerationTwo(w.core, again.verified, candidate, NOW + 2n);
     assert.equal(gen2.actionId, reserved.record.actionId);
 
-    // PRE-FIX: the Portfolio pre-sign check passes and the fixture settles a second time.
+    // …but it is never a Portfolio reservation: no attempt, no pre-sign pass, no settlement.
     const executed = await executeFixtureChild(w.core, again.transcript, again.verified.child, candidate, gen2, NOW + 5n);
-    assert.ok(executed.ok);
+    assert.ok(!executed.ok);
+    assert.deepEqual(executed.error.map((r) => r.code), ['RESERVATION_GENERATION_INVALID']);
+    const settled = await defaultExecutor(w.core)(again.verified, gen2, NOW + 5n, again.transcript);
+    assert.equal(settled.status, 'FAILED');
+    assert.deepEqual(settled.reasons.map((r) => r.code), ['RESERVATION_GENERATION_INVALID']);
+    assert.equal(settled.transactions, 0);
+    assert.equal(settled.attempt, null);
     const s = (await w.core.engine.read(w.m.principal)).state;
     assert.equal(s.reservations.size, 2);
-    assert.equal(s.attempts.size, 1);
+    assert.equal(s.attempts.size, 0);
   });
 
-  it('stock, through the real custody: a directly reserved generation 2 reaches the principal key', async () => {
+  it('stock, through the real custody: a directly reserved generation 2 never reaches the principal key', async () => {
     const g = await gateWorld();
     try {
       const m = g.core.compiled.mandate;
@@ -85,12 +106,61 @@ describe('LOW-1: a direct Core generation 2 of a Portfolio action at the signing
       const compiled = compileAction(g.core.compiled, first.verified.child, candidate);
       assert.ok(compiled.ok);
       const issued = await g.signer.issueAuthorizedBuy(gen2, { payload: compiled.value.payload, states: g.binding.states(candidate, NOW + 5n), context: { evaluationTime: NOW + 5n, sources: [...g.binding.sources()], blockHeads: [], sequenceWatermarks: [] } });
-      // PRE-FIX: the key signs and the gate executes.
-      assert.equal(issued.status, 'ISSUED');
-      assert.equal(g.keyUses(), 1);
-      assert.equal(g.chain.txs.length, 1);
+      assert.notEqual(issued.status, 'ISSUED');
+      assert.equal(g.keyUses(), 0);
+      assert.equal(g.chain.txs.length, 0);
+
+      // The unchanged Phase 7E.3 signer admitted its attempt before custody; with the exact attempt, the only reason left is the generation.
+      const state = g.store.readCommitted(first.verified.child.principal).state;
+      const attempt = [...state.attempts.values()].find((a) => a.reservation === gen2.reservation);
+      assert.ok(attempt !== undefined);
+      const claim = { agent: first.verified.child.agent, child: first.verified.child, candidate, reservation: gen2.reservation, action: gen2.actionId, generation: gen2.generation, authorization: gen2.executionId, attempt: attempt.attempt, at: NOW + 5n };
+      assert.deepEqual(checkBeforeSign(g.core, first.transcript, claim, state).map((r) => [r.code, r.subject]), [
+        ['RESERVATION_GENERATION_INVALID', 'claim:2'],
+        ['RESERVATION_GENERATION_INVALID', 'reservation:2'],
+      ]);
+      // Claiming generation 1 against the generation-2 reservation does not help.
+      assert.deepEqual(checkBeforeSign(g.core, first.transcript, { ...claim, generation: PORTFOLIO_GENERATION }, state).map((r) => r.code), ['ATTEMPT_NOT_COMMITTED', 'RESERVATION_GENERATION_INVALID', 'RESERVATION_MISSING']);
     } finally {
       g.close();
     }
+  });
+});
+
+describe('generation 1 is unaffected', () => {
+  it('the exact generation-1 path executes; claiming generation 2 for it is refused; its replay stays RESERVATION_EXISTS', async () => {
+    const w = await world();
+    const candidate = yieldDeposit({ amount: USDC(100n) });
+    const signed = proposal(w.m, 'yield', candidate);
+    const first = authorizationForSigned(w.m, 'yield', signed, NOW);
+    const reserved = await reserveChild(w.core, first.transcript, first.verified.digest, NOW);
+    assert.ok(reserved.status === 'RESERVED');
+    const executed = await executeFixtureChild(w.core, first.transcript, first.verified.child, candidate, reserved.record, NOW + 5n);
+    assert.ok(executed.ok, executed.ok ? '' : JSON.stringify(executed.error));
+    const state = (await w.core.engine.read(w.m.principal)).state;
+    const claim = { agent: first.verified.child.agent, child: first.verified.child, candidate, reservation: reserved.record.reservation, action: reserved.record.actionId, generation: reserved.record.generation, authorization: reserved.record.executionId, attempt: executed.value.attempt.attempt, at: NOW + 5n };
+    assert.deepEqual(checkBeforeSign(w.core, first.transcript, claim, state), []);
+    // Claim generation 2 against the generation-1 reservation.
+    assert.deepEqual(checkBeforeSign(w.core, first.transcript, { ...claim, generation: 2n as never }, state).map((r) => [r.code, r.subject]), [
+      ['ATTEMPT_NOT_COMMITTED', executed.value.attempt.attempt],
+      ['RESERVATION_GENERATION_INVALID', 'claim:2'],
+      ['RESERVATION_MISSING', reserved.record.reservation],
+    ]);
+    const again = authorizationForSigned(w.m, 'yield', signed, NOW + 1n);
+    assert.deepEqual(codes(await reserveChild(w.core, again.transcript, again.verified.digest, NOW + 1n)), ['LEDGER:REQUEST_INVALID/RESERVATION_EXISTS']);
+  });
+
+  it('Core outside Portfolio: generation 2 while generation 1 is open is refused, and after a close is granted — as before', async () => {
+    const w = await world();
+    const candidate = yieldDeposit({ amount: USDC(100n) });
+    const first = authorizationForSigned(w.m, 'yield', proposal(w.m, 'yield', candidate), NOW);
+    const reserved = await reserveChild(w.core, first.transcript, first.verified.digest, NOW);
+    assert.ok(reserved.status === 'RESERVED');
+    const request = requestFor(w.core, first.verified.child, candidate, NOW + 1n);
+    assert.ok(request.ok);
+    const open = await w.core.engine.authorizeAndReserve({ ...request.value, generation: 2n }, { maxAttempts: 1 });
+    assert.ok(open.status !== 'AUTHORIZED' && open.refusal.reason === 'PREVIOUS_GENERATION_OPEN', JSON.stringify(open.status));
+    await closeNeverIssued(w.core, first.verified, reserved.record, NOW + 1n);
+    assert.equal((await directGenerationTwo(w.core, first.verified, candidate, NOW + 2n)).generation, 2n);
   });
 });

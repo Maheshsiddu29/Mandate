@@ -144,18 +144,28 @@ export type ReserveOutcome =
   | { readonly status: 'REFUSED'; readonly reasons: readonly Reason[] };
 
 /**
+ * The only reservation generation Portfolio uses or signs for. Core admits a
+ * later generation of an action once the previous one is closed — a Core
+ * feature for callers that retry an action — but a Portfolio child is one
+ * signed proposal, reserved at most once, ever: a retry is a new signed
+ * proposal. Portfolio policy, enforced where it reserves (`requestFor`) and,
+ * independently, where a key could be used (`checkBeforeSign`).
+ */
+export const PORTFOLIO_GENERATION = 1n as ReservationGeneration;
+
+/**
  * The authorization request for a child at `at`: its compiled action, fresh
- * state and the binding's sources. Always generation 1: a portfolio child is
- * reserved at most once, ever. Its action identity is its signed proposal's
- * (compile.ts), so the ledger refuses a second reservation — active,
- * admitted, closed or consumed — as `RESERVATION_EXISTS`. A retry after a
- * pre-execution failure is a new signed proposal, never a new identity for
- * the old one.
+ * state and the binding's sources. Always `PORTFOLIO_GENERATION`: a portfolio
+ * child is reserved at most once, ever. Its action identity is its signed
+ * proposal's (compile.ts), so the ledger refuses a second reservation —
+ * active, admitted, closed or consumed — as `RESERVATION_EXISTS`. A retry
+ * after a pre-execution failure is a new signed proposal, never a new
+ * identity or generation for the old one.
  */
 export function requestFor(core: PortfolioCore, child: ChildExecutionAuthorization, candidate: ActionCandidate, at: bigint): Result<AuthorizationRequest, Reason> {
   const a = compileAction(core.compiled, child, candidate);
   if (!a.ok) return a;
-  return ok({ action: a.value.envelope, payload: a.value.payload, generation: 1n, states: a.value.binding.states(candidate, at), context: { evaluationTime: at, sources: [...a.value.binding.sources()], blockHeads: [], sequenceWatermarks: [] } });
+  return ok({ action: a.value.envelope, payload: a.value.payload, generation: PORTFOLIO_GENERATION, states: a.value.binding.states(candidate, at), context: { evaluationTime: at, sources: [...a.value.binding.sources()], blockHeads: [], sequenceWatermarks: [] } });
 }
 
 /**
@@ -227,7 +237,10 @@ export interface SignClaim {
  * 2. the party asking is the child's own agent;
  * 3. the action is byte-for-byte the one the child compiles to (no mutation);
  * 4. the reservation is ACTIVE, is that action's, and holds exactly the approved demand;
- * 5. an ADMIT_ATTEMPT for it is durably committed.
+ * 5. both the claimed and the reserved generation are `PORTFOLIO_GENERATION`
+ *    — a later generation of the same action, which Core can admit after a
+ *    close, is never a Portfolio reservation, however it was made;
+ * 6. an ADMIT_ATTEMPT for it is durably committed.
  *
  * The domain signer then runs its own checks (Robinhood custody re-derives
  * the gate artifact from the committed attempt).
@@ -242,7 +255,9 @@ export function checkBeforeSign(core: PortfolioCore, transcript: VerificationTra
   const compiled = compileAction(core.compiled, claim.child, claim.candidate);
   if (!compiled.ok) found.push(compiled.error);
   else if (actionId(compiled.value.envelope) !== claim.action) found.push(reason('CHILD_ACTION_MUTATED', 'action'));
+  if (claim.generation !== PORTFOLIO_GENERATION) found.push(reason('RESERVATION_GENERATION_INVALID', `claim:${claim.generation}`));
   const r = state.reservations.get(claim.reservation);
+  if (r !== undefined && r.generation !== PORTFOLIO_GENERATION) found.push(reason('RESERVATION_GENERATION_INVALID', `reservation:${r.generation}`));
   if (r === undefined || r.status !== 'ACTIVE' || r.action !== claim.action || r.generation !== claim.generation) found.push(reason('RESERVATION_MISSING', claim.reservation));
   else {
     const held = demandedResources(core.compiled, r.module.domainId, r.demands.map((d) => ({ quantity: { ...d.contribution.quantity, atoms: d.reserved - d.consumed - d.released } })));
