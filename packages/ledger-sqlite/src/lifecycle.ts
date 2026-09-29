@@ -15,7 +15,7 @@
  * effect at the next decision or attempt.
  */
 
-import type { DatabaseSync, StatementSync } from 'node:sqlite';
+import { DatabaseSync, type StatementSync } from 'node:sqlite';
 import { validateAdapterRef, validateModuleRef, type AdapterRef, type ImplementationDigest, type ModuleRef } from '@mandate/core';
 import type { AdapterRegistration, AdapterRegistry, AdapterStatus, ModuleRegistration, ModuleRegistry, ModuleStatus } from '@mandate/ledger';
 import { textColumn, type SqlRow, type SqliteLedgerStore } from './store.ts';
@@ -27,8 +27,9 @@ export class LifecycleTable {
   readonly #upsert: StatementSync;
   readonly #get: StatementSync;
 
-  constructor(store: SqliteLedgerStore) {
-    this.#db = store.database;
+  /** Over the store's own connection, or — so registries can exist before the store is built — a connection of its own. */
+  constructor(store: SqliteLedgerStore | DatabaseSync) {
+    this.#db = store instanceof DatabaseSync ? store : store.database;
     this.#db.exec(`
       CREATE TABLE IF NOT EXISTS lifecycle (
         kind TEXT NOT NULL,
@@ -62,6 +63,16 @@ export class LifecycleTable {
     const status = STATUSES.find((s) => s === textColumn(row, 'status'));
     return status === undefined ? null : { ref: textColumn(row, 'ref'), status, implementations: textColumn(row, 'implementations') };
   }
+}
+
+/** A lifecycle table on its own connection to the ledger file (WAL; the store may be opened after it). */
+export function openLifecycle(path: string): { table: LifecycleTable; close: () => void } {
+  if (path === '' || path === ':memory:') throw new Error('the lifecycle table is durable: a file path is required');
+  const db = new DatabaseSync(path);
+  db.exec('PRAGMA busy_timeout = 5000');
+  db.exec('PRAGMA journal_mode = WAL');
+  db.exec('PRAGMA synchronous = FULL');
+  return { table: new LifecycleTable(db), close: () => db.close() };
 }
 
 export class DurableModuleRegistry implements ModuleRegistry {

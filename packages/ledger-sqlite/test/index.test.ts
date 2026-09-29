@@ -9,7 +9,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { validateModuleRef } from '@mandate/core';
-import { decodeBatch, type ImplementationDigest } from '@mandate/ledger';
+import { decodeBatch } from '@mandate/ledger';
+import type { ImplementationDigest } from '@mandate/core';
 import { DurableAdapterRegistry, DurableModuleRegistry, LifecycleTable, SqliteLedgerStore, type SqlRow } from '../src/index.ts';
 import { ADAPTER, PRINCIPAL, SETUP, admission, admitEvent, digestOf, must, reserveEvent, tempDb } from './support/world.ts';
 
