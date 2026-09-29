@@ -1,0 +1,26 @@
+{
+  "name": "@mandate/portfolio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Phase 7F: the Portfolio Mandate and multi-agent coordination layer above Mandate Core. A principal-signed PORTFOLIO_MANDATE.V1 with typed resources and allocation modes, parent-to-child authority derivation, a deterministic authority-free Mandate Room, a Portfolio Verifier, compilation into Core grants and reservation through the unchanged control engine, and deterministic receipts. Offline; no network, clock or key.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./demo": "./src/demo/index.ts"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "dependencies": {
+    "@mandate/control": "0.1.0",
+    "@mandate/core": "0.1.0",
+    "@mandate/evm-robinhood": "0.1.0",
+    "@mandate/execution-gate": "0.1.0",
+    "@mandate/kernel": "0.1.0",
+    "@mandate/ledger": "0.1.0",
+    "@mandate/perp-lighter": "0.1.0",
+    "@mandate/registry": "0.1.0",
+    "@noble/curves": "2.4.0",
+    "@noble/hashes": "2.4.0"
+  }
+}

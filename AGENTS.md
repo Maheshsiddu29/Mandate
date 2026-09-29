@@ -115,7 +115,7 @@ authorization.
 
 The dependency directions are `adapter → registry → kernel`,
 `router → registry → kernel`, `jev → router → registry → kernel`,
-`execution-gate → kernel`, `core → kernel`, `ledger → core → kernel`, `control → ledger → core → kernel`, `ledger-sqlite → ledger → core` and `perp-lighter → control, ledger-sqlite, ledger, core, kernel` and `evm-robinhood → control, ledger-sqlite, ledger, core, execution-gate, kernel`, never the reverse, and it is enforced by structural tests
+`execution-gate → kernel`, `core → kernel`, `ledger → core → kernel`, `control → ledger → core → kernel`, `ledger-sqlite → ledger → core` and `perp-lighter → control, ledger-sqlite, ledger, core, kernel` and `evm-robinhood → control, ledger-sqlite, ledger, core, execution-gate, kernel` and `portfolio → evm-robinhood, perp-lighter, control, ledger, registry, execution-gate, core, kernel`, never the reverse, and it is enforced by structural tests
 ([ADR 0004](docs/adr/0004-registry-package-boundary.md),
 [ADR 0012](docs/adr/0012-jev-closed-set-authority-boundary.md)). The kernel,
 registry and router perform no I/O; the Robinhood adapter and the Jev client
