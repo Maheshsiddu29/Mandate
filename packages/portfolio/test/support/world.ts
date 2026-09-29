@@ -109,7 +109,15 @@ export function principalSignature(m: PortfolioMandate): string {
 
 /** A complete verifier transcript and the exact child it derives for one proposal. */
 export function authorizationFor(m: PortfolioMandate, role: string, candidate: ActionCandidate, at: bigint = NOW): { readonly transcript: VerificationTranscript; readonly verified: VerifiedChild } {
-  const signed = proposal(m, role, candidate);
+  return authorizationForSigned(m, role, proposal(m, role, candidate), at);
+}
+
+/**
+ * The same, for one exact, already-signed proposal: the room (with the other
+ * agents releasing their preferred allocation) and the verifier, both at `at`.
+ * Re-running it at another `at` presents byte-identical signed input.
+ */
+export function authorizationForSigned(m: PortfolioMandate, role: string, signed: SignedProposal, at: bigint = NOW): { readonly transcript: VerificationTranscript; readonly verified: VerifiedChild } {
   const agents: ScriptedAgent[] = [new ScriptedAgent(role, [[1, { kind: 'PROPOSE', signed }]])];
   for (const policy of m.agents) {
     if (policy.label === role) continue;
