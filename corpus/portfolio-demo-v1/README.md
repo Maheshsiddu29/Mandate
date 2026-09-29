@@ -11,7 +11,7 @@ A new, versioned corpus. No earlier corpus is changed.
 | File | What |
 | --- | --- |
 | `mandate.json` | the demonstration's `PORTFOLIO_MANDATE.V1`: its canonical encoding (hex), digest, and the principal's signature (a publicly derived demonstration key) |
-| `receipt.json` | the demonstration run's `PORTFOLIO_RECEIPT.V1` and its digest: proposals, decisions, releases, allocation and ledger before and after, child authorizations, registry verdicts, reservations, executions and their evidence classes |
+| `receipt.json` | the demonstration run's `PORTFOLIO_RECEIPT.V2` and its digest: the complete mandate, exact candidates/actions, ordered allocation events, ledger before and after, child authorizations, registry verdicts, reservations, executions and their evidence classes |
 | `view.json` | the UI data contract for that run (docs/phase-7f/portfolio-mandate.md §14): timeline, per-agent statuses, one row per proposal, resources, domains and their evidence classes |
 | `vectors.json` | screening vectors: 30 signed proposals — every shape the demonstration and the security tests use — with the outcome (`PASS`, `REDUCE`, `REFUSED`), reason codes and subjects, the registry's verdict, and the approved resources |
 
