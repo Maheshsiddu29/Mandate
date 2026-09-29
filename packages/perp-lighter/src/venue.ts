@@ -125,3 +125,51 @@ export class HttpVenueClient implements VenueClient {
     }
   }
 }
+
+// --- Live state reads (Phase 7E.2) ----------------------------------------------------------
+
+/** One raw read: exactly what came back, or why nothing did. `endpoint` never carries the auth token. */
+export type RawRead =
+  | { readonly ok: true; readonly endpoint: string; readonly status: number; readonly body: string }
+  | { readonly ok: false; readonly endpoint: string; readonly error: string };
+
+/** The state adapter's reads: account, market metadata with marks, and one market's active orders. */
+export interface StateClient {
+  account(accountIndex: bigint): Promise<RawRead>;
+  orderBookDetails(): Promise<RawRead>;
+  /** `token` is a read-only auth token; it travels in the `Authorization` header, never the URL. */
+  activeOrders(accountIndex: bigint, marketIndex: number, token: string): Promise<RawRead>;
+}
+
+export class HttpStateClient implements StateClient {
+  readonly #base: string;
+  readonly #timeoutMs: number;
+
+  constructor(baseUrl: string, timeoutMs = 10_000) {
+    const url = new URL(baseUrl);
+    if (url.protocol !== 'https:' || !TESTNET_HOSTS.includes(url.hostname)) throw new VenueHostRefused(url.hostname);
+    this.#base = `${url.origin}/api/v1`;
+    this.#timeoutMs = timeoutMs;
+  }
+
+  async #get(endpoint: string, token: string | null): Promise<RawRead> {
+    try {
+      const res = await fetch(`${this.#base}${endpoint}`, { headers: token === null ? {} : { Authorization: token }, signal: AbortSignal.timeout(this.#timeoutMs) });
+      return { ok: true, endpoint, status: res.status, body: await res.text() };
+    } catch (e) {
+      return { ok: false, endpoint, error: e instanceof Error ? e.name : 'FETCH_FAILED' };
+    }
+  }
+
+  account(accountIndex: bigint): Promise<RawRead> {
+    return this.#get(`/account?by=index&value=${accountIndex}`, null);
+  }
+
+  orderBookDetails(): Promise<RawRead> {
+    return this.#get('/orderBookDetails', null);
+  }
+
+  activeOrders(accountIndex: bigint, marketIndex: number, token: string): Promise<RawRead> {
+    return this.#get(`/accountActiveOrders?account_index=${accountIndex}&market_id=${marketIndex}`, token);
+  }
+}
