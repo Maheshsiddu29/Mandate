@@ -17,8 +17,16 @@ import {
   registerPortfolio,
   resolveCandidate,
   resourceVectorInputOf,
+  mandateSigningHash,
+  releaseDigest,
+  releaseSigningHash,
   validateAgentProposal,
+  validateAgentRelease,
   type ActionCandidate,
+  type AgentMessage,
+  type AgentStrategy,
+  type RoomFeedback,
+  type SignedRelease,
   type AgentPolicy,
   type ChildExecutionAuthorization,
   type CompiledPortfolio,
@@ -78,4 +86,33 @@ export function childFor(m: PortfolioMandate, role: string, candidate: ActionCan
   const d = deriveChildAuthorization(m, proposal(m, role, candidate).proposal, r.action, at);
   if (!d.ok) assert.fail(`derive: ${JSON.stringify(d.reasons)}`);
   return d.value;
+}
+
+/** A signed release of `amounts` whole USDC per resource by `role`. */
+export function release(m: PortfolioMandate, role: string, amounts: readonly (readonly [string, bigint])[], sequence = 1n): SignedRelease {
+  const r = validateAgentRelease({ portfolioMandate: portfolioMandateDigest(m), agent: demoParty(role), sequence, amounts: amounts.map(([resource, whole]) => ({ resource, atoms: whole * 1_000_000n })) });
+  if (!r.ok) assert.fail(`release: ${r.error.code} at ${r.error.path}`);
+  return { release: r.value, signature: signPrehash(releaseSigningHash(releaseDigest(r.value)), demoKey(role)) };
+}
+
+/** The principal's signature over the mandate. */
+export function principalSignature(m: PortfolioMandate): string {
+  return signPrehash(mandateSigningHash(portfolioMandateDigest(m)), demoKey('principal'));
+}
+
+/** An agent that sends a fixed message per round and idles otherwise; it records the feedback it gets. */
+export class ScriptedAgent implements AgentStrategy {
+  readonly agent: { kind: string; value: string };
+  readonly script: ReadonlyMap<number, AgentMessage>;
+  readonly heard: RoomFeedback[] = [];
+
+  constructor(role: string, script: readonly (readonly [number, AgentMessage])[]) {
+    this.agent = demoParty(role);
+    this.script = new Map(script);
+  }
+
+  act(round: number, feedback: RoomFeedback): AgentMessage {
+    this.heard.push(feedback);
+    return this.script.get(round) ?? { kind: 'IDLE' };
+  }
 }
