@@ -24,3 +24,7 @@ export * from './proposal.ts';
 export * from './authority.ts';
 export * from './child.ts';
 export * from './allocation.ts';
+export * from './binding.ts';
+export * from './domains/fixture.ts';
+export * from './domains/stock.ts';
+export * from './domains/perps.ts';

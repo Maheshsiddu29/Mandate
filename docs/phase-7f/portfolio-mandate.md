@@ -122,7 +122,7 @@ The demonstration's resources:
 | `derivative-notional` | `NOTIONAL` | USDC, 6 | `lighter-perp` | 400 | portfolio-wide derivative exposure |
 | `illiquid-notional` | `NOTIONAL` | USDC, 6 | `nft-fixture` | 400 | portfolio-wide illiquid-asset exposure |
 | `spot-capital` | `CAPITAL` | USDC, 6 | `robinhood-evm` | 800 | GateSpotPolicy requires a capital dimension |
-| `perp-margin` | `MARGIN` | USDC, 6 | `lighter-perp` | 300 | perp margin is never spot capital |
+| `perp-margin` | `MARGIN` | USDC, 6 | `lighter-perp` | 400 | perp margin is never spot capital |
 
 ## 4. The Portfolio Mandate v1 object
 
@@ -146,7 +146,8 @@ AgentPolicy {
   scope            AuthorityScope           ⊆ the portfolio's scope
   notBefore        i64                      ⊆ the portfolio's window
   expiresAt        i64
-  hardMaxima       ResourceLimit[]          each ≤ the portfolio limit of the same resource
+  hardMaxima       ResourceLimit[]          each ≤ the portfolio limit of the same resource; an
+                                            unlisted resource is bounded by the portfolio limit alone
   preferred        ResourceLimit[]          PREALLOCATED: the allocation; HYBRID: preferred; DYNAMIC: empty
 }
 
@@ -228,10 +229,11 @@ or a refusal:
   `RELEASE_EXCEEDS_UNUSED`.
 - `claim(agent, claimId, lot, amount)` — `DYNAMIC` and `HYBRID` only
   (`CLAIM_NOT_PERMITTED_IN_MODE`); `amount ≤ lot.remaining` (`LOT_EXHAUSTED`)
-  and `allocated + amount ≤ hardMax` (`AGENT_LIMIT_EXCEEDED`). A claim id is
+  and `allocated + amount ≤` the agent's cap — its listed hard maximum, or
+  the portfolio limit where it lists none (`AGENT_LIMIT_EXCEEDED`). A claim id is
   applied once. A lot's amount can therefore be reassigned **exactly once**.
 - The invariant after every operation: `Σ allocated + Σ lot.remaining =
-  portfolio limit`, `committed ≤ allocated ≤ hardMax` per agent.
+  portfolio limit`, `committed ≤ allocated ≤ cap` per agent.
 
 ## 7. Parent → child authority
 
@@ -258,9 +260,14 @@ mechanically at three levels, each by code, never by comment:
 | window | `parent.notBefore ≤ child.notBefore`, `child.expiresAt ≤ parent.expiresAt` | `CHILD_WIDENS_WINDOW` |
 | resource maximum | declared resource; child ≤ parent limit of the same resource | `CHILD_RESOURCE_UNDECLARED`, `CHILD_WIDENS_RESOURCE_LIMIT` |
 
-A resource the parent does not limit may be limited by a child — an added
-restriction — but never unlimited: an undeclared resource is refused. Every
-violation is reported, not only the first.
+Portfolio limits are closed-world: a resource the portfolio does not limit
+has limit zero, so no agent may hold any of it, and an undeclared resource is
+refused. An agent's hard maxima are ceilings *under* those limits: a resource
+the agent does not list is bounded by the portfolio limit alone. That is
+exactly Core's rule for ledger dimensions — a child need not restate one,
+because the parent's leg is charged regardless — and it is what lets an
+agent's action be locally valid yet exceed a portfolio-wide limit such as
+derivative exposure. Every violation is reported, not only the first.
 
 An execution is represented as the **singleton scope** of its one resolved
 action (§8): `{domain}`, `{kind}`, `{chain}`, `{venue}`, `{asset}`,

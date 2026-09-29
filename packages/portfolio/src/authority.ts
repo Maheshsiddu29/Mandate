@@ -32,7 +32,7 @@ import { compareRatios, type DomainId, type Ratio } from '@mandate/core';
 import type { RightKind } from '@mandate/registry';
 import type { AgentPolicy, PortfolioMandate } from './mandate.ts';
 import { canonicalReasons, reason, type Reason, type ReasonCode } from './reasons.ts';
-import { amountOf, exceeding, resourceTable, undeclared, type ResourceVector } from './resources.ts';
+import { amountOf, exceeding, exceedingListed, resourceTable, undeclared, type ResourceVector } from './resources.ts';
 import { SCOPE_SETS, assetKey, setKeys, validateAuthorityScope, type ActionKind, type AuthorityScope, type ScopeSet } from './scope.ts';
 
 const WIDENS: { readonly [S in ScopeSet]: ReasonCode } = {
@@ -84,11 +84,17 @@ export function checkChildWindow(parent: Window, child: Window): readonly Reason
   return child.notBefore < parent.notBefore || child.expiresAt > parent.expiresAt ? [reason('CHILD_WIDENS_WINDOW', 'window')] : [];
 }
 
-/** Closed world: a resource the parent does not limit has limit zero, so any positive child limit in it widens. */
-export function checkChildLimits(parentLimits: ResourceVector, childLimits: ResourceVector, declared: ReadonlySet<string>): readonly Reason[] {
+/**
+ * A child's resource limits against its parent's. Against the portfolio the
+ * parent is closed-world (`closed`): a resource the portfolio does not limit
+ * has limit zero, so any positive child limit in it widens. Against an agent
+ * only the ceilings the agent lists apply: the portfolio's closed-world
+ * limits still bound the rest.
+ */
+export function checkChildLimits(parentLimits: ResourceVector, childLimits: ResourceVector, declared: ReadonlySet<string>, closed = true): readonly Reason[] {
   const found: Reason[] = [];
   for (const a of childLimits) if (!declared.has(a.resource)) found.push(reason('CHILD_RESOURCE_UNDECLARED', a.resource));
-  for (const r of exceeding(childLimits, parentLimits)) if (declared.has(r)) found.push(reason('CHILD_WIDENS_RESOURCE_LIMIT', r));
+  for (const r of closed ? exceeding(childLimits, parentLimits) : exceedingListed(childLimits, parentLimits)) if (declared.has(r)) found.push(reason('CHILD_WIDENS_RESOURCE_LIMIT', r));
   return found;
 }
 
@@ -117,7 +123,7 @@ export function checkPortfolioMandate(m: PortfolioMandate): readonly Reason[] {
   for (const a of m.agents) {
     found.push(...checkAgentPolicy(m, a));
     found.push(...prefixed(a.agent.value, undeclared(a.preferred, table)));
-    for (const r of exceeding(a.preferred, a.hardMaxima)) found.push(reason('PREFERRED_EXCEEDS_HARD_MAXIMUM', `${a.agent.value}/${r}`));
+    for (const r of exceedingListed(a.preferred, a.hardMaxima)) found.push(reason('PREFERRED_EXCEEDS_HARD_MAXIMUM', `${a.agent.value}/${r}`));
     if (m.allocationMode === 'DYNAMIC' && a.preferred.length > 0) found.push(reason('ALLOCATION_MODE_VIOLATION', `${a.agent.value}/preferred`));
   }
   for (const d of m.resources) {

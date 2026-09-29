@@ -91,7 +91,11 @@ export type AgentPolicy = Tagged<
     readonly scope: AuthorityScope;
     readonly notBefore: bigint;
     readonly expiresAt: bigint;
-    /** Closed world: a resource with no entry has hard maximum zero. */
+    /**
+     * The agent's own ceilings, each ≤ the portfolio limit of the same resource. A resource the agent
+     * does not list is bounded by the portfolio limit alone — exactly Core's rule that a child need not
+     * restate a ledger dimension because the parent's leg is charged regardless (authority-model.md §4).
+     */
     readonly hardMaxima: ResourceVector;
     /** PREALLOCATED: the allocation. HYBRID: the preferred allocation. DYNAMIC: empty. */
     readonly preferred: ResourceVector;

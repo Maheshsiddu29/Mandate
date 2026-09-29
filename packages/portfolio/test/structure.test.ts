@@ -66,6 +66,15 @@ describe('portfolio structural boundary', () => {
     for (const { file, text } of SOURCES.filter((s) => !s.file.startsWith('demo/'))) assert.doesNotMatch(text, /secp256k1\.sign|getPublicKey/, file);
   });
 
+  it('the portfolio layer is domain-agnostic: only bindings name a domain package, and only the demonstration uses fixture data', () => {
+    for (const { file, text } of SOURCES) {
+      const layer = file.includes('/') ? file.split('/')[0] : 'core';
+      // index.ts is the package surface: it re-exports the bindings, it implements nothing.
+      if (layer === 'core' && file !== 'index.ts') assert.doesNotMatch(text, /@mandate\/(?:evm-robinhood|perp-lighter)|\.\/(?:domains|demo)\//, file);
+      if (layer !== 'demo') assert.doesNotMatch(text, /@mandate\/registry\/testing|\.\.\/demo\//, file);
+    }
+  });
+
   it('nothing below it depends on it', () => {
     for (const p of ['kernel', 'core', 'registry', 'ledger', 'control', 'ledger-sqlite', 'execution-gate', 'evm-robinhood', 'perp-lighter']) {
       assert.doesNotMatch(readFileSync(new URL(`packages/${p}/package.json`, REPO), 'utf8'), /@mandate\/portfolio/, p);

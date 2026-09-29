@@ -42,7 +42,7 @@ import { PortfolioTag, decodePortfolio, portfolioDigest, portfolioWriter } from 
 import { agentPolicyOf, portfolioMandateDigest, type PortfolioMandate, type PortfolioMandateDigest } from './mandate.ts';
 import { proposalDigest, type AgentProposal, type ProposalDigest } from './proposal.ts';
 import { canonicalReasons, reason, type Reason } from './reasons.ts';
-import { exceeding, readResourceVectorInput, resourceVectorInputOf, validateResourceVector, writeResourceVector, type ResourceAmountInput, type ResourceVector } from './resources.ts';
+import { exceeding, exceedingListed, readResourceVectorInput, resourceVectorInputOf, validateResourceVector, writeResourceVector, type ResourceAmountInput, type ResourceVector } from './resources.ts';
 import { authorityScopeInputOf, readAuthorityScopeInput, validateAuthorityScope, writeAuthorityScope, type AuthorityScope, type AuthorityScopeInput } from './scope.ts';
 
 export type ChildAuthorizationDigest = Tagged<Digest32, 'ChildAuthorizationDigest'>;
@@ -166,8 +166,8 @@ export function childExecutionAuthorizationInputOf(c: ChildExecutionAuthorizatio
  * Level 2 (and, redundantly, level 1) of the subset rule for one child:
  * bound to this mandate and principal; its agent is one of the mandate's;
  * its scope ⊆ the agent's scope and ⊆ the portfolio's; its window ⊆ both;
- * its approved resources declared and ≤ the agent's hard maxima and ≤ the
- * portfolio limits. Every violation, canonical order.
+ * its approved resources declared, ≤ every hard maximum the agent lists and
+ * ≤ the portfolio's closed-world limits. Every violation, canonical order.
  */
 export function checkChildAuthorization(m: PortfolioMandate, c: ChildExecutionAuthorization): readonly Reason[] {
   const found: Reason[] = [];
@@ -178,7 +178,7 @@ export function checkChildAuthorization(m: PortfolioMandate, c: ChildExecutionAu
   const declared = new Set<string>(m.resources.map((d) => d.resource));
   found.push(...checkChildScope(agent.scope, c.scope), ...checkChildScope(m.scope, c.scope));
   found.push(...checkChildWindow(agent, c), ...checkChildWindow(m, c));
-  found.push(...checkChildLimits(agent.hardMaxima, c.approved, declared), ...checkChildLimits(m.limits, c.approved, declared));
+  found.push(...checkChildLimits(agent.hardMaxima, c.approved, declared, false), ...checkChildLimits(m.limits, c.approved, declared));
   return canonicalReasons(found);
 }
 
@@ -199,7 +199,7 @@ export function deriveChildAuthorization(
   const agent = agentPolicyOf(m, p.agent);
   if (agent === null) return { ok: false, reasons: [reason('AGENT_UNKNOWN', p.agent.value)] };
   const found: Reason[] = [...permits(agent.scope, a, now), ...permits(m.scope, a, now)];
-  for (const r of exceeding(a.demand, agent.hardMaxima)) found.push(reason('AGENT_LIMIT_EXCEEDED', r));
+  for (const r of exceedingListed(a.demand, agent.hardMaxima)) found.push(reason('AGENT_LIMIT_EXCEEDED', r));
   for (const r of exceeding(a.demand, m.limits)) found.push(reason('PORTFOLIO_LIMIT_EXCEEDED', r));
   const notBefore = [p.createdAt, agent.notBefore, m.notBefore].reduce((x, y) => (x > y ? x : y));
   const expiresAt = [p.expiresAt, agent.expiresAt, m.expiresAt].reduce((x, y) => (x < y ? x : y));

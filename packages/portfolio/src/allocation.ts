@@ -17,7 +17,8 @@
  *           DYNAMIC:              allocated = 0; the whole limit is one lot
  * COMMIT    committed + x ≤ allocated                       one commit per proposal
  * RELEASE   x ≤ allocated − committed; allocated −= x; x becomes a new lot    one per release id
- * CLAIM     DYNAMIC and HYBRID only; x ≤ lot.remaining; allocated + x ≤ hard maximum    one per claim id
+ * CLAIM     DYNAMIC and HYBRID only; x ≤ lot.remaining; allocated + x ≤ the agent's cap    one per claim id
+ *           (its listed hard maximum, or the portfolio limit where it lists none)
  * invariant Σ allocated + Σ lot.remaining = portfolio limit; committed ≤ allocated
  * ```
  *
@@ -31,6 +32,14 @@ import { partyIdsEqual, writeParty, type AgentId } from '@mandate/core';
 import { agentPolicyOf, type AllocationMode, type PortfolioMandate } from './mandate.ts';
 import { reason, type Reason } from './reasons.ts';
 import { amountOf, compareResourceIds, type PortfolioResourceId, type ResourceVector } from './resources.ts';
+
+/** What an agent may hold of a resource: its listed hard maximum, or the portfolio limit where it lists none. */
+export function agentCap(m: PortfolioMandate, agent: AgentId, resource: string): bigint {
+  const policy = agentPolicyOf(m, agent);
+  if (policy === null) return 0n;
+  const listed = policy.hardMaxima.find((h) => h.resource === resource);
+  return listed === undefined ? amountOf(m.limits, resource) : listed.atoms;
+}
 
 export interface AllocationEntry {
   readonly agent: AgentId;
@@ -137,7 +146,7 @@ export function applyAllocation(m: PortfolioMandate, book: AllocationBook, op: A
       const i = entryIndex(book, op.agent, lot.resource);
       if (i < 0) return err(reason('RESOURCE_UNDECLARED', lot.resource));
       const e = entries[i] as AllocationEntry;
-      if (e.allocated + op.amount > amountOf(policy.hardMaxima, lot.resource)) return err(reason('AGENT_LIMIT_EXCEEDED', `${op.agent.value}/${lot.resource}`));
+      if (e.allocated + op.amount > agentCap(m, op.agent, lot.resource)) return err(reason('AGENT_LIMIT_EXCEEDED', `${op.agent.value}/${lot.resource}`));
       entries[i] = { ...e, allocated: e.allocated + op.amount };
       lots[li] = { ...lot, remaining: lot.remaining - op.amount };
       break;
@@ -167,7 +176,7 @@ export function checkBookInvariant(m: PortfolioMandate, book: AllocationBook): r
   }
   for (const e of book.entries) {
     const policy = agentPolicyOf(m, e.agent);
-    const cap = policy === null ? 0n : book.mode === 'PREALLOCATED' ? amountOf(policy.preferred, e.resource) : amountOf(policy.hardMaxima, e.resource);
+    const cap = policy === null ? 0n : book.mode === 'PREALLOCATED' ? amountOf(policy.preferred, e.resource) : agentCap(m, e.agent, e.resource);
     if (e.committed > e.allocated || e.allocated > cap) found.push(reason('CANDIDATE_BOOK_MISMATCH', `${e.agent.value}/${e.resource}`));
   }
   for (const l of book.lots) if (l.remaining < 0n || l.remaining > l.amount) found.push(reason('CANDIDATE_BOOK_MISMATCH', l.id));
@@ -187,7 +196,7 @@ export function obtainable(m: PortfolioMandate, book: AllocationBook, agent: Age
   const unused = e.allocated - e.committed;
   if (book.mode === 'PREALLOCATED') return unused;
   const pooled = book.lots.filter((l) => l.resource === resource).reduce((s, l) => s + l.remaining, 0n);
-  const headroom = amountOf(policy.hardMaxima, resource) - e.allocated;
+  const headroom = agentCap(m, agent, resource) - e.allocated;
   return unused + (headroom < pooled ? (headroom > 0n ? headroom : 0n) : pooled);
 }
 

@@ -166,7 +166,7 @@ export function readCanonicalAssetInput(r: CoreReader): CanonicalAssetInput {
 }
 
 /** One text key per canonical asset, for set membership. Never parsed. */
-export function assetKey(a: CanonicalAssetId): string {
+export function assetKey(a: { readonly assetClass: string; readonly idScheme: string; readonly value: string }): string {
   return `${a.assetClass}\u0000${a.idScheme}\u0000${a.value}`;
 }
 

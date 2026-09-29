@@ -251,10 +251,20 @@ export function vectorsEqual(a: ResourceVector, b: ResourceVector): boolean {
 
 /**
  * Every resource where `v` exceeds `limits`. Closed world: a resource with no
- * limit entry has limit zero, so an amount in it exceeds.
+ * limit entry has limit zero, so an amount in it exceeds. This is the rule for
+ * portfolio limits.
  */
 export function exceeding(v: ResourceVector, limits: ResourceVector): readonly string[] {
   return v.filter((a) => a.atoms > amountOf(limits, a.resource)).map((a) => a.resource);
+}
+
+/**
+ * Every resource where `v` exceeds a limit `limits` actually lists. A resource
+ * with no entry is not limited *here* — the rule for an agent's hard maxima,
+ * which sit under the portfolio's closed-world limits.
+ */
+export function exceedingListed(v: ResourceVector, limits: ResourceVector): readonly string[] {
+  return v.filter((a) => limits.some((l) => l.resource === a.resource && a.atoms > l.atoms)).map((a) => a.resource);
 }
 
 // --- Contributions: the only way a domain quantity reaches a resource ----------------------
