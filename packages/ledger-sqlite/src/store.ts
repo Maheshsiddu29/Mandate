@@ -135,6 +135,8 @@ export class SqliteLedgerStore implements LedgerStore {
   readonly #batchesAfter: StatementSync;
   readonly #insertBatch: StatementSync;
   readonly #upsertHead: StatementSync;
+  readonly #indexAttempt: StatementSync;
+  readonly #indexClosed: StatementSync;
   #closed = false;
 
   private constructor(db: DatabaseSync, o: SqliteStoreOptions) {
@@ -147,6 +149,8 @@ export class SqliteLedgerStore implements LedgerStore {
     this.#batchesAfter.setReadBigInts(true);
     this.#insertBatch = db.prepare('INSERT INTO ledger_batches (principal, version, previous_head, head, encoded) VALUES (?, ?, ?, ?, ?)');
     this.#upsertHead = db.prepare('INSERT INTO ledger_heads (principal, version, head) VALUES (?, ?, ?) ON CONFLICT(principal) DO UPDATE SET version = excluded.version, head = excluded.head');
+    this.#indexAttempt = db.prepare('INSERT INTO ledger_attempt_index (attempt, principal, version) VALUES (?, ?, ?)');
+    this.#indexClosed = db.prepare('INSERT INTO ledger_closed_reservations (reservation, principal, version) VALUES (?, ?, ?)');
   }
 
   /** Open (creating if absent) the store at `o.path`. */
@@ -168,6 +172,11 @@ export class SqliteLedgerStore implements LedgerStore {
         encoded BLOB NOT NULL,
         PRIMARY KEY (principal, version)
       ) WITHOUT ROWID;
+      -- 7E.2: derived indexes, written in the same transaction as the batch that causes them.
+      -- They locate facts in the log; they are not a second truth. A reader that relies on one
+      -- (the key-custody process) re-verifies against the batch bytes, whose digest is the head.
+      CREATE TABLE IF NOT EXISTS ledger_attempt_index (attempt TEXT PRIMARY KEY, principal TEXT NOT NULL, version INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS ledger_closed_reservations (reservation TEXT PRIMARY KEY, principal TEXT NOT NULL, version INTEGER NOT NULL);
     `);
     db.prepare('INSERT OR IGNORE INTO store_meta (key, value) VALUES (?, ?)').run('schema', SQLITE_STORE_SCHEMA);
     const schema = db.prepare('SELECT value FROM store_meta WHERE key = ?').get('schema') as SqlRow | undefined;
@@ -272,6 +281,10 @@ export class SqliteLedgerStore implements LedgerStore {
       const state = applied.value.state;
       this.#insertBatch.run(key, state.version, current.head, state.head, applied.value.encoded);
       this.#upsertHead.run(key, state.version, state.head);
+      for (const e of events) {
+        if (e.kind === 'ADMIT_ATTEMPT') this.#indexAttempt.run(e.admission.attempt, key, state.version);
+        else if (e.kind === 'CLOSE') this.#indexClosed.run(e.reservation, key, state.version);
+      }
       fault?.('AFTER_INSERT', principal);
       fault?.('BEFORE_COMMIT', principal);
       this.#db.exec('COMMIT');

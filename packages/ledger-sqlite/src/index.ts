@@ -13,3 +13,4 @@
 
 export * from './store.ts';
 export * from './journal.ts';
+export * from './lifecycle.ts';
