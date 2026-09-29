@@ -16,13 +16,19 @@ import {
   executeFixtureChild,
   fullAvailability,
   portfolioMandateDigest,
+  proposalDigest,
   receiptDigest,
   releaseDigest,
   reserveChild,
+  runMandateRoom,
   runPortfolio,
+  screenProposal,
   validateChildExecutionAuthorization,
   verifyPortfolio,
   type AllocationOp,
+  type PortfolioCandidate,
+  type SignedProposal,
+  type SignedRelease,
 } from '../src/index.ts';
 import { USDC, demoBindings, demoMandate, demoParty } from '../src/demo/index.ts';
 import { NOW, stockBuy, swap, yieldDeposit } from './support/candidates.ts';
@@ -179,5 +185,60 @@ describe('Phase 7F.1 independent audit reproductions', () => {
     different({ ...base, childAuthorizations: base.childAuthorizations.map((c, i) => (i === 0 ? { ...c, action: null } : c)) }, 'child action');
     different({ ...base, reservations: base.reservations.map((r, i) => (i === 0 && r.generation !== null ? { ...r, generation: (r.generation + 1n) as never } : r)) }, 'reservation generation');
     different({ ...base, representationDecisions: base.representationDecisions.map((r, i) => (i === 0 ? { ...r, asset: `${r.asset ?? 'none'}-changed` } : r)) }, 'canonical asset decision');
+  });
+});
+
+describe('Phase 7F.2 audit follow-ups', () => {
+  const verifyWith = (mandate: ReturnType<typeof demoMandate>, candidate: PortfolioCandidate, proposals: readonly SignedProposal[], releases: readonly SignedRelease[]) =>
+    verifyPortfolio({ mandate, signature: principalSignature(mandate), bindings: demoBindings(), availability: fullAvailability(mandate), now: NOW, candidate, proposals, releases });
+  const releaseOp = (signed: SignedRelease): AllocationOp => ({ kind: 'RELEASE', agent: signed.release.agent, id: `release/${releaseDigest(signed.release)}` as Identifier, amounts: signed.release.amounts });
+
+  it('INFO-2: the verifier refuses a strictly decreasing and an equal release sequence, and a release applied twice', () => {
+    const mandate = demoMandate();
+    const empty = (log: AllocationOp[]): PortfolioCandidate => ({ portfolioMandate: portfolioMandateDigest(mandate), accepted: [], allocationLog: log });
+    const five = release(mandate, 'nft', [['portfolio-notional', 10n]], 5n);
+    const three = release(mandate, 'nft', [['portfolio-notional', 20n]], 3n);
+    const alsoFive = release(mandate, 'nft', [['portfolio-notional', 30n]], 5n);
+    const decreasing = verifyWith(mandate, empty([releaseOp(five), releaseOp(three)]), [], [five, three]);
+    assert.ok(decreasing.status === 'REFUSED');
+    assert.deepEqual(decreasing.reasons.map((r) => r.code), ['RELEASE_SEQUENCE_INVALID']);
+    const equal = verifyWith(mandate, empty([releaseOp(five), releaseOp(alsoFive)]), [], [five, alsoFive]);
+    assert.ok(equal.status === 'REFUSED');
+    assert.deepEqual(equal.reasons.map((r) => r.code), ['RELEASE_SEQUENCE_INVALID']);
+    // The same signed release twice is refused by the book's own replay before the sequence rule is reached.
+    const twice = verifyWith(mandate, empty([releaseOp(five), releaseOp(five)]), [], [five]);
+    assert.ok(twice.status === 'REFUSED' && twice.reasons.every((r) => r.code === 'CANDIDATE_BOOK_MISMATCH'));
+    // In increasing order the same releases verify.
+    assert.equal(verifyWith(mandate, empty([releaseOp(three), releaseOp(five)]), [], [three, five]).status, 'VERIFIED');
+  });
+
+  it('INFO-3: freshly signed hostile swap proposals are refused by screening itself — in the room, and when a malicious room accepts them', async () => {
+    const hostile = [
+      ['zero minimum out', swap({ amount: USDC(100n), minOut: 0n }), 'SLIPPAGE_NOT_ALLOWED'],
+      ['slippage one basis point over the bound', swap({ amount: USDC(100n), minOut: (120_000_000_000_000_000n * 9_949n) / 10_000n }), 'SLIPPAGE_NOT_ALLOWED'],
+      ['quote one second past its bound', swap({ amount: USDC(100n), observedAt: NOW - 61n }), 'QUOTE_STALE'],
+    ] as const;
+    for (const [name, candidate, code] of hostile) {
+      const w = await world();
+      const signed = proposal(w.m, 'swap', candidate);
+      const digest = proposalDigest(signed.proposal);
+      const room = runMandateRoom({ mandate: w.m, signature: principalSignature(w.m), bindings: demoBindings(), availability: fullAvailability(w.m), now: NOW, agents: [new ScriptedAgent('swap', [[1, { kind: 'PROPOSE', signed }]])] });
+      const decision = room.decisions.find((d) => d.proposal === digest);
+      assert.ok(decision !== undefined && decision.outcome === 'REJECTED', name);
+      assert.deepEqual(decision.reasons.map((r) => r.code), [code], name);
+      assert.deepEqual(room.candidate.accepted, [], name);
+
+      // A malicious room accepts and commits it anyway: the verifier re-screens the signed proposal and refuses.
+      const forced: PortfolioCandidate = { portfolioMandate: portfolioMandateDigest(w.m), accepted: [digest], allocationLog: [{ kind: 'COMMIT', agent: signed.proposal.agent, id: digest as unknown as Identifier, amounts: signed.proposal.requested }] };
+      const verdict = verifyWith(w.m, forced, [signed], []);
+      assert.ok(verdict.status === 'REFUSED', name);
+      assert.deepEqual(verdict.reasons.map((r) => r.code), [code], name);
+      const transcript = { signature: principalSignature(w.m), availability: fullAvailability(w.m), verifiedAt: NOW, candidate: forced, proposals: [signed], releases: [] };
+      const child = screenProposal(w.m, demoBindings(), signed, NOW).child;
+      assert.equal(child, null, name);
+      const out = await reserveChild(w.core, transcript, `0x${'00'.repeat(32)}` as never, NOW);
+      assert.ok(out.status === 'REFUSED' && out.reasons.some((r) => r.code === code), name);
+      assert.equal((await w.core.engine.read(w.m.principal)).state.reservations.size, 0, name);
+    }
   });
 });
