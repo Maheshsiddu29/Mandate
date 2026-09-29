@@ -16,7 +16,9 @@ and what it depends on.
 > Phase 7E.0 — Lighter venue evidence and the PerpPolicy v1 / Venue Signer
 > specification ([phase-7e/](phase-7e/README.md)), documentation only — is
 > accepted; Phase 7E.1 ([phase-7e/implementation-7e1.md](phase-7e/implementation-7e1.md)),
-> testnet only, is implemented locally and awaiting review.** No production domain module,
+> testnet only, is accepted; Phase 7E.2
+> ([phase-7e/implementation-7e2.md](phase-7e/implementation-7e2.md)), testnet
+> only, is implemented locally and awaiting review.** No production domain module,
 > venue integration, observation reconciliation or later Phase 7 mechanism
 > exists, and nothing has been deployed.
 > Rationale for the phase ordering is in
@@ -605,10 +607,16 @@ the Venue Signer, `ADMIT_ATTEMPT`, execution REPLAY-1 and the 7F evidence
 rules are specified against them ([phase-7e/](phase-7e/README.md)). Verdict:
 **FIT WITH LIMITATIONS** ([phase-7e/venue-fit.md](phase-7e/venue-fit.md)).
 Documentation only; nothing was sent, signed or queried.
-**7E.1 — implementation: complete locally, awaiting review.** F-1…F-4
+**7E.1 — implementation: accepted.** F-1…F-4
 implemented additively; PerpPolicy v1 and the Lighter Venue Signer; testnet
 evidence recorded ([phase-7e/testnet-evidence.md](phase-7e/testnet-evidence.md)).
 Reconciliation remains 7F.
+**7E.2 — enforcement closure and live state adapter: complete locally,
+awaiting review.** Key custody verifies the durable `ADMIT_ATTEMPT` itself
+before key use; a live Lighter state adapter feeds PerpPolicy, failing closed
+([phase-7e/implementation-7e2.md](phase-7e/implementation-7e2.md)). E-3…E-8
+and E-10 remain blocked pending sanctioned testnet access; full release at
+`VERIFIED` cannot be demonstrated on testnet.
 
 ### Phase 7F — Cross-domain reconciliation: EVM fixture and perps
 
@@ -682,7 +690,7 @@ to the product, and belongs in the design documents before it belongs in code.
 | 7B | Core types and generic action/state model | 7A | **FROZEN ✓** — with 7B.1 representation hardening (meet and AUTH-2 → 7C; module interface → 7D) |
 | 7C | Authority Graph + Global Authority Ledger (meet, effective lineage, AUTH-2) | 7B | **FROZEN ✓** |
 | 7D | Invariant + Reservation Engine (executable `DomainModule` interface) | 7C | **FROZEN ✓** — with 7D.1 hardening, 7D.2 provenance and 7D.3 immutable authority semantics (observation reconciliation → 7F, issuance → 7E) |
-| 7E | PerpPolicy v1 and Venue Signer | 7D | 7E.0 accepted; **7E.1 implemented locally, awaiting review** (testnet only) |
+| 7E | PerpPolicy v1 and Venue Signer | 7D | 7E.0, 7E.1 accepted; **7E.2 implemented locally, awaiting review** (testnet only) |
 | 7F | Cross-domain reconciliation: EVM fixture and perps | 7E | planned |
 | 7G | Developer SDK and simulator | 7F | planned |
 | 7H | Receipts and authority provenance | 7F | planned |

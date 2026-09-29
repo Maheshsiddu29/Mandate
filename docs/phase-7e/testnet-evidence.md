@@ -8,6 +8,9 @@
 > captures used by tests are committed under
 > `packages/perp-lighter/test/fixtures/`, pinned by digest; working captures
 > live in the ignored `.lighter-testnet/`.
+>
+> **Phase 7E.2** added read-only captures only; they are recorded in
+> [§8](#8-phase-7e2-captures). No write was made in 7E.2.
 
 ## Contents
 
@@ -18,6 +21,7 @@
 5. [Status of E-1 … E-11](#5-status-of-e-1--e-11)
 6. [What this changes in the implementation](#6-what-this-changes-in-the-implementation)
 7. [Reproducing](#7-reproducing)
+8. [Phase 7E.2 captures](#8-phase-7e2-captures)
 
 ---
 
@@ -133,3 +137,36 @@ The 7E.1 `--probe-send` option (E-P2) was retired in Phase 7E.2: custody now
 signs only a transaction whose durable `ADMIT_ATTEMPT` it has verified itself,
 so the unadmitted probe signature E-P2 used can no longer be produced. E-P2's
 result above stands as captured on the date recorded.
+
+## 8. Phase 7E.2 captures
+
+All read-only, testnet only, for the live state adapter
+([implementation-7e2.md §4](implementation-7e2.md#4-the-live-state-adapter)).
+Account 7 is an existing public testnet account; we hold no key for it.
+
+| # | UTC | Request | Result | Used as |
+| --- | --- | --- | --- | --- |
+| E-S1 | 2026-09-29 03:51:04 | `GET /account?by=index&value=7` | 200; one ETH position, −0.3715, `margin_mode` 0 (**cross**), IMF `"5.00"`, `total_order_count` 0 | fixture `account-7-cross-position` (`l1_address` zeroed) |
+| E-S2 | 2026-09-29 03:51:04 | `GET /accountActiveOrders?account_index=7&market_id=4095`, no auth | HTTP 400, code 20001 "auth query param and Authorization header are empty" | fixture `active-orders-no-auth` |
+| E-S3 | 2026-09-29 03:51:13 | `GET /apikeys?account_index=7&api_key_index=255` | 200; keys 4–12 registered (nine keys), per-key nonces | context only: a public account with several keys is not a CRED-1 deployment |
+| E-S4 | 2026-09-29 04:10:51 | `GET /accountActiveOrders?…`, `Authorization: ro:<invalid placeholder>` | HTTP 401, code 20013 "invalid auth string" | fixture `active-orders-invalid-token` |
+| E-S5 | 2026-09-29 | `LighterStateReader` over `HttpStateClient`, account 7, no read-only token | account and metadata normalized; `UNKNOWN` at `AUTH_TOKEN_UNAVAILABLE`, no states | the live path fails closed |
+
+Findings:
+
+- **T-12.** `accountActiveOrders` refuses without auth (20001) and with an
+  invalid token (20013), with HTTP 400 and 401: a monitor cannot read orders
+  without a credential derived from the account's API key. HIGH.
+- **T-13.** The account endpoint reports `margin_mode` per position entry,
+  IMF as a percent string, and account- and market-level open and pending
+  order counts, which the reader cross-checks against the orders it reads.
+  Whether a flat market with no setting ever appears in `positions` is
+  unobserved (E-8); the reader never invents one. MEDIUM.
+
+**Still blocked:** E-3, E-4, E-5, E-6, E-7, E-8 and E-10, pending sanctioned
+testnet funds and account access — requested in
+[lighter-testnet-request.md](lighter-testnet-request.md). E-1 stays partial.
+
+> **LIVE TESTNET LIMITATION: full authority release cannot currently be
+> demonstrated.** The release threshold stays `VERIFIED`, which testnet has
+> never been observed to reach (T-5).

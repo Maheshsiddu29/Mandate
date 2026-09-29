@@ -50,7 +50,10 @@ specification ([docs/phase-7e](docs/phase-7e/README.md)), documentation
 only — is accepted; **Phase 7E.1** — PerpPolicy v1, the SQLite reference store,
 `ADMIT_ATTEMPT`, `DISABLED`, pre-execution requirements and the Lighter Venue
 Signer ([implementation-7e1.md](docs/phase-7e/implementation-7e1.md)), testnet
-only — is implemented locally and awaiting review. **Phase 7F is not started**
+only — is accepted; **Phase 7E.2** — custody's independent verification of the
+durable `ADMIT_ATTEMPT` and the live Lighter state adapter
+([implementation-7e2.md](docs/phase-7e/implementation-7e2.md)), testnet only —
+is implemented locally and awaiting review. **Phase 7F is not started**
 and must not begin until explicitly opened. **Phase 6 is
 frozen at `dc98df5`**; nothing in Phase 7 may modify
 MCE v2, Candidate V3, the gate, its libraries, fixture or replay semantics, or

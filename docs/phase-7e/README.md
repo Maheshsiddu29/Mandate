@@ -1,10 +1,13 @@
 # Phase 7E.0 — Real perp venue evidence and enforcement contract
 
-> **Status: Phase 7E.0 (research and specification) ACCEPTED. Phase 7E.1
-> (implementation) complete locally and awaiting review** —
+> **Status: Phase 7E.0 (research and specification) ACCEPTED; Phase 7E.1
+> (implementation) ACCEPTED as the base. Phase 7E.2 (enforcement closure and
+> the live state adapter) complete locally and awaiting review** —
+> [implementation-7e2.md](implementation-7e2.md),
 > [implementation-7e1.md](implementation-7e1.md),
 > [testnet-evidence.md](testnet-evidence.md),
-> [security-boundary.md](security-boundary.md). Lighter testnet only; no
+> [security-boundary.md](security-boundary.md),
+> [lighter-testnet-request.md](lighter-testnet-request.md). Lighter testnet only; no
 > mainnet, no real funds, no production credentials; reconciliation is Phase
 > 7F and not built. The 7E.0 documents below are kept as written; 7E.1's
 > changes to their assumptions are recorded in venue-evidence.md §14.
@@ -29,7 +32,9 @@ protection. 7E.0 establishes the venue facts first and specifies against them.
 | [venue-fit.md](venue-fit.md) | the verdict, the nine weaker guarantees, alternatives (Hyperliquid, dYdX v4), conditions to proceed |
 | [implementation-7e1.md](implementation-7e1.md) | **7E.1**: the durable store, `ADMIT_ATTEMPT`, `DISABLED`, pre-execution requirements, PerpPolicy v1, the Venue Signer, crash, concurrency and mutation results, benchmarks, changes to frozen packages |
 | [testnet-evidence.md](testnet-evidence.md) | **7E.1**: every testnet interaction, findings T-1 … T-11, status of E-1 … E-11 |
-| [security-boundary.md](security-boundary.md) | **7E.1**: the broad-credential fact, CRED-1 conditions, deployment profiles, key-theft blast radius, residual risks |
+| [security-boundary.md](security-boundary.md) | **7E.1/7E.2**: the broad-credential fact, CRED-1 conditions, deployment profiles, custody's durable verification, auth tokens, key-theft blast radius, residual risks |
+| [implementation-7e2.md](implementation-7e2.md) | **7E.2**: custody verifies the durable `ADMIT_ATTEMPT` itself; the live Lighter state adapter; auth tokens; mutants M12–M15; LIVE TESTNET LIMITATION |
+| [lighter-testnet-request.md](lighter-testnet-request.md) | **7E.2**: draft request to Lighter for sanctioned testnet funds and access (E-3…E-8, E-10) |
 
 ## Summary
 
@@ -133,4 +138,6 @@ so this is a specification choice, not a contradiction.
 ## Stop
 
 7E.0 ended with the specification. 7E.1 implemented it (see
-[implementation-7e1.md](implementation-7e1.md)) and stops before 7F.
+[implementation-7e1.md](implementation-7e1.md)); 7E.2 closed custody's
+verification gap and added the live state adapter
+([implementation-7e2.md](implementation-7e2.md)). 7E stops before 7F.

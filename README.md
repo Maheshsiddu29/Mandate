@@ -19,8 +19,11 @@ financial assets.**
 > Venue Signer specification ([docs/phase-7e](docs/phase-7e/README.md)),
 > documentation only — is accepted; Phase 7E.1 — PerpPolicy v1, the SQLite
 > reference store and the Lighter Venue Signer, testnet only
-> ([implementation-7e1.md](docs/phase-7e/implementation-7e1.md)) — is
-> implemented locally and awaiting review. Phase 7F is not started.**
+> ([implementation-7e1.md](docs/phase-7e/implementation-7e1.md)) — is accepted;
+> Phase 7E.2 — custody verifies the durable `ADMIT_ATTEMPT` itself, and a live
+> Lighter state adapter ([implementation-7e2.md](docs/phase-7e/implementation-7e2.md)),
+> testnet only — is implemented locally and awaiting review. Phase 7F is not
+> started.**
 >
 > **Status: Phase 6R.2B (secure gas optimization) implemented locally and awaiting independent security and gas review ([report](docs/phase-6r2b-report.md): normal BUY 401,684 → 246,963 execution gas, worst case 6,724,561 → 425,922, no semantic change), after the Phase 6R.2A gas attribution benchmark ([report](docs/phase-6r2a-gas-profile.md)) and Phase 6R.1b — an onchain execution
 > gate, tested against a labelled settlement fixture and not deployed.** The
