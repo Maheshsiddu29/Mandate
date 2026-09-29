@@ -167,11 +167,14 @@ export interface ResolvedAction {
   readonly demand: ResourceVector;
 }
 
-/** A quote observed after `now` is not a quote: it is treated as older than any bound. */
-const FUTURE_QUOTE_AGE = 2n ** 64n - 1n;
-
-export function quoteAge(observedAt: bigint, now: bigint): bigint {
-  return observedAt > now ? FUTURE_QUOTE_AGE : now - observedAt;
+/**
+ * A quote's age at `now`, exactly; `null` for a quote observed after `now`,
+ * which has no age and is never fresh. Not a sentinel age: any age is ≤ some
+ * valid bound (a `UINT64_MAX` bound admitted the old one), so `permits`
+ * refuses a future quote explicitly instead (7F.2 audit INFO-2).
+ */
+export function quoteAge(observedAt: bigint, now: bigint): bigint | null {
+  return observedAt > now ? null : now - observedAt;
 }
 
 /**
@@ -225,8 +228,9 @@ function singletonScope(a: ResolvedAction, maxQuoteAgeSeconds: bigint | null): A
 
 /**
  * The singleton scope of one resolved action *at `now`*: its quote bound is
- * the quote's age then. A runtime predicate's operand only (`permits`) —
- * never an authorization identity, because it changes with `now`.
+ * the quote's age then (none for a future quote, which `permits` refuses on
+ * its own). A runtime predicate's operand only (`permits`) — never an
+ * authorization identity, because it changes with `now`.
  */
 export function actionScope(a: ResolvedAction, now: bigint): AuthorityScope {
   return singletonScope(a, a.quoteObservedAt === null ? null : quoteAge(a.quoteObservedAt, now));
@@ -261,11 +265,14 @@ const ACTION_CODE: { readonly [K in ReasonCode]?: ReasonCode } = {
 
 /**
  * Every reason `scope` does not permit action `a` at `now`: the singleton
- * scope's subset violations under their action-level names, plus each route
- * pool that is not an allowed venue. Empty: permitted.
+ * scope's subset violations under their action-level names, each route pool
+ * that is not an allowed venue, and a quote observed after `now` — refused
+ * whatever the bound, `QUOTE_NOT_ALLOWED` where the scope permits no quote.
+ * Empty: permitted.
  */
 export function permits(scope: AuthorityScope, a: ResolvedAction, now: bigint): readonly Reason[] {
   const found: Reason[] = [];
+  if (a.quoteObservedAt !== null && a.quoteObservedAt > now) found.push(reason(scope.maxQuoteAgeSeconds === null ? 'QUOTE_NOT_ALLOWED' : 'QUOTE_STALE', 'quote'));
   for (const r of checkChildScope(scope, actionScope(a, now))) {
     if (r.code === 'CHILD_WIDENS_QUOTE_AGE') found.push(reason(scope.maxQuoteAgeSeconds === null ? 'QUOTE_NOT_ALLOWED' : 'QUOTE_STALE', 'quote'));
     else found.push(reason(ACTION_CODE[r.code] ?? r.code, r.subject));

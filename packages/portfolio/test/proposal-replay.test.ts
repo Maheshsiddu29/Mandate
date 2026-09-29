@@ -15,7 +15,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { actionId, keccakDigest, type Digest32 } from '@mandate/core';
+import { UINT64_MAX, actionId, keccakDigest, type Digest32 } from '@mandate/core';
 import { bytesToHex } from '@mandate/kernel';
 import { AuthorityLedger } from '@mandate/ledger';
 import { controlRules } from '@mandate/control';
@@ -27,6 +27,7 @@ import {
   defaultExecutor,
   encodeAgentProposal,
   executeFixtureChild,
+  permits,
   fullAvailability,
   portfolioMandateDigest,
   proposalDigest,
@@ -34,6 +35,7 @@ import {
   quoteExpiresAt,
   requestFor,
   reservationPhase,
+  resolveCandidate,
   reserveChild,
   runPortfolio,
   screenProposal,
@@ -44,7 +46,7 @@ import {
   type PortfolioMandate,
   type SignedProposal,
 } from '../src/index.ts';
-import { USDC, demoBindings } from '../src/demo/index.ts';
+import { USDC, demoBindings, demoMandate, demoMandateInput } from '../src/demo/index.ts';
 import { NOW, stockBuy, swap, yieldDeposit } from './support/candidates.ts';
 import { gateWorld } from './support/gate.ts';
 import { ScriptedAgent, agentOf, authorizationForSigned, principalSignature, proposal, world, type World } from './support/world.ts';
@@ -167,6 +169,35 @@ describe('F7F1-01: proposal, child and Core action identity do not depend on the
     assert.ok(future.child === null && future.reasons.some((r) => r.code === 'QUOTE_STALE'));
     assert.equal(quoteAgeBound(agentOf(w.m, 'swap').scope, w.m.scope), 60n);
     assert.equal(quoteAgeBound(agentOf(w.m, 'nft').scope, w.m.scope), null);
+  });
+
+  it('a future-dated quote is refused under any bound, the maximum included; a quote observed at now is fresh', () => {
+    // 7F.2 audit INFO-2: a future quote was given a sentinel age of UINT64_MAX, which a UINT64_MAX bound admitted.
+    const bounded = (q: bigint) => {
+      const input = demoMandateInput();
+      return demoMandate({ scope: { ...input.scope, maxQuoteAgeSeconds: q }, agents: input.agents.map((a) => (a.label === 'swap' ? { ...a, scope: { ...a.scope, maxQuoteAgeSeconds: q } } : a)) });
+    };
+    for (const [name, m, bound] of [['normal bound', demoMandate(), 60n], ['UINT64_MAX bound', bounded(UINT64_MAX), UINT64_MAX]] as const) {
+      assert.equal(quoteAgeBound(agentOf(m, 'swap').scope, m.scope), bound, name);
+      const future = proposal(m, 'swap', swap({ observedAt: NOW + 1n }));
+      const refused = screenedAt(m, future, NOW);
+      assert.equal(refused.child, null, name);
+      assert.deepEqual(refused.reasons.map((r) => r.code), ['QUOTE_STALE'], name);
+      const action = resolveCandidate(demoBindings(), m, agentOf(m, 'swap'), future.proposal.candidate, NOW);
+      assert.ok(action.ok, name);
+      assert.deepEqual(permits(agentOf(m, 'swap').scope, action.action, NOW).map((r) => r.code), ['QUOTE_STALE'], name);
+      assert.deepEqual(permits(m.scope, action.action, NOW).map((r) => r.code), ['QUOTE_STALE'], name);
+      // Observed exactly at `now`: age 0, fresh whenever the policy allows quotes.
+      const present = screenedAt(m, proposal(m, 'swap', swap({ observedAt: NOW })), NOW);
+      assert.ok(present.child !== null, `${name}: ${JSON.stringify(present.reasons)}`);
+      assert.equal(present.child.scope.maxQuoteAgeSeconds, bound, name);
+    }
+    // Without any bound a future quote is, as before, not allowed at all.
+    const nft = demoMandate();
+    const noBound = { ...agentOf(nft, 'swap').scope, maxQuoteAgeSeconds: null };
+    const future = resolveCandidate(demoBindings(), nft, agentOf(nft, 'swap'), swap({ observedAt: NOW + 1n }), NOW);
+    assert.ok(future.ok);
+    assert.deepEqual(permits(noBound, future.action, NOW).map((r) => r.code), ['QUOTE_NOT_ALLOWED']);
   });
 });
 
