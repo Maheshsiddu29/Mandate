@@ -15,7 +15,7 @@
  */
 
 export * from './reasons.ts';
-export { PortfolioTag, PORTFOLIO_SCHEMA_VERSION, decodePortfolio, isCanonical } from './encoding.ts';
+export { PortfolioTag, PORTFOLIO_SCHEMA_VERSION, PORTFOLIO_RECEIPT_SCHEMA_VERSION, decodePortfolio, isCanonical } from './encoding.ts';
 export * from './resources.ts';
 export * from './scope.ts';
 export * from './mandate.ts';

@@ -49,6 +49,44 @@ export interface VerifierInput {
   readonly releases: readonly SignedRelease[];
 }
 
+/**
+ * The complete value proof carried from verification to every later
+ * authority boundary. Nothing in it is trusted: consumers re-run
+ * `verifyPortfolio` against the compiled mandate and bindings.
+ */
+export interface VerificationTranscript {
+  readonly signature: string;
+  readonly availability: ResourceAvailability;
+  readonly verifiedAt: bigint;
+  readonly candidate: PortfolioCandidate;
+  readonly proposals: readonly SignedProposal[];
+  readonly releases: readonly SignedRelease[];
+}
+
+export function verificationTranscript(input: VerifierInput): VerificationTranscript {
+  return {
+    signature: input.signature,
+    availability: input.availability,
+    verifiedAt: input.now,
+    candidate: input.candidate,
+    proposals: input.proposals,
+    releases: input.releases,
+  };
+}
+
+export function verifyTranscript(mandate: PortfolioMandate, bindings: readonly DomainBinding[], transcript: VerificationTranscript): VerifierResult {
+  return verifyPortfolio({
+    mandate,
+    signature: transcript.signature,
+    bindings,
+    availability: transcript.availability,
+    now: transcript.verifiedAt,
+    candidate: transcript.candidate,
+    proposals: transcript.proposals,
+    releases: transcript.releases,
+  });
+}
+
 export interface VerifiedChild {
   readonly child: ChildExecutionAuthorization;
   readonly digest: ChildAuthorizationDigest;
@@ -112,11 +150,25 @@ export function verifyPortfolio(input: VerifierInput): VerifierResult {
   const signedReleases = new Map<string, SignedRelease>();
   for (const s of input.releases) signedReleases.set(`release/${releaseDigest(s.release)}`, s);
   const committed = new Map<string, number>();
+  const releaseSequence = new Map<string, bigint>();
+  const releaseIds = new Set<string>();
+  const claimIds = new Set<string>();
   for (const op of c.allocationLog) {
     if (op.kind === 'RELEASE') {
       const s = signedReleases.get(op.id);
       const genuine = s !== undefined && s.release.agent.value === op.agent.value && s.release.portfolioMandate === c.portfolioMandate && vectorsEqual(s.release.amounts, op.amounts) && releaseSignedByAgent(s.release, s.signature);
       if (!genuine) found.push(reason('CANDIDATE_BOOK_MISMATCH', `release-unsigned:${op.id}`));
+      if (releaseIds.has(op.id)) found.push(reason('CANDIDATE_BOOK_MISMATCH', `release-duplicate:${op.id}`));
+      releaseIds.add(op.id);
+      if (genuine && s !== undefined) {
+        const last = releaseSequence.get(s.release.agent.value);
+        if (last !== undefined && s.release.sequence <= last) found.push(reason('RELEASE_SEQUENCE_INVALID', `${s.release.agent.value}/${s.release.sequence}`));
+        else releaseSequence.set(s.release.agent.value, s.release.sequence);
+      }
+    }
+    if (op.kind === 'CLAIM') {
+      if (claimIds.has(op.id)) found.push(reason('CANDIDATE_BOOK_MISMATCH', `claim-duplicate:${op.id}`));
+      claimIds.add(op.id);
     }
     if (op.kind === 'COMMIT') {
       committed.set(op.id, (committed.get(op.id) ?? 0) + 1);
@@ -144,9 +196,4 @@ export function verifyPortfolio(input: VerifierInput): VerifierResult {
 
   if (found.length > 0) return refuse(found);
   return { status: 'VERIFIED', children: [...children].sort((a, b) => byText(a.digest, b.digest)), book, approved };
-}
-
-/** The set of child digests a verification produced: the only children `checkBeforeSign` will accept. */
-export function verifiedDigests(r: VerifierResult): ReadonlySet<ChildAuthorizationDigest> {
-  return new Set(r.status === 'VERIFIED' ? r.children.map((c) => c.digest) : []);
 }

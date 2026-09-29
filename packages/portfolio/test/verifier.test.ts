@@ -147,7 +147,7 @@ describe('the receipt', () => {
     const w = await world();
     const r = await runPortfolio({ core: w.core, signature: principalSignature(m), now: NOW, agents: agents(), execute: defaultExecutor(w.core) });
     const rev = <T,>(xs: readonly T[]) => [...xs].reverse();
-    const book = (b: typeof r.receipt.allocationAfter) => ({ ...b, entries: rev(b.entries), lots: rev(b.lots), log: rev(b.log) });
+    const book = (b: typeof r.receipt.allocationAfter) => ({ ...b, entries: rev(b.entries), lots: rev(b.lots) });
     const shuffled = {
       ...r.receipt,
       agents: rev(r.receipt.agents),

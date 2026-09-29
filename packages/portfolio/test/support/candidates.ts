@@ -35,14 +35,14 @@ export function stockBuy(o: { representation?: string; tenths?: bigint; quantity
   return must({ kind: 'STOCK_BUY', representation: o.representation ?? STOCK_APPROVED, account: o.account ?? PRINCIPAL_ON_ROBINHOOD, quantity: o.quantity ?? ((o.tenths ?? 48n) * TOKEN) / 10n, claims: { ...NO_CLAIMS, ticker: 'NVDA', ...o.claims } });
 }
 
-export function swap(o: { router?: string; route?: string[]; tokenIn?: string; amount?: bigint; quotedOut?: bigint; minOut?: bigint; observedAt?: bigint; recipient?: string } = {}): ActionCandidate {
+export function swap(o: { router?: string; route?: string[]; tokenIn?: string; tokenOut?: string; amount?: bigint; quotedOut?: bigint; minOut?: bigint; observedAt?: bigint; recipient?: string } = {}): ActionCandidate {
   const quotedOut = o.quotedOut ?? 120_000_000_000_000_000n;
   return must({
     kind: 'SWAP_EXACT_IN',
     router: o.router ?? APPROVED_ROUTER,
     route: o.route ?? [APPROVED_POOL],
     tokenIn: o.tokenIn ?? FIXTURE_USDC,
-    tokenOut: WETH,
+    tokenOut: o.tokenOut ?? WETH,
     amountIn: o.amount ?? 300_000_000n,
     quotedOut,
     minOut: o.minOut ?? (quotedOut * 9_970n) / 10_000n,

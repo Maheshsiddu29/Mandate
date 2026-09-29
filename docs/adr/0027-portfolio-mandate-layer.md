@@ -8,6 +8,13 @@
   [portfolio-mandate.md](../phase-7f/portfolio-mandate.md),
   [security-model.md](../phase-7f/security-model.md)
 
+Phase 7F.1 hardening is recorded in
+[security-fixes-7f1.md](../phase-7f/security-fixes-7f1.md). It does not change
+this package boundary or the Portfolio Mandate v1 schema. It requires a
+complete signed verification transcript at reservation and signing, makes the
+Portfolio custody factory mandatory, and introduces the separately versioned
+`PORTFOLIO_RECEIPT.V2` encoding.
+
 ## Context
 
 Phase 7F adds one principal coordinating several specialized agents across

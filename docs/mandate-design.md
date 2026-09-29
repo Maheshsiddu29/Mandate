@@ -2108,6 +2108,16 @@ Phase 6 is implemented and tested locally against a labelled settlement fixture,
 not deployed, and awaiting review; testnet execution was not authorized in this
 phase.
 
+Phase 7F is implemented locally as the Portfolio Mandate layer above Core.
+Phase 7F.1 hardens its execution handoff: every reserve/admit/sign boundary
+re-runs a complete signed verification transcript and binds the exact
+candidate, child, action, reservation generation, execution authorization and
+attempt by canonical value. The Portfolio custody construction exposes only a
+guarded signer. `PORTFOLIO_RECEIPT.V2` commits the complete mandate and exact
+ordered allocation event stream; it does not change `PORTFOLIO_MANDATE.V1`.
+Release sequence monotonicity is verified within a transcript; durable
+cross-run high-water marks remain unbuilt and cannot widen Core authority.
+
 ### 25.1 Rules that apply to every phase
 
 **SPECIFIED, and enforced by [AGENTS.md](../AGENTS.md):**

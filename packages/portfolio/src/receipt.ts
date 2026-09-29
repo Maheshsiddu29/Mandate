@@ -5,7 +5,7 @@
  * proposed, what was decided and why, what was released and reassigned, the
  * allocation and the ledger before and after, every child authorization,
  * every registry verdict, every reservation and every execution result with
- * its evidence class. Its digest is keccak-256 of `PORTFOLIO_RECEIPT.V1`.
+ * its evidence class. Its digest is keccak-256 of `PORTFOLIO_RECEIPT.V2`.
  *
  * **Nothing in the digest depends on order or prose.** Every list is written
  * in a canonical order (by digest, identifier or party), so reordering the
@@ -15,14 +15,14 @@
  */
 
 import { ByteWriter, type Identifier } from '@mandate/kernel';
-import { writeDigest, type Digest32, type DomainId, type Tagged } from '@mandate/core';
-import type { AllocationBook, AllocationOp } from './allocation.ts';
+import { writeDigest, type ActionId, type Digest32, type DomainId, type ReservationGeneration, type Tagged } from '@mandate/core';
+import { writeAllocationOp, type AllocationBook } from './allocation.ts';
 import type { ResourceAvailability } from './availability.ts';
 import type { EvidenceClass, RepresentationDecisionRecord } from './binding.ts';
-import type { ActionCandidate } from './candidate.ts';
-import type { ChildAuthorizationDigest } from './child.ts';
-import { PortfolioTag, portfolioDigest, portfolioWriter } from './encoding.ts';
-import type { AllocationMode, PortfolioMandateDigest } from './mandate.ts';
+import { candidateDigest, encodeActionCandidate, type ActionCandidate, type CandidateDigest } from './candidate.ts';
+import { encodeChildExecutionAuthorization, type ChildAuthorizationDigest, type ChildExecutionAuthorization } from './child.ts';
+import { PORTFOLIO_RECEIPT_SCHEMA_VERSION, PortfolioTag, portfolioDigest, portfolioWriter } from './encoding.ts';
+import { encodePortfolioMandate, type AllocationMode, type PortfolioMandate, type PortfolioMandateDigest } from './mandate.ts';
 import type { ProposalDigest } from './proposal.ts';
 import type { Reason } from './reasons.ts';
 import type { ReleaseDigest } from './release.ts';
@@ -39,6 +39,7 @@ export type ExecutionStatus = (typeof EXECUTION_STATUSES)[number];
 
 export interface ReceiptProposal {
   readonly proposal: ProposalDigest;
+  readonly candidate: CandidateDigest;
   readonly agent: Identifier;
   readonly round: number;
   readonly kind: ActionKind;
@@ -64,6 +65,8 @@ export interface ReceiptRelease {
   readonly release: ReleaseDigest;
   readonly agent: Identifier;
   readonly round: number;
+  readonly sequence: bigint;
+  readonly amounts: ResourceVector;
   readonly applied: boolean;
   readonly reasons: readonly Reason[];
 }
@@ -74,6 +77,8 @@ export interface ReceiptReservation {
   readonly reservation: Digest32 | null;
   readonly authorization: Digest32 | null;
   readonly executionAuthorization: Digest32 | null;
+  readonly action: ActionId | null;
+  readonly generation: ReservationGeneration | null;
   readonly ledgerVersion: bigint | null;
   readonly reasons: readonly Reason[];
 }
@@ -102,6 +107,8 @@ export interface ReceiptAgent {
 export interface PortfolioReceipt {
   readonly principal: Identifier;
   readonly portfolioMandate: PortfolioMandateDigest;
+  /** The complete canonical mandate whose digest is named above. */
+  readonly mandate: PortfolioMandate;
   readonly policyVersion: bigint;
   readonly allocationMode: AllocationMode;
   readonly rounds: number;
@@ -114,8 +121,8 @@ export interface PortfolioReceipt {
   readonly resourcesBefore: ResourceAvailability;
   readonly resourcesAfter: ResourceAvailability;
   readonly verification: { readonly status: 'VERIFIED' | 'REFUSED'; readonly reasons: readonly Reason[] };
-  readonly childAuthorizations: readonly { readonly child: ChildAuthorizationDigest; readonly agent: Identifier; readonly proposal: ProposalDigest; readonly approved: ResourceVector }[];
-  readonly representationDecisions: readonly (RepresentationDecisionRecord & { readonly proposal: ProposalDigest })[];
+  readonly childAuthorizations: readonly { readonly child: ChildAuthorizationDigest; readonly agent: Identifier; readonly proposal: ProposalDigest; readonly candidate: ActionCandidate; readonly authorization: ChildExecutionAuthorization; readonly action: ActionId | null; readonly approved: ResourceVector }[];
+  readonly representationDecisions: readonly (RepresentationDecisionRecord & { readonly proposal: ProposalDigest; readonly asset: string | null })[];
   readonly reservations: readonly ReceiptReservation[];
   readonly executions: readonly ExecutionResult[];
   /** Onchain transactions the whole run sent. */
@@ -171,7 +178,7 @@ function writeNullableDigest(w: ByteWriter, d: string | null): void {
   if (d !== null) writeDigest(w, d as Digest32);
 }
 
-/** A book in canonical order: entries by (agent, resource), lots by id. Two valid orderings of one log encode alike. */
+/** State sets are canonical; the event stream is committed in execution order with every field. */
 function writeBook(w: ByteWriter, b: AllocationBook): void {
   const entries = [...b.entries].sort((x, y) => byText(x.agent.value, y.agent.value) || compareResourceIds(x.resource, y.resource));
   w.u16(entries.length);
@@ -183,8 +190,8 @@ function writeBook(w: ByteWriter, b: AllocationBook): void {
     writeNullableText(w, l.from === null ? null : l.from.value);
     w.u256(l.amount).u256(l.remaining);
   }
-  const ops = [...b.log].map((op: AllocationOp) => `${op.kind} ${op.agent.value} ${op.id}`).sort(byText);
-  w8(w, ops);
+  w.u16(b.log.length);
+  for (const op of b.log) writeAllocationOp(w, op);
 }
 
 function writeAvailability(w: ByteWriter, a: ResourceAvailability): void {
@@ -200,9 +207,11 @@ function writeAvailability(w: ByteWriter, a: ResourceAvailability): void {
 }
 
 export function encodeReceipt(r: PortfolioReceipt): Uint8Array {
-  const w = portfolioWriter(PortfolioTag.RECEIPT);
+  const w = portfolioWriter(PortfolioTag.RECEIPT, PORTFOLIO_RECEIPT_SCHEMA_VERSION);
   w.str(r.principal);
   writeDigest(w, r.portfolioMandate);
+  const mandate = encodePortfolioMandate(r.mandate);
+  w.u32(mandate.length).raw(mandate);
   w.u64(r.policyVersion).str(r.allocationMode).u16(r.rounds);
   const agents = [...r.agents].sort((a, b) => byText(a.agent, b.agent));
   w.u16(agents.length);
@@ -211,6 +220,7 @@ export function encodeReceipt(r: PortfolioReceipt): Uint8Array {
   w.u16(proposals.length);
   for (const p of proposals) {
     writeDigest(w, p.proposal);
+    writeDigest(w, p.candidate);
     w.str(p.agent).u16(p.round).str(p.kind);
     writeNullableText(w, p.domain);
     w.str(p.representation);
@@ -229,7 +239,8 @@ export function encodeReceipt(r: PortfolioReceipt): Uint8Array {
   w.u16(releases.length);
   for (const x of releases) {
     writeDigest(w, x.release);
-    w.str(x.agent).u16(x.round).u8(x.applied ? 1 : 0);
+    w.str(x.agent).u16(x.round).u64(x.sequence).u8(x.applied ? 1 : 0);
+    writeVector(w, x.amounts);
     writeReasons(w, x.reasons);
   }
   writeBook(w, r.allocationBefore);
@@ -244,6 +255,12 @@ export function encodeReceipt(r: PortfolioReceipt): Uint8Array {
     writeDigest(w, c.child);
     w.str(c.agent);
     writeDigest(w, c.proposal);
+    writeDigest(w, candidateDigest(c.candidate));
+    const candidate = encodeActionCandidate(c.candidate);
+    w.u32(candidate.length).raw(candidate);
+    const child = encodeChildExecutionAuthorization(c.authorization);
+    w.u32(child.length).raw(child);
+    writeNullableDigest(w, c.action);
     writeVector(w, c.approved);
   }
   const reps = [...r.representationDecisions].sort((a, b) => byText(a.proposal, b.proposal));
@@ -251,6 +268,7 @@ export function encodeReceipt(r: PortfolioReceipt): Uint8Array {
   for (const x of reps) {
     writeDigest(w, x.proposal);
     w.str(x.representation).str(x.status);
+    writeNullableText(w, x.asset);
     w8(w, [...x.codes].sort(byText));
   }
   const reservations = [...r.reservations].sort((a, b) => byText(a.child, b.child));
@@ -261,6 +279,9 @@ export function encodeReceipt(r: PortfolioReceipt): Uint8Array {
     writeNullableDigest(w, x.reservation);
     writeNullableDigest(w, x.authorization);
     writeNullableDigest(w, x.executionAuthorization);
+    writeNullableDigest(w, x.action);
+    w.u8(x.generation === null ? 0 : 1);
+    if (x.generation !== null) w.u64(x.generation);
     w.u8(x.ledgerVersion === null ? 0 : 1);
     if (x.ledgerVersion !== null) w.u64(x.ledgerVersion);
     writeReasons(w, x.reasons);

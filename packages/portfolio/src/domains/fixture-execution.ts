@@ -26,6 +26,7 @@ import { FIXTURE_ARTIFACT_KIND } from './fixture.ts';
 import { reason, type Reason } from '../reasons.ts';
 import { checkBeforeSign, ledgerRefusal, type PortfolioCore } from '../reservation.ts';
 import type { ResourceVector } from '../resources.ts';
+import type { VerificationTranscript } from '../verifier.ts';
 
 export interface FixtureExecution {
   readonly attempt: AttemptRecord;
@@ -52,7 +53,7 @@ export function fixtureArtifactId(child: ChildAuthorizationDigest, record: Autho
  */
 export async function executeFixtureChild(
   core: PortfolioCore,
-  verified: ReadonlySet<ChildAuthorizationDigest>,
+  transcript: VerificationTranscript,
   child: ChildExecutionAuthorization,
   candidate: ActionCandidate,
   record: AuthorizationRecord,
@@ -86,7 +87,17 @@ export async function executeFixtureChild(
   );
   if (out.status === 'REFUSED' || out.status === 'CONFLICT') return err([ledgerRefusal(out.refusal)]);
   const snapshot = await core.engine.read(record.principal);
-  const blocked = checkBeforeSign(core, verified, { agent: child.agent, child, candidate, reservation: record.reservation, action: record.actionId }, snapshot.state);
+  const blocked = checkBeforeSign(core, transcript, {
+    agent: child.agent,
+    child,
+    candidate,
+    reservation: record.reservation,
+    action: record.actionId,
+    generation: record.generation,
+    authorization: record.executionId,
+    attempt: out.attempt.attempt,
+    at,
+  }, snapshot.state);
   if (blocked.length > 0) return err(blocked);
   return ok({ attempt: out.attempt, artifact, settled: child.approved, evidence: 'SIMULATED' });
 }

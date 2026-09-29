@@ -128,7 +128,7 @@ export async function serializeCorpus(): Promise<{ readonly [file: string]: stri
   });
   return {
     'mandate.json': text(toJson({ corpusVersion: PORTFOLIO_CORPUS_VERSION, schema: 'PORTFOLIO_MANDATE.V1', digest: portfolioMandateDigest(m), encoding: bytesToHex(encodePortfolioMandate(m)), principalSignature: run.signature })),
-    'receipt.json': text(toJson({ corpusVersion: PORTFOLIO_CORPUS_VERSION, schema: 'PORTFOLIO_RECEIPT.V1', receiptDigest: run.digest, receipt: run.receipt })),
+    'receipt.json': text(toJson({ corpusVersion: PORTFOLIO_CORPUS_VERSION, schema: 'PORTFOLIO_RECEIPT.V2', receiptDigest: run.digest, receipt: run.receipt })),
     'view.json': text(toJson({ corpusVersion: PORTFOLIO_CORPUS_VERSION, view })),
     'vectors.json': text(toJson({ corpusVersion: PORTFOLIO_CORPUS_VERSION, evaluatedAt: NOW, vectorCount: screened.length, vectors: screened })),
   };

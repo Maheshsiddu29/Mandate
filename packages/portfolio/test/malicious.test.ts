@@ -20,20 +20,25 @@ import {
   childAuthorizationDigest,
   childExecutionAuthorizationInputOf,
   compileAction,
+  executeFixtureChild,
   fullAvailability,
+  portfolioMandateDigest,
+  releaseDigest,
   requestFor,
   reserveChild,
   runMandateRoom,
   validateChildExecutionAuthorization,
+  verifyPortfolio,
   type ActionCandidate,
   type AgentMessage,
+  type AllocationOp,
   type ChildExecutionAuthorization,
   type SignedProposal,
 } from '../src/index.ts';
 import { DEMO_DOMAIN_SEPARATOR, DEMO_GATE_CODEHASH, DEMO_GATE_CONFIG, PRINCIPAL, STOCK_COUNTERFEIT, STOCK_LOOKALIKE, USDC, demoBindings, demoKey, demoMandate, demoParty } from '../src/demo/index.ts';
-import { NOW, perpOpen, stockBuy, swap } from './support/candidates.ts';
+import { NOW, nftBuy, perpOpen, stockBuy, swap, yieldDeposit } from './support/candidates.ts';
 import { gateWorld, type GateWorld } from './support/gate.ts';
-import { ScriptedAgent, childFor, principalSignature, proposal, world, type World } from './support/world.ts';
+import { ScriptedAgent, authorizationFor, childFor, principalSignature, proposal, release, world, type World } from './support/world.ts';
 
 const m = demoMandate();
 const propose = (signed: SignedProposal): AgentMessage => ({ kind: 'PROPOSE', signed });
@@ -101,9 +106,11 @@ describe('the canonical asset and representation hero case', () => {
 describe('malicious authorized agents', () => {
   it('A — the stock agent substitutes the representation after approval: the child binds its candidate, and nothing is reserved', async () => {
     const w = await world();
-    const child = childFor(w.m, 'stock', stockBuy());
-    const r = await reserveChild(w.core, child, stockBuy({ representation: STOCK_LOOKALIKE }), NOW);
-    assert.deepEqual(r.status === 'REFUSED' ? r.reasons.map((x) => x.code) : r.status, ['CHILD_ACTION_MUTATED']);
+    const authorization = authorizationFor(w.m, 'stock', stockBuy());
+    const forged = validateChildExecutionAuthorization({ ...childExecutionAuthorizationInputOf(authorization.verified.child), candidate: candidateDigest(stockBuy({ representation: STOCK_LOOKALIKE })) });
+    assert.ok(forged.ok);
+    const r = await reserveChild(w.core, authorization.transcript, childAuthorizationDigest(forged.value), NOW);
+    assert.ok(r.status === 'REFUSED' && r.reasons.some((x) => x.code === 'CHILD_AUTHORIZATION_UNKNOWN'));
     const snap = await w.core.engine.read(w.m.principal);
     assert.equal(snap.state.reservations.size, 0);
   });
@@ -127,12 +134,14 @@ describe('malicious authorized agents', () => {
   it('D — a candidate changed after authorization is refused before any key: the action no longer compiles to the child', async () => {
     const w = await world();
     const candidate = swap();
-    const child = childFor(w.m, 'swap', candidate);
-    const r = await reserveChild(w.core, child, candidate, NOW);
+    const authorization = authorizationFor(w.m, 'swap', candidate);
+    const child = authorization.verified.child;
+    const r = await reserveChild(w.core, authorization.transcript, authorization.verified.digest, NOW);
     assert.ok(r.status === 'RESERVED');
+    const issued = await executeFixtureChild(w.core, authorization.transcript, child, candidate, r.record, NOW + 5n);
+    assert.ok(issued.ok);
     const snap = await w.core.engine.read(w.m.principal);
-    const verified = new Set([childAuthorizationDigest(child)]);
-    const reasons = checkBeforeSign(w.core, verified, { agent: child.agent, child, candidate: swap({ amount: USDC(301n) }), reservation: r.record.reservation, action: r.record.actionId }, snap.state);
+    const reasons = checkBeforeSign(w.core, authorization.transcript, { agent: child.agent, child, candidate: swap({ amount: USDC(301n) }), reservation: r.record.reservation, action: r.record.actionId, generation: r.record.generation, authorization: r.record.executionId, attempt: issued.value.attempt.attempt, at: NOW + 5n }, snap.state);
     assert.ok(reasons.some((x) => x.code === 'CHILD_ACTION_MUTATED'), JSON.stringify(reasons));
   });
 });
@@ -162,11 +171,12 @@ const mine = (g: GateWorld, a: GateAttempt) => g.chain.mine({ calldata: executeC
 
 async function issuedStock(g: GateWorld, verify = true): Promise<{ attempt: GateAttempt; child: ChildExecutionAuthorization }> {
   const candidate = stockBuy({ tenths: 48n });
-  const child = childFor(g.core.compiled.mandate, 'stock', candidate);
-  const r = await reserveChild(g.core, child, candidate, NOW);
+  const authorization = authorizationFor(g.core.compiled.mandate, 'stock', candidate);
+  const child = authorization.verified.child;
+  const r = await reserveChild(g.core, authorization.transcript, authorization.verified.digest, NOW);
   assert.ok(r.status === 'RESERVED');
-  g.children.set(r.record.reservation, { child, candidate });
-  if (verify) g.verified.add(childAuthorizationDigest(child));
+  const transcript = verify ? authorization.transcript : { ...authorization.transcript, candidate: { ...authorization.transcript.candidate, accepted: [] } };
+  g.children.set(r.record.reservation, { child, candidate, record: r.record, transcript });
   const compiled = compileAction(g.core.compiled, child, candidate);
   assert.ok(compiled.ok);
   const at = NOW + 5n;
@@ -180,6 +190,58 @@ async function issuedStock(g: GateWorld, verify = true): Promise<{ attempt: Gate
   assert.ok(tx !== undefined);
   return { attempt: tx.call.attempt, child };
 }
+
+describe('Phase 7F.1 hostile five-agent boundary', () => {
+  it('preserves legitimate reservations while stale swap, custody bypass and release replay use no key and send no transaction', async () => {
+    const g = await gateWorld();
+    try {
+      const cases = [
+        ['stock', stockBuy({ tenths: 48n })],
+        ['swap', swap({ amount: USDC(300n) })],
+        ['nft', nftBuy({ price: USDC(250n) })],
+        ['yield', yieldDeposit({ amount: USDC(450n) })],
+        ['perps', perpOpen({ usdc: 400n })],
+      ] as const;
+      const reserved = new Map<string, { authorization: ReturnType<typeof authorizationFor>; record: import('@mandate/control').AuthorizationRecord; candidate: ActionCandidate }>();
+      for (const [role, candidate] of cases) {
+        const authorization = authorizationFor(g.core.compiled.mandate, role, candidate);
+        const out = await reserveChild(g.core, authorization.transcript, authorization.verified.digest, NOW);
+        assert.equal(out.status, 'RESERVED', role);
+        assert.ok(out.status === 'RESERVED');
+        reserved.set(role, { authorization, record: out.record, candidate });
+      }
+      const before = await g.core.engine.read(g.core.compiled.mandate.principal);
+      assert.equal(before.state.reservations.size, 5);
+
+      const swapAuthorization = reserved.get('swap') as NonNullable<ReturnType<typeof reserved.get>>;
+      const staleCandidate = swap({ minOut: 0n, observedAt: NOW - 10_000n });
+      const rebound = validateChildExecutionAuthorization({ ...childExecutionAuthorizationInputOf(swapAuthorization.authorization.verified.child), candidate: candidateDigest(staleCandidate) });
+      assert.ok(rebound.ok);
+      assert.equal((await reserveChild(g.core, swapAuthorization.authorization.transcript, childAuthorizationDigest(rebound.value), NOW)).status, 'REFUSED');
+
+      const mandate = g.core.compiled.mandate;
+      const a = release(mandate, 'nft', [['portfolio-notional', 10n]], 9n);
+      const b = release(mandate, 'nft', [['portfolio-notional', 5n]], 9n);
+      const allocationLog: AllocationOp[] = [a, b].map((signed) => ({ kind: 'RELEASE', agent: signed.release.agent, id: `release/${releaseDigest(signed.release)}` as never, amounts: signed.release.amounts }));
+      const replay = verifyPortfolio({ mandate, signature: principalSignature(mandate), bindings: demoBindings(), availability: fullAvailability(mandate), now: NOW, candidate: { portfolioMandate: portfolioMandateDigest(mandate), accepted: [], allocationLog }, proposals: [], releases: [a, b] });
+      assert.ok(replay.status === 'REFUSED' && replay.reasons.some((r) => r.code === 'RELEASE_SEQUENCE_INVALID'));
+
+      const stock = reserved.get('stock') as NonNullable<ReturnType<typeof reserved.get>>;
+      const badTranscript = { ...stock.authorization.transcript, candidate: { ...stock.authorization.transcript.candidate, accepted: [] } };
+      g.children.set(stock.record.reservation, { child: stock.authorization.verified.child, candidate: stock.candidate, record: stock.record, transcript: badTranscript });
+      const compiled = compileAction(g.core.compiled, stock.authorization.verified.child, stock.candidate);
+      assert.ok(compiled.ok);
+      const outcome = await g.signer.issueAuthorizedBuy(stock.record, { payload: compiled.value.payload, states: g.binding.states(stock.candidate, NOW + 5n), context: { evaluationTime: NOW + 5n, sources: [...g.binding.sources()], blockHeads: [], sequenceWatermarks: [] } });
+      assert.equal(outcome.status, 'REFUSED');
+      assert.equal(g.keyUses(), 0);
+      assert.equal(g.chain.txs.length, 0);
+      const after = await g.core.engine.read(mandate.principal);
+      assert.equal(after.state.reservations.size, 5);
+    } finally {
+      g.close();
+    }
+  });
+});
 
 describe('ONCHAIN_DEFENSE_TEST (SIMULATED against the Phase 6 reference model; no transaction sent)', () => {
   it('the verified stock child executes exactly: 4.8 tokens for 600 USDC, into the principal', async () => {
@@ -228,6 +290,7 @@ describe('ONCHAIN_DEFENSE_TEST (SIMULATED against the Phase 6 reference model; n
     try {
       await issuedStock(g, false);
       assert.equal(g.chain.txs.length, 0);
+      assert.equal(g.keyUses(), 0);
     } finally {
       g.close();
     }

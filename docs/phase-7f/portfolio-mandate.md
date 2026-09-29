@@ -195,7 +195,7 @@ The repository's encoding discipline (ADR 0002, ADR 0020), unchanged:
   naming the object and its version. Tags: `PORTFOLIO_MANDATE.V1`,
   `PORTFOLIO_ACTION_CANDIDATE.V1`, `PORTFOLIO_PROPOSAL.V1`,
   `PORTFOLIO_RELEASE.V1`, `PORTFOLIO_CHILD_AUTHORIZATION.V1`,
-  `PORTFOLIO_RECEIPT.V1`, and the three signing prefixes
+  `PORTFOLIO_RECEIPT.V2` (receipt schema 2), and the three signing prefixes
   `PORTFOLIO_MANDATE_SIGNATURE.V1`, `PORTFOLIO_PROPOSAL_SIGNATURE.V1`,
   `PORTFOLIO_RELEASE_SIGNATURE.V1`. The room's `PortfolioCandidate` is never
   hashed or signed: it is untrusted, and the verifier re-derives it.
@@ -402,9 +402,11 @@ produced. It re-derives, independently:
 2. for every accepted proposal: authentication, freshness, sequence,
    extensions, identity resolution and `permits` against the agent scope and
    the portfolio scope; declared = derived demand;
-3. the allocation book, replayed from the room's decision log from the
+3. the allocation book, replayed in event order from the room's decision log from the
    mandate's initial book — every commit, release and claim re-applied with
-   its rules — and compared with the book the candidate claims;
+   every field, strictly increasing per-agent release sequences, unique
+   release/claim ids and feasible lot ordering — and compared with the book
+   the candidate claims;
 4. per resource: `Σ approved ≤ agent hard maximum − agent reserved` and
    `Σ approved over all agents ≤ portfolio limit − portfolio reserved`, using
    the ledger's current reservations;
@@ -442,7 +444,11 @@ and checks each one ⊆ its agent's policy ⊆ the portfolio (§7, level 2).
 They are registered through the unchanged `ControlEngine`, whose ledger
 re-checks every delegation ⊆ its parent.
 
-Each `ChildExecutionAuthorization` is mapped by its domain binding to one
+Reservation receives the complete signed verification transcript, re-runs
+the verifier by value, selects the exact child digest and re-screens the
+signed proposal at reservation time. It does not accept a caller-created
+child or a claimed verifier-membership set. Each verified
+`ChildExecutionAuthorization` is then mapped by its domain binding to one
 Core action envelope — principal, the agent's delegation, the agent as actor,
 the exact module, adapter, market and payload, a nonce derived from the child
 authorization digest, its window — and reserved with
@@ -465,41 +471,47 @@ The reservation lifecycle is the ledger's, not a new one:
 | `SETTLED` / `FAILED` | domain execution evidence, with its evidence class (§15) |
 | `CONSUMED` / `RELEASED` | ledger reconciliation — **not built**: executed reservations stay `ACTIVE`, as in 7E.3; the only release is `NEVER_ISSUED` |
 
-**Before any principal or custody key signs**, `checkBeforeSign` requires:
-the child authorization is one the verifier derived (allocation exists); its
+**Before any principal or custody key signs**, `checkBeforeSign` re-runs the
+same signed transcript and requires: the child authorization is one the
+verifier derived (allocation exists and the mandate/proposal remain active); its
 action is byte-identical to the one the binding derives from it (no
 mutation); an `ACTIVE` reservation of that action exists with demands equal
-to the approved resources; and an `ADMIT_ATTEMPT` for that reservation is
-committed. The domain signer then performs its own existing checks (for the
+to the approved resources; and the exact claimed `ADMIT_ATTEMPT` matches the
+reservation, generation, action and execution authorization. The domain signer then performs its own existing checks (for the
 Robinhood gate, custody re-derives the gate artifact from the committed
 attempt). For the Robinhood path the portfolio's check is placed in front of
-the principal key itself: `guardGateCustody` wraps the unchanged gate custody,
-so a stock reservation the portfolio never verified can reach the gate
-signer but never the principal's signature.
+the principal key itself: `createPortfolioGateSigner` captures the unchanged
+generic gate custody and exposes only the guarded signer. A stock reservation
+the portfolio never verified can reach generic Core APIs but not a Portfolio
+principal signature.
 
 Agent releases are signed too (`PORTFOLIO_RELEASE.V1`): a release can only
 reduce the releasing agent's own allocation, but an unauthenticated one
-would let any party strip an agent of its allocation.
+would let any party strip an agent of its allocation. The verifier requires
+sequences to increase strictly within the transcript. Cross-run high-water
+marks are not durable in Phase 7F.1; that residual can reduce offchain
+allocation but cannot widen signed or ledger authority.
 
 ## 13. The Portfolio Receipt
 
-A deterministic, canonically encoded record (`PORTFOLIO_RECEIPT.V1`) of one
+A deterministic, canonically encoded record (`PORTFOLIO_RECEIPT.V2`, schema
+version 2) of one
 portfolio run:
 
 ```text
-PortfolioReceipt {                                    PORTFOLIO_RECEIPT.V1
-  principal, portfolioMandate, policyVersion, allocationMode, rounds
+PortfolioReceipt {                                    PORTFOLIO_RECEIPT.V2
+  principal, complete canonical mandate, mandate digest, policyVersion, allocationMode, rounds
   agents[]                  agent, label, final status (derived, never reported)
-  proposals[]               digest, agent, round, kind, domain, exact representation, venue, requested
+  proposals[]               digest, candidate digest, agent, round, kind, domain, exact representation, venue, requested
   decisions[]               proposal, round, outcome, reason codes, reduce target,
                             refusal = NONE | OFFCHAIN_REFUSAL (0 transactions, 0 gas)
-  releases[]                digest, agent, round, applied, reasons
-  allocationBefore/After    the book: entries, lots, operations
+  releases[]                digest, agent, round, sequence, amounts, applied, reasons
+  allocationBefore/After    entries/lots as canonical sets; complete operations in event order
   resourcesBefore/After     the ledger: headroom and reserved per resource, per agent
   verification              VERIFIED | REFUSED, with reasons
-  childAuthorizations[]     digest, agent, proposal, approved resources
-  representationDecisions[] the registry's verdict and codes for every stock candidate
-  reservations[]            child → reservation, authorization, execution authorization, ledger version
+  childAuthorizations[]     exact child and candidate encodings, digests, agent, proposal, action, approved resources
+  representationDecisions[] canonical asset, representation, registry verdict and codes
+  reservations[]            child → reservation, authorization, execution authorization, action, generation, ledger version
   executions[]              child → status, this run's evidence class, the integration and its evidence,
                             attempt, artifact, transactions
   transactions              onchain transactions the whole run sent
@@ -507,7 +519,8 @@ PortfolioReceipt {                                    PORTFOLIO_RECEIPT.V1
 receiptDigest = keccak(encoding)
 ```
 
-Every list is in canonical order. No prose, no model output and no display
+Unordered collections are canonical. Ordered event streams preserve order.
+No prose, no model output and no display
 text is inside the digest; a display rendering is derived from the receipt,
 never the reverse. Reordering the proposals or the candidate's selections
 cannot change the digest.

@@ -6,6 +6,12 @@
 > frozen is modified — not MCE v2, Candidate V3, the Phase 6 gate, Core, the
 > ledger, the control engine, the Phase 7E.3 deployment or any canonical
 > corpus.
+>
+> **Phase 7F.1 hardening is implemented locally and awaiting review.** See
+> [security-fixes-7f1.md](security-fixes-7f1.md). It adds value-based
+> verify→reserve→admit→sign binding, mandatory Portfolio custody construction,
+> ordered transcript replay and `PORTFOLIO_RECEIPT.V2`; the Portfolio Mandate
+> remains v1.
 
 **One authority layer. Many agents. Multiple markets.** Five specialized
 agents — stock, swap, NFT, yield, perps — act for one principal. Discovery,
@@ -20,6 +26,7 @@ transactions.
 | [ADR 0027](../adr/0027-portfolio-mandate-layer.md) | why a separate package that compiles into Core rather than a Core change |
 | [demo.md](demo.md) | the five-agent demonstration round by round, its evidence classes, and what is real and what is not |
 | [implementation-7f.md](implementation-7f.md) | what was built, how it maps onto existing components, decisions needing approval, tests, validation, performance, residual risks |
+| [security-fixes-7f1.md](security-fixes-7f1.md) | the independently reproduced findings, exact boundary invariant, Receipt V2, transcript rules and residual cross-run replay risk |
 
 Run it: `npm run portfolio:demo` (offline). Its receipt, UI view and
 screening vectors are committed in

@@ -1,8 +1,8 @@
 /**
  * The stock child's real issuance path, offline: the portfolio's compiled
  * grants in the SQLite reference store with its durable lifecycle table, the
- * existing `GateSigner`, `LocalGateCustody` behind the portfolio's
- * `guardGateCustody`, the stock agent's own key, and a chain that executes
+ * existing `GateSigner`, `LocalGateCustody` behind the portfolio's mandatory
+ * signer factory, the stock agent's own key, and a chain that executes
  * every call through the Phase 6 reference model (the evm-robinhood test
  * `ModelChain`, which the frozen differential corpus proves byte-equal in its
  * decisions to the Solidity gate). **SIMULATED: no transaction is sent.**
@@ -14,17 +14,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { validateAdapterRef, validatePrincipalId, type ReservationId } from '@mandate/core';
 import { DurableAdapterRegistry, DurableModuleRegistry, IssuanceJournal, SqliteLedgerStore, openLifecycle } from '@mandate/ledger-sqlite';
-import { GateSigner, LocalAgentSigner, LocalGateCustody, gateAdapterRef } from '@mandate/evm-robinhood';
+import { GateSigner, LocalAgentSigner, LocalGateCustody, gateAdapterRef, type GateKeyCustody } from '@mandate/evm-robinhood';
 import {
   compilePortfolio,
   createPortfolioCore,
-  guardGateCustody,
+  createPortfolioGateSigner,
   registerPortfolio,
   type ActionCandidate,
-  type ChildAuthorizationDigest,
   type ChildExecutionAuthorization,
   type PortfolioCore,
   type StockBinding,
+  type VerificationTranscript,
 } from '../../src/index.ts';
 import { DEMO_DOMAIN_SEPARATOR, DEMO_GATE, DEMO_GATE_CODEHASH, DEMO_GATE_CONFIG, DEMO_T0, DEMO_USDC_TOKEN, PRINCIPAL, USDC, demoBindings, demoKey, demoMandate, demoParty } from '../../src/demo/index.ts';
 import { ModelChain } from '../../../evm-robinhood/test/support/world.ts';
@@ -36,9 +36,8 @@ export interface GateWorld {
   readonly chain: ModelChain;
   readonly signer: GateSigner;
   readonly binding: StockBinding;
-  /** Children the portfolio's verifier has admitted; the guard refuses every other reservation. */
-  readonly verified: Set<ChildAuthorizationDigest>;
-  readonly children: Map<string, { child: ChildExecutionAuthorization; candidate: ActionCandidate }>;
+  readonly children: Map<string, { child: ChildExecutionAuthorization; candidate: ActionCandidate; record: import('@mandate/control').AuthorizationRecord; transcript: VerificationTranscript }>;
+  readonly keyUses: () => number;
   close(): void;
 }
 
@@ -74,8 +73,7 @@ export async function gateWorld(): Promise<GateWorld> {
   chain.fund(DEMO_USDC_TOKEN, PRINCIPAL.value, USDC(1_000n));
   // The principal's only approval is to the gate, for exactly its spot-capital authority.
   chain.approve(DEMO_USDC_TOKEN, PRINCIPAL.value, DEMO_GATE, USDC(800n));
-  const verified = new Set<ChildAuthorizationDigest>();
-  const children = new Map<string, { child: ChildExecutionAuthorization; candidate: ActionCandidate }>();
+  const children = new Map<string, { child: ChildExecutionAuthorization; candidate: ActionCandidate; record: import('@mandate/control').AuthorizationRecord; transcript: VerificationTranscript }>();
   const inner = new LocalGateCustody(
     demoKey('principal'),
     {
@@ -91,15 +89,23 @@ export async function gateWorld(): Promise<GateWorld> {
     },
     { module: binding.policy.ref, adapter: adapterRef },
   );
-  const custody = guardGateCustody(inner, { core, verified, childOf: (r: ReservationId) => children.get(r) ?? null, state: () => sqlite.readCommitted(principalId.value).state });
-  const signer = new GateSigner({
+  let keyUses = 0;
+  const counted: GateKeyCustody = {
+    principal: () => inner.principal(),
+    signMandate: (artifact, terms, claim) => {
+      keyUses += 1;
+      return inner.signMandate(artifact, terms, claim);
+    },
+  };
+  const signer = createPortfolioGateSigner({
     engine: core.engine,
     store: sqlite,
     journal,
-    custody,
+    custody: counted,
     agent: new LocalAgentSigner(demoKey('stock')),
     chain,
     config: { gate: DEMO_GATE_CONFIG, gateCodehash: DEMO_GATE_CODEHASH, domainSeparator: DEMO_DOMAIN_SEPARATOR, principal: principalId.value, principalAddress: PRINCIPAL.value, agentAddress: demoParty('stock').value, adapter: adapterRef, policy: binding.policy.ref, deadlineSeconds: 120n, retry: { maxAttempts: 32 } },
+    portfolio: { core, childOf: (r: ReservationId) => children.get(r) ?? null, transcriptOf: (r: ReservationId) => children.get(r)?.transcript ?? null, state: () => sqlite.readCommitted(principalId.value).state },
   });
   return {
     core,
@@ -107,8 +113,8 @@ export async function gateWorld(): Promise<GateWorld> {
     chain,
     signer,
     binding,
-    verified,
     children,
+    keyUses: () => keyUses,
     close: () => {
       sqlite.close();
       lifecycle.close();

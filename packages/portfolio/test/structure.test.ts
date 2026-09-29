@@ -66,6 +66,11 @@ describe('portfolio structural boundary', () => {
     for (const { file, text } of SOURCES.filter((s) => !s.file.startsWith('demo/'))) assert.doesNotMatch(text, /secp256k1\.sign|getPublicKey/, file);
   });
 
+  it('exposes only the mandatory guarded Portfolio gate-signer factory', () => {
+    assert.equal('guardGateCustody' in pkg, false);
+    assert.equal(typeof pkg.createPortfolioGateSigner, 'function');
+  });
+
   it('the portfolio layer is domain-agnostic: only bindings name a domain package, and only the demonstration uses fixture data', () => {
     for (const { file, text } of SOURCES) {
       const layer = file.includes('/') ? file.split('/')[0] : 'core';

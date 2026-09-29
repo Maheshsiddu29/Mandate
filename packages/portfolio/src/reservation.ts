@@ -28,7 +28,7 @@
  */
 
 import { err, ok, type Result } from '@mandate/kernel';
-import { actionId, authorityId, validateAdapterRef, type ActionId, type ReservationId } from '@mandate/core';
+import { actionId, authorityId, validateAdapterRef, type ActionId, type ExecutionAuthorizationId, type ReservationGeneration, type ReservationId } from '@mandate/core';
 import {
   InMemoryLedgerStore,
   ReferenceAdapterRegistry,
@@ -37,6 +37,7 @@ import {
   availableOf,
   nodeTargetKey,
   type AdapterRegistry,
+  type AttemptId,
   type AttemptRecord,
   type InMemoryStoreHooks,
   type LedgerSnapshot,
@@ -51,8 +52,11 @@ import type { ResourceAvailability } from './availability.ts';
 import type { ActionCandidate } from './candidate.ts';
 import { checkChildAuthorization, childAuthorizationDigest, type ChildAuthorizationDigest, type ChildExecutionAuthorization } from './child.ts';
 import { compileAction, type CompiledPortfolio } from './compile.ts';
+import { proposalDigest } from './proposal.ts';
 import { canonicalReasons, reason, type Reason } from './reasons.ts';
 import { demandOf, resourceTable, vectorsEqual, type Contribution, type ResourceAmount, type ResourceVector } from './resources.ts';
+import { screenProposal } from './screen.ts';
+import { verifyTranscript, type VerificationTranscript, type VerifiedChild } from './verifier.ts';
 
 export interface PortfolioCore {
   readonly compiled: CompiledPortfolio;
@@ -136,7 +140,7 @@ export function demandedResources(c: CompiledPortfolio, domain: string, demands:
 }
 
 export type ReserveOutcome =
-  | { readonly status: 'RESERVED'; readonly record: AuthorizationRecord; readonly request: AuthorizationRequest; readonly snapshot: LedgerSnapshot }
+  | { readonly status: 'RESERVED'; readonly record: AuthorizationRecord; readonly request: AuthorizationRequest; readonly snapshot: LedgerSnapshot; readonly verified: VerifiedChild }
   | { readonly status: 'REFUSED'; readonly reasons: readonly Reason[] };
 
 /** The authorization request for a child at `at`: its compiled action, fresh state and the binding's sources. */
@@ -152,7 +156,30 @@ export function requestFor(core: PortfolioCore, child: ChildExecutionAuthorizati
  * pure decision first and refuses when the module would reserve anything
  * other than exactly the approved resources; then reserves atomically.
  */
-export async function reserveChild(core: PortfolioCore, child: ChildExecutionAuthorization, candidate: ActionCandidate, at: bigint, retry: RetryPolicy = { maxAttempts: 8 }): Promise<ReserveOutcome> {
+function verifiedAtBoundary(core: PortfolioCore, transcript: VerificationTranscript, digest: ChildAuthorizationDigest, at: bigint): Result<VerifiedChild, readonly Reason[]> {
+  const verification = verifyTranscript(core.compiled.mandate, core.compiled.bindings, transcript);
+  if (verification.status === 'REFUSED') return err(verification.reasons);
+  const verified = verification.children.find((x) => x.digest === digest);
+  if (verified === undefined) return err([reason('CHILD_AUTHORIZATION_UNKNOWN', digest)]);
+  const signed = transcript.proposals.find((x) => proposalDigest(x.proposal) === verified.proposal);
+  if (signed === undefined) return err([reason('CANDIDATE_PROPOSAL_UNKNOWN', verified.proposal)]);
+  const current = screenProposal(core.compiled.mandate, core.compiled.bindings, signed, at);
+  if (current.child === null) return err(current.reasons);
+  if (
+    current.child.portfolioMandate !== verified.child.portfolioMandate ||
+    current.child.agent.kind !== verified.child.agent.kind ||
+    current.child.agent.value !== verified.child.agent.value ||
+    current.child.proposal !== verified.child.proposal ||
+    current.child.candidate !== verified.child.candidate ||
+    !vectorsEqual(current.child.approved, verified.child.approved)
+  ) return err([reason('CHILD_ACTION_MUTATED', digest)]);
+  return ok(verified);
+}
+
+export async function reserveChild(core: PortfolioCore, transcript: VerificationTranscript, digest: ChildAuthorizationDigest, at: bigint, retry: RetryPolicy = { maxAttempts: 8 }): Promise<ReserveOutcome> {
+  const proof = verifiedAtBoundary(core, transcript, digest, at);
+  if (!proof.ok) return { status: 'REFUSED', reasons: proof.error };
+  const { child, candidate } = proof.value;
   const invalid = checkChildAuthorization(core.compiled.mandate, child);
   if (invalid.length > 0) return { status: 'REFUSED', reasons: invalid };
   const request = requestFor(core, child, candidate, at);
@@ -163,7 +190,7 @@ export async function reserveChild(core: PortfolioCore, child: ChildExecutionAut
   if (!charged.ok) return { status: 'REFUSED', reasons: [charged.error] };
   if (!vectorsEqual(charged.value, child.approved)) return { status: 'REFUSED', reasons: [reason('RESERVATION_DEMAND_MISMATCH', childAuthorizationDigest(child))] };
   const out = await core.engine.authorizeAndReserve(request.value, retry);
-  if (out.status === 'AUTHORIZED') return { status: 'RESERVED', record: out.authorization, request: request.value, snapshot: out.snapshot };
+  if (out.status === 'AUTHORIZED') return { status: 'RESERVED', record: out.authorization, request: request.value, snapshot: out.snapshot, verified: proof.value };
   return { status: 'REFUSED', reasons: [ledgerRefusal(out.refusal)] };
 }
 
@@ -184,6 +211,10 @@ export interface SignClaim {
   readonly candidate: ActionCandidate;
   readonly reservation: ReservationId;
   readonly action: ActionId;
+  readonly generation: ReservationGeneration;
+  readonly authorization: ExecutionAuthorizationId;
+  readonly attempt: AttemptId;
+  readonly at: bigint;
 }
 
 /**
@@ -199,22 +230,29 @@ export interface SignClaim {
  * The domain signer then runs its own checks (Robinhood custody re-derives
  * the gate artifact from the committed attempt).
  */
-export function checkBeforeSign(core: PortfolioCore, verified: ReadonlySet<ChildAuthorizationDigest>, claim: SignClaim, state: LedgerState): readonly Reason[] {
+export function checkBeforeSign(core: PortfolioCore, transcript: VerificationTranscript, claim: SignClaim, state: LedgerState): readonly Reason[] {
   const found: Reason[] = [];
   const digest = childAuthorizationDigest(claim.child);
-  if (!verified.has(digest)) found.push(reason('CHILD_AUTHORIZATION_UNKNOWN', digest));
+  const proof = verifiedAtBoundary(core, transcript, digest, claim.at);
+  if (!proof.ok) found.push(...proof.error);
+  else if (proof.value.child.candidate !== claim.child.candidate || proof.value.proposal !== claim.child.proposal) found.push(reason('CHILD_ACTION_MUTATED', digest));
   if (claim.agent.kind !== claim.child.agent.kind || claim.agent.value !== claim.child.agent.value) found.push(reason('CHILD_AGENT_MISMATCH', claim.agent.value));
   const compiled = compileAction(core.compiled, claim.child, claim.candidate);
   if (!compiled.ok) found.push(compiled.error);
   else if (actionId(compiled.value.envelope) !== claim.action) found.push(reason('CHILD_ACTION_MUTATED', 'action'));
   const r = state.reservations.get(claim.reservation);
-  if (r === undefined || r.status !== 'ACTIVE' || r.action !== claim.action) found.push(reason('RESERVATION_MISSING', claim.reservation));
+  if (r === undefined || r.status !== 'ACTIVE' || r.action !== claim.action || r.generation !== claim.generation) found.push(reason('RESERVATION_MISSING', claim.reservation));
   else {
     const held = demandedResources(core.compiled, r.module.domainId, r.demands.map((d) => ({ quantity: { ...d.contribution.quantity, atoms: d.reserved - d.consumed - d.released } })));
     if (!held.ok || !vectorsEqual(held.value, claim.child.approved)) found.push(reason('RESERVATION_DEMAND_MISMATCH', claim.reservation));
   }
-  const attempts: readonly AttemptRecord[] = attemptsOf(state, claim.reservation);
-  if (attempts.length === 0) found.push(reason('ATTEMPT_NOT_COMMITTED', claim.reservation));
+  const attempt: AttemptRecord | undefined = state.attempts.get(claim.attempt);
+  if (
+    attempt === undefined ||
+    attempt.reservation !== claim.reservation ||
+    attempt.generation !== claim.generation ||
+    attempt.action !== claim.action ||
+    attempt.authorization !== claim.authorization
+  ) found.push(reason('ATTEMPT_NOT_COMMITTED', claim.attempt));
   return canonicalReasons(found);
 }
-

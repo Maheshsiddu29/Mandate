@@ -8,20 +8,25 @@
 import assert from 'node:assert/strict';
 import {
   agentPolicyOf,
+  amountOf,
   compilePortfolio,
   createPortfolioCore,
   deriveChildAuthorization,
+  fullAvailability,
   portfolioMandateDigest,
   proposalDigest,
   proposalSigningHash,
   registerPortfolio,
   resolveCandidate,
   resourceVectorInputOf,
+  runMandateRoom,
   mandateSigningHash,
   releaseDigest,
   releaseSigningHash,
   validateAgentProposal,
   validateAgentRelease,
+  verificationTranscript,
+  verifyPortfolio,
   type ActionCandidate,
   type AgentMessage,
   type AgentStrategy,
@@ -34,6 +39,8 @@ import {
   type PortfolioCoreOptions,
   type PortfolioMandate,
   type SignedProposal,
+  type VerificationTranscript,
+  type VerifiedChild,
 } from '../../src/index.ts';
 import { actionCandidateInputOf } from '../../src/candidate.ts';
 import { DEMO_T0, demoBindings, demoKey, demoMandate, demoParty, signPrehash } from '../../src/demo/index.ts';
@@ -98,6 +105,38 @@ export function release(m: PortfolioMandate, role: string, amounts: readonly (re
 /** The principal's signature over the mandate. */
 export function principalSignature(m: PortfolioMandate): string {
   return signPrehash(mandateSigningHash(portfolioMandateDigest(m)), demoKey('principal'));
+}
+
+/** A complete verifier transcript and the exact child it derives for one proposal. */
+export function authorizationFor(m: PortfolioMandate, role: string, candidate: ActionCandidate, at: bigint = NOW): { readonly transcript: VerificationTranscript; readonly verified: VerifiedChild } {
+  const signed = proposal(m, role, candidate);
+  const agents: ScriptedAgent[] = [new ScriptedAgent(role, [[1, { kind: 'PROPOSE', signed }]])];
+  for (const policy of m.agents) {
+    if (policy.label === role) continue;
+    const atoms = amountOf(policy.preferred, 'portfolio-notional');
+    if (atoms > 0n) agents.push(new ScriptedAgent(policy.label, [[1, { kind: 'RELEASE', signed: release(m, policy.label, [['portfolio-notional', atoms / 1_000_000n]]) }]]));
+  }
+  const room = runMandateRoom({
+    mandate: m,
+    signature: principalSignature(m),
+    bindings: demoBindings(),
+    availability: fullAvailability(m),
+    now: at,
+    agents,
+  });
+  const input = {
+    mandate: m,
+    signature: principalSignature(m),
+    bindings: demoBindings(),
+    availability: fullAvailability(m),
+    now: at,
+    candidate: room.candidate,
+    proposals: room.proposals,
+    releases: room.signedReleases,
+  };
+  const result = verifyPortfolio(input);
+  if (result.status !== 'VERIFIED' || result.children.length !== 1) assert.fail(`verify: ${JSON.stringify(result, (_key, value: bigint | unknown) => (typeof value === 'bigint' ? value.toString() : value))}`);
+  return { transcript: verificationTranscript(input), verified: result.children[0] as VerifiedChild };
 }
 
 /** An agent that sends a fixed message per round and idles otherwise; it records the feedback it gets. */

@@ -107,7 +107,7 @@ describe('release and reassignment', () => {
     ]);
     assert.deepEqual(o.releases.map((r) => [r.round, r.applied, r.reasons.map((x) => x.code).join(',')]), [
       [1, true, ''],
-      [2, false, 'RELEASE_ALREADY_APPLIED'],
+        [2, false, 'RELEASE_SEQUENCE_INVALID'],
       [3, false, 'AGENT_SIGNATURE_INVALID'],
       [4, false, 'RELEASE_EXCEEDS_UNUSED'],
     ]);

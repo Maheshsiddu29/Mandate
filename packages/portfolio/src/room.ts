@@ -183,7 +183,7 @@ export function runMandateRoom(input: RoomInput): RoomOutcome {
       if (agentPolicyOf(m, r.agent) === null) found.push(reason('AGENT_UNKNOWN', r.agent.value));
       else if (!releaseSignedByAgent(r, message.signed.signature)) found.push(reason('AGENT_SIGNATURE_INVALID', r.agent.value));
       const last = releaseSequence.get(r.agent.value);
-      if (last !== undefined && r.sequence <= last) found.push(reason('RELEASE_ALREADY_APPLIED', `sequence:${r.sequence}`));
+      if (last !== undefined && r.sequence <= last) found.push(reason('RELEASE_SEQUENCE_INVALID', `sequence:${r.sequence}`));
       let applied = false;
       if (found.length === 0) {
         const next = applyAllocation(m, book, { kind: 'RELEASE', agent: r.agent, id: `release/${id}` as Identifier, amounts: r.amounts });

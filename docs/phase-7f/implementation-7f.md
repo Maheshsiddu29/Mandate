@@ -10,6 +10,11 @@
 > Specification: [portfolio-mandate.md](portfolio-mandate.md); security
 > model: [security-model.md](security-model.md); the run:
 > [demo.md](demo.md); decision: [ADR 0027](../adr/0027-portfolio-mandate-layer.md).
+>
+> **Phase 7F.1:** the security hardening in
+> [security-fixes-7f1.md](security-fixes-7f1.md) supersedes the original
+> handoff, custody and receipt details below. The mandate stays v1; receipts
+> produced after hardening are `PORTFOLIO_RECEIPT.V2`.
 
 ## Contents
 
@@ -36,7 +41,7 @@
 | coordination | `screen.ts`, `room.ts` | one screening rule shared by room and verifier; the deterministic, authority-free Mandate Room |
 | verification | `verifier.ts` | the Portfolio Verifier: re-derives everything the room produced |
 | Core binding | `binding.ts`, `compile.ts`, `reservation.ts` | the `DomainBinding` interface; compilation into Core grants; reservation through `ControlEngine`; `checkBeforeSign` |
-| output | `receipt.ts`, `status.ts`, `run.ts`, `view.ts` | `PORTFOLIO_RECEIPT.V1`; derived agent statuses; the end-to-end run; the UI data contract |
+| output | `receipt.ts`, `status.ts`, `run.ts`, `view.ts` | `PORTFOLIO_RECEIPT.V2`; complete ordered transcript commitments; derived agent statuses; the end-to-end run; the UI data contract |
 | domains | `domains/stock.ts`, `domains/perps.ts`, `domains/fixture.ts`, `domains/fixture-execution.ts`, `domains/executors.ts`, `domains/stock-custody.ts` | registry-resolved stock over GateSpotPolicy v1; PerpPolicy v1 perps; the FIXTURE module for swap, NFT and yield; fixture issuance; the default executor; the custody guard |
 | demonstration | `demo/*` (exported as `@mandate/portfolio/demo`) | labelled markets, the demo mandate, publicly derived keys, five deterministic agents, `runDemo` |
 | scripts | `scripts/demo.ts`, `scripts/benchmark.ts` | `npm run portfolio:demo`, `npm run portfolio:benchmark` |
@@ -85,7 +90,7 @@ Each is recorded where the code makes it; these need the owner's approval.
    and simulates FIXTURE children only; stock and perps children are
    recorded `AWAITING_DOMAIN_SIGNER`. For stock, the portfolio's
    `checkBeforeSign` is placed in front of the principal key by wrapping the
-   unchanged custody (`guardGateCustody`).
+   unchanged custody through the mandatory `createPortfolioGateSigner` factory.
 6. **Releases are signed**, like proposals, because an unauthenticated
    release strips an agent of allocation.
 7. **Fixture modules are named after their domain**: module names are
@@ -99,7 +104,7 @@ Each is recorded where the code makes it; these need the owner's approval.
 
 ## 4. Tests
 
-164 tests in 17 files, all offline and deterministic.
+172 tests in 18 files, all offline and deterministic after Phase 7F.1.
 
 | File | Tests | What |
 | --- | ---: | --- |
@@ -113,13 +118,14 @@ Each is recorded where the code makes it; these need the owner's approval.
 | `room.test.ts` | 16 | mandate refusal; accept/reduce/reject; release and reassignment by utility (and reversed); double/forged/over-release; outsider, wrong key, relayed proposal, replay, stale, extension, misdeclared, minimum, other mandate; order invariance; round bound; five-agent coalition |
 | `verifier.test.ts` | 11 | honest room verified; forged signature, expired mandate; the room cannot create authority (accepted refusal, duplicate, unknown proposal, over-claim, altered commit, unsigned release, dropped commit, forged coalition, stale availability); receipt determinism and order-independence |
 | `demo.test.ts` | 9 | the demonstration step by step, and its determinism |
-| `malicious.test.ts` | 10 | the stock hero case in the room and around it; malicious authorized agents A–D; ONCHAIN_DEFENSE_TEST against the gate's reference model: exact execution, mutation, compromised-key re-signing, replay, an unverified reservation never signed |
+| `malicious.test.ts` | 11 | the stock hero case in the room and around it; malicious authorized agents A–D; hostile five-agent boundary; ONCHAIN_DEFENSE_TEST against the gate's reference model: exact execution, mutation, compromised-key re-signing, replay, an unverified reservation never signed |
+| `hardening-regressions.test.ts` | 6 | independent reproductions; full swap-field mutation matrix; stale quote at the reservation boundary; caller-forged verifier membership; repeated release sequence; Receipt V2 field and event-order commitments |
 | `concurrency.test.ts` | 4 | five agents at their hard maxima under forced interleavings; twelve seeded interleavings; one child reserved ten times; two claims on one lot |
 | `adversarial.test.ts` | 8 | 8,000 decoder mutations and 1,000 random byte strings — total and canonical; malformed candidates; unknown required metadata; the screen is total |
 | `view.test.ts` | 4 | the UI contract: headline, timeline, rows, evidence classes |
 | `corpus.test.ts` | 3 | the committed corpus is the generator's output and says what it must |
 | `taxonomy.test.ts` | 4 | the codes not produced elsewhere; every reason code produced somewhere |
-| `structure.test.ts` | 6 | exact dependencies; no I/O, clock, randomness or environment in source; no `any`; no signing outside the demonstration; bindings are the only domain-aware modules; nothing below depends on the package |
+| `structure.test.ts` | 7 | exact dependencies; no I/O, clock, randomness or environment in source; no `any`; no signing outside the demonstration; mandatory guarded signer factory; bindings are the only domain-aware modules; nothing below depends on the package |
 
 The security checklist of the phase brief maps onto them as follows:
 unknown agent (room, vectors); malicious authorized agent (malicious A–D,

@@ -26,14 +26,15 @@ export const PortfolioTag = {
   RELEASE: 'PORTFOLIO_RELEASE.V1',
   RELEASE_SIGNATURE: 'PORTFOLIO_RELEASE_SIGNATURE.V1',
   CHILD_AUTHORIZATION: 'PORTFOLIO_CHILD_AUTHORIZATION.V1',
-  RECEIPT: 'PORTFOLIO_RECEIPT.V1',
+  RECEIPT: 'PORTFOLIO_RECEIPT.V2',
 } as const;
 export type PortfolioTag = (typeof PortfolioTag)[keyof typeof PortfolioTag];
 
 export const PORTFOLIO_SCHEMA_VERSION = 1;
+export const PORTFOLIO_RECEIPT_SCHEMA_VERSION = 2;
 
-export function portfolioWriter(tag: PortfolioTag): ByteWriter {
-  return new ByteWriter().str(tag).u16(PORTFOLIO_SCHEMA_VERSION);
+export function portfolioWriter(tag: PortfolioTag, version: number = PORTFOLIO_SCHEMA_VERSION): ByteWriter {
+  return new ByteWriter().str(tag).u16(version);
 }
 
 export function portfolioDigest<T extends Digest32>(bytes: Uint8Array): T {

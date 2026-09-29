@@ -70,6 +70,8 @@ The run shows the first layer refusing. The tests show the rest:
 | an agent asks beyond its hard maximum | `AGENT_LIMIT_EXCEEDED`; the ledger's agent leg refuses it around the portfolio | `malicious.test.ts` |
 | the candidate is changed after authorization | `CHILD_ACTION_MUTATED` before any key; after signing, the gate: `AgentSignatureInvalid`, and with a compromised agent key `MaxNotionalExceeded` / `RecipientNotPrincipal` | `malicious.test.ts` (ONCHAIN_DEFENSE_TEST, SIMULATED against the Phase 6 reference model) |
 | a stock reservation the portfolio never verified | the portfolio's guard in front of custody: the principal key never signs | `malicious.test.ts` |
+| a stale or rebound swap candidate, including `minOut = 0` | signed transcript re-verification at reserve/sign time; zero key uses and zero transactions | `hardening-regressions.test.ts` |
+| repeated release sequence or reordered/altered allocation event | ordered verifier replay refuses it; Receipt V2 commits the distinction | `hardening-regressions.test.ts`, `verifier.test.ts` |
 | the room "accepts" a refused proposal, over-claims, forges a release | the verifier refuses each by name | `verifier.test.ts` |
 | all five agents, at their hard maxima, at once | the room, the verifier, and the ledger under forced interleavings: ≤ 2,000 every time | `room.test.ts`, `verifier.test.ts`, `concurrency.test.ts` |
 

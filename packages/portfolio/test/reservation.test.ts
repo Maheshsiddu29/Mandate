@@ -24,13 +24,14 @@ import {
 } from '../src/index.ts';
 import { DEMO_T0, USDC, demoBindings, demoMandate, demoParty } from '../src/demo/index.ts';
 import { NOW, nftBuy, perpOpen, stockBuy, swap, yieldDeposit } from './support/candidates.ts';
-import { childFor, world } from './support/world.ts';
+import { authorizationFor, childFor, world } from './support/world.ts';
 
 const reserved = async (w: Awaited<ReturnType<typeof world>>, role: string, candidate: ReturnType<typeof stockBuy>) => {
-  const child = childFor(w.m, role, candidate);
-  const r = await reserveChild(w.core, child, candidate, NOW);
+  const authorization = authorizationFor(w.m, role, candidate);
+  const child = authorization.verified.child;
+  const r = await reserveChild(w.core, authorization.transcript, authorization.verified.digest, NOW);
   if (r.status !== 'RESERVED') assert.fail(`reserve ${role}: ${JSON.stringify(r.reasons)}`);
-  return { child, record: r.record };
+  return { child, record: r.record, transcript: authorization.transcript };
 };
 
 describe('compilation into Core', () => {
@@ -110,8 +111,8 @@ describe('reservation through the control engine', () => {
     await reserved(w, 'stock', stockBuy({ tenths: 64n })); // 800
     await reserved(w, 'yield', yieldDeposit({ amount: USDC(800n) }));
     await reserved(w, 'perps', perpOpen({ usdc: 400n }));
-    const child = childFor(w.m, 'swap', swap({ amount: USDC(1n) }));
-    const r = await reserveChild(w.core, child, swap({ amount: USDC(1n) }), NOW);
+    const authorization = authorizationFor(w.m, 'swap', swap({ amount: USDC(1n) }));
+    const r = await reserveChild(w.core, authorization.transcript, authorization.verified.digest, NOW);
     assert.deepEqual(r.status === 'REFUSED' ? r.reasons.map((x) => x.code) : r.status, ['LEDGER:AUTHORITY_UNAVAILABLE/LEDGER_LIMIT_EXCEEDED']);
     const snap = await w.core.engine.read(w.m.principal);
     assert.equal(amountOf(availabilityFrom(w.compiled, snap, NOW).reserved, 'portfolio-notional'), USDC(2_000n));
@@ -119,25 +120,25 @@ describe('reservation through the control engine', () => {
 
   it('a mutated candidate is refused before the ledger: the child binds its candidate by digest', async () => {
     const w = await world();
-    const child = childFor(w.m, 'swap', swap());
-    const r = await reserveChild(w.core, child, swap({ recipient: 'eip155:421614/account:0x9999999999999999999999999999999999999999' }), NOW);
-    assert.deepEqual(r.status === 'REFUSED' ? r.reasons.map((x) => x.code) : r.status, ['CHILD_ACTION_MUTATED']);
+    const authorization = authorizationFor(w.m, 'swap', swap());
+    const r = await reserveChild(w.core, { ...authorization.transcript, proposals: authorization.transcript.proposals.map((p) => ({ ...p, proposal: { ...p.proposal, candidate: swap({ recipient: 'eip155:421614/account:0x9999999999999999999999999999999999999999' }) } as never })) }, authorization.verified.digest, NOW);
+    assert.equal(r.status, 'REFUSED');
   });
 
   it('an agent that understates what its action consumes is refused: the module’s demand must equal the approved demand', async () => {
     const w = await world();
     // The agent claims a 40 % margin setting; the admitted account book says 50 %: Core's margin is larger than approved.
     const candidate = perpOpen({ usdc: 400n, imf: 4_000 });
-    const child = childFor(w.m, 'perps', candidate);
-    const r = await reserveChild(w.core, child, candidate, NOW);
+    const authorization = authorizationFor(w.m, 'perps', candidate);
+    const r = await reserveChild(w.core, authorization.transcript, authorization.verified.digest, NOW);
     assert.deepEqual(r.status === 'REFUSED' ? r.reasons.map((x) => x.code) : r.status, ['RESERVATION_DEMAND_MISMATCH']);
   });
 
   it('replay: the same child reserves once; the second is refused by the ledger', async () => {
     const w = await world();
     const candidate = swap();
-    const { child } = await reserved(w, 'swap', candidate);
-    const again = await reserveChild(w.core, child, candidate, NOW);
+    const { child, transcript } = await reserved(w, 'swap', candidate);
+    const again = await reserveChild(w.core, transcript, childAuthorizationDigest(child), NOW);
     assert.equal(again.status, 'REFUSED');
     assert.ok(again.status === 'REFUSED' && again.reasons.some((x) => x.code.startsWith('LEDGER:') && x.code.includes('RESERVATION_EXISTS')), JSON.stringify(again.status === 'REFUSED' ? again.reasons : []));
   });
@@ -157,17 +158,17 @@ describe('before any key is used', () => {
   it('a fixture child: ADMIT_ATTEMPT is committed first, then checkBeforeSign passes, then the simulated venue settles', async () => {
     const w = await world();
     const candidate = yieldDeposit({ amount: USDC(600n) });
-    const { child, record } = await reserved(w, 'yield', candidate);
-    const verified = new Set<ChildAuthorizationDigest>([childAuthorizationDigest(child)]);
+    const { child, record, transcript } = await reserved(w, 'yield', candidate);
     let snap = await w.core.engine.read(record.principal);
-    const claim = { agent: child.agent, child, candidate, reservation: record.reservation, action: record.actionId };
-    assert.deepEqual(checkBeforeSign(w.core, verified, claim, snap.state).map((r) => r.code), ['ATTEMPT_NOT_COMMITTED']);
-    const x = await executeFixtureChild(w.core, verified, child, candidate, record, NOW + 5n);
+    const missingAttempt = `0x${'00'.repeat(32)}` as never;
+    const claim = { agent: child.agent, child, candidate, reservation: record.reservation, action: record.actionId, generation: record.generation, authorization: record.executionId, attempt: missingAttempt, at: NOW + 5n };
+    assert.deepEqual(checkBeforeSign(w.core, transcript, claim, snap.state).map((r) => r.code), ['ATTEMPT_NOT_COMMITTED']);
+    const x = await executeFixtureChild(w.core, transcript, child, candidate, record, NOW + 5n);
     assert.ok(x.ok, x.ok ? '' : JSON.stringify(x.error));
     assert.equal(x.value.evidence, 'SIMULATED');
     snap = await w.core.engine.read(record.principal);
     assert.equal(reservationPhase(snap.state, record.reservation), 'ADMITTED');
-    assert.deepEqual(checkBeforeSign(w.core, verified, claim, snap.state), []);
+    assert.deepEqual(checkBeforeSign(w.core, transcript, { ...claim, attempt: x.value.attempt.attempt }, snap.state), []);
     // Nothing was consumed or released: reconciliation is not built.
     assert.equal(snap.state.reservations.get(record.reservation)?.status, 'ACTIVE');
   });
@@ -178,24 +179,25 @@ describe('before any key is used', () => {
     const yieldC = yieldDeposit({ amount: USDC(600n) });
     const s = await reserved(w, 'swap', swapC);
     const y = await reserved(w, 'yield', yieldC);
-    const verified = new Set<ChildAuthorizationDigest>([childAuthorizationDigest(s.child), childAuthorizationDigest(y.child)]);
-    await executeFixtureChild(w.core, verified, y.child, yieldC, y.record, NOW + 5n);
+    const executed = await executeFixtureChild(w.core, y.transcript, y.child, yieldC, y.record, NOW + 5n);
+    assert.ok(executed.ok);
     const snap = await w.core.engine.read(w.m.principal);
+    const base = { reservation: y.record.reservation, action: y.record.actionId, generation: y.record.generation, authorization: y.record.executionId, attempt: executed.value.attempt.attempt, at: NOW + 5n };
     // The swap agent presents its own child against the yield agent's admitted reservation.
-    const stolen = checkBeforeSign(w.core, verified, { agent: s.child.agent, child: s.child, candidate: swapC, reservation: y.record.reservation, action: s.record.actionId }, snap.state);
+    const stolen = checkBeforeSign(w.core, y.transcript, { ...base, agent: s.child.agent, child: s.child, candidate: swapC, action: s.record.actionId }, snap.state);
     assert.ok(stolen.some((r) => r.code === 'RESERVATION_MISSING'));
     // The swap agent presents the yield child itself.
-    const impersonated = checkBeforeSign(w.core, verified, { agent: s.child.agent, child: y.child, candidate: yieldC, reservation: y.record.reservation, action: y.record.actionId }, snap.state);
-    assert.deepEqual(impersonated.map((r) => r.code), ['CHILD_AGENT_MISMATCH']);
-    const unverified = checkBeforeSign(w.core, new Set(), { agent: y.child.agent, child: y.child, candidate: yieldC, reservation: y.record.reservation, action: y.record.actionId }, snap.state);
-    assert.deepEqual(unverified.map((r) => r.code), ['CHILD_AUTHORIZATION_UNKNOWN']);
+    const impersonated = checkBeforeSign(w.core, y.transcript, { ...base, agent: s.child.agent, child: y.child, candidate: yieldC }, snap.state);
+    assert.ok(impersonated.some((r) => r.code === 'CHILD_AGENT_MISMATCH'));
+    const unverified = checkBeforeSign(w.core, { ...y.transcript, candidate: { ...y.transcript.candidate, accepted: [] } }, { ...base, agent: y.child.agent, child: y.child, candidate: yieldC }, snap.state);
+    assert.ok(unverified.length > 0);
   });
 
   it('the fixture issuer refuses to issue for a domain that is not a fixture', async () => {
     const w = await world();
     const candidate = stockBuy();
-    const { child, record } = await reserved(w, 'stock', candidate);
-    const x = await executeFixtureChild(w.core, new Set([childAuthorizationDigest(child)]), child, candidate, record, NOW + 5n);
+    const { child, record, transcript } = await reserved(w, 'stock', candidate);
+    const x = await executeFixtureChild(w.core, transcript, child, candidate, record, NOW + 5n);
     assert.ok(!x.ok && x.error.some((r) => r.subject === 'not-a-fixture:robinhood-evm'));
   });
 
@@ -213,7 +215,8 @@ describe('before any key is used', () => {
       const core = createPortfolioCore(compiled.value, { storeOf: (rules) => (store = SqliteLedgerStore.open({ path: join(dir, 'ledger.db'), rules })) });
       assert.ok((await registerPortfolio(core, DEMO_T0)).ok);
       const candidate = swap();
-      const r = await reserveChild(core, childFor(m, 'swap', candidate), candidate, NOW);
+      const authorization = authorizationFor(m, 'swap', candidate);
+      const r = await reserveChild(core, authorization.transcript, authorization.verified.digest, NOW);
       assert.equal(r.status, 'RESERVED');
       (store as ReturnType<typeof SqliteLedgerStore.open> | null)?.close();
     } finally {

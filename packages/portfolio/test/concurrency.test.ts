@@ -17,7 +17,12 @@ import { amountOf, availabilityFrom, initialBook, applyAllocation, planClaims, r
 import { USDC, demoParty } from '../src/demo/index.ts';
 import { NOW, nftBuy, perpOpen, stockBuy, swap, yieldDeposit } from './support/candidates.ts';
 import { Rng } from './support/random.ts';
-import { childFor, world, type World } from './support/world.ts';
+import { authorizationFor, world, type World } from './support/world.ts';
+
+const reserve = (w: World, role: string, candidate: ActionCandidate) => {
+  const authorization = authorizationFor(w.m, role, candidate);
+  return reserveChild(w.core, authorization.transcript, authorization.verified.digest, NOW, { maxAttempts: 32 });
+};
 
 /** A delay hook that yields a seeded number of macrotask turns at every read and commit, so agents interleave. */
 function shuffling(seed: number): InMemoryStoreHooks & { turns: number } {
@@ -59,7 +64,7 @@ describe('five agents racing for one pool', () => {
   it('all five at their hard maxima (2,900 against 2,000), interleaved: the ledger never oversubscribes a leg', async () => {
     const hooks = shuffling(7);
     const w = await world({ hooks });
-    const outs = await Promise.all(AT_MAXIMA.map(([role, c]) => reserveChild(w.core, childFor(w.m, role, c), c, NOW, { maxAttempts: 32 })));
+    const outs = await Promise.all(AT_MAXIMA.map(([role, c]) => reserve(w, role, c)));
     const snap = await w.core.engine.read(w.m.principal);
     legsHold(w, snap.state);
     const reserved = amountOf(availabilityFrom(w.compiled, snap, NOW).reserved, 'portfolio-notional');
@@ -85,7 +90,7 @@ describe('five agents racing for one pool', () => {
       const r = new Rng(seed * 101);
       const w = await world({ hooks: shuffling(seed) });
       const batch = sizes(r);
-      const outs = await Promise.all(batch.map(([role, c]) => reserveChild(w.core, childFor(w.m, role, c), c, NOW, { maxAttempts: 32 })));
+      const outs = await Promise.all(batch.map(([role, c]) => reserve(w, role, c)));
       const snap = await w.core.engine.read(w.m.principal);
       legsHold(w, snap.state);
       // Every refusal is the ledger's limit, never a lost race: the engine retried.
@@ -99,8 +104,8 @@ describe('five agents racing for one pool', () => {
   it('one child reserved ten times at once: exactly one reservation, nine refusals', async () => {
     const w = await world({ hooks: shuffling(3) });
     const c = swap({ amount: USDC(200n) });
-    const child = childFor(w.m, 'swap', c);
-    const outs = await Promise.all(Array.from({ length: 10 }, () => reserveChild(w.core, child, c, NOW, { maxAttempts: 32 })));
+    const authorization = authorizationFor(w.m, 'swap', c);
+    const outs = await Promise.all(Array.from({ length: 10 }, () => reserveChild(w.core, authorization.transcript, authorization.verified.digest, NOW, { maxAttempts: 32 })));
     assert.equal(outs.filter((o) => o.status === 'RESERVED').length, 1);
     for (const o of outs) if (o.status === 'REFUSED') assert.ok(o.reasons.every((x) => x.code.startsWith('LEDGER:') && x.code.includes('RESERVATION_EXISTS')), JSON.stringify(o.reasons));
     const snap = await w.core.engine.read(w.m.principal);
