@@ -5,7 +5,14 @@
 > `packages/execution-gate`; the decision is
 > [ADR 0019](adr/0019-onchain-execution-gate.md). The only supported execution
 > path runs against a **labelled settlement fixture**, not a venue (§5). Nothing
-> has been deployed to any network and no transaction has been sent.
+> was deployed in Phase 6.
+>
+> **Phase 7E.3 note.** The unchanged gate is now deployed on Robinhood Chain
+> **testnet** (46630) with one labelled fixture market and is driven by Mandate
+> Core through `packages/evm-robinhood`
+> ([phase-7e/robinhood-deployment.md](phase-7e/robinhood-deployment.md)). No
+> section below is changed by that; §13's final deployment-provenance gate is
+> still not built.
 
 **Mandate does not choose investments for users. It enforces the authority users
 grant to agents.**

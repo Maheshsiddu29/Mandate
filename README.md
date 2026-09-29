@@ -22,8 +22,15 @@ financial assets.**
 > ([implementation-7e1.md](docs/phase-7e/implementation-7e1.md)) — is accepted;
 > Phase 7E.2 — custody verifies the durable `ADMIT_ATTEMPT` itself, and a live
 > Lighter state adapter ([implementation-7e2.md](docs/phase-7e/implementation-7e2.md)),
-> testnet only — is implemented locally and awaiting review. Phase 7F is not
-> started.**
+> testnet only — is accepted. **Phase 7E.3 — Robinhood Chain testnet
+> deployment and real EVM enforcement ([implementation-7e3.md](docs/phase-7e/implementation-7e3.md),
+> [robinhood-demo.md](docs/phase-7e/robinhood-demo.md)) — is implemented and run
+> on Robinhood Chain testnet and awaiting review:** the frozen Phase 6 gate is
+> deployed on testnet (46630) at `0xb03c1e072192a82ba68604841a0e42f32609aa3e`
+> and has executed a valueless BUY of a labelled fixture token under real
+> Mandate authorization (reservation, `ADMIT_ATTEMPT`, custody), with replay,
+> mutation and an over-authority proposal refused. Testnet only, fixtures only,
+> no reconciliation. Phase 7F is not started.**
 >
 > **Status: Phase 6R.2B (secure gas optimization) implemented locally and awaiting independent security and gas review ([report](docs/phase-6r2b-report.md): normal BUY 401,684 → 246,963 execution gas, worst case 6,724,561 → 425,922, no semantic change), after the Phase 6R.2A gas attribution benchmark ([report](docs/phase-6r2a-gas-profile.md)) and Phase 6R.1b — an onchain execution
 > gate, tested against a labelled settlement fixture and not deployed.** The
@@ -215,9 +222,12 @@ against the signed economic bound. Every trader and
 every agent uses the same gate; there are no modes.
 
 The only supported execution path runs against a **labelled fixed-price settlement fixture**,
-because the repository evidences no executable Robinhood venue. Nothing has been
-deployed and no transaction has been sent. `REAL_MARKET` configuration is
-rejected until inclusion-time market state can be authenticated.
+because the repository evidences no executable Robinhood venue. `REAL_MARKET`
+configuration is rejected until inclusion-time market state can be
+authenticated. Phase 6 deployed nothing; **Phase 7E.3 deployed the unchanged
+gate to Robinhood Chain testnet** with one labelled fixture market and drives
+it from Mandate Core through `packages/evm-robinhood`
+([robinhood-deployment.md](docs/phase-7e/robinhood-deployment.md)).
 
 ```bash
 git submodule update --init          # forge-std
@@ -307,6 +317,9 @@ See [MVP scope](docs/mandate-design.md#20-buildathon-mvp-scope) and
 ├── packages/core/         Mandate Core v1 types, canonical encodings and validators (Phase 7B; no ledger)
 ├── packages/ledger/       authority graph, meet and principal-wide CAS ledger over Core (Phase 7C; in-memory store only)
 ├── packages/control/      invariant and reservation engine: domain-module contract, admission, projection, reservation (Phase 7D)
+├── packages/ledger-sqlite/ durable SQLite reference store and issuance journal (Phase 7E.1)
+├── packages/perp-lighter/ PerpPolicy v1 and the Lighter Venue Signer, testnet only (Phase 7E.1–7E.2)
+├── packages/evm-robinhood/ GateSpotPolicy v1 and the Robinhood gate signer over the frozen gate, testnet only (Phase 7E.3)
 ├── contracts/             Solidity: the execution gate, codec, labelled fixture venue, Foundry tests
 ├── corpus/gate-v1/        TypeScript ↔ Solidity execution-gate vectors
 ├── corpus/core-v1/        Mandate Core v1 canonical-encoding vectors

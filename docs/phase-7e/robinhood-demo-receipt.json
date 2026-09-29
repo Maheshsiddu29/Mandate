@@ -1,0 +1,88 @@
+{
+  "label": "Phase 7E.3 development receipt (not the 7H receipt architecture). Robinhood Chain TESTNET; valueless labelled fixtures; public identifiers only.",
+  "dryRun": false,
+  "chainId": 46630,
+  "explorer": "https://explorer.testnet.chain.robinhood.com",
+  "gate": "0xb03c1e072192a82ba68604841a0e42f32609aa3e",
+  "principal": "0x396205c987a71bb75d87db5d604ec485e33e11ad",
+  "agent": "0xf2b2639d91da04eb5a42bdc1d4df5bd76ebbfdac",
+  "submitter": "0x8b7cdd2e3f9d2102eccb018969cfb4589fac0ff2",
+  "mandate": {
+    "rootGrant": "0x4636b7dba8e6f1cc64b840db88eddc252daabef177974e42665f97c1b1e3b94d",
+    "holder": "0xf2b2639d91da04eb5a42bdc1d4df5bd76ebbfdac",
+    "capitalLimit": "500 MDUSD (CAPITAL, 6 decimals, principal-wide)"
+  },
+  "module": {
+    "domainId": "robinhood-evm",
+    "moduleId": "gate-spot",
+    "moduleVersion": 1,
+    "moduleDigest": "0xb279605993e7146b090f1b222f150936d055a4116a61f70cd5db9d4f0a875926"
+  },
+  "adapter": {
+    "adapterId": "robinhood-gate-signer",
+    "adapterVersion": 1,
+    "adapterDigest": "0x917a5abe10cf5db2f79250ac459e72141eb5e9c5ade76372bd615b51136bde14"
+  },
+  "authorizedAction": {
+    "action": "0x79ba4249ad349e6f5e53da675701a41c8c8d22a571d54cebb82e4db0a4614110",
+    "actionPayloadDigest": "0xc9e489ae8a8c5f04bd45a5a1b73083248b531172b37eaec57101b771a6e3852f",
+    "quantity": "30 MDEMO",
+    "reservation": "0x8dfd59d8fa0f3d271be832b4af372f89756025651860e8d5a45021e49255f8db",
+    "generation": "1",
+    "executionAuthorization": "0x28ce3a40df35e76a42eacb0214013a8d7cfee55a0f9e786dd319ecba239e8d9b",
+    "authorizationRecord": "0x217e21476b1687fa50b887d19a5e68872ba325029bbfb689e09b39faae5f3559",
+    "ledgerVersionCommitted": "3",
+    "attempt": "0xa7393d2b4a885ca2a0443a9872471886dd3eaa84a83a2adef8f7c8e71fbb43a3",
+    "admitAttemptSlot": {
+      "scope": "evm:46630:gate:0xb03c1e072192a82ba68604841a0e42f32609aa3e:principal:0x396205c987a71bb75d87db5d604ec485e33e11ad",
+      "sequence": "1"
+    },
+    "gateMandateDigest": "0x575840cf58a66c3ef6832a0e6fa01984de395d82cab88c142e4f8c6d41a663c4",
+    "executionCommitment": "0xc3ac92a73c7d5796e82a5aa6d19f4a5069d3c42961e36b1eb91a1e46a868c62a",
+    "commitmentRecordedOnchain": "0xc3ac92a73c7d5796e82a5aa6d19f4a5069d3c42961e36b1eb91a1e46a868c62a",
+    "transaction": "0x7144f09fc4e8a5c4b74b77b4c9d0fc748501e404ab3249151f576ba6e9dff344",
+    "block": "126043962",
+    "gasUsed": "309663",
+    "result": "SUCCESS",
+    "principalMDUSD": {
+      "before": "1000000000",
+      "after": "700000000"
+    },
+    "principalMDEMO": {
+      "before": "0",
+      "after": "30000000000000000000"
+    }
+  },
+  "authority": {
+    "limit": "500000000",
+    "reservedBefore": "0",
+    "reservedByThisAction": "300000000",
+    "reservedAfter": "300000000",
+    "note": "MDUSD atoms (6 decimals). The executed reservation stays reserved: consumption is reconciliation (7F), not built."
+  },
+  "replay": {
+    "transaction": "0x540fe679794dab855d93bcc7a55102a7952fc29647a72080a0dd754364cd9773",
+    "status": "REVERTED",
+    "gasUsed": "164767",
+    "revert": "MandateAlreadyConsumed"
+  },
+  "mutation": {
+    "amount": {
+      "transaction": "0xe8346c4d35801356903c0d6c77b80ee774aa8b959a25ab313c9242dfbaba4ef3",
+      "status": "REVERTED",
+      "gasUsed": "162190",
+      "revert": "AgentSignatureInvalid"
+    },
+    "recipientByEthCall": "AgentSignatureInvalid",
+    "targetByEthCall": "UnsupportedRepresentation"
+  },
+  "refusedBeforeTransaction": {
+    "quantity": "25 MDEMO (250 MDUSD)",
+    "projectedCapital": "550 MDUSD > 500",
+    "refusal": "AUTHORITY_UNAVAILABLE/LEDGER_LIMIT_EXCEEDED",
+    "transactions": 0
+  },
+  "agentDirectPath": "ERC20InsufficientAllowance",
+  "expiryAfterDeadlineByEthCall": "ExecutionDeadlinePassed",
+  "runLedger": ".robinhood-testnet/runs/ (gitignored)"
+}

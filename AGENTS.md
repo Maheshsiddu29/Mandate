@@ -53,7 +53,14 @@ Signer ([implementation-7e1.md](docs/phase-7e/implementation-7e1.md)), testnet
 only — is accepted; **Phase 7E.2** — custody's independent verification of the
 durable `ADMIT_ATTEMPT` and the live Lighter state adapter
 ([implementation-7e2.md](docs/phase-7e/implementation-7e2.md)), testnet only —
-is implemented locally and awaiting review. **Phase 7F is not started**
+is accepted; **Phase 7E.3** — the unchanged Phase 6 gate deployed to Robinhood
+Chain **testnet** (46630) and driven from Mandate Core by
+`packages/evm-robinhood` ([implementation-7e3.md](docs/phase-7e/implementation-7e3.md)),
+testnet only, labelled fixtures only — is run on testnet and awaiting review.
+Testnet commands (`npm run robinhood:testnet:deploy|demo|verify`) are explicit
+only and need the gitignored disposable keys in `.robinhood-testnet/`; never
+run them, or any other chain write, without explicit authorization, and never
+against a mainnet (the package refuses one). **Phase 7F is not started**
 and must not begin until explicitly opened. **Phase 6 is
 frozen at `dc98df5`**; nothing in Phase 7 may modify
 MCE v2, Candidate V3, the gate, its libraries, fixture or replay semantics, or
@@ -104,7 +111,7 @@ authorization.
 
 The dependency directions are `adapter → registry → kernel`,
 `router → registry → kernel`, `jev → router → registry → kernel`,
-`execution-gate → kernel`, `core → kernel`, `ledger → core → kernel`, `control → ledger → core → kernel`, `ledger-sqlite → ledger → core` and `perp-lighter → control, ledger-sqlite, ledger, core, kernel`, never the reverse, and it is enforced by structural tests
+`execution-gate → kernel`, `core → kernel`, `ledger → core → kernel`, `control → ledger → core → kernel`, `ledger-sqlite → ledger → core` and `perp-lighter → control, ledger-sqlite, ledger, core, kernel` and `evm-robinhood → control, ledger-sqlite, ledger, core, execution-gate, kernel`, never the reverse, and it is enforced by structural tests
 ([ADR 0004](docs/adr/0004-registry-package-boundary.md),
 [ADR 0012](docs/adr/0012-jev-closed-set-authority-boundary.md)). The kernel,
 registry and router perform no I/O; the Robinhood adapter and the Jev client

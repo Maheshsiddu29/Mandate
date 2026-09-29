@@ -1,0 +1,131 @@
+{
+  "label": "SANITIZED. Robinhood Chain TESTNET only. Public addresses, hashes and settings; no private key, mnemonic or RPC credential. Valueless demo fixtures.",
+  "network": {
+    "name": "Robinhood Chain Testnet",
+    "chainId": 46630,
+    "rpc": "https://rpc.testnet.chain.robinhood.com",
+    "explorer": "https://explorer.testnet.chain.robinhood.com",
+    "nativeGasToken": "ETH",
+    "arbOsVersion": 61,
+    "source": "https://docs.robinhood.com/chain/connecting/ (accessed 2026-09-28)"
+  },
+  "deployer": "0x8b7cdd2e3f9d2102eccb018969cfb4589fac0ff2",
+  "principal": "0x396205c987a71bb75d87db5d604ec485e33e11ad",
+  "agent": "0xf2b2639d91da04eb5a42bdc1d4df5bd76ebbfdac",
+  "compiler": {
+    "solc": "0.8.37+commit.f401782d",
+    "optimizer": true,
+    "optimizerRuns": 200,
+    "viaIr": true,
+    "evmVersion": "cancun",
+    "bytecodeHash": "none"
+  },
+  "gitCommit": "78e252fcb55480747dca68c6d1c18b2dc01159a7",
+  "frozenPhase6Source": "dc98df5 (MandateExecutionGate, MandateCodec, GateArithmetic, FixtureVenue, FixtureVenueAdapter unchanged)",
+  "timestamp": "2026-09-29T06:07:35.595Z",
+  "contracts": {
+    "mandateExecutionGate": {
+      "address": "0xb03c1e072192a82ba68604841a0e42f32609aa3e",
+      "deploymentTx": "0x81c629ca5abe37b524c02b40bddf4bb264dff6878d8d92f8d907ab87789dd024",
+      "block": "126043799",
+      "createdBy": "0x8b7cdd2e3f9d2102eccb018969cfb4589fac0ff2",
+      "runtimeCodeHash": "0x67b48d04480ccb015f89ca46ce800a043cab596bf782a3e9d78758d73b245d07",
+      "runtimeSizeBytes": 13815,
+      "creationCodeHash": "0x4868bc7e6a78b2314338146fb3f6620bf542988a46d54c2aae6fee6d95d9412c",
+      "deploymentGasUsed": "4726133",
+      "domainSeparator": "0xf329d090b6884759270a5130b75dac2c86ca3e8ed6413a654046f117aa4817d3",
+      "runtimeMatchesArtifactExceptImmutables": true
+    },
+    "fixtureVenue": {
+      "address": "0x850be07c638ae221c35433eaac71a8c8720de504",
+      "deploymentTx": null,
+      "block": "126043799",
+      "createdBy": "0xb03c1e072192a82ba68604841a0e42f32609aa3e",
+      "runtimeCodeHash": "0x5831eb1e67234fe0db0bae08a29f8f6f5e8de46e87efd40ed581d6f8254335ef",
+      "runtimeSizeBytes": 1777,
+      "creationCodeHash": null,
+      "deploymentGasUsed": null
+    },
+    "fixtureVenueAdapter": {
+      "address": "0x88c966c644208f3a0e75ef929169a7e06084e969",
+      "deploymentTx": null,
+      "block": "126043799",
+      "createdBy": "0xb03c1e072192a82ba68604841a0e42f32609aa3e",
+      "runtimeCodeHash": "0xa413115e1008e37f4db42b2bae1a5b2686c287bf8cab7f5e103f3203ad8fe18f",
+      "runtimeSizeBytes": 2076,
+      "creationCodeHash": null,
+      "deploymentGasUsed": null
+    },
+    "mdemo": {
+      "address": "0x5d4c3618f996777baf0e0468884bb7a440f189e1",
+      "deploymentTx": "0xb691eb10193009236247fe0a546aa1c2cc283d2d8fdd23d58df10412bc5aca5a",
+      "block": "126043771",
+      "createdBy": "0x8b7cdd2e3f9d2102eccb018969cfb4589fac0ff2",
+      "runtimeCodeHash": "0xdf7afe9a4fba8d6b910611918d5a82e4dd1794318eb9ab2cd197d9919ba46901",
+      "runtimeSizeBytes": 1536,
+      "creationCodeHash": "0x1491d8cdffd85d737b710920790a06a26206ff5dd57f3ef6352b89c618fd3976",
+      "deploymentGasUsed": "605756",
+      "name": "Mandate Demo Asset (TESTNET FIXTURE)",
+      "symbol": "MDEMO",
+      "decimals": 18,
+      "supply": "1000000000000000000000000"
+    },
+    "mdusd": {
+      "address": "0x53b640b9a573e33c541de5a4917bc4d28d956abf",
+      "deploymentTx": "0xa79ca776466382de872ad670dfbb8dec41d213a42cabdc38633d876ecbd2f8ab",
+      "block": "126043785",
+      "createdBy": "0x8b7cdd2e3f9d2102eccb018969cfb4589fac0ff2",
+      "runtimeCodeHash": "0x0dd4081cb4426cc7b3793ea9438d5c710d094df41f0ded7c7a057fe35056801f",
+      "runtimeSizeBytes": 1536,
+      "creationCodeHash": "0x1491d8cdffd85d737b710920790a06a26206ff5dd57f3ef6352b89c618fd3976",
+      "deploymentGasUsed": "605531",
+      "name": "Mandate Demo Dollar (TESTNET FIXTURE)",
+      "symbol": "MDUSD",
+      "decimals": 6,
+      "supply": "1000000000000"
+    }
+  },
+  "market": {
+    "representation": "0x5d4c3618f996777baf0e0468884bb7a440f189e1",
+    "fundingToken": "0x53b640b9a573e33c541de5a4917bc4d28d956abf",
+    "canonicalAsset": {
+      "assetClass": "fixture",
+      "idScheme": "mandate-demo",
+      "value": "MDEMO"
+    },
+    "issuer": "issuer.mandate-demo",
+    "venue": "venue.mandate-fixture",
+    "quantityUnit": "TOKEN",
+    "settlementUnit": "MDUSD",
+    "synthetic": false,
+    "fixturePriceDecimals": 6,
+    "fixturePrice": "10000000",
+    "fixtureFeeBps": 0
+  },
+  "setup": [
+    {
+      "step": "stock venue with 1,000 MDEMO",
+      "tx": "0xcc99534298c4bfffb6892b87c980a864e1616118af8c723bcbdfba212b95ae14",
+      "gasUsed": "57306"
+    },
+    {
+      "step": "fund principal with 1,000 MDUSD",
+      "tx": "0x73b2d6b3d7754dee4bc140f56ef194a5cc827aed98e6dfa48c93f8ee75752bb7",
+      "gasUsed": "57258"
+    },
+    {
+      "step": "fund principal with 0.00005 ETH for its approve",
+      "tx": "0xfb04b997242231858d448d74131174f813b37e02464123aeb66604c63f97edf0",
+      "gasUsed": "24913"
+    },
+    {
+      "step": "principal approves the gate for 500 MDUSD (= its capital authority)",
+      "tx": "0xc848cefc5ff4850835d74de392ed86eb81f1623371091700b29a675dcbd8453b",
+      "gasUsed": "51975"
+    }
+  ],
+  "verification": {
+    "deployScriptVerify": "PASS: DeployMandateGate.verify(gate, contracts/deploy/robinhood-testnet.json) against the deployed gate",
+    "explorerSourceVerification": "UNAVAILABLE: https://explorer.testnet.chain.robinhood.com (Blockscout) does not offer solc v0.8.37+commit.f401782d (newest release it lists: v0.8.36+commit.8a079791); the frozen Phase 6 build pins 0.8.37 and recompiling would change the deployed bytecode. Runtime code hashes and deployment metadata are recorded instead; the gate's runtime code was checked against the build artifact (runtimeMatchesArtifactExceptImmutables). Checked 2026-09-29T06:11:54.830Z."
+  }
+}

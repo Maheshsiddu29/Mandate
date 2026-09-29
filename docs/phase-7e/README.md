@@ -1,16 +1,20 @@
 # Phase 7E.0 — Real perp venue evidence and enforcement contract
 
-> **Status: Phase 7E.0 (research and specification) ACCEPTED; Phase 7E.1
-> (implementation) ACCEPTED as the base. Phase 7E.2 (enforcement closure and
-> the live state adapter) complete locally and awaiting review** —
+> **Status: Phase 7E.0 (research and specification), 7E.1 (implementation)
+> and 7E.2 (enforcement closure and the live state adapter) ACCEPTED. Phase
+> 7E.3 (Robinhood Chain testnet deployment and real EVM enforcement) run on
+> testnet and awaiting review** — [implementation-7e3.md](implementation-7e3.md),
+> [robinhood-deployment.md](robinhood-deployment.md),
+> [robinhood-demo.md](robinhood-demo.md); earlier:
 > [implementation-7e2.md](implementation-7e2.md),
 > [implementation-7e1.md](implementation-7e1.md),
 > [testnet-evidence.md](testnet-evidence.md),
 > [security-boundary.md](security-boundary.md),
-> [lighter-testnet-request.md](lighter-testnet-request.md). Lighter testnet only; no
-> mainnet, no real funds, no production credentials; reconciliation is Phase
-> 7F and not built. The 7E.0 documents below are kept as written; 7E.1's
-> changes to their assumptions are recorded in venue-evidence.md §14.
+> [lighter-testnet-request.md](lighter-testnet-request.md). Testnets only
+> (Lighter testnet; Robinhood Chain testnet 46630); no mainnet, no real funds,
+> no production credentials; reconciliation is Phase 7F and not built. The
+> 7E.0 documents below are kept as written; 7E.1's changes to their
+> assumptions are recorded in venue-evidence.md §14.
 
 Phase 7E will be Mandate's first real external-market integration: a real
 `PerpPolicy`, a venue-native enforcement boundary, the `ADMIT_ATTEMPT`
@@ -35,6 +39,10 @@ protection. 7E.0 establishes the venue facts first and specifies against them.
 | [security-boundary.md](security-boundary.md) | **7E.1/7E.2**: the broad-credential fact, CRED-1 conditions, deployment profiles, custody's durable verification, auth tokens, key-theft blast radius, residual risks |
 | [implementation-7e2.md](implementation-7e2.md) | **7E.2**: custody verifies the durable `ADMIT_ATTEMPT` itself; the live Lighter state adapter; auth tokens; mutants M12–M15; LIVE TESTNET LIMITATION |
 | [lighter-testnet-request.md](lighter-testnet-request.md) | **7E.2**: draft request to Lighter for sanctioned testnet funds and access (E-3…E-8, E-10) |
+| [implementation-7e3.md](implementation-7e3.md) | **7E.3**: GateSpotPolicy v1, the Robinhood gate signer, Core identity bound into the frozen gate's signed fields, custody, the cross-domain ledger scenario, tests and validation |
+| [robinhood-deployment.md](robinhood-deployment.md) | **7E.3**: verified Robinhood Chain testnet configuration, what is deployed and why fixtures, testnet tokens examined, USDG, provenance, gas |
+| [robinhood-demo.md](robinhood-demo.md) | **7E.3**: the live testnet run — transactions, refusals, the receipt |
+| [deployment-manifest.json](deployment-manifest.json), [robinhood-demo-receipt.json](robinhood-demo-receipt.json) | **7E.3**: sanitized, machine-readable manifest and receipt |
 
 ## Summary
 
@@ -140,4 +148,6 @@ so this is a specification choice, not a contradiction.
 7E.0 ended with the specification. 7E.1 implemented it (see
 [implementation-7e1.md](implementation-7e1.md)); 7E.2 closed custody's
 verification gap and added the live state adapter
-([implementation-7e2.md](implementation-7e2.md)). 7E stops before 7F.
+([implementation-7e2.md](implementation-7e2.md)); 7E.3 deployed the frozen
+gate to Robinhood Chain testnet and drove it from Mandate Core
+([implementation-7e3.md](implementation-7e3.md)). 7E stops before 7F.

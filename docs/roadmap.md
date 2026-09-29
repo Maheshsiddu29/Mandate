@@ -18,9 +18,12 @@ and what it depends on.
 > accepted; Phase 7E.1 ([phase-7e/implementation-7e1.md](phase-7e/implementation-7e1.md)),
 > testnet only, is accepted; Phase 7E.2
 > ([phase-7e/implementation-7e2.md](phase-7e/implementation-7e2.md)), testnet
-> only, is implemented locally and awaiting review.** No production domain module,
-> venue integration, observation reconciliation or later Phase 7 mechanism
-> exists, and nothing has been deployed.
+> only, is accepted; Phase 7E.3
+> ([phase-7e/implementation-7e3.md](phase-7e/implementation-7e3.md)) — the
+> frozen gate deployed to Robinhood Chain **testnet** and driven by Mandate
+> Core — is run on testnet and awaiting review.** No mainnet deployment,
+> production domain module, observation reconciliation or later Phase 7
+> mechanism exists.
 > Rationale for the phase ordering is in
 > [mandate-design.md §25](mandate-design.md#25-phased-engineering-roadmap);
 > scope boundaries are in
@@ -617,6 +620,19 @@ before key use; a live Lighter state adapter feeds PerpPolicy, failing closed
 ([phase-7e/implementation-7e2.md](phase-7e/implementation-7e2.md)). E-3…E-8
 and E-10 remain blocked pending sanctioned testnet access; full release at
 `VERIFIED` cannot be demonstrated on testnet.
+**7E.3 — Robinhood Chain testnet deployment and real EVM enforcement: run on
+testnet, awaiting review.** Brings forward the part of 7F's "EVM adapter over
+the frozen gate" that authorizes and issues: GateSpotPolicy v1 and the
+`robinhood-gate-signer` adapter (`packages/evm-robinhood`) turn a Core
+reservation into one exact gate artifact behind `ADMIT_ATTEMPT`; the unchanged
+Phase 6 gate is deployed on Robinhood Chain testnet (46630) with a labelled
+fixture market and executed a valueless BUY under that authorization, refusing
+replay, mutation and an over-authority proposal
+([phase-7e/robinhood-demo.md](phase-7e/robinhood-demo.md)). An offline test
+puts Lighter and Robinhood reservations in one principal ledger under a shared
+committed-notional limit. USDG (official on testnet, but an upgradeable proxy
+the frozen token policy prohibits) is deferred to 7E.4. Reconciliation stays
+7F.
 
 ### Phase 7F — Cross-domain reconciliation: EVM fixture and perps
 
@@ -690,7 +706,7 @@ to the product, and belongs in the design documents before it belongs in code.
 | 7B | Core types and generic action/state model | 7A | **FROZEN ✓** — with 7B.1 representation hardening (meet and AUTH-2 → 7C; module interface → 7D) |
 | 7C | Authority Graph + Global Authority Ledger (meet, effective lineage, AUTH-2) | 7B | **FROZEN ✓** |
 | 7D | Invariant + Reservation Engine (executable `DomainModule` interface) | 7C | **FROZEN ✓** — with 7D.1 hardening, 7D.2 provenance and 7D.3 immutable authority semantics (observation reconciliation → 7F, issuance → 7E) |
-| 7E | PerpPolicy v1 and Venue Signer | 7D | 7E.0, 7E.1 accepted; **7E.2 implemented locally, awaiting review** (testnet only) |
+| 7E | PerpPolicy v1 and Venue Signer; Robinhood EVM domain | 7D | 7E.0–7E.2 accepted; **7E.3 run on Robinhood Chain testnet, awaiting review** (testnet only) |
 | 7F | Cross-domain reconciliation: EVM fixture and perps | 7E | planned |
 | 7G | Developer SDK and simulator | 7F | planned |
 | 7H | Receipts and authority provenance | 7F | planned |
