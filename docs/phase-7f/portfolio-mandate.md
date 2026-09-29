@@ -1,7 +1,8 @@
 # Phase 7F — Portfolio Mandate v1 specification
 
-> **Status: specification for Phase 7F, opened by the repository owner on
-> 2026-09-29.** A layer *above* Mandate Core. It changes nothing frozen: not
+> **Status: Phase 7F, opened by the repository owner on 2026-09-29;
+> implemented in `packages/portfolio`, offline, awaiting review**
+> ([implementation-7f.md](implementation-7f.md)). A layer *above* Mandate Core. It changes nothing frozen: not
 > MCE v2, not Candidate V3, not the Phase 6 gate, not Core, the ledger or the
 > control engine, not the Phase 7E.3 deployment and not any canonical corpus.
 > Security model: [security-model.md](security-model.md). Package decision:
@@ -192,9 +193,12 @@ The repository's encoding discipline (ADR 0002, ADR 0020), unchanged:
 
 - `str(tag) ‖ u16(schemaVersion = 1) ‖ body`, with the length-prefixed tag
   naming the object and its version. Tags: `PORTFOLIO_MANDATE.V1`,
-  `PORTFOLIO_PROPOSAL.V1`, `PORTFOLIO_CHILD_AUTHORIZATION.V1`,
-  `PORTFOLIO_CANDIDATE.V1`, `PORTFOLIO_RECEIPT.V1`, and the two signing
-  prefixes `PORTFOLIO_MANDATE_SIGNATURE.V1`, `PORTFOLIO_PROPOSAL_SIGNATURE.V1`.
+  `PORTFOLIO_ACTION_CANDIDATE.V1`, `PORTFOLIO_PROPOSAL.V1`,
+  `PORTFOLIO_RELEASE.V1`, `PORTFOLIO_CHILD_AUTHORIZATION.V1`,
+  `PORTFOLIO_RECEIPT.V1`, and the three signing prefixes
+  `PORTFOLIO_MANDATE_SIGNATURE.V1`, `PORTFOLIO_PROPOSAL_SIGNATURE.V1`,
+  `PORTFOLIO_RELEASE_SIGNATURE.V1`. The room's `PortfolioCandidate` is never
+  hashed or signed: it is untrusted, and the verifier re-derives it.
 - Big-endian fixed-width integers; `u256` atoms; `u16`-prefixed ASCII
   identifiers in the ADR 0002 charset; a `u8` presence flag before every
   nullable field; explicit enum wire codes that never depend on declaration
@@ -468,7 +472,14 @@ mutation); an `ACTIVE` reservation of that action exists with demands equal
 to the approved resources; and an `ADMIT_ATTEMPT` for that reservation is
 committed. The domain signer then performs its own existing checks (for the
 Robinhood gate, custody re-derives the gate artifact from the committed
-attempt).
+attempt). For the Robinhood path the portfolio's check is placed in front of
+the principal key itself: `guardGateCustody` wraps the unchanged gate custody,
+so a stock reservation the portfolio never verified can reach the gate
+signer but never the principal's signature.
+
+Agent releases are signed too (`PORTFOLIO_RELEASE.V1`): a release can only
+reduce the releasing agent's own allocation, but an unauthenticated one
+would let any party strip an agent of its allocation.
 
 ## 13. The Portfolio Receipt
 

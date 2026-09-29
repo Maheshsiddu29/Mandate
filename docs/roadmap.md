@@ -636,7 +636,8 @@ the frozen token policy prohibits) is deferred to 7E.4. Reconciliation stays
 
 ### Phase 7F — Portfolio Mandate and multi-agent coordination
 
-**Opened by the owner on 2026-09-29, in progress.** One principal, five
+**Opened by the owner on 2026-09-29; implemented locally, offline, awaiting
+review** ([phase-7f/implementation-7f.md](phase-7f/implementation-7f.md)). One principal, five
 specialized agents (stock, swap, NFT, yield, perps), one authority: a
 principal-signed Portfolio Mandate with typed resources and three allocation
 modes, compiled into Core grants; a deterministic, authority-free Mandate
@@ -719,7 +720,7 @@ to the product, and belongs in the design documents before it belongs in code.
 | 7C | Authority Graph + Global Authority Ledger (meet, effective lineage, AUTH-2) | 7B | **FROZEN ✓** |
 | 7D | Invariant + Reservation Engine (executable `DomainModule` interface) | 7C | **FROZEN ✓** — with 7D.1 hardening, 7D.2 provenance and 7D.3 immutable authority semantics (observation reconciliation → 7F, issuance → 7E) |
 | 7E | PerpPolicy v1 and Venue Signer; Robinhood EVM domain | 7D | 7E.0–7E.2 accepted; **7E.3 run on Robinhood Chain testnet, awaiting review** (testnet only) |
-| 7F | Portfolio Mandate and multi-agent coordination | 7E | **opened 2026-09-29, in progress** (offline) |
+| 7F | Portfolio Mandate and multi-agent coordination | 7E | **implemented locally, offline, awaiting review** |
 | — | Cross-domain reconciliation (formerly 7F) | 7E | unscheduled |
 | 7G | Developer SDK and simulator | 7F | planned |
 | 7H | Receipts and authority provenance | 7F | planned |

@@ -1,6 +1,6 @@
 # Phase 7F — Multi-agent security model
 
-> **Status: Phase 7F specification.** Companion to
+> **Status: Phase 7F, implemented and tested ([implementation-7f.md](implementation-7f.md)).** Companion to
 > [portfolio-mandate.md](portfolio-mandate.md). Scope: one principal, several
 > agents, several markets. Authority across principals remains Phase 9.
 
@@ -44,7 +44,8 @@ agent that authenticates correctly.
 | T5 | authorized agent routes through an unknown venue | `VENUE_NOT_ALLOWED` | Core `MARKETS_NOT_PERMITTED` |
 | T6 | authorized agent requests beyond its child authority | `AGENT_LIMIT_EXCEEDED` | ledger `LEDGER_LIMIT_EXCEEDED` at the agent's leg |
 | T7 | agent understates its demand | `PROPOSAL_RESOURCES_MISDECLARED` | `RESERVATION_DEMAND_MISMATCH`; the ledger charges the module's figure |
-| T8 | candidate changed after authorization | `CHILD_ACTION_MUTATED` before any key | the gate: `AgentSignatureInvalid`, `MaxNotionalExceeded`, … |
+| T8 | candidate changed after authorization | `CHILD_ACTION_MUTATED` before any key | the gate: `AgentSignatureInvalid`, `MaxNotionalExceeded`, `RecipientNotPrincipal` (tested against the Phase 6 reference model) |
+| T8a | a stock reservation made around the portfolio | `guardGateCustody`: the principal key signs only after `checkBeforeSign` passes | custody's own re-derivation of the gate artifact |
 | T9 | one agent uses another's reservation | `CHILD_AGENT_MISMATCH` | Core `ACTOR_NOT_HOLDER`; the reservation is bound to its action |
 | T10 | agents race for the same pool | — | the ledger's compare-and-swap: every leg checked at the committed version |
 | T11 | a released lot is claimed twice | `LOT_EXHAUSTED`, `CLAIM_ALREADY_APPLIED` | the verifier replays the book |

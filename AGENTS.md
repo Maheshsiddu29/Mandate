@@ -64,8 +64,8 @@ against a mainnet (the package refuses one). **Phase 7F** — the Portfolio
 Mandate and multi-agent coordination layer, `packages/portfolio`
 ([docs/phase-7f](docs/phase-7f/README.md),
 [ADR 0027](docs/adr/0027-portfolio-mandate-layer.md)) — was opened by the
-owner on 2026-09-29 and is in progress: offline only, above Core and compiled
-into it, changing nothing frozen. **Phase 6 is
+owner on 2026-09-29 and is implemented locally, offline, awaiting review:
+above Core and compiled into it, changing nothing frozen. **Phase 6 is
 frozen at `dc98df5`**; nothing in Phase 7 may modify
 MCE v2, Candidate V3, the gate, its libraries, fixture or replay semantics, or
 any canonical vector. Before it came **Phase 6R.2B** (secure gas optimization:
@@ -346,6 +346,19 @@ The execution-gate package's runtime dependencies are fixed to
 versions ([ADR 0019](docs/adr/0019-onchain-execution-gate.md)); it performs no
 I/O, and `structure.test.ts` enforces both, plus that its error vocabulary matches
 the Solidity gate's.
+
+The portfolio package's runtime dependencies are fixed by
+[ADR 0027](docs/adr/0027-portfolio-mandate-layer.md) to `@mandate/control`,
+`@mandate/core`, `@mandate/evm-robinhood`, `@mandate/execution-gate`,
+`@mandate/kernel`, `@mandate/ledger`, `@mandate/perp-lighter`,
+`@mandate/registry` and the kernel's pinned noble packages. Its source
+performs no I/O and reads no clock, randomness or environment; only
+`src/domains/` names a domain package, only `src/demo/` uses fixture data or
+signs (with publicly derived demonstration keys); `structure.test.ts`
+enforces all of it. `npm run portfolio-corpus:generate` regenerates
+`corpus/portfolio-demo-v1` (part of `generated:check`); `npm run
+portfolio:demo` prints the offline demonstration and `npm run
+portfolio:benchmark` measures it.
 
 `jev:characterize` is the only command that contacts TypeSafe. It refuses to
 run without a credential and exits with code 2, so a blocked run is never
