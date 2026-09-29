@@ -64,7 +64,8 @@
     "robinhood:testnet:deploy": "node packages/evm-robinhood/scripts/deploy.ts",
     "robinhood:testnet:demo": "node packages/evm-robinhood/scripts/demo.ts",
     "robinhood:testnet:verify": "node packages/evm-robinhood/scripts/verify.ts",
-    "portfolio:demo": "node packages/portfolio/scripts/demo.ts"
+    "portfolio:demo": "node packages/portfolio/scripts/demo.ts",
+    "portfolio:benchmark": "node packages/portfolio/scripts/benchmark.ts"
   },
   "devDependencies": {
     "@openzeppelin/contracts": "5.6.1",
