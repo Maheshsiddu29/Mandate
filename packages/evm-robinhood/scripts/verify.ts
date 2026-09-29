@@ -13,24 +13,48 @@ import { encodeArguments } from '../src/index.ts';
 import { address, toHex, uint } from '../src/abi.ts';
 import { CONFIG_PATH, EXPLORER, MANIFEST_PATH, REPO, gateConstructorArgs, json, log, tokenConstructorArgs, type DemoMarketConfig, type Manifest } from './lib.ts';
 
+/**
+ * Blockscout's own verdict. `forge verify-contract --watch` exits 0 even when
+ * Blockscout answers `Fail - Unable to verify`, so the exit code proves nothing:
+ * only a `Pass` (or "already verified") status counts.
+ */
 function verify(addr: string, target: string, args: string): string {
+  let out: string;
   try {
-    execFileSync(
+    out = execFileSync(
       'forge',
       ['verify-contract', addr, target, '--verifier', 'blockscout', '--verifier-url', `${EXPLORER}/api/`, '--chain-id', '46630', '--constructor-args', args, '--watch'],
-      { cwd: REPO, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', timeout: 180_000 },
+      { cwd: REPO, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', timeout: 240_000 },
     );
-    return 'VERIFIED';
   } catch (e) {
-    const out = e instanceof Error && 'stdout' in e ? String((e as { stdout: string }).stdout) + String((e as { stderr?: string }).stderr ?? '') : String(e);
-    return /already verified/i.test(out) ? 'VERIFIED (already)' : `FAILED: ${out.split('\n').filter((l) => l.trim() !== '').slice(-2).join(' | ').slice(0, 300)}`;
+    out = e instanceof Error && 'stdout' in e ? String((e as { stdout: string }).stdout) + String((e as { stderr?: string }).stderr ?? '') : String(e);
   }
+  if (/already verified/i.test(out)) return 'VERIFIED (already)';
+  if (/Details: `Pass/.test(out)) return 'VERIFIED';
+  const details = [...out.matchAll(/Details: `([^`]*)`/g)].map((m) => m[1]).pop();
+  return `NOT VERIFIED: ${details ?? out.split('\n').filter((l) => l.trim() !== '').slice(-1).join('').slice(0, 200)}`;
 }
 
-function main(): void {
+/** The explorer's supported solc versions: verification of a build it cannot reproduce is not attempted. */
+async function supportedSolc(): Promise<readonly string[]> {
+  const r = await fetch(`${EXPLORER}/api/v2/smart-contracts/verification/config`, { signal: AbortSignal.timeout(20_000) });
+  const body = (await r.json()) as { solidity_compiler_versions?: string[] };
+  return body.solidity_compiler_versions ?? [];
+}
+
+async function main(): Promise<void> {
   const m = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8')) as Manifest;
   const config = JSON.parse(readFileSync(CONFIG_PATH, 'utf8')) as { markets: DemoMarketConfig[] };
   const c = m.contracts;
+  const solc = `v${m.compiler.solc}`;
+  const supported = await supportedSolc();
+  if (!supported.includes(solc)) {
+    const newest = supported.find((v) => /^v\d+\.\d+\.\d+\+commit/.test(v)) ?? 'none';
+    const note = `UNAVAILABLE: ${EXPLORER} (Blockscout) does not offer solc ${solc} (newest release it lists: ${newest}); the frozen Phase 6 build pins 0.8.37 and recompiling would change the deployed bytecode. Runtime code hashes and deployment metadata are recorded instead; the gate's runtime code was checked against the build artifact (runtimeMatchesArtifactExceptImmutables). Checked ${new Date().toISOString()}.`;
+    log(note);
+    writeFileSync(MANIFEST_PATH, `${json({ ...m, verification: { ...m.verification, explorerSourceVerification: note } })}\n`);
+    return;
+  }
   const market = config.markets[0] as DemoMarketConfig;
   const venuePrice = BigInt(market.fixturePrice) * 10n ** BigInt(c.mdusd.decimals - market.fixturePriceDecimals);
   const results = {
@@ -45,4 +69,7 @@ function main(): void {
   writeFileSync(MANIFEST_PATH, `${json({ ...m, verification: { ...m.verification, explorerSourceVerification: `Blockscout ${EXPLORER} — ${summary}` } })}\n`);
 }
 
-main();
+main().catch((e: Error) => {
+  process.stderr.write(`verify failed: ${e.message}\n`);
+  process.exitCode = 1;
+});
