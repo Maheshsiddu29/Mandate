@@ -21,6 +21,11 @@
 > quote-age bound and a window ending at the quote's expiry instead of the
 > quote's age at verification, and the Core action nonce is the signed
 > proposal's digest. Encodings and versions are unchanged.
+>
+> **Phase 7F.3:** [security-fixes-7f3.md](security-fixes-7f3.md) pins
+> signing and fixture settlement to reservation generation 1
+> (`RESERVATION_GENERATION_INVALID`) and refuses future-dated quotes
+> explicitly. Encodings and versions are unchanged.
 
 ## Contents
 
@@ -110,8 +115,8 @@ Each is recorded where the code makes it; these need the owner's approval.
 
 ## 4. Tests
 
-193 tests in 19 files, all offline and deterministic after Phase 7F.2
-(172 in 18 after Phase 7F.1).
+198 tests in 20 files, all offline and deterministic after Phase 7F.3
+(193 in 19 after Phase 7F.2, 172 in 18 after Phase 7F.1).
 
 | File | Tests | What |
 | --- | ---: | --- |
@@ -127,7 +132,8 @@ Each is recorded where the code makes it; these need the owner's approval.
 | `demo.test.ts` | 9 | the demonstration step by step, and its determinism |
 | `malicious.test.ts` | 11 | the stock hero case in the room and around it; malicious authorized agents A–D; hostile five-agent boundary; ONCHAIN_DEFENSE_TEST against the gate's reference model: exact execution, mutation, compromised-key re-signing, replay, an unverified reservation never signed |
 | `hardening-regressions.test.ts` | 8 | independent reproductions; full swap-field mutation matrix; stale quote at the reservation boundary; caller-forged verifier membership; repeated release sequence; Receipt V2 field and event-order commitments; 7F.2: decreasing/equal/doubled release sequences at the verifier; freshly signed hostile proposals refused by screening |
-| `proposal-replay.test.ts` | 18 | F7F1-01: one signed proposal at many verification times is one proposal ID, one child, one action; exact freshness boundary and Core's own expiry; identity mutations; replay in every ledger state; hostile replay end to end, across two runs and through the real stock custody |
+| `proposal-replay.test.ts` | 19 | F7F1-01: one signed proposal at many verification times is one proposal ID, one child, one action; exact freshness boundary and Core's own expiry; identity mutations; replay in every ledger state; hostile replay end to end, across two runs and through the real stock custody; 7F.3: a future-dated quote refused under the normal and the `UINT64_MAX` bound |
+| `generation-pin.test.ts` | 4 | 7F.3 LOW-1: a generation 2 reserved directly through Core after a close is never admitted, signed (zero key uses) or settled; claim/reservation generation matrix; generation 1 unaffected; Core's own generation rules unchanged |
 | `concurrency.test.ts` | 4 | five agents at their hard maxima under forced interleavings; twelve seeded interleavings; one child reserved ten times; two claims on one lot |
 | `adversarial.test.ts` | 8 | 8,000 decoder mutations and 1,000 random byte strings — total and canonical; malformed candidates; unknown required metadata; the screen is total |
 | `view.test.ts` | 4 | the UI contract: headline, timeline, rows, evidence classes |

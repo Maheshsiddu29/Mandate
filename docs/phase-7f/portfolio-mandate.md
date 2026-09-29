@@ -503,8 +503,11 @@ same signed transcript and requires: the child authorization is one the
 verifier derived (allocation exists and the mandate/proposal remain active); its
 action is byte-identical to the one the binding derives from it (no
 mutation); an `ACTIVE` reservation of that action exists with demands equal
-to the approved resources; and the exact claimed `ADMIT_ATTEMPT` matches the
-reservation, generation, action and execution authorization. The domain signer then performs its own existing checks (for the
+to the approved resources; both the claimed and the reserved generation are
+1 — Portfolio's only generation, whatever Core would grant after a close
+(`RESERVATION_GENERATION_INVALID`, Phase 7F.3); and the exact claimed
+`ADMIT_ATTEMPT` matches the reservation, generation, action and execution
+authorization. The domain signer then performs its own existing checks (for the
 Robinhood gate, custody re-derives the gate artifact from the committed
 attempt). For the Robinhood path the portfolio's check is placed in front of
 the principal key itself: `createPortfolioGateSigner` captures the unchanged

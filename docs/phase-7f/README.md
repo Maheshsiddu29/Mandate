@@ -18,6 +18,12 @@
 > one child authorization and one Core action whenever it is verified, so the
 > existing ledger refuses its replay; quote freshness is a predicate, never an
 > identity. No version changes.
+>
+> **Phase 7F.3 freeze hardening is implemented locally and awaiting review.**
+> See [security-fixes-7f3.md](security-fixes-7f3.md): Portfolio signs and
+> settles only generation 1 of an action, and a future-dated quote is refused
+> under every bound. The 64-bit nonce and stock registry freshness are
+> recorded as accepted residuals. No version changes.
 
 **One authority layer. Many agents. Multiple markets.** Five specialized
 agents — stock, swap, NFT, yield, perps — act for one principal. Discovery,
@@ -34,6 +40,7 @@ transactions.
 | [implementation-7f.md](implementation-7f.md) | what was built, how it maps onto existing components, decisions needing approval, tests, validation, performance, residual risks |
 | [security-fixes-7f1.md](security-fixes-7f1.md) | the independently reproduced findings, exact boundary invariant, Receipt V2, transcript rules and residual cross-run replay risk |
 | [security-fixes-7f2.md](security-fixes-7f2.md) | F7F1-01: stable proposal, child and Core action identity; time-invariant quote authorization; replay by ledger state; retry and sequence semantics |
+| [security-fixes-7f3.md](security-fixes-7f3.md) | freeze hardening: generation 1 pinned at the signing boundary; future-dated quotes refused explicitly; the 64-bit nonce and stock registry freshness as accepted residuals |
 
 Run it: `npm run portfolio:demo` (offline). Its receipt, UI view and
 screening vectors are committed in

@@ -21,6 +21,12 @@ boundary, schema or version: a child now commits only time-invariant facts,
 and each Core action's nonce is its signed proposal's digest, so replay of
 one proposal is refused by the existing ledger rather than by new state.
 
+Phase 7F.3 is recorded in
+[security-fixes-7f3.md](../phase-7f/security-fixes-7f3.md). It changes no
+boundary, schema or version: Portfolio signs and settles only generation 1
+of an action (Core's generation rules are unchanged), and a future-dated
+quote is refused under every quote-age bound.
+
 ## Context
 
 Phase 7F adds one principal coordinating several specialized agents across

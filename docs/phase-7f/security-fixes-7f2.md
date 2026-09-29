@@ -79,7 +79,9 @@ now − observedAt ≤ bound   ⇔   now < quoteExpiresAt
 `quoteExpiresAt` is a function of the signed observation time and static
 policy only. Exact bigint arithmetic cannot overflow; the result is narrowed
 by windows that are themselves valid `i64` seconds. A quote observed after
-`now` is still infinitely old (`QUOTE_STALE`); a missing bound still permits
+`now` is still `QUOTE_STALE` (Phase 7F.3 made that refusal explicit rather
+than a sentinel age a `UINT64_MAX` bound could admit —
+[security-fixes-7f3.md](security-fixes-7f3.md) §2); a missing bound still permits
 no quote (`QUOTE_NOT_ALLOWED`); `deriveChildAuthorization` additionally
 refuses rather than ever emitting an empty window.
 
@@ -138,7 +140,10 @@ afresh. Core's ledger could admit generation 2 of the same action after a
 close; Portfolio deliberately does not use it — a ledger-controlled retry of
 the same `proposalId`/`actionId` at the next generation would be the only
 acceptable form, and it is not built. Once settled, replay stays refused
-permanently.
+permanently. (Phase 7F.3 enforces generation 1 at the signing boundary too:
+a generation 2 reserved directly through Core is never signed, admitted or
+settled as a Portfolio child — [security-fixes-7f3.md](security-fixes-7f3.md)
+§1.)
 
 ## 5. Proposal sequence
 
