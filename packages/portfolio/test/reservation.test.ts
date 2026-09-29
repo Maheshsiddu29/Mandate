@@ -70,6 +70,11 @@ describe('compilation into Core', () => {
     assert.ok(g2.ok);
     const r2 = await w.core.engine.registerDelegation(g2.value, DEMO_T0, { maxAttempts: 1 });
     assert.ok(r2.status === 'REFUSED' && r2.refusal.detail.kind === 'DELEGATION' && r2.refusal.detail.violations.some((v) => v.code === 'DELEGATION_WIDENS_SET'));
+    // A window that outlives the root's: DELEGATION_WIDENS_WINDOW.
+    const longer = validateAuthorityGrant({ lineage: { kind: 'DELEGATION', parent: authorityId(w.compiled.root), issuer: demoParty('principal') }, principal: demoParty('principal'), holder: demoParty('perps'), notBefore: DEMO_T0, expiresAt: w.compiled.root.expiresAt + 1n, terms: base, nonce: 98n });
+    assert.ok(longer.ok);
+    const r3 = await w.core.engine.registerDelegation(longer.value, DEMO_T0, { maxAttempts: 1 });
+    assert.ok(r3.status === 'REFUSED' && r3.refusal.detail.kind === 'DELEGATION' && r3.refusal.detail.violations.some((v) => v.code === 'DELEGATION_WIDENS_WINDOW'));
   });
 });
 

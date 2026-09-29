@@ -212,6 +212,17 @@ describe('ONCHAIN_DEFENSE_TEST (SIMULATED against the Phase 6 reference model; n
     }
   });
 
+  it('replay: the byte-identical executed call, re-broadcast, reverts MandateAlreadyConsumed; a second issuance request gets the existing attempt', async () => {
+    const g = await gateWorld();
+    try {
+      const { attempt } = await issuedStock(g);
+      assert.equal(mine(g, attempt).revert, rev('MandateAlreadyConsumed'));
+      assert.equal(g.chain.txs.filter((t) => t.result === 'SUCCESS').length, 1);
+    } finally {
+      g.close();
+    }
+  });
+
   it('a stock reservation the portfolio never verified reaches the signer but never the principal’s key: nothing is signed or sent', async () => {
     const g = await gateWorld();
     try {

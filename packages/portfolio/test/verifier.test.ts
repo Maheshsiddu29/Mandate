@@ -12,6 +12,7 @@ import {
   fullAvailability,
   portfolioMandateDigest,
   proposalDigest,
+  receiptDigest,
   runMandateRoom,
   runPortfolio,
   verifyPortfolio,
@@ -140,6 +141,30 @@ describe('the receipt', () => {
     const forward = verifyPortfolio(input);
     const reversed = verifyPortfolio({ ...input, candidate: { ...input.candidate, accepted: [...input.candidate.accepted].reverse() }, proposals: [...input.proposals].reverse(), releases: [...input.releases].reverse() });
     assert.deepEqual(reversed, forward);
+  });
+
+  it('the receipt digest does not depend on the order of any list in it', async () => {
+    const w = await world();
+    const r = await runPortfolio({ core: w.core, signature: principalSignature(m), now: NOW, agents: agents(), execute: defaultExecutor(w.core) });
+    const rev = <T,>(xs: readonly T[]) => [...xs].reverse();
+    const book = (b: typeof r.receipt.allocationAfter) => ({ ...b, entries: rev(b.entries), lots: rev(b.lots), log: rev(b.log) });
+    const shuffled = {
+      ...r.receipt,
+      agents: rev(r.receipt.agents),
+      proposals: rev(r.receipt.proposals),
+      decisions: rev(r.receipt.decisions),
+      releases: rev(r.receipt.releases),
+      childAuthorizations: rev(r.receipt.childAuthorizations),
+      representationDecisions: rev(r.receipt.representationDecisions),
+      reservations: rev(r.receipt.reservations),
+      executions: rev(r.receipt.executions),
+      allocationBefore: book(r.receipt.allocationBefore),
+      allocationAfter: book(r.receipt.allocationAfter),
+    };
+    assert.equal(receiptDigest(shuffled), r.digest);
+    // …and it does depend on content: one decision's reason changes it.
+    const altered = { ...r.receipt, decisions: r.receipt.decisions.map((d, i) => (i === 0 ? { ...d, reasons: [...d.reasons, { code: 'VENUE_NOT_ALLOWED' as const, subject: 'x' }] } : d)) };
+    assert.notEqual(receiptDigest(altered), r.digest);
   });
 
   it('records every refusal as an offchain refusal with zero transactions', async () => {
