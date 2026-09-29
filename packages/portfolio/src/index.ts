@@ -40,3 +40,4 @@ export * from './receipt.ts';
 export * from './status.ts';
 export * from './run.ts';
 export * from './domains/executors.ts';
+export * from './domains/stock-custody.ts';
