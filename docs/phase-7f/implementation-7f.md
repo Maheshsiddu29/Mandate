@@ -15,6 +15,12 @@
 > [security-fixes-7f1.md](security-fixes-7f1.md) supersedes the original
 > handoff, custody and receipt details below. The mandate stays v1; receipts
 > produced after hardening are `PORTFOLIO_RECEIPT.V2`.
+>
+> **Phase 7F.2:** [security-fixes-7f2.md](security-fixes-7f2.md) makes one
+> signed proposal one authorization identity: the child commits the static
+> quote-age bound and a window ending at the quote's expiry instead of the
+> quote's age at verification, and the Core action nonce is the signed
+> proposal's digest. Encodings and versions are unchanged.
 
 ## Contents
 
@@ -104,7 +110,8 @@ Each is recorded where the code makes it; these need the owner's approval.
 
 ## 4. Tests
 
-172 tests in 18 files, all offline and deterministic after Phase 7F.1.
+193 tests in 19 files, all offline and deterministic after Phase 7F.2
+(172 in 18 after Phase 7F.1).
 
 | File | Tests | What |
 | --- | ---: | --- |
@@ -114,12 +121,13 @@ Each is recorded where the code makes it; these need the owner's approval.
 | `properties.test.ts` | 5 | seeded: childAuthority ≤ parentAuthority; every single widening caught; subset soundness (thousands of permitted actions exercised); monotonic tightening (refusals only grow); exact resource limits |
 | `allocation.test.ts` | 10 | three modes; release → lot → reassignment exactly once; double release/claim/commit; over-release/commit/claim; 8,000 seeded random operations with conservation and exact replay after each |
 | `bindings.test.ts` | 21 | stock through the registry (look-alike excluded, counterfeit unknown, claims never identity); swap venue/route/recipient/slippage/quote; NFT contract identity; yield product/issuer/quote; perps leverage and derivative exposure; an agent outside its domain |
-| `reservation.test.ts` | 13 | compilation; the ledger's own refusal of a wider limit, market or window; all five domains reserved through their real modules; the ledger's 2,000; mutation; understated demand; replay; nonces; `checkBeforeSign`; fixture issuance; one child cannot use another's reservation; SQLite store |
+| `reservation.test.ts` | 14 | compilation; the ledger's own refusal of a wider limit, market or window; all five domains reserved through their real modules; the ledger's 2,000; mutation; understated demand; replay; the nonce is the signed proposal's; a drifted child is never a second action; `checkBeforeSign`; fixture issuance; one child cannot use another's reservation; SQLite store |
 | `room.test.ts` | 16 | mandate refusal; accept/reduce/reject; release and reassignment by utility (and reversed); double/forged/over-release; outsider, wrong key, relayed proposal, replay, stale, extension, misdeclared, minimum, other mandate; order invariance; round bound; five-agent coalition |
 | `verifier.test.ts` | 11 | honest room verified; forged signature, expired mandate; the room cannot create authority (accepted refusal, duplicate, unknown proposal, over-claim, altered commit, unsigned release, dropped commit, forged coalition, stale availability); receipt determinism and order-independence |
 | `demo.test.ts` | 9 | the demonstration step by step, and its determinism |
 | `malicious.test.ts` | 11 | the stock hero case in the room and around it; malicious authorized agents A–D; hostile five-agent boundary; ONCHAIN_DEFENSE_TEST against the gate's reference model: exact execution, mutation, compromised-key re-signing, replay, an unverified reservation never signed |
-| `hardening-regressions.test.ts` | 6 | independent reproductions; full swap-field mutation matrix; stale quote at the reservation boundary; caller-forged verifier membership; repeated release sequence; Receipt V2 field and event-order commitments |
+| `hardening-regressions.test.ts` | 8 | independent reproductions; full swap-field mutation matrix; stale quote at the reservation boundary; caller-forged verifier membership; repeated release sequence; Receipt V2 field and event-order commitments; 7F.2: decreasing/equal/doubled release sequences at the verifier; freshly signed hostile proposals refused by screening |
+| `proposal-replay.test.ts` | 18 | F7F1-01: one signed proposal at many verification times is one proposal ID, one child, one action; exact freshness boundary and Core's own expiry; identity mutations; replay in every ledger state; hostile replay end to end, across two runs and through the real stock custody |
 | `concurrency.test.ts` | 4 | five agents at their hard maxima under forced interleavings; twelve seeded interleavings; one child reserved ten times; two claims on one lot |
 | `adversarial.test.ts` | 8 | 8,000 decoder mutations and 1,000 random byte strings — total and canonical; malformed candidates; unknown required metadata; the screen is total |
 | `view.test.ts` | 4 | the UI contract: headline, timeline, rows, evidence classes |
@@ -149,12 +157,17 @@ Run on 2026-09-29 at the phase's final commits:
 
 | Command | Result |
 | --- | --- |
-| `npm run check` | **pass** — 1,748 TypeScript tests in 714 suites across all packages, fixtures, replays, cross-surface (60 checks: 54 match, 5 not comparable, 1 unavailable, 0 mismatch), credential scan (675 tracked files; the 3 disposable testnet keys checked by value), junk check |
+| `npm run check` | **pass** — 1,748 TypeScript tests in 332 suites across all packages, fixtures, replays, cross-surface (60 checks: 54 match, 5 not comparable, 1 unavailable, 0 mismatch), credential scan (675 tracked files; the 3 disposable testnet keys checked by value), junk check |
 | `npm run generated:check` | **pass** — every earlier corpus and generated document regenerates without drift (including frozen `core-v1`, `control-v1`, `gate-v1`); the new `portfolio-demo-v1` is reproduced byte for byte |
 | `npm run portfolio:demo` | **pass** — verification `VERIFIED`, four children reserved, exact Receipt V2 digest `0x4ab95270652f56891dc0bddedf2d90fb953c48db31e9053cfc839f23fa91a615`, 0 transactions |
 | `npm audit --audit-level=high` | **pass** — 0 vulnerabilities |
 | `git diff <phase start> -- packages/{kernel,core,ledger,control,registry,execution-gate,evm-robinhood,perp-lighter,ledger-sqlite,…} contracts docs/phase-7e docs/core-v1 corpus/<existing>` | **empty**: nothing frozen or deployed changed |
 | `forge fmt`, `forge build`, `forge test`, fuzz, invariants, `slither .` | **not run**: no contract, script or Solidity dependency was touched in this phase (the gate's behaviour here is exercised through the Phase 6 reference model the frozen differential corpus proves equal to it) |
+
+(The suite count was first recorded here as 714; the TAP output said 332 —
+corrected in Phase 7F.2, audit INFO-4. The Phase 7F.2 validation — 1,769
+tests in 338 suites, receipt `0x6d47bd67…41e1ad` — is recorded in
+[security-fixes-7f2.md](security-fixes-7f2.md) §9.)
 
 ## 6. Performance
 

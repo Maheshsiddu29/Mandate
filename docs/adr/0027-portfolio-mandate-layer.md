@@ -15,6 +15,12 @@ complete signed verification transcript at reservation and signing, makes the
 Portfolio custody factory mandatory, and introduces the separately versioned
 `PORTFOLIO_RECEIPT.V2` encoding.
 
+Phase 7F.2 is recorded in
+[security-fixes-7f2.md](../phase-7f/security-fixes-7f2.md). It changes no
+boundary, schema or version: a child now commits only time-invariant facts,
+and each Core action's nonce is its signed proposal's digest, so replay of
+one proposal is refused by the existing ledger rather than by new state.
+
 ## Context
 
 Phase 7F adds one principal coordinating several specialized agents across

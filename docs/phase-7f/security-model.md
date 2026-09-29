@@ -40,7 +40,7 @@ agent that authenticates correctly.
 | # | Threat | First refusal | Independent backstops |
 | --- | --- | --- | --- |
 | T1 | unknown party proposes | room/verifier `AGENT_UNKNOWN` | Core `ACTOR_NOT_HOLDER` (no delegation to it) |
-| T2 | forged or replayed proposal | `AGENT_SIGNATURE_INVALID`, `PROPOSAL_REPLAYED` | ledger `RESERVATION_EXISTS` for the same action |
+| T2 | forged or replayed proposal | `AGENT_SIGNATURE_INVALID`, `PROPOSAL_REPLAYED` (within a transcript) | ledger `RESERVATION_EXISTS`: one signed proposal is one Core action whenever it is verified (security-fixes-7f2.md) |
 | T3 | authorized agent substitutes a look-alike representation | registry `REPRESENTATION_UNKNOWN` / `ISSUER_NOT_ALLOWED`; `REPRESENTATION_NOT_ALLOWED` | Core `MARKETS_NOT_PERMITTED`; GateSpotPolicy `MARKET_NOT_REVIEWED`; the gate's own market table |
 | T4 | authorized agent substitutes a recipient | `RECIPIENT_NOT_ALLOWED` | Core `RECIPIENTS_NOT_PERMITTED`; the gate's `RecipientNotPrincipal` |
 | T5 | authorized agent routes through an unknown venue | `VENUE_NOT_ALLOWED` | Core `MARKETS_NOT_PERMITTED` |
@@ -54,7 +54,7 @@ agent that authenticates correctly.
 | T12 | coalition of all agents | no coalition operation exists | every agent's own leg and the portfolio-wide leg |
 | T13 | compromised Mandate Room | the verifier re-derives everything | the ledger enforces hard limits whatever the verifier admits |
 | T14 | compromised verifier | — | Core: sets, meet and ledger legs; the domain enforcement point |
-| T15 | stale quote or stale proposal | `QUOTE_STALE`, `PROPOSAL_EXPIRED` | domain state freshness in Core admission |
+| T15 | stale quote or stale proposal | `QUOTE_STALE`, `PROPOSAL_EXPIRED` | the compiled action's window ends at the quote's expiry (Core `ACTION_EXPIRED`); domain state freshness in Core admission |
 | T16 | incomparable quantities summed | `RESOURCE_INCOMPARABLE` (no API adds two resources) | the ledger matches kind and unit exactly |
 | T17 | unknown required metadata | `PROPOSAL_EXTENSION_UNKNOWN` | — |
 | T18 | repeated/non-monotonic release or reordered claim transcript | `RELEASE_SEQUENCE_INVALID` or `CANDIDATE_BOOK_MISMATCH` | ordered replay with unique ids and exact lot accounting |

@@ -75,8 +75,13 @@ There is deliberately no second allocation ledger. Sequence monotonicity is
 therefore durable only inside one supplied transcript. A release from an older
 completed process could be presented in a later process unless an integrator
 persists a high-water mark. This residual replay risk cannot expand financial
-authority: a release only reduces the releasing agent's offchain allocation,
-and every resulting child is still bounded by signed scope and the Core ledger.
+authority beyond the principal's limits. A replayed release reduces the
+releasing agent's offchain allocation *and* can create an offchain lot that
+another agent may claim — so it can shift allocation between agents — but
+every resulting child is still bounded by its own agent's hard maxima, the
+portfolio limits, signed scope and the Core ledger. (Corrected in Phase 7F.2,
+audit INFO-1: an earlier wording said a release could only reduce
+allocation.)
 Durable cross-run sequence state would require an explicitly opened ledger or
 persistence design phase.
 

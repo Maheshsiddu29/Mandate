@@ -12,6 +12,12 @@
 > verify→reserve→admit→sign binding, mandatory Portfolio custody construction,
 > ordered transcript replay and `PORTFOLIO_RECEIPT.V2`; the Portfolio Mandate
 > remains v1.
+>
+> **Phase 7F.2 replay hardening is implemented locally and awaiting review.**
+> See [security-fixes-7f2.md](security-fixes-7f2.md): one signed proposal has
+> one child authorization and one Core action whenever it is verified, so the
+> existing ledger refuses its replay; quote freshness is a predicate, never an
+> identity. No version changes.
 
 **One authority layer. Many agents. Multiple markets.** Five specialized
 agents — stock, swap, NFT, yield, perps — act for one principal. Discovery,
@@ -27,6 +33,7 @@ transactions.
 | [demo.md](demo.md) | the five-agent demonstration round by round, its evidence classes, and what is real and what is not |
 | [implementation-7f.md](implementation-7f.md) | what was built, how it maps onto existing components, decisions needing approval, tests, validation, performance, residual risks |
 | [security-fixes-7f1.md](security-fixes-7f1.md) | the independently reproduced findings, exact boundary invariant, Receipt V2, transcript rules and residual cross-run replay risk |
+| [security-fixes-7f2.md](security-fixes-7f2.md) | F7F1-01: stable proposal, child and Core action identity; time-invariant quote authorization; replay by ledger state; retry and sequence semantics |
 
 Run it: `npm run portfolio:demo` (offline). Its receipt, UI view and
 screening vectors are committed in
