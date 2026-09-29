@@ -36,7 +36,7 @@ import {
   type PrincipalId,
   type Tagged,
 } from '@mandate/core';
-import { actionScope, checkChildLimits, checkChildScope, checkChildWindow, permits, type ResolvedAction } from './authority.ts';
+import { authorizedScope, checkChildLimits, checkChildScope, checkChildWindow, permits, quoteAgeBound, quoteExpiresAt, type ResolvedAction } from './authority.ts';
 import { candidateDigest, type CandidateDigest } from './candidate.ts';
 import { PortfolioTag, decodePortfolio, portfolioDigest, portfolioWriter } from './encoding.ts';
 import { agentPolicyOf, portfolioMandateDigest, type PortfolioMandate, type PortfolioMandateDigest } from './mandate.ts';
@@ -188,7 +188,17 @@ export function checkChildAuthorization(m: PortfolioMandate, c: ChildExecutionAu
  * agent's scope and the portfolio's at `now`, its demand is within the
  * agent's hard maxima and the portfolio limits, and `now` is inside every
  * window. The window is the intersection of the proposal's, the agent's and
- * the portfolio's.
+ * the portfolio's, and — for a quote-bearing action — ends when the quote
+ * goes stale under the tightest policy bound.
+ *
+ * **`now` decides admissibility only (F7F1-01).** Every field of the child
+ * is a function of the mandate, the signed proposal and the resolved action:
+ * the quote contributes its signed observation time (through the candidate
+ * digest), the static policy bound and the deterministic expiry
+ * `quoteExpiresAt(observedAt, bound)` — never its age at `now`. The same
+ * signed proposal therefore derives the same child, and so the same Core
+ * action, whenever it is verified; a later verification is a replay the
+ * ledger already knows, and one after the quote's expiry is `QUOTE_STALE`.
  */
 export function deriveChildAuthorization(
   m: PortfolioMandate,
@@ -201,14 +211,19 @@ export function deriveChildAuthorization(
   const found: Reason[] = [...permits(agent.scope, a, now), ...permits(m.scope, a, now)];
   for (const r of exceedingListed(a.demand, agent.hardMaxima)) found.push(reason('AGENT_LIMIT_EXCEEDED', r));
   for (const r of exceeding(a.demand, m.limits)) found.push(reason('PORTFOLIO_LIMIT_EXCEEDED', r));
+  const bound = quoteAgeBound(agent.scope, m.scope);
+  const ends = [p.expiresAt, agent.expiresAt, m.expiresAt];
+  if (a.quoteObservedAt !== null && bound !== null) ends.push(quoteExpiresAt(a.quoteObservedAt, bound));
   const notBefore = [p.createdAt, agent.notBefore, m.notBefore].reduce((x, y) => (x > y ? x : y));
-  const expiresAt = [p.expiresAt, agent.expiresAt, m.expiresAt].reduce((x, y) => (x < y ? x : y));
+  const expiresAt = ends.reduce((x, y) => (x < y ? x : y));
   if (now < m.notBefore) found.push(reason('PORTFOLIO_MANDATE_NOT_YET_VALID'));
   if (now >= m.expiresAt) found.push(reason('PORTFOLIO_MANDATE_EXPIRED'));
   if (now < agent.notBefore) found.push(reason('AGENT_NOT_YET_VALID', agent.agent.value));
   if (now >= agent.expiresAt) found.push(reason('AGENT_EXPIRED', agent.agent.value));
   if (now < p.createdAt) found.push(reason('PROPOSAL_NOT_YET_VALID'));
   if (now >= p.expiresAt) found.push(reason('PROPOSAL_EXPIRED'));
+  // Unreachable for a fresh quote (now < quoteExpiresAt, notBefore ≤ now); kept so an empty window can never be emitted.
+  if (found.length === 0 && expiresAt <= notBefore) found.push(reason('QUOTE_STALE', 'quote'));
   if (found.length > 0) return { ok: false, reasons: canonicalReasons(found) };
   const child = {
     portfolioMandate: portfolioMandateDigest(m),
@@ -216,7 +231,7 @@ export function deriveChildAuthorization(
     agent: agent.agent,
     proposal: proposalDigest(p),
     candidate: candidateDigest(p.candidate),
-    scope: actionScope(a, now),
+    scope: authorizedScope(a, bound),
     approved: a.demand,
     notBefore,
     expiresAt,

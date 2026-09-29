@@ -1,7 +1,7 @@
 {
   "corpusVersion": 1,
   "schema": "PORTFOLIO_RECEIPT.V2",
-  "receiptDigest": "0x4ab95270652f56891dc0bddedf2d90fb953c48db31e9053cfc839f23fa91a615",
+  "receiptDigest": "0xa6e88a57b9dcdde75d3731d0b6a33927ffb685bfb469b0d049f50ce010e7778a",
   "receipt": {
     "principal": "0x51f0ff0faae50fa64f0a74a2ff2fee3055765904",
     "portfolioMandate": "0x489abf9f157735aa5b2fe689e45f472f789ef9af47bcb9383f28656cbc8eda3c",
@@ -1662,6 +1662,88 @@
     },
     "childAuthorizations": [
       {
+        "child": "0x3aad99d55d8ca738e15b56061bc596e21d66393a398dd82fb8ca767990ff9897",
+        "agent": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325",
+        "proposal": "0x31323068e9e9b8c401a73364ce80ffe780cd99d307002a3a45ff895fe6597859",
+        "candidate": {
+          "kind": "YIELD_DEPOSIT",
+          "product": "eip155:421614/erc4626:0x000000000000000000000000000000000000a110",
+          "amount": "600000000",
+          "quotedApyBps": 520,
+          "quoteObservedAt": "1800000990",
+          "recipient": "eip155:421614/account:0x51f0ff0faae50fa64f0a74a2ff2fee3055765904",
+          "claims": {
+            "ticker": null,
+            "displayName": null,
+            "issuer": null,
+            "asset": null
+          }
+        },
+        "authorization": {
+          "portfolioMandate": "0x489abf9f157735aa5b2fe689e45f472f789ef9af47bcb9383f28656cbc8eda3c",
+          "principal": {
+            "kind": "eip155-address",
+            "value": "0x51f0ff0faae50fa64f0a74a2ff2fee3055765904"
+          },
+          "agent": {
+            "kind": "eip155-address",
+            "value": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325"
+          },
+          "proposal": "0x31323068e9e9b8c401a73364ce80ffe780cd99d307002a3a45ff895fe6597859",
+          "candidate": "0x44236b2d354cf05e556bc69b7728b6f5a1c360898e8beb11249b6e549099b6d0",
+          "scope": {
+            "domains": [
+              "yield-fixture"
+            ],
+            "actions": [
+              "YIELD_DEPOSIT"
+            ],
+            "chains": [
+              "eip155:421614"
+            ],
+            "venues": [
+              "eip155:421614/yield-protocol:0x000000000000000000000000000000000000a110"
+            ],
+            "assets": [
+              {
+                "assetClass": "fund",
+                "idScheme": "mandate-core",
+                "value": "fund:alpha-usd-vault"
+              }
+            ],
+            "representations": [
+              "eip155:421614/erc4626:0x000000000000000000000000000000000000a110"
+            ],
+            "issuers": [
+              "issuer.fixture.vault-alpha"
+            ],
+            "recipients": [
+              "eip155:421614/account:0x51f0ff0faae50fa64f0a74a2ff2fee3055765904"
+            ],
+            "syntheticPolicy": "FORBIDDEN",
+            "requiredRights": [],
+            "maxLeverage": null,
+            "maxSlippageBps": null,
+            "maxQuoteAgeSeconds": "300"
+          },
+          "approved": [
+            {
+              "resource": "portfolio-notional",
+              "atoms": "600000000"
+            }
+          ],
+          "notBefore": "1800000990",
+          "expiresAt": "1800001291"
+        },
+        "action": "0x5dce0584eb3cf50020c7863d4c2f26a0d6addd9bce626deb623e9fa2b6aa7ba6",
+        "approved": [
+          {
+            "resource": "portfolio-notional",
+            "atoms": "600000000"
+          }
+        ]
+      },
+      {
         "child": "0x468c59b53c7078140be95d5f4a3cd9b91217beed7aea586cea75f0800611c216",
         "agent": "0x7f2ae22dc7b2645eb28be9449f775ec12dea24fe",
         "proposal": "0xf784a3ecf2d6ce03b54b64ba9e01312e982e4404e3f1178412520c4cf46853ea",
@@ -1751,88 +1833,6 @@
             "resource": "spot-capital",
             "atoms": "600000000"
           },
-          {
-            "resource": "portfolio-notional",
-            "atoms": "600000000"
-          }
-        ]
-      },
-      {
-        "child": "0x6983229fbdc2d294a271fad748e0370268bc2bbe07ffdb48abc67e8faa090b5c",
-        "agent": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325",
-        "proposal": "0x31323068e9e9b8c401a73364ce80ffe780cd99d307002a3a45ff895fe6597859",
-        "candidate": {
-          "kind": "YIELD_DEPOSIT",
-          "product": "eip155:421614/erc4626:0x000000000000000000000000000000000000a110",
-          "amount": "600000000",
-          "quotedApyBps": 520,
-          "quoteObservedAt": "1800000990",
-          "recipient": "eip155:421614/account:0x51f0ff0faae50fa64f0a74a2ff2fee3055765904",
-          "claims": {
-            "ticker": null,
-            "displayName": null,
-            "issuer": null,
-            "asset": null
-          }
-        },
-        "authorization": {
-          "portfolioMandate": "0x489abf9f157735aa5b2fe689e45f472f789ef9af47bcb9383f28656cbc8eda3c",
-          "principal": {
-            "kind": "eip155-address",
-            "value": "0x51f0ff0faae50fa64f0a74a2ff2fee3055765904"
-          },
-          "agent": {
-            "kind": "eip155-address",
-            "value": "0xbd8f524207e35ea23bdfa7aec6a2a3495f327325"
-          },
-          "proposal": "0x31323068e9e9b8c401a73364ce80ffe780cd99d307002a3a45ff895fe6597859",
-          "candidate": "0x44236b2d354cf05e556bc69b7728b6f5a1c360898e8beb11249b6e549099b6d0",
-          "scope": {
-            "domains": [
-              "yield-fixture"
-            ],
-            "actions": [
-              "YIELD_DEPOSIT"
-            ],
-            "chains": [
-              "eip155:421614"
-            ],
-            "venues": [
-              "eip155:421614/yield-protocol:0x000000000000000000000000000000000000a110"
-            ],
-            "assets": [
-              {
-                "assetClass": "fund",
-                "idScheme": "mandate-core",
-                "value": "fund:alpha-usd-vault"
-              }
-            ],
-            "representations": [
-              "eip155:421614/erc4626:0x000000000000000000000000000000000000a110"
-            ],
-            "issuers": [
-              "issuer.fixture.vault-alpha"
-            ],
-            "recipients": [
-              "eip155:421614/account:0x51f0ff0faae50fa64f0a74a2ff2fee3055765904"
-            ],
-            "syntheticPolicy": "FORBIDDEN",
-            "requiredRights": [],
-            "maxLeverage": null,
-            "maxSlippageBps": null,
-            "maxQuoteAgeSeconds": "10"
-          },
-          "approved": [
-            {
-              "resource": "portfolio-notional",
-              "atoms": "600000000"
-            }
-          ],
-          "notBefore": "1800000990",
-          "expiresAt": "1800004600"
-        },
-        "action": "0x2f9811fa5e34875139477eda5e82cabf709539a81286d0b8d0eefdfab9d9cba5",
-        "approved": [
           {
             "resource": "portfolio-notional",
             "atoms": "600000000"
@@ -1940,7 +1940,7 @@
         ]
       },
       {
-        "child": "0xb616bdcb2604560c480f0e856d3521f5121d840923eedf9b9484cc7f02d69c96",
+        "child": "0x88cc891a34c03ab0f9ec63143243d4cecc48338ffc7a9dd18716cda15c387a52",
         "agent": "0x82b836ee81df078196f21d53af66bcb5623bf9a8",
         "proposal": "0x88cb44c7dc996afad6147d8224113b354df580fa900e50842eb6967e318a2128",
         "candidate": {
@@ -2006,7 +2006,7 @@
             "requiredRights": [],
             "maxLeverage": null,
             "maxSlippageBps": 30,
-            "maxQuoteAgeSeconds": "10"
+            "maxQuoteAgeSeconds": "60"
           },
           "approved": [
             {
@@ -2015,9 +2015,9 @@
             }
           ],
           "notBefore": "1800000990",
-          "expiresAt": "1800004600"
+          "expiresAt": "1800001051"
         },
-        "action": "0x109f8dc9a7e442eb3b35007f5bf0dbb7969a1a252c1b6b4958697c27dd50cf0b",
+        "action": "0x771d375a24bfe806b00c7e959822baa39bdb7d6d028131918f395416455f582f",
         "approved": [
           {
             "resource": "portfolio-notional",
@@ -2047,23 +2047,23 @@
     ],
     "reservations": [
       {
-        "child": "0x468c59b53c7078140be95d5f4a3cd9b91217beed7aea586cea75f0800611c216",
+        "child": "0x3aad99d55d8ca738e15b56061bc596e21d66393a398dd82fb8ca767990ff9897",
         "status": "RESERVED",
-        "reservation": "0x919e60ab4de49b3e62ecc52de25b30b1ef13bd2211803b3511c0622a295b253c",
-        "authorization": "0x81d72eb42efc5a8d4ca85e02cd5935db1cd9fd4894d83560445282f125596752",
-        "executionAuthorization": "0x82b70f4eda07f3ad349717d2cbc62368031cf0135bff713b657e52397d0df588",
-        "action": "0xa9503f202fe1ee81c9b54fb6a161bd5e49d2a1444ace4e5f1a2ab339e060854d",
+        "reservation": "0xa0350d7f11957f8a2d3a0e5a8781fc3990cd626c93ea44cd994f8d2216db6af5",
+        "authorization": "0x35f3fd3df75b23d4acff8ab03254118a80ab53426433fc046ae6b9a7f4aaf83e",
+        "executionAuthorization": "0x0cf917fe16c66956ec6f20402d6d80b6b9cf9db425e91689e8360a116d149630",
+        "action": "0x5dce0584eb3cf50020c7863d4c2f26a0d6addd9bce626deb623e9fa2b6aa7ba6",
         "generation": "1",
         "ledgerVersion": "8",
         "reasons": []
       },
       {
-        "child": "0x6983229fbdc2d294a271fad748e0370268bc2bbe07ffdb48abc67e8faa090b5c",
+        "child": "0x468c59b53c7078140be95d5f4a3cd9b91217beed7aea586cea75f0800611c216",
         "status": "RESERVED",
-        "reservation": "0x73b98ea8fcc2a6a8eb8dd737702aaccebdc5c0fc7a21108a6d6831ba6ac57f2a",
-        "authorization": "0x44cacf65914179acc1c6157afad8f90048be7bd28bbf1823d81a5b218e729343",
-        "executionAuthorization": "0x54aed9f44f2c6e6dbacc750eb3ffc3160a2cf4259a217e4dae37f120c5ca64a4",
-        "action": "0x2f9811fa5e34875139477eda5e82cabf709539a81286d0b8d0eefdfab9d9cba5",
+        "reservation": "0x919e60ab4de49b3e62ecc52de25b30b1ef13bd2211803b3511c0622a295b253c",
+        "authorization": "0x93b70f5ef4a6e534040fb11e4432143952a9abceecd45dbf3016130ee7c300fd",
+        "executionAuthorization": "0x1149f2193fd73c31c3685d86c653b578b339b143290d5208de49da8daa31860d",
+        "action": "0xa9503f202fe1ee81c9b54fb6a161bd5e49d2a1444ace4e5f1a2ab339e060854d",
         "generation": "1",
         "ledgerVersion": "9",
         "reasons": []
@@ -2072,7 +2072,7 @@
         "child": "0x853169f0a8fd313b67b624fe948c049a898c5d01fe416e1d80a4483ddb6d1953",
         "status": "RESERVED",
         "reservation": "0x2af30a48c82bea4d5b5345591f704d0a75e9dfced46d4821ceb597ff132798f7",
-        "authorization": "0xad3e8c5475bb42c406deb1b4749b0d20632bdfb3ad628ef9811260bc8d71accc",
+        "authorization": "0xd4dc7d08de2af13de5617ae9f27b7ec95f2d4e61f7ebadaf02980a963e379210",
         "executionAuthorization": "0x302c0b4c0debb3214de6558e339eb234ca435116bbaac7593ab12c53d963a155",
         "action": "0x7f4e417cebf4b8ad33184315a48bd305610ab9a4a9f6cc11846ebaf7dc1fd918",
         "generation": "1",
@@ -2080,18 +2080,29 @@
         "reasons": []
       },
       {
-        "child": "0xb616bdcb2604560c480f0e856d3521f5121d840923eedf9b9484cc7f02d69c96",
+        "child": "0x88cc891a34c03ab0f9ec63143243d4cecc48338ffc7a9dd18716cda15c387a52",
         "status": "RESERVED",
-        "reservation": "0xb064c6d0590ab0a11164d5e774cbfc04dfb6f536d27ef01ff91459d2e3d552b7",
-        "authorization": "0x9e63a14b728120392eb19991542d48d794a02cad1002e4d503ef2f67a238a811",
-        "executionAuthorization": "0x96236a477b76e73ceafcaf3286a9a3326de7d18b9b6621c95ea4d5337be31e72",
-        "action": "0x109f8dc9a7e442eb3b35007f5bf0dbb7969a1a252c1b6b4958697c27dd50cf0b",
+        "reservation": "0x8c120220a726a1c04b5ef36fdc84a16dd803f99e0c8a61e8feb76dc82421c970",
+        "authorization": "0x796c0d26d5d367cd241543b062639ee67ad4498ad8223d68f147a62cd79a0e43",
+        "executionAuthorization": "0x9e79f725ba196a6b8b176560ff22337e6927732acf4d70209e6a40d216c206d3",
+        "action": "0x771d375a24bfe806b00c7e959822baa39bdb7d6d028131918f395416455f582f",
         "generation": "1",
         "ledgerVersion": "11",
         "reasons": []
       }
     ],
     "executions": [
+      {
+        "child": "0x3aad99d55d8ca738e15b56061bc596e21d66393a398dd82fb8ca767990ff9897",
+        "integration": "yield-fixture.v1",
+        "integrationEvidence": "FIXTURE",
+        "status": "SETTLED",
+        "evidence": "SIMULATED",
+        "attempt": "0xffe446280cd7032a766e1bc98fe6e2de17058e6815f3fef197cb9a0b80b8a479",
+        "artifact": "0xe27d5e8e86cd5f970b403af95b3483943c5448b7c37e73effe4fbaac9b45a36e",
+        "transactions": 0,
+        "reasons": []
+      },
       {
         "child": "0x468c59b53c7078140be95d5f4a3cd9b91217beed7aea586cea75f0800611c216",
         "integration": "robinhood-gate-signer.v1",
@@ -2100,17 +2111,6 @@
         "evidence": "OFFCHAIN_ONLY",
         "attempt": null,
         "artifact": null,
-        "transactions": 0,
-        "reasons": []
-      },
-      {
-        "child": "0x6983229fbdc2d294a271fad748e0370268bc2bbe07ffdb48abc67e8faa090b5c",
-        "integration": "yield-fixture.v1",
-        "integrationEvidence": "FIXTURE",
-        "status": "SETTLED",
-        "evidence": "SIMULATED",
-        "attempt": "0xd2dc32cb7a6e07564544707d80d0b60a5891396ac28c5b24e3c0d8c643e6a181",
-        "artifact": "0x7fb8f5b46d32a7551b6c5a103dfe9d4cace7fc78c6356b35f6777eec158f405a",
         "transactions": 0,
         "reasons": []
       },
@@ -2126,13 +2126,13 @@
         "reasons": []
       },
       {
-        "child": "0xb616bdcb2604560c480f0e856d3521f5121d840923eedf9b9484cc7f02d69c96",
+        "child": "0x88cc891a34c03ab0f9ec63143243d4cecc48338ffc7a9dd18716cda15c387a52",
         "integration": "swap-fixture.v1",
         "integrationEvidence": "FIXTURE",
         "status": "SETTLED",
         "evidence": "SIMULATED",
-        "attempt": "0x2c0cd529ab234b4dd6100187518a9d52e2997cab2ea332d3d1cf560f7ccb0ef3",
-        "artifact": "0xe199e0ffc7acc68609807f6b7ecf0743968bf6f528b765aefb49e4129e2c2067",
+        "attempt": "0xcdc415c16f1d633e0f8af6048e346c0e4426a95d653e6077b03862d897b63738",
+        "artifact": "0xf6482e4f40971a79a2b211b4582960252ded0396706b95114feef08f973a76c9",
         "transactions": 0,
         "reasons": []
       }

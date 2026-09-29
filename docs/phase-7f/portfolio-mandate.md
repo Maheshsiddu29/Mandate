@@ -277,7 +277,8 @@ An execution is represented as the **singleton scope** of its one resolved
 action (§8): `{domain}`, `{kind}`, `{chain}`, `{venue}`, `{asset}`,
 `{representation}`, `{issuer}`, `{recipient}`, the synthetic policy its
 instrument needs, the rights it establishes, and its own leverage, slippage
-and quote age as bounds. So one function, `checkChildScope`, decides every
+and quote age as bounds (for a child, the static quote-age bound instead of
+the age: §11). So one function, `checkChildScope`, decides every
 level — portfolio ⊇ agent ⊇ execution — and `permits(scope, action)` is that
 same check under action-level names (`CHILD_WIDENS_VENUES` becomes
 `VENUE_NOT_ALLOWED`, and so on), plus each swap-route pool against the allowed
@@ -420,9 +421,29 @@ ChildExecutionAuthorization {                 schema PORTFOLIO_CHILD_AUTHORIZATI
   portfolioMandate, principal, agent, proposal, candidate   digests and parties
   kind, domain, chain, venue, asset, representation, issuer, recipient   the resolved action
   approved           ResourceLimit[]          = the derived demand
-  notBefore, expiresAt                        ≤ proposal, agent and portfolio windows
+  notBefore, expiresAt                        ≤ proposal, agent and portfolio windows,
+                                              and expiresAt ≤ quoteExpiresAt for a quote
 }
 ```
+
+**The child is a function of the signed proposal, never of the time it is
+verified (Phase 7F.2).** A quote's age is the only fact of an action that
+moves with time, so it is a freshness *predicate*, evaluated by `permits`
+at every boundary, and never part of the child. The child's singleton scope
+carries the tightest policy bound — `maxQuoteAgeSecs` of the agent and of the
+portfolio — in place of the quote's age; the quote's signed observation time
+is committed through the candidate digest; and the child's window ends at
+
+```text
+quoteExpiresAt = quoteObservedAt + maxQuoteAgeSecs + 1     (exclusive, like every expiresAt)
+```
+
+so `now − quoteObservedAt ≤ maxQuoteAgeSecs ⇔ now < quoteExpiresAt`: the
+compiled Core action expires with its quote, and Core's own window check
+refuses a stale one. One signed proposal verified at T₁, T₂ or T₃ derives the
+same child; at T₃ past the quote's expiry it is `QUOTE_STALE` instead.
+Reservation and pre-sign re-derive the child at their own time and require it
+byte for byte (`CHILD_ACTION_MUTATED` otherwise).
 
 and checks each one ⊆ its agent's policy ⊆ the portfolio (§7, level 2).
 

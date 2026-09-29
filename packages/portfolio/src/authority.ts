@@ -23,6 +23,12 @@
  * - **monotonic tightening**: shrinking a set, lowering a bound, forbidding
  *   synthetics or requiring another right can only add violations.
  *
+ * A quote's age is the one bound that moves with time. `permits` compares
+ * the age at `now` (a freshness predicate); the child commits to the static
+ * policy bound and a window ending at the quote's expiry
+ * (`authorizedScope`, `quoteExpiresAt`), so time decides only whether a
+ * child is admissible, never which child it is.
+ *
  * Every violation is reported, not only the first. Nothing here reads a
  * label, a ticker or a claim.
  */
@@ -168,8 +174,32 @@ export function quoteAge(observedAt: bigint, now: bigint): bigint {
   return observedAt > now ? FUTURE_QUOTE_AGE : now - observedAt;
 }
 
-/** The singleton scope of one resolved action, at `now`. */
-export function actionScope(a: ResolvedAction, now: bigint): AuthorityScope {
+/**
+ * The tightest quote-age bound of `scopes`; `null` when any of them has none,
+ * in which case no quote-bearing action is permitted (`permits` says
+ * `QUOTE_NOT_ALLOWED`). Static policy: it never depends on the time.
+ */
+export function quoteAgeBound(...scopes: readonly AuthorityScope[]): bigint | null {
+  let bound: bigint | null = null;
+  for (const s of scopes) {
+    if (s.maxQuoteAgeSeconds === null) return null;
+    if (bound === null || s.maxQuoteAgeSeconds < bound) bound = s.maxQuoteAgeSeconds;
+  }
+  return bound;
+}
+
+/**
+ * The first instant a quote observed at `observedAt` is stale under `bound`:
+ * fresh ⇔ `now − observedAt ≤ bound` ⇔ `now < observedAt + bound + 1`, the
+ * same exclusive end as every `expiresAt`. A function of signed and policy
+ * facts only, so it is the same whenever it is computed. Exact bigint
+ * arithmetic cannot overflow; a caller narrows the result by a valid window.
+ */
+export function quoteExpiresAt(observedAt: bigint, bound: bigint): bigint {
+  return observedAt + bound + 1n;
+}
+
+function singletonScope(a: ResolvedAction, maxQuoteAgeSeconds: bigint | null): AuthorityScope {
   const scope = validateAuthorityScope(
     {
       domains: [a.domain],
@@ -184,13 +214,34 @@ export function actionScope(a: ResolvedAction, now: bigint): AuthorityScope {
       requiredRights: [...new Set(a.rights)],
       maxLeverage: a.leverage === null ? null : { numerator: a.leverage.numerator, scale: a.leverage.scale },
       maxSlippageBps: a.slippageBps,
-      maxQuoteAgeSeconds: a.quoteObservedAt === null ? null : quoteAge(a.quoteObservedAt, now),
+      maxQuoteAgeSeconds: a.quoteObservedAt === null ? null : maxQuoteAgeSeconds,
     },
     'action',
   );
   // Every field came from a validated candidate or a reviewed table, so this cannot fail; if it did, that is a bug.
   if (!scope.ok) throw new Error(`resolved action has no valid scope: ${scope.error.code} at ${scope.error.path}`);
   return scope.value;
+}
+
+/**
+ * The singleton scope of one resolved action *at `now`*: its quote bound is
+ * the quote's age then. A runtime predicate's operand only (`permits`) —
+ * never an authorization identity, because it changes with `now`.
+ */
+export function actionScope(a: ResolvedAction, now: bigint): AuthorityScope {
+  return singletonScope(a, a.quoteObservedAt === null ? null : quoteAge(a.quoteObservedAt, now));
+}
+
+/**
+ * The singleton scope a child authorization commits to (F7F1-01): every
+ * fact of the action, and — for a quote-bearing action — the static policy
+ * bound `maxQuoteAgeSeconds` instead of the quote's current age. With the
+ * quote's observation time committed by the candidate digest, and the
+ * child's window ending at `quoteExpiresAt`, this is independent of when it
+ * is derived: one signed proposal has one child.
+ */
+export function authorizedScope(a: ResolvedAction, maxQuoteAgeSeconds: bigint | null): AuthorityScope {
+  return singletonScope(a, maxQuoteAgeSeconds);
 }
 
 const ACTION_CODE: { readonly [K in ReasonCode]?: ReasonCode } = {

@@ -143,7 +143,15 @@ export type ReserveOutcome =
   | { readonly status: 'RESERVED'; readonly record: AuthorizationRecord; readonly request: AuthorizationRequest; readonly snapshot: LedgerSnapshot; readonly verified: VerifiedChild }
   | { readonly status: 'REFUSED'; readonly reasons: readonly Reason[] };
 
-/** The authorization request for a child at `at`: its compiled action, fresh state and the binding's sources. */
+/**
+ * The authorization request for a child at `at`: its compiled action, fresh
+ * state and the binding's sources. Always generation 1: a portfolio child is
+ * reserved at most once, ever. Its action identity is its signed proposal's
+ * (compile.ts), so the ledger refuses a second reservation — active,
+ * admitted, closed or consumed — as `RESERVATION_EXISTS`. A retry after a
+ * pre-execution failure is a new signed proposal, never a new identity for
+ * the old one.
+ */
 export function requestFor(core: PortfolioCore, child: ChildExecutionAuthorization, candidate: ActionCandidate, at: bigint): Result<AuthorizationRequest, Reason> {
   const a = compileAction(core.compiled, child, candidate);
   if (!a.ok) return a;
@@ -165,14 +173,8 @@ function verifiedAtBoundary(core: PortfolioCore, transcript: VerificationTranscr
   if (signed === undefined) return err([reason('CANDIDATE_PROPOSAL_UNKNOWN', verified.proposal)]);
   const current = screenProposal(core.compiled.mandate, core.compiled.bindings, signed, at);
   if (current.child === null) return err(current.reasons);
-  if (
-    current.child.portfolioMandate !== verified.child.portfolioMandate ||
-    current.child.agent.kind !== verified.child.agent.kind ||
-    current.child.agent.value !== verified.child.agent.value ||
-    current.child.proposal !== verified.child.proposal ||
-    current.child.candidate !== verified.child.candidate ||
-    !vectorsEqual(current.child.approved, verified.child.approved)
-  ) return err([reason('CHILD_ACTION_MUTATED', digest)]);
+  // The child is time-invariant (F7F1-01), so re-derivation at the boundary must reproduce it byte for byte.
+  if (childAuthorizationDigest(current.child) !== verified.digest) return err([reason('CHILD_ACTION_MUTATED', digest)]);
   return ok(verified);
 }
 

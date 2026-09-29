@@ -7,8 +7,10 @@
  * path: room → verifier → child derivation → Core compilation → reservation
  * through the control engine and ledger.
  *
- * This file first records the pre-fix behavior; the fixing commit turns each
- * assertion into the fail-closed property while keeping the same inputs.
+ * Before the fix both verifications reserved: the child committed the quote's
+ * age at verification time, so each time minted a new child and action. The
+ * same inputs now derive one child and one action, and the ledger refuses
+ * the second reservation as the replay it is.
  */
 
 import { describe, it } from 'node:test';
@@ -52,23 +54,16 @@ async function replayAcrossTime(role: 'swap' | 'yield', candidate: ActionCandida
 }
 
 describe('F7F1-01: one signed proposal verified at two times', () => {
-  it('reproduces: a swap proposal derives a second child, action and reservation at T+1', async () => {
-    const r = await replayAcrossTime('swap', swap({ amount: USDC(100n) }));
-    assert.equal(r.second.verified.proposal, r.first.verified.proposal);
-    assert.notEqual(r.second.verified.digest, r.first.verified.digest);
-    assert.notEqual(r.secondAction, r.firstAction);
-    assert.equal(r.firstOut.status, 'RESERVED');
-    assert.equal(r.secondOut.status, 'RESERVED');
-    assert.equal(r.reservations, 2);
-  });
-
-  it('reproduces: a yield proposal derives a second child, action and reservation at T+1', async () => {
-    const r = await replayAcrossTime('yield', yieldDeposit({ amount: USDC(100n) }));
-    assert.equal(r.second.verified.proposal, r.first.verified.proposal);
-    assert.notEqual(r.second.verified.digest, r.first.verified.digest);
-    assert.notEqual(r.secondAction, r.firstAction);
-    assert.equal(r.firstOut.status, 'RESERVED');
-    assert.equal(r.secondOut.status, 'RESERVED');
-    assert.equal(r.reservations, 2);
-  });
+  for (const [role, candidate] of [['swap', swap({ amount: USDC(100n) })], ['yield', yieldDeposit({ amount: USDC(100n) })]] as const) {
+    it(`${role}: the same signed proposal has one child and one action; the second reservation is the ledger's replay`, async () => {
+      const r = await replayAcrossTime(role, candidate);
+      assert.equal(r.second.verified.proposal, r.first.verified.proposal);
+      assert.equal(r.second.verified.digest, r.first.verified.digest);
+      assert.equal(r.secondAction, r.firstAction);
+      assert.equal(r.firstOut.status, 'RESERVED');
+      assert.ok(r.secondOut.status === 'REFUSED', JSON.stringify(r.secondOut.status));
+      assert.deepEqual(r.secondOut.reasons.map((x) => x.code), ['LEDGER:REQUEST_INVALID/RESERVATION_EXISTS']);
+      assert.equal(r.reservations, 1);
+    });
+  }
 });
