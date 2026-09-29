@@ -28,3 +28,7 @@ export * from './binding.ts';
 export * from './domains/fixture.ts';
 export * from './domains/stock.ts';
 export * from './domains/perps.ts';
+export * from './availability.ts';
+export * from './compile.ts';
+export * from './reservation.ts';
+export * from './domains/fixture-execution.ts';

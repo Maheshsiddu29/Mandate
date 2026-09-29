@@ -222,8 +222,9 @@ export function fixtureManifest(c: FixtureDomainConfig): Uint8Array {
   return w.finish();
 }
 
+/** Module names are registry-wide (action-state-model.md §8.1), so each fixture domain's module is named after it. */
 export function fixtureModuleRef(c: FixtureDomainConfig): ModuleRefInput {
-  return { domainId: c.domain, moduleId: 'fixture', moduleVersion: FIXTURE_MODULE_VERSION, moduleDigest: keccakDigest(fixtureManifest(c)) };
+  return { domainId: c.domain, moduleId: `${c.domain}-module`, moduleVersion: FIXTURE_MODULE_VERSION, moduleDigest: keccakDigest(fixtureManifest(c)) };
 }
 
 export function fixtureAdapterRefInput(c: FixtureDomainConfig): AdapterRefInput {
