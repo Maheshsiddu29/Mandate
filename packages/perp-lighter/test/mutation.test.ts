@@ -20,7 +20,7 @@ import assert from 'node:assert/strict';
 import { keccakDigest, writeDigest, type ObservationId } from '@mandate/core';
 import { attemptIdFor, type LedgerEvent } from '@mandate/ledger';
 import type { AuthorizationRecord } from '@mandate/control';
-import { ARTIFACT_KIND, decodeAction, slotScope, type CustodyTx } from '../src/index.ts';
+import { ARTIFACT_KIND, decodeAction, slotScope, type AttemptClaim, type CustodyTx } from '../src/index.ts';
 import { admit, construct, guard, hashTx, issue, readPreExecution, resolveIntent, signAdmitted, submit, type IssueRequest, type SignerDeps } from '../src/issuance.ts';
 import { authorizeOrder, issuanceWorld, type FakeVenue, type IssuanceWorld } from './support/signer-world.ts';
 import { ByteWriter } from '@mandate/kernel';
@@ -72,6 +72,14 @@ async function scenario(run: (x: IssuanceWorld, rec: AuthorizationRecord, reques
   }
 }
 
+function claimFor(rec: AuthorizationRecord, attempt: string): AttemptClaim {
+  return { attempt, reservation: rec.reservation, generation: rec.generation, action: rec.actionId };
+}
+
+function existingAttempt(d: SignerDeps, rec: AuthorizationRecord): string {
+  return (d.store.readCommitted(rec.principal).state.reservationAttempts.get(rec.reservation) ?? [])[0] ?? '';
+}
+
 // --- Mutants, from production's own stages ----------------------------------------------
 
 type Composition = (deps: SignerDeps, rec: AuthorizationRecord, request: IssueRequest) => Promise<void>;
@@ -100,7 +108,7 @@ async function prepared(d: SignerDeps, rec: AuthorizationRecord, req: IssueReque
 const SIGN_BEFORE_ADMIT: Composition = async (d, rec, req) => {
   const p = await prepared(d, rec, req);
   if (!p.h.ok) return;
-  await d.custody.sign(p.tx, p.h.value.hash, 'pending');
+  await d.custody.sign(p.tx, claimFor(rec, attemptIdFor({ reservation: rec.reservation, generation: rec.generation, action: rec.actionId, module: rec.module, adapter: rec.adapter, authorization: rec.executionId, ordinal: 1 })));
   await admit(d, p.intent, req, p.tx, p.h.value, p.ev.scope, p.ev.results);
 };
 
@@ -123,7 +131,7 @@ const NEVER_ISSUED_AFTER_ADMIT: Composition = async (d, rec, req) => {
 const TWO_ATTEMPTS: Composition = async (d, rec, req) => {
   await issue(d, 'ORDER', rec, req);
   const p = await prepared(d, rec, req, (t) => ({ ...t, nonce: t.nonce + 1n }), true);
-  if (p.h.ok) await d.custody.sign(p.tx, p.h.value.hash, 'second');
+  if (p.h.ok) await d.custody.sign(p.tx, claimFor(rec, existingAttempt(d, rec)));
 };
 
 function mutateAfterAuthorization(mutate: (t: CustodyTx) => CustodyTx): Composition {
@@ -142,7 +150,7 @@ function permitType(type: string): Composition {
     const p = await prepared(d, rec, req, (t) => ({ ...t, type }), true);
     if (!p.h.ok) return;
     const a = await admit(d, p.intent, req, p.tx, p.h.value, p.ev.scope, p.ev.results);
-    if (a.status === 'ADMITTED') await d.custody.sign(p.tx, p.h.value.hash, a.attempt.attempt);
+    if (a.status === 'ADMITTED') await d.custody.sign(p.tx, claimFor(rec, a.attempt.attempt));
   };
 }
 
@@ -152,9 +160,9 @@ const REUSE_HASH: Composition = async (d, rec, req) => {
   if (!p.h.ok) return;
   const a = await admit(d, p.intent, req, p.tx, p.h.value, p.ev.scope, p.ev.results);
   if (a.status !== 'ADMITTED') return;
-  await d.custody.sign(p.tx, p.h.value.hash, a.attempt.attempt);
-  // "Another reservation": the same bytes, signed again under a different attempt label, with the ledger's refusal ignored.
-  await d.custody.sign(p.tx, p.h.value.hash, 'another-reservation');
+  await d.custody.sign(p.tx, claimFor(rec, a.attempt.attempt));
+  // "Another reservation": the same bytes, asked for again under another claim, with the ledger's refusal ignored.
+  await d.custody.sign(p.tx, { attempt: a.attempt.attempt, reservation: ('0x' + '5'.repeat(64)) as never, generation: 1n, action: rec.actionId });
 };
 
 /** Commit ADMIT_ATTEMPT directly, bypassing the control engine's module and adapter checks. */
@@ -169,7 +177,7 @@ const BYPASS_TRUST: Composition = async (d, rec, req) => {
     admission: { attempt: attemptIdFor(base), ...base, venueAccount: p.intent.action.account, artifact: { kind: ARTIFACT_KIND as never, id: p.h.value.bytes }, slot: { scope: slotScope(d.config.chainId, d.config.accountIndex, d.config.apiKeyIndex) as never, sequence: p.tx.nonce }, validUntil: p.intent.validUntil, requirements: rec.executionId as never, revalidation: rec.executionId as never },
   };
   const out = await d.store.compareAndAppend(rec.principal, snap.version, snap.head, [event]);
-  if (out.status === 'COMMITTED') await d.custody.sign(p.tx, p.h.value.hash, base.reservation);
+  if (out.status === 'COMMITTED') await d.custody.sign(p.tx, claimFor(rec, attemptIdFor(base)));
 };
 
 /** After an unknown submission, retry at once with a fresh order. */
@@ -178,7 +186,7 @@ const RETRY_UNKNOWN_FRESH: Composition = async (d, rec, req) => {
   const out = await issue(d, 'ORDER', rec, req);
   if (out.status === 'ISSUED' && out.issuance === 'OUTCOME_UNKNOWN') {
     const p = await prepared(d, rec, req, (t) => ({ ...t, nonce: t.nonce + 1n }), true);
-    if (p.h.ok) await d.custody.sign(p.tx, p.h.value.hash, 'retry');
+    if (p.h.ok) await d.custody.sign(p.tx, claimFor(rec, existingAttempt(d, rec)));
   }
 };
 

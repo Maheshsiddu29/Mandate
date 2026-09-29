@@ -19,7 +19,7 @@ export * from './market.ts';
 export * from './identity.ts';
 export * from './adapter.ts';
 export { ALLOWED_DIRECTION, ASSUMPTIONS, MAX_LEVERAGE, MAX_MARKED_EXPOSURE, ORDER_NOTIONAL_BOUND, PRICE_LADDER, STATE_LADDER, allowedDirectionParams, createPerpPolicy, maxLeverageParams, maxMarkedExposureParams, perpImplementation, perpManifest, perpModuleRef, type Direction, type PerpPolicy, type PerpPolicyConfig } from './policy.ts';
-export { GoKeyCustody, custodyJson, type CustodyResult, type CustodyTx, type GoCustodyOptions, type HashedTx, type KeyCustody, type SignedTx } from './custody.ts';
+export { GoKeyCustody, custodyJson, type AttemptClaim, type CustodyBinding, type CustodyResult, type CustodyTx, type GoCustodyOptions, type HashedTx, type KeyCustody, type SignedTx } from './custody.ts';
 export { HttpVenueClient, TESTNET_HOSTS, VenueHostRefused, type RegisteredKey, type Submission, type VenueClient, type VenueRead } from './venue.ts';
 export { credentialScope, credentialSubject, highestAdmittedSlot, nonceSlot } from './evidence.ts';
 export { buildCancelTx, buildOrderTx, checkAllowed, checkBinding, type SignerIdentity } from './tx.ts';

@@ -30,7 +30,9 @@ import {
   InMemoryLedgerStore,
   ReferenceAdapterRegistry,
   ReferenceModuleRegistry,
+  type AdapterRegistry,
   type AdapterStatus,
+  type ModuleRegistry,
   type InMemoryStoreHooks,
   type LedgerStore,
   type ModuleStatus,
@@ -111,8 +113,8 @@ export const SOL_PRICE_USD = 11_891n;
 export interface PerpWorld {
   readonly policy: PerpPolicy;
   readonly modules: readonly DomainModule[];
-  readonly registry: ReferenceModuleRegistry;
-  readonly adapters: ReferenceAdapterRegistry;
+  readonly registry: ModuleRegistry;
+  readonly adapters: AdapterRegistry;
   readonly catalog: ModuleCatalog;
   readonly store: LedgerStore;
   readonly engine: ControlEngine;
@@ -127,6 +129,8 @@ export interface WorldOptions {
   readonly storeOf?: (rules: ReducerRules) => LedgerStore;
   readonly hooks?: InMemoryStoreHooks;
   readonly policy?: PerpPolicy;
+  /** Durable registries (the lifecycle table); replaces the in-memory reference registries. */
+  readonly registries?: { readonly modules: ModuleRegistry; readonly adapters: AdapterRegistry };
   /** Other adapters the registry knows, as ACTIVE (the cross-domain tests' spot adapter). */
   readonly extraAdapters?: readonly AdapterRefInput[];
 }
@@ -134,8 +138,8 @@ export interface WorldOptions {
 export function perpWorld(o: WorldOptions = {}): PerpWorld {
   const policy = o.policy ?? createPerpPolicy(CONFIG);
   const modules: DomainModule[] = [policy, ...(o.extra ?? [])];
-  const registry = must(ReferenceModuleRegistry.create(modules.map((m) => ({ module: m.ref, status: m === policy ? (o.moduleStatus ?? 'ACTIVE') : 'ACTIVE', implementations: [m.implementation] }))));
-  const adapters = must(ReferenceAdapterRegistry.create([{ adapter: lighterAdapterRef({ chainId: CHAIN }), status: o.adapterStatus ?? 'ACTIVE' }, ...(o.extraAdapters ?? []).map((a) => ({ adapter: must(validateAdapterRef(a)), status: 'ACTIVE' as const }))]));
+  const registry: ModuleRegistry = o.registries?.modules ?? must(ReferenceModuleRegistry.create(modules.map((m) => ({ module: m.ref, status: m === policy ? (o.moduleStatus ?? 'ACTIVE') : 'ACTIVE', implementations: [m.implementation] }))));
+  const adapters: AdapterRegistry = o.registries?.adapters ?? must(ReferenceAdapterRegistry.create([{ adapter: lighterAdapterRef({ chainId: CHAIN }), status: o.adapterStatus ?? 'ACTIVE' }, ...(o.extraAdapters ?? []).map((a) => ({ adapter: must(validateAdapterRef(a)), status: 'ACTIVE' as const }))]));
   const catalog = must(ModuleCatalog.create(registry, modules.map((module) => ({ module, corpus: [] }))));
   const store = o.store ?? o.storeOf?.(controlRules(catalog)) ?? new InMemoryLedgerStore(o.hooks ?? {}, controlRules(catalog));
   return { policy, modules, registry, adapters, catalog, store, engine: new ControlEngine({ store, registry, catalog, adapters }) };

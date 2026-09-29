@@ -7,7 +7,8 @@
  * 1. PerpPolicy decision and reservation (in-memory ledger)
  * 2. issue-time revalidation on fresh state
  * 3. ADMIT_ATTEMPT durable commit (SQLite reference store, synchronous FULL)
- * 4. signing excluding network (fake custody; real Go custody if built)
+ * 4. signing excluding network (fake custody; real Go custody if built, which
+ *    first verifies the durable ADMIT_ATTEMPT from the ledger file itself)
  * 5. the full local issue path (resolve → evidence → construct → hash → admit → sign → journal → submit to a fake venue)
  */
 
@@ -15,12 +16,16 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { principalKey } from '@mandate/ledger';
 import { GoKeyCustody, VenueSigner, type KeyCustody } from '../src/index.ts';
-import { ONCE, T, authorized, context, order, request, states } from '../test/support/world.ts';
+import { ONCE, T as T_WORLD, authorized, context, order, request, states } from '../test/support/world.ts';
 import { issuanceWorld } from '../test/support/signer-world.ts';
 
 const BIN = 'packages/perp-lighter/custody/bin/lighter-custody';
 const N = Number(process.env['BENCH_N'] ?? '200');
+// The Go custody checks attempt validity against the real clock: start at the later of the world's T and now.
+const NOW_S = BigInt(Math.floor(Date.now() / 1000));
+const T = NOW_S > T_WORLD ? NOW_S : T_WORLD;
 
 function stats(label: string, samples: number[]): void {
   const s = [...samples].sort((a, b) => a - b);
@@ -56,7 +61,8 @@ async function main(): Promise<void> {
     if (existsSync(BIN)) {
       const key = join(dir, 'bench.lighter-key');
       spawnSync(BIN, ['keygen', key]);
-      goCustody = new GoKeyCustody({ binary: BIN, keyFile: key, chainId: 300, accountIndex: x.deps.config.accountIndex, apiKeyIndex: x.deps.config.apiKeyIndex, journal: join(dir, 'bench.journal') });
+      // Custody verifies each ADMIT_ATTEMPT from this ledger file before signing: stage 4 includes that read.
+      goCustody = new GoKeyCustody({ binary: BIN, keyFile: key, chainId: 300, accountIndex: x.deps.config.accountIndex, apiKeyIndex: x.deps.config.apiKeyIndex, journal: join(dir, 'bench.journal'), ledger: x.path, binding: { principal: principalKey(x.deps.config.principal), module: x.w.policy.ref, adapter: x.deps.config.adapter } });
       const pk = await goCustody.publicKey();
       if (pk.ok) x.venue.keys = [{ apiKeyIndex: x.deps.config.apiKeyIndex, publicKey: pk.value }];
     }

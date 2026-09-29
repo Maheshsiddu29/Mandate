@@ -4,25 +4,24 @@
  * Read-only captures of the facts Phase 7E.1 can establish without a funded
  * account (testnet-evidence.md): market metadata, a window of recent
  * transactions with their statuses, nonces and finality timestamps, block
- * records, the height's progress, and a short WebSocket sample. With
- * `--probe-send`, one additional write: a correctly signed create-order for a
- * disposable key and an account index that does not exist, to observe how the
- * API refuses it (no account, no funds, nothing can execute).
+ * records, the height's progress, and a short WebSocket sample.
+ *
+ * The 7E.1 `--probe-send` write (E-P2, testnet-evidence.md) is retired: since
+ * Phase 7E.2 custody signs nothing without a durable ADMIT_ATTEMPT it verifies
+ * itself, so an unadmitted probe signature is no longer producible. E-P2's
+ * captured result stands as recorded.
  *
  * Output goes to the directory given by `LIGHTER_EVIDENCE_OUT` (default
- * `.lighter-testnet/evidence`, ignored by git). Nothing secret is written: the
- * disposable key stays in its key file; the probe's transaction info carries
- * only a signature for a key registered nowhere.
+ * `.lighter-testnet/evidence`, ignored by git). Nothing secret is written.
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { GoKeyCustody, HttpVenueClient, TESTNET_HOSTS, type CustodyTx } from '../src/index.ts';
+import { TESTNET_HOSTS } from '../src/index.ts';
 
 const BASE = `https://${TESTNET_HOSTS[0] as string}`;
 const API = `${BASE}/api/v1`;
 const OUT = process.env['LIGHTER_EVIDENCE_OUT'] ?? '.lighter-testnet/evidence';
-const probeSend = process.argv.includes('--probe-send');
 
 async function get(path: string): Promise<{ at: string; status: number; body: string }> {
   const at = new Date().toISOString();
@@ -83,22 +82,6 @@ async function main(): Promise<void> {
   const h2 = await get('/currentHeight');
   save('heights.json', { first: h1, second: h2 });
 
-  if (probeSend) {
-    // A disposable key registered nowhere, and an account index that does not exist.
-    const venue = new HttpVenueClient(BASE);
-    const custody = new GoKeyCustody({ binary: 'packages/perp-lighter/custody/bin/lighter-custody', keyFile: '.lighter-testnet/probe.lighter-key', chainId: 300, accountIndex: 281_474_976_700_001n, apiKeyIndex: 5, journal: join(OUT, 'probe.journal') });
-    const now = BigInt(Date.now());
-    const tx: CustodyTx = {
-      type: 'CREATE_ORDER', chainId: 300, accountIndex: 281_474_976_700_001n, apiKeyIndex: 5, marketIndex: 4096, clientOrderIndex: 1n, baseAmount: 20n, price: 1n,
-      isAsk: 0, orderType: 0, timeInForce: 0, reduceOnly: 0, orderExpiry: 0n, cancelIndex: 0n, expiredAt: now + 300_000n, nonce: 0n, selfTradeBehavior: 1, selfTradeEquality: 0,
-    };
-    const hashed = await custody.hash(tx);
-    const signed = hashed.ok ? await custody.sign(tx, hashed.value.hash, 'probe') : null;
-    const sent = signed !== null && signed.ok ? await venue.sendTx(signed.value.txType, signed.value.txInfo) : null;
-    save('probe-send.json', { at: new Date().toISOString(), note: 'disposable key, nonexistent account; price 0.1 USD for 0.0002 BTC — cannot execute', hash: hashed.ok ? hashed.value.hash : hashed.error, sent });
-    custody.close();
-    summary['probeSend'] = true;
-  }
   summary['finishedAt'] = new Date().toISOString();
   save('summary.json', summary);
   process.stdout.write(`testnet evidence written to ${OUT}\n`);

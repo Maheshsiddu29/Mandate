@@ -199,7 +199,8 @@ export function admit(deps: SignerDeps, intent: Intent, request: IssueRequest, t
 // --- 6–8. sign, journal, submit --------------------------------------------------------------
 
 export async function signAdmitted(deps: SignerDeps, tx: CustodyTx, hash: string, attempt: AttemptRecord): Promise<Step<SignedTx>> {
-  const signed = await deps.custody.sign(tx, hash, attempt.attempt);
+  // Custody is given the attempt, not the hash: it verifies the durable ADMIT_ATTEMPT itself.
+  const signed = await deps.custody.sign(tx, { attempt: attempt.attempt, reservation: attempt.reservation, generation: attempt.generation, action: attempt.action });
   if (!signed.ok) return stop('SIGN', signed.error);
   if (signed.value.hash !== hash) return stop('SIGN', 'SIGNED_HASH_NOT_COMMITTED');
   return { ok: true, value: signed.value };

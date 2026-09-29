@@ -10,7 +10,7 @@
 import assert from 'node:assert/strict';
 import { keccakDigest, type Digest32 } from '@mandate/core';
 import type { AttemptRecord, LedgerState } from '@mandate/ledger';
-import { IssuanceJournal, SqliteLedgerStore } from '@mandate/ledger-sqlite';
+import { DurableAdapterRegistry, DurableModuleRegistry, IssuanceJournal, SqliteLedgerStore, openLifecycle, type LifecycleTable } from '@mandate/ledger-sqlite';
 import type { AuthorizationRecord } from '@mandate/control';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -18,9 +18,12 @@ import { join } from 'node:path';
 import {
   ALLOWED_TX_TYPES,
   ARTIFACT_KIND,
+  createPerpPolicy,
+  slotScope,
   VenueSigner,
   custodyJson,
   lighterAdapterRef,
+  type AttemptClaim,
   type CustodyResult,
   type CustodyTx,
   type HashedTx,
@@ -32,7 +35,7 @@ import {
   type VenueClient,
   type VenueRead,
 } from '../../src/index.ts';
-import { API_KEY_INDEX, CHAIN, ONCE, P, RETRY, SUB_ACCOUNT, T, authorized, btcNotionalDim, btcSizeDim, context, marginDim, must, order, perpWorld, policy, request, root, setup, states, type PerpWorld } from './world.ts';
+import { API_KEY_INDEX, CHAIN, CONFIG, ONCE, P, RETRY, SUB_ACCOUNT, T, authorized, btcNotionalDim, btcSizeDim, context, marginDim, must, order, perpWorld, policy, request, root, setup, states, type PerpWorld } from './world.ts';
 import { validatePrincipalId } from '@mandate/core';
 
 export const PUBLIC_KEY = 'ab'.repeat(40);
@@ -45,29 +48,54 @@ export function fakeHash(tx: CustodyTx): string {
 
 export interface SignCall {
   readonly tx: CustodyTx;
+  /** Custody's own hash of `tx`. */
   readonly hash: string;
-  /** At the moment of signing: the attempts in the committed ledger whose artifact is this hash. */
+  readonly claim: AttemptClaim | null;
+  /** At the moment of the request: the committed attempts whose artifact is this hash. */
   readonly boundTo: readonly AttemptRecord[];
+  /** Whether custody produced a signature. */
+  readonly signed: boolean;
+  readonly refusal: string | null;
 }
 
-/** A key custody stand-in that records every call and, at each signature, what the committed ledger said. */
+/**
+ * How the fake custody decides. `DURABLE` mirrors the Go custody (ledger.go):
+ * it reads the committed ledger itself and signs only its own hash of `tx`
+ * when that is exactly the claimed attempt's committed artifact. The others
+ * are mutants: M12 trusts that the transaction is the admitted one once the
+ * attempt exists; M13 signs with no attempt at all.
+ */
+export type CustodyVerification = 'DURABLE' | 'TRUST_CALLER_HASH' | 'NO_ATTEMPT_REQUIRED';
+
+export interface FakeCustodyOptions {
+  readonly ledger: () => LedgerState;
+  readonly issued: (attempt: string) => boolean;
+  readonly lifecycle: (kind: 'MODULE' | 'ADAPTER', name: string, version: number) => { status: string; digest: string } | null;
+  readonly clockMs: () => bigint;
+  readonly verification?: CustodyVerification;
+}
+
+const hex = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
+
+/** A key custody stand-in that records every request and verifies it against the committed ledger, as the Go custody does. */
 export class FakeCustody implements KeyCustody {
   readonly hashes: CustodyTx[] = [];
   readonly signs: SignCall[] = [];
-  readonly #ledger: () => LedgerState;
+  readonly #o: FakeCustodyOptions;
   readonly #slots = new Map<string, string>();
   onSign: (() => void) | null = null;
+  onHash: (() => void) | null = null;
   publicKeyValue = PUBLIC_KEY;
+  verification: CustodyVerification;
 
-  constructor(ledger: () => LedgerState) {
-    this.#ledger = ledger;
+  constructor(o: FakeCustodyOptions) {
+    this.#o = o;
+    this.verification = o.verification ?? 'DURABLE';
   }
 
   async publicKey(): Promise<CustodyResult<string>> {
     return { ok: true, value: this.publicKeyValue };
   }
-
-  onHash: (() => void) | null = null;
 
   async hash(tx: CustodyTx): Promise<CustodyResult<HashedTx>> {
     this.hashes.push(tx);
@@ -76,23 +104,65 @@ export class FakeCustody implements KeyCustody {
     return { ok: true, value: { hash: fakeHash(tx), txType: tx.type === 'CREATE_ORDER' ? 14 : 15 } };
   }
 
-  async sign(tx: CustodyTx, expectedHash: string, attempt: string): Promise<CustodyResult<SignedTx>> {
+  /** The Go custody's `VerifyAdmitted`, over the committed ledger state. */
+  verify(claim: AttemptClaim | null, tx: CustodyTx, hash: string): string | null {
+    if (this.verification === 'NO_ATTEMPT_REQUIRED') return null;
+    if (claim === null || claim.attempt === '') return 'ATTEMPT_ID_MISSING';
+    const state = this.#o.ledger();
+    const a = state.attempts.get(claim.attempt);
+    if (a === undefined) return 'ATTEMPT_NOT_ADMITTED';
+    if (this.verification === 'TRUST_CALLER_HASH') return null;
+    const policy = CONFIG_REFS.module();
+    if (a.module.moduleDigest !== policy.moduleDigest || a.module.moduleId !== policy.moduleId) return 'MODULE_NOT_SERVED';
+    if (a.adapter.adapterDigest !== CONFIG_REFS.adapter.adapterDigest) return 'ADAPTER_NOT_SERVED';
+    if (a.reservation !== claim.reservation || a.generation !== claim.generation || a.action !== claim.action) return 'RESERVATION_MISMATCH';
+    if (a.venueAccount.localId !== `lighter:${CHAIN}:account:${SUB_ACCOUNT}`) return 'ACCOUNT_MISMATCH';
+    if (a.artifact.kind !== ARTIFACT_KIND || hex(a.artifact.id) !== hash) return 'ARTIFACT_NOT_ADMITTED';
+    if (a.slot === null || a.slot.scope !== slotScope(CHAIN, SUB_ACCOUNT, API_KEY_INDEX) || a.slot.sequence !== tx.nonce) return 'SLOT_MISMATCH';
+    if (this.#o.clockMs() >= a.validUntil * 1_000n || tx.expiredAt > a.validUntil * 1_000n) return 'ATTEMPT_EXPIRED';
+    if (state.reservations.get(a.reservation)?.status !== 'ACTIVE') return 'RESERVATION_CLOSED';
+    if (this.#o.issued(claim.attempt)) return 'ATTEMPT_ALREADY_ISSUED';
+    for (const [kind, name, version, digest] of [['MODULE', policy.moduleId, policy.moduleVersion, policy.moduleDigest], ['ADAPTER', CONFIG_REFS.adapter.adapterId, CONFIG_REFS.adapter.adapterVersion, CONFIG_REFS.adapter.adapterDigest]] as const) {
+      const lc = this.#o.lifecycle(kind, name, version);
+      if (lc === null) return `${kind}_LIFECYCLE_UNKNOWN`;
+      if (lc.digest !== digest) return `${kind}_LIFECYCLE_OTHER_DIGEST`;
+      if (lc.status !== 'ACTIVE' && lc.status !== 'RETIRING') return `${kind}_${lc.status}`;
+    }
+    return null;
+  }
+
+  async sign(tx: CustodyTx, claim: AttemptClaim | null): Promise<CustodyResult<SignedTx>> {
     const hash = fakeHash(tx);
-    const hex = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
-    const boundTo = [...this.#ledger().attempts.values()].filter((a) => a.artifact.kind === ARTIFACT_KIND && hex(a.artifact.id) === hash);
-    this.signs.push({ tx, hash, boundTo });
+    const boundTo = [...this.#o.ledger().attempts.values()].filter((a) => a.artifact.kind === ARTIFACT_KIND && hex(a.artifact.id) === hash);
+    const record = (signed: boolean, refusal: string | null) => this.signs.push({ tx, hash, claim, boundTo, signed, refusal });
     this.onSign?.();
-    if (hash !== expectedHash) return { ok: false, error: 'HASH_NOT_COMMITTED' };
-    if (!(ALLOWED_TX_TYPES as readonly string[]).includes(tx.type)) return { ok: false, error: 'TX_TYPE_FORBIDDEN' };
+    if (!(ALLOWED_TX_TYPES as readonly string[]).includes(tx.type)) {
+      record(false, 'TX_TYPE_FORBIDDEN');
+      return { ok: false, error: 'TX_TYPE_FORBIDDEN' };
+    }
+    const refusal = this.verify(claim, tx, hash);
+    if (refusal !== null) {
+      record(false, refusal);
+      return { ok: false, error: refusal };
+    }
     const slot = tx.nonce.toString();
-    if (this.#slots.has(slot) && this.#slots.get(slot) !== hash) return { ok: false, error: 'SLOT_ALREADY_SIGNED' };
+    if (this.#slots.has(slot) && this.#slots.get(slot) !== hash) {
+      record(false, 'SLOT_ALREADY_SIGNED');
+      return { ok: false, error: 'SLOT_ALREADY_SIGNED' };
+    }
     this.#slots.set(slot, hash);
-    void attempt;
+    record(true, null);
     return { ok: true, value: { hash, txType: tx.type === 'CREATE_ORDER' ? 14 : 15, txInfo: JSON.stringify({ ...custodyJson(tx), Sig: 'fake-signature' }) } };
   }
 
   close(): void {}
 }
+
+/** The module and adapter this custody serves (set by `issuanceWorld`). */
+const CONFIG_REFS: { module: () => { moduleId: string; moduleVersion: number; moduleDigest: string }; adapter: { adapterId: string; adapterVersion: number; adapterDigest: string } } = {
+  module: () => createPerpPolicy(CONFIG).ref,
+  adapter: lighterAdapterRef({ chainId: CHAIN }),
+};
 
 export type SendBehaviour = 'ACK' | 'REJECT' | 'UNKNOWN' | 'ACK_OTHER_HASH';
 
@@ -143,6 +213,7 @@ export interface IssuanceWorld {
   readonly deps: SignerDeps;
   readonly g: ReturnType<typeof root>;
   readonly path: string;
+  readonly lifecycle: LifecycleTable;
   /** The signer's clock, in ms; tests move it forward. */
   clock: { ms: bigint };
   close(): void;
@@ -166,19 +237,32 @@ export async function issuanceWorld(o: IssuanceOptions = {}): Promise<IssuanceWo
   const tmp = o.path === undefined ? tempDir() : null;
   const path = o.path ?? join((tmp as { dir: string }).dir, 'ledger.db');
   let store: SqliteLedgerStore | null = null;
+  // One durable lifecycle source for Control and custody, in the ledger's own file.
+  const lifecycle = openLifecycle(path);
+  const perp = createPerpPolicy(CONFIG);
+  lifecycle.table.setModule({ module: perp.ref, status: o.moduleStatus ?? 'ACTIVE', implementations: [perp.implementation] });
+  lifecycle.table.setAdapter({ adapter: lighterAdapterRef({ chainId: CHAIN }), status: o.adapterStatus ?? 'ACTIVE' });
   const w = perpWorld({
+    policy: perp,
+    registries: { modules: new DurableModuleRegistry(lifecycle.table), adapters: new DurableAdapterRegistry(lifecycle.table) },
     storeOf: (rules) => (store = SqliteLedgerStore.open({ path, rules })),
-    ...(o.moduleStatus === undefined ? {} : { moduleStatus: o.moduleStatus }),
-    ...(o.adapterStatus === undefined ? {} : { adapterStatus: o.adapterStatus }),
   });
   const s = store as unknown as SqliteLedgerStore;
   const g = root(w, [btcSizeDim(1_000_000n), btcNotionalDim(10n ** 12n), marginDim(10n ** 12n)]);
   if (o.reopen !== true) await setup(w, policy(), [g]);
   const principal = must(validatePrincipalId(P, 'p'));
   const journal = new IssuanceJournal(s);
-  const custody = new FakeCustody(() => s.readCommitted(principal).state);
-  const venue = new FakeVenue();
   const clock = { ms: o.clockMs ?? NOW_MS };
+  const custody = new FakeCustody({
+    ledger: () => s.readCommitted(principal).state,
+    issued: (attempt) => journal.get(attempt as never) !== null,
+    lifecycle: (kind, name, version) => {
+      const row = lifecycle.table.read(kind, name, version);
+      return row === null ? null : { status: row.status, digest: (JSON.parse(row.ref) as { moduleDigest?: string; adapterDigest?: string }).moduleDigest ?? (JSON.parse(row.ref) as { adapterDigest: string }).adapterDigest };
+    },
+    clockMs: () => clock.ms,
+  });
+  const venue = new FakeVenue();
   const deps: SignerDeps = {
     engine: w.engine,
     store: s,
@@ -188,7 +272,7 @@ export async function issuanceWorld(o: IssuanceOptions = {}): Promise<IssuanceWo
     clock: () => clock.ms,
     config: { chainId: CHAIN, accountIndex: SUB_ACCOUNT, apiKeyIndex: API_KEY_INDEX, principal, adapter: lighterAdapterRef({ chainId: CHAIN }), policy: w.policy.ref, txTtlMs: 599_000n, retry: RETRY },
   };
-  return { w, store: s, journal, custody, venue, signer: new VenueSigner(deps), deps, g, path, clock, close: () => { s.close(); tmp?.cleanup(); } };
+  return { w, store: s, journal, custody, venue, signer: new VenueSigner(deps), deps, g, path, clock, lifecycle: lifecycle.table, close: () => { s.close(); lifecycle.close(); tmp?.cleanup(); } };
 }
 
 /** Authorize a BUY and return the record with the request its issuance needs. */

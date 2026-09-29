@@ -7,9 +7,12 @@
  * - `publicKey` — for the `CREDENTIAL_SCOPE` check;
  * - `hash(tx)` — the venue's exact transaction hash, computed **without** the
  *   key, so it can be committed in `ADMIT_ATTEMPT` first;
- * - `sign(tx, expectedHash, attempt)` — signs only a transaction whose
- *   recomputed hash equals the committed one, only of an allowed shape, only
- *   for the configured account and key, and at most one hash per nonce slot.
+ * - `sign(tx, claim)` — takes an **attempt id**, never a hash. Custody reads
+ *   the durable `ADMIT_ATTEMPT` itself (read-only, from the ledger's
+ *   database), recomputes the hash from `tx`, and signs only if it is exactly
+ *   that attempt's committed artifact — for its principal, module, adapter,
+ *   account, key and nonce slot, while the attempt is live, unissued and under
+ *   a module and adapter that are not disabled (Phase 7E.2).
  *
  * There is no `sign(bytes)`, no raw key accessor and no SDK client here.
  * `GoKeyCustody` runs the separate `lighter-custody` process (custody/main.go),
@@ -56,11 +59,26 @@ export interface SignedTx extends HashedTx {
   readonly txInfo: string;
 }
 
+/** What the signer asks custody to sign for. A claim, verified by custody against the durable ledger — never proof. */
+export interface AttemptClaim {
+  readonly attempt: string;
+  readonly reservation: string;
+  readonly generation: bigint;
+  readonly action: string;
+}
+
 export interface KeyCustody {
   publicKey(): Promise<CustodyResult<string>>;
   hash(tx: CustodyTx): Promise<CustodyResult<HashedTx>>;
-  sign(tx: CustodyTx, expectedHash: string, attempt: string): Promise<CustodyResult<SignedTx>>;
+  sign(tx: CustodyTx, claim: AttemptClaim): Promise<CustodyResult<SignedTx>>;
   close(): void;
+}
+
+/** What one custody process serves: the ledger principal key (as the store keys it), the module and the adapter. */
+export interface CustodyBinding {
+  readonly principal: string;
+  readonly module: { readonly domainId: string; readonly moduleId: string; readonly moduleVersion: number; readonly moduleDigest: string };
+  readonly adapter: { readonly adapterId: string; readonly adapterVersion: number; readonly adapterDigest: string };
 }
 
 const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
@@ -102,6 +120,9 @@ export interface GoCustodyOptions {
   readonly accountIndex: bigint;
   readonly apiKeyIndex: number;
   readonly journal: string;
+  /** The ledger's SQLite file; custody opens it read-only. */
+  readonly ledger: string;
+  readonly binding: CustodyBinding;
 }
 
 interface Reply {
@@ -132,6 +153,8 @@ export class GoKeyCustody implements KeyCustody {
         LIGHTER_CUSTODY_ACCOUNT_INDEX: o.accountIndex.toString(),
         LIGHTER_CUSTODY_API_KEY_INDEX: String(o.apiKeyIndex),
         LIGHTER_CUSTODY_JOURNAL: o.journal,
+        LIGHTER_CUSTODY_LEDGER: o.ledger,
+        LIGHTER_CUSTODY_BINDING: JSON.stringify(o.binding),
       },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -174,8 +197,8 @@ export class GoKeyCustody implements KeyCustody {
     return r.ok && typeof r.hash === 'string' && typeof r.txType === 'number' ? { ok: true, value: { hash: r.hash, txType: r.txType } } : { ok: false, error: r.error ?? 'CUSTODY_FAILED' };
   }
 
-  async sign(tx: CustodyTx, expectedHash: string, attempt: string): Promise<CustodyResult<SignedTx>> {
-    const r = await this.#call({ op: 'sign', tx: custodyJson(tx), expectedHash, attempt });
+  async sign(tx: CustodyTx, claim: AttemptClaim): Promise<CustodyResult<SignedTx>> {
+    const r = await this.#call({ op: 'sign', tx: custodyJson(tx), claim: { attempt: claim.attempt, reservation: claim.reservation, generation: jsonInt(claim.generation), action: claim.action } });
     return r.ok && typeof r.hash === 'string' && typeof r.txType === 'number' && typeof r.txInfo === 'string' ? { ok: true, value: { hash: r.hash, txType: r.txType, txInfo: r.txInfo } } : { ok: false, error: r.error ?? 'CUSTODY_FAILED' };
   }
 

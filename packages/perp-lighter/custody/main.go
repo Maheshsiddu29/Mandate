@@ -15,8 +15,10 @@
 //   - `hash` never touches the key: the Mandate issuer computes the exact
 //     transaction hash first and commits ADMIT_ATTEMPT to the ledger before
 //     asking for `sign`;
-//   - `sign` recomputes the hash from the transaction it is given and refuses
-//     unless it equals the committed hash the caller names;
+//   - `sign` takes an attempt id, never a hash: custody reads the durable
+//     ADMIT_ATTEMPT from the ledger itself (read-only; ledger.go), recomputes
+//     the hash from the transaction it is given, and signs only if that hash
+//     is exactly the committed artifact of that attempt (Phase 7E.2);
 //   - a durable per-slot journal: a nonce slot is signed for at most one
 //     transaction hash, ever. Re-signing the identical transaction is allowed
 //     (it is the same artifact); any other transaction for that slot is
@@ -33,6 +35,8 @@
 //	LIGHTER_CUSTODY_ACCOUNT_INDEX  the dedicated sub-account
 //	LIGHTER_CUSTODY_API_KEY_INDEX  the signer's API key index
 //	LIGHTER_CUSTODY_JOURNAL        path of the per-slot journal file
+//	LIGHTER_CUSTODY_LEDGER         path of the ledger's SQLite database, opened read-only
+//	LIGHTER_CUSTODY_BINDING        JSON: the principal key, ModuleRef and AdapterRef this custody serves
 //
 // `lighter-custody keygen <file>` writes a fresh key to <file> (mode 0600)
 // and prints only the public key.
@@ -48,6 +52,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/elliottech/lighter-go/client"
 	"github.com/elliottech/lighter-go/signer"
@@ -78,10 +83,9 @@ type Tx struct {
 }
 
 type request struct {
-	Op           string `json:"op"`
-	Tx           *Tx    `json:"tx,omitempty"`
-	ExpectedHash string `json:"expectedHash,omitempty"`
-	Attempt      string `json:"attempt,omitempty"`
+	Op    string        `json:"op"`
+	Tx    *Tx           `json:"tx,omitempty"`
+	Claim *AttemptClaim `json:"claim,omitempty"`
 }
 
 type response struct {
@@ -100,11 +104,15 @@ type config struct {
 	journal      string
 }
 
+// verifier decides whether the durable ledger admitted exactly this signing. Production: ledgerView.VerifyAdmitted.
+type verifier func(claim AttemptClaim, tx *Tx, hash []byte, cfg config, now time.Time) error
+
 type custody struct {
-	cfg  config
-	key  signer.KeyManager
-	mu   sync.Mutex
-	slot map[int64]string // nonce -> the one hash ever signed for it
+	cfg    config
+	key    signer.KeyManager
+	mu     sync.Mutex
+	slot   map[int64]string // nonce -> the one hash ever signed for it
+	verify verifier
 }
 
 var errForbidden = errors.New("TX_TYPE_FORBIDDEN")
@@ -228,12 +236,16 @@ func (c *custody) handle(r request) response {
 		}
 		return response{OK: true, Hash: h, TxType: txType}
 	case "sign":
+		if r.Claim == nil || r.Claim.Attempt == "" {
+			return response{Error: "ATTEMPT_ID_MISSING"}
+		}
 		h, msg, info, txType, err := c.hash(r.Tx)
 		if err != nil {
 			return response{Error: err.Error()}
 		}
-		if r.ExpectedHash == "" || !strings.EqualFold(r.ExpectedHash, h) {
-			return response{Error: "HASH_NOT_COMMITTED"}
+		// The durable ADMIT_ATTEMPT decides, not the caller: custody's own hash must be its committed artifact.
+		if err := c.verify(*r.Claim, r.Tx, msg, c.cfg, time.Now()); err != nil {
+			return response{Error: err.Error()}
 		}
 		c.mu.Lock()
 		defer c.mu.Unlock()
@@ -353,7 +365,17 @@ func main() {
 		os.Exit(2)
 	}
 	journal := mustEnv("LIGHTER_CUSTODY_JOURNAL")
-	c := &custody{cfg: config{chainID: uint32(chain), accountIndex: account, apiKeyIndex: uint8(apiKey), journal: journal}, key: key, slot: loadJournal(journal)}
+	var binding Binding
+	if err := json.Unmarshal([]byte(mustEnv("LIGHTER_CUSTODY_BINDING")), &binding); err != nil || binding.Principal == "" {
+		fmt.Fprintln(os.Stderr, "lighter-custody: binding malformed")
+		os.Exit(2)
+	}
+	ledger, err := openLedger(mustEnv("LIGHTER_CUSTODY_LEDGER"), binding)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "lighter-custody: ledger unavailable")
+		os.Exit(2)
+	}
+	c := &custody{cfg: config{chainID: uint32(chain), accountIndex: account, apiKeyIndex: uint8(apiKey), journal: journal}, key: key, slot: loadJournal(journal), verify: ledger.VerifyAdmitted}
 
 	in := bufio.NewScanner(os.Stdin)
 	in.Buffer(make([]byte, 64*1024), 64*1024)

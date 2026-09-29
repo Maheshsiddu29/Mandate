@@ -127,9 +127,9 @@ lighter:testnet:evidence` wrote to `.lighter-testnet/evidence/`.
 npm run lighter:custody:build                      # Go ≥ 1.23; fetches the pinned modules
 npm run lighter:custody:check                      # offline once built: E-O2
 npm run lighter:testnet:evidence                   # LIVE, testnet only, read-only
-npm run lighter:testnet:evidence -- --probe-send   # adds the single write, E-P2 (needs .lighter-testnet/probe.lighter-key)
 ```
 
-The probe key is created with `packages/perp-lighter/custody/bin/lighter-custody
-keygen .lighter-testnet/probe.lighter-key`; it is never printed, logged or
-committed.
+The 7E.1 `--probe-send` option (E-P2) was retired in Phase 7E.2: custody now
+signs only a transaction whose durable `ADMIT_ATTEMPT` it has verified itself,
+so the unadmitted probe signature E-P2 used can no longer be produced. E-P2's
+result above stands as captured on the date recorded.
