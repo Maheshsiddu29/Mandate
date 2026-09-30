@@ -104,6 +104,7 @@ export class MandateVersions {
   readonly #clock: Clock;
   readonly #entries: Entry[] = [];
   #reserved = false;
+  #reserving = false;
   #paused = false;
   #busy = false;
 
@@ -146,7 +147,25 @@ export class MandateVersions {
     return this.#reserved;
   }
 
-  /** Something was reserved: from now on authority can only be paused, not amended. */
+  /**
+   * Hold the active version still while the ledger reserves under it: an
+   * amendment or pause arriving meanwhile is refused as BUSY rather than
+   * revoking the root halfway through a reservation. `false` if an
+   * authorization is already in progress.
+   */
+  beginReservation(): boolean {
+    if (this.#busy || this.#reserving) return false;
+    this.#reserving = true;
+    return true;
+  }
+
+  /** `reserved`: something was reserved; from now on authority can only be paused, not amended. */
+  endReservation(reserved: boolean): void {
+    this.#reserving = false;
+    if (reserved) this.#reserved = true;
+  }
+
+  /** Something was reserved outside a held reservation (tests, continuations). */
   markReserved(): void {
     this.#reserved = true;
   }
@@ -158,6 +177,7 @@ export class MandateVersions {
   async authorize(draft: MandateDraft, confirmation: string, protocolNow: bigint): Promise<AuthorizeResult> {
     const refuse = (code: RefusalCode, message: string, issues: readonly ValidationIssue[] = []): AuthorizeResult => ({ ok: false, code, message, issues });
     if (this.#busy) return refuse('BUSY', 'Another authorization is in progress.');
+    if (this.#reserving) return refuse('BUSY', 'The ledger is reserving under the active version; try again when it finishes.');
     if (confirmation !== this.expectedConfirmation) return refuse('CONFIRMATION_REQUIRED', `Authorization needs the principal's explicit confirmation: "${this.expectedConfirmation}".`);
     if (this.#paused) return refuse('MANDATE_PAUSED', 'The mandate was paused; this session authorizes nothing further.');
     const previous = this.#entries[this.#entries.length - 1];
@@ -224,6 +244,7 @@ export class MandateVersions {
   /** Revoke the active root with no successor: every later authorization is refused, by the ledger. */
   async pause(confirmation: string, protocolNow: bigint): Promise<{ readonly ok: true; readonly record: VersionRecord } | { readonly ok: false; readonly code: RefusalCode; readonly message: string }> {
     if (confirmation !== PAUSE_CONFIRMATION) return { ok: false, code: 'CONFIRMATION_REQUIRED', message: `Pausing needs the explicit confirmation "${PAUSE_CONFIRMATION}".` };
+    if (this.#reserving || this.#busy) return { ok: false, code: 'BUSY', message: 'A reservation or authorization is in progress; try again when it finishes.' };
     const last = this.#entries[this.#entries.length - 1];
     if (last === undefined || last.record.status !== 'ACTIVE' || this.#paused) return { ok: false, code: 'NO_ACTIVE_MANDATE', message: 'There is no active mandate to pause.' };
     const revoked = await revokeRoot(last.active.core, protocolNow, BigInt(last.record.version));

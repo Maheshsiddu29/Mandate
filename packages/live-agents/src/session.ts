@@ -1,0 +1,377 @@
+/**
+ * A Live AI Lab session (docs/demo/live-ai-lab.md).
+ *
+ * ```text
+ * draft ─(explicit AUTHORIZE MANDATE V1)─▶ ACTIVE
+ *   ─▶ concurrent discovery ─▶ screening ─▶ resource conflict? ─▶ autonomous live Room
+ *   ─▶ freshly signed proposals at the agreed sizes ─▶ runPortfolio (real Room, verifier, ledger)
+ *   ─▶ stale quotes: REFRESH_REQUIRED ─▶ one fresh decision ─▶ runPortfolio again
+ * ```
+ *
+ * The principal may authorize an amendment at any time before the first
+ * reservation. It supersedes the version in force: the running epoch is
+ * aborted (the Room finalizes SUPERSEDED, late replies are ignored),
+ * in-flight proposals are re-screened under the new version and marked
+ * REAUTHORIZE_REQUIRED, and discovery starts again under the new authority.
+ * The principal never edits a Room allocation.
+ */
+
+import { proposalDigest, type Reason, type SignedProposal } from '@mandate/portfolio';
+import type { TrustedCandidate } from './agents/spec.ts';
+import { applyPreset, presetDraft, type MandateDraft, type Preset } from './authoring/draft-types.ts';
+import type { DraftValidation } from './authoring/draft-validator.ts';
+import { MandateVersions, type ActiveMandate, type AuthorizeResult } from './authoring/mandate-versioning.ts';
+import { interpretPrompt } from './authoring/prompt-to-draft.ts';
+import { amountViews, enabledRoles } from './context.ts';
+import { discover, discoverAgent, type AgentOutcome, type DiscoveryDeps } from './discovery.ts';
+import type { JevAdvisor } from './jev/advisor.ts';
+import { NoopJevAdvisor } from './jev/noop-advisor.ts';
+import { availabilityAt, ledgerView, runProtocol, sessionBindings, type ProtocolRun } from './mandate/portfolio-adapter.ts';
+import { buildProposal, demandOf, SequenceBook } from './mandate/proposal-builder.ts';
+import { LocalPrincipalSigner, createAgentSigners, type LocalAgentSigner } from './mandate/signer.ts';
+import { reasonCodes, screen } from './mandate/verifier-adapter.ts';
+import { DEFAULT_MAX_GENERATIONS, runLiveRoom, type RoomResult } from './room/coordinator.ts';
+import { assess, type Participant } from './room/negotiation.ts';
+import { protocolClock, realClock, type Clock } from './runtime/clock.ts';
+import type { AgentModelProvider } from './runtime/provider.ts';
+import { EventLog } from './telemetry/events.ts';
+import { usdcText, type Role } from './types.ts';
+
+export interface SessionOptions {
+  readonly provider: AgentModelProvider;
+  /** Interprets prompts into drafts; defaults to `provider`. */
+  readonly interpreter?: AgentModelProvider;
+  readonly jev?: JevAdvisor;
+  readonly clock?: Clock;
+  readonly sessionId?: string;
+  readonly agentTimeoutMs: number;
+  readonly roomRoundTimeoutMs: number;
+  readonly maxGenerations?: number;
+  /** Fresh-decision cycles after a stale quote; default 1. */
+  readonly maxRefreshes?: number;
+  /** Tests: protocol time instead of the monotonic mapping. */
+  readonly protocolNow?: () => bigint;
+  /** A development chaos wrapper is in use: every event says so. */
+  readonly chaos?: string | null;
+}
+
+export type RunStatus = 'AUTHORIZED' | 'PARTIALLY_AUTHORIZED' | 'REFUSED' | 'NO_FEASIBLE_PORTFOLIO' | 'NOTHING_TO_AUTHORIZE' | 'NO_ACTIVE_MANDATE' | 'SUPERSEDED_TOO_OFTEN';
+
+export interface FinalProposal {
+  readonly role: Role;
+  readonly proposal: string;
+  readonly requested: bigint;
+  readonly outcome: 'RESERVED' | 'REFUSED' | 'STALE';
+  readonly reasons: readonly string[];
+}
+
+export interface RunResult {
+  readonly status: RunStatus;
+  readonly version: number | null;
+  readonly epochs: number;
+  readonly discovery: readonly AgentOutcome[];
+  readonly room: RoomResult | null;
+  readonly final: readonly FinalProposal[];
+  readonly refreshed: readonly FinalProposal[];
+  readonly receipts: readonly string[];
+  readonly reservedAtoms: bigint;
+  readonly executorCalls: number;
+  readonly transactions: number;
+}
+
+const MAX_EPOCHS = 3;
+
+export class LiveSession {
+  readonly id: string;
+  readonly clock: Clock;
+  readonly events: EventLog;
+  readonly versions: MandateVersions;
+  readonly provider: AgentModelProvider;
+  readonly signers: ReadonlyMap<Role, LocalAgentSigner>;
+  readonly protocolNow: () => bigint;
+  readonly #o: SessionOptions;
+  readonly #sequences = new SequenceBook();
+  readonly #jev: JevAdvisor;
+  readonly #drains: (() => Promise<void>)[] = [];
+  #epoch = new AbortController();
+  #running = false;
+  #rooms = 0;
+
+  constructor(o: SessionOptions) {
+    this.#o = o;
+    this.clock = o.clock ?? realClock;
+    this.id = o.sessionId ?? `live-${this.clock.wallIso().replace(/\D/g, '').slice(0, 17)}`;
+    this.provider = o.provider;
+    this.#jev = o.jev ?? new NoopJevAdvisor();
+    const start = this.clock.nowMs();
+    this.protocolNow = o.protocolNow ?? protocolClock(this.clock, start);
+    this.versions = new MandateVersions({ bindings: sessionBindings(), signer: new LocalPrincipalSigner(), clock: this.clock });
+    this.signers = createAgentSigners();
+    this.events = new EventLog({ sessionId: this.id, clock: this.clock, startMs: start, protocolNow: this.protocolNow, version: () => this.versions.active?.version ?? null });
+    this.events.emit('SESSION_STARTED', {
+      data: {
+        provider: o.provider.name,
+        providerKind: o.provider.kind,
+        model: o.provider.model,
+        jev: this.#jev.name,
+        agentTimeoutMs: o.agentTimeoutMs,
+        roomRoundTimeoutMs: o.roomRoundTimeoutMs,
+        maxGenerations: o.maxGenerations ?? DEFAULT_MAX_GENERATIONS,
+        chaos: o.chaos ?? null,
+        protocolTimeAnchor: this.protocolNow(),
+        evidence: 'Fixture markets (Phase 7F demonstration); real Mandate code; no transaction; demonstration keys only.',
+      },
+    });
+  }
+
+  // --- Authoring --------------------------------------------------------------------------
+
+  presetDraft(p: Preset): MandateDraft {
+    return presetDraft(p);
+  }
+
+  fillUnset(d: MandateDraft, p: Preset): { readonly draft: MandateDraft; readonly filled: readonly string[] } {
+    return applyPreset(d, p, true);
+  }
+
+  validate(d: MandateDraft): DraftValidation {
+    return this.versions.validate(d, this.protocolNow());
+  }
+
+  async interpret(prompt: string): Promise<{ readonly draft: MandateDraft | null; readonly validation: DraftValidation | null; readonly error: string | null }> {
+    const interpreter = this.#o.interpreter ?? this.provider;
+    this.events.emit('MANDATE_DRAFT_REQUESTED', { data: { prompt: prompt.slice(0, 600), interpreter: interpreter.name, interpreterKind: interpreter.kind, model: interpreter.model } });
+    const r = await interpretPrompt(prompt, interpreter, this.clock, this.#o.agentTimeoutMs);
+    if (r.draft === null) {
+      const error = 'error' in r.outcome ? r.outcome.error : 'no draft';
+      this.events.emit('MANDATE_DRAFT_CREATED', { data: { ok: false, status: r.outcome.status, error, authority: 'NONE' } });
+      return { draft: null, validation: null, error };
+    }
+    const validation = this.validate(r.draft);
+    this.events.emit('MANDATE_DRAFT_CREATED', {
+      data: { ok: true, authority: 'NONE — a draft until the principal authorizes it', fieldsSet: Object.keys(r.draft.provenance).length, issues: r.draft.issues, notes: r.draft.notes, providerLatencyMs: r.outcome.timing.providerLatencyMs },
+    });
+    const conflicts = validation.issues.filter((i) => i.severity === 'BLOCKING' && i.code !== 'MISSING_VALUE');
+    if (conflicts.length > 0) this.events.emit('MANDATE_DRAFT_CONFLICT', { data: { issues: conflicts.map((i) => ({ code: i.code, field: i.field, message: i.message, protocol: i.protocol })) } });
+    return { draft: r.draft, validation, error: null };
+  }
+
+  /**
+   * Authorize V1, or an amendment. Only `confirmation` === "AUTHORIZE
+   * MANDATE V<n>" does anything. An amendment supersedes the running epoch.
+   */
+  async authorize(draft: MandateDraft, confirmation: string): Promise<AuthorizeResult> {
+    const amending = this.versions.active !== null;
+    if (amending) this.events.emit('MANDATE_AMENDMENT_STARTED', { data: { from: this.versions.active?.version ?? null, to: this.versions.nextVersion } });
+    const r = await this.versions.authorize(draft, confirmation, this.protocolNow());
+    if (!r.ok) {
+      if (amending) this.events.emit('MANDATE_AMENDMENT_REFUSED', { data: { code: r.code, message: r.message, issues: r.issues.map((i) => i.code) } });
+      else if (r.issues.length > 0) this.events.emit('MANDATE_DRAFT_CONFLICT', { data: { code: r.code, issues: r.issues.map((i) => ({ code: i.code, field: i.field, message: i.message, protocol: i.protocol })) } });
+      return r;
+    }
+    this.events.emit('MANDATE_VERSION_AUTHORIZED', {
+      mandateVersion: r.record.version,
+      data: { version: r.record.version, digest: r.record.digest, signatureLabel: r.record.signatureLabel, supersedes: r.record.supersedes, changes: r.record.changes, guardrails: r.record.guardrails, ledgerVersion: r.record.ledgerVersion, expiresAt: r.record.expiresAt },
+    });
+    if (r.superseded !== null) {
+      this.events.emit('MANDATE_VERSION_SUPERSEDED', { mandateVersion: r.superseded.version, data: { version: r.superseded.version, supersededBy: r.record.version, revokedAtLedgerVersion: r.superseded.revokedAtLedgerVersion, effect: 'root revoked in the ledger: nothing further is authorized under it' } });
+      this.events.emit('MANDATE_AMENDMENT_AUTHORIZED', { data: { from: r.superseded.version, to: r.record.version, changes: r.record.changes, effect: 'in-flight proposals must be re-authorized; negotiation restarts under the new version' } });
+      this.#epoch.abort();
+    }
+    return r;
+  }
+
+  async pause(confirmation: string): Promise<boolean> {
+    const r = await this.versions.pause(confirmation, this.protocolNow());
+    if (r.ok) {
+      this.events.emit('MANDATE_PAUSED', { mandateVersion: r.record.version, data: { version: r.record.version, revokedAtLedgerVersion: r.record.revokedAtLedgerVersion } });
+      this.#epoch.abort();
+    }
+    return r.ok;
+  }
+
+  // --- Autonomous operation ----------------------------------------------------------------
+
+  #deps(): DiscoveryDeps {
+    return { provider: this.provider, jev: this.#jev, clock: this.clock, events: this.events, signers: this.signers, sequences: this.#sequences, protocolNow: this.protocolNow, timeoutMs: this.#o.agentTimeoutMs, current: () => this.versions.active };
+  }
+
+  /** Everything superseded is re-screened under the version now in force: Mandate refuses the old digest. */
+  #markSuperseded(outcomes: readonly AgentOutcome[]): void {
+    const now = this.versions.active;
+    for (const o of outcomes) {
+      if (o.signed === null || o.state === 'STALE' || o.state === 'BLOCKED') continue;
+      const s = now === null ? null : screen(now.mandate, now.compiled.bindings, o.signed, this.protocolNow());
+      this.events.emit('PROPOSAL_STALE', { agent: o.role, mandateVersion: o.version, data: { cause: now === null ? 'MANDATE_PAUSED' : 'MANDATE_SUPERSEDED', askedUnder: o.version, screenedUnder: now?.version ?? null, reasons: s === null ? [] : reasonCodes(s.reasons), next: 'REAUTHORIZE_REQUIRED' } });
+    }
+  }
+
+  async run(): Promise<RunResult> {
+    if (this.#running) throw new Error('this session is already running');
+    this.#running = true;
+    try {
+      for (let epoch = 1; epoch <= MAX_EPOCHS; epoch += 1) {
+        const active = this.versions.active;
+        if (active === null) return this.#result('NO_ACTIVE_MANDATE', null, epoch, [], null);
+        this.#epoch = new AbortController();
+        const signal = this.#epoch.signal;
+        const outcomes = await discover(this.#deps(), active, enabledRoles(active));
+        if (signal.aborted) {
+          this.#markSuperseded(outcomes);
+          continue;
+        }
+        const admissible = outcomes.filter((o) => o.state === 'ADMISSIBLE' && o.candidate !== null && o.signed !== null);
+        if (admissible.length === 0) return this.#result('NOTHING_TO_AUTHORIZE', active.version, epoch, outcomes, null);
+
+        const participants: Participant[] = admissible.map((o) => {
+          const c = o.candidate as TrustedCandidate;
+          return { role: o.role, agent: (this.signers.get(o.role) as LocalAgentSigner).party, candidate: c, observedAt: o.observedAt, originalAtoms: o.sizeAtoms, minimumAtoms: c.resizable ? c.minAtoms : o.sizeAtoms };
+        });
+        const av = await availabilityAt(active.core, this.protocolNow());
+        const demandAt = (p: Participant, atoms: bigint) => (atoms === 0n ? [] : demandOf(active.mandate, active.compiled.bindings, p.agent, p.candidate.build(atoms, p.observedAt), atoms, this.protocolNow()).demand);
+        const fit = assess(participants, new Map(participants.map((p) => [p.role, p.originalAtoms])), av, demandAt);
+
+        let room: RoomResult | null = null;
+        let requests: ReadonlyMap<Role, bigint> = new Map(participants.map((p) => [p.role, p.originalAtoms]));
+        if (!fit.feasible) {
+          this.events.emit('PORTFOLIO_CONFLICT', {
+            data: {
+              authority: { atoms: fit.authorityAtoms, amount: usdcText(fit.authorityAtoms) },
+              admissibleDemand: { atoms: fit.demandAtoms, amount: usdcText(fit.demandAtoms) },
+              requiredReduction: { atoms: fit.requiredAtoms, amount: usdcText(fit.requiredAtoms) },
+              constraints: fit.lines,
+              agentExcess: fit.agentExcess.map((x) => ({ role: x.role, resource: x.resource, requested: usdcText(x.requestedAtoms), limit: usdcText(x.limitAtoms) })),
+              excludedAtScreening: outcomes.filter((o) => o.state === 'BLOCKED').map((o) => o.role),
+            },
+          });
+          this.#rooms += 1;
+          room = await runLiveRoom(
+            { provider: this.provider, clock: this.clock, events: this.events, roundTimeoutMs: this.#o.roomRoundTimeoutMs, maxGenerations: this.#o.maxGenerations ?? DEFAULT_MAX_GENERATIONS, superseded: signal },
+            { roomId: `room-v${active.version}-${this.#rooms}`, version: active.version, participants, availability: av, demandAt },
+          );
+          this.#drains.push(room.drain);
+          if (room.status === 'SUPERSEDED') {
+            this.#markSuperseded(admissible);
+            continue;
+          }
+          if (room.status === 'NO_FEASIBLE_PORTFOLIO') return this.#result('NO_FEASIBLE_PORTFOLIO', active.version, epoch, outcomes, room);
+          requests = room.requests;
+        }
+        if (signal.aborted) {
+          this.#markSuperseded(admissible);
+          continue;
+        }
+        return await this.#authorizeFinal(active, epoch, outcomes, room, participants, requests);
+      }
+      return this.#result('SUPERSEDED_TOO_OFTEN', this.versions.active?.version ?? null, MAX_EPOCHS, [], null);
+    } finally {
+      this.#running = false;
+    }
+  }
+
+  #result(status: RunStatus, version: number | null, epochs: number, discovery: readonly AgentOutcome[], room: RoomResult | null, extra: Partial<RunResult> = {}): RunResult {
+    return { status, version, epochs, discovery, room, final: [], refreshed: [], receipts: [], reservedAtoms: 0n, executorCalls: 0, transactions: 0, ...extra };
+  }
+
+  /** Sign what the Room agreed, hand it to the real Mandate path, and account for every proposal. */
+  async #reverify(active: ActiveMandate, phase: 'FINAL' | 'REFRESH', items: readonly { readonly role: Role; readonly signed: SignedProposal }[]): Promise<{ readonly run: ProtocolRun | null; readonly proposals: readonly FinalProposal[]; readonly reserved: bigint }> {
+    if (!this.versions.beginReservation()) {
+      return { run: null, proposals: items.map((i) => ({ role: i.role, proposal: proposalDigest(i.signed.proposal), requested: 0n, outcome: 'REFUSED', reasons: ['SESSION:AUTHORIZATION_IN_PROGRESS'] })), reserved: 0n };
+    }
+    let reservedAny = false;
+    try {
+      const now = this.protocolNow();
+      this.events.emit('MANDATE_REVERIFY_STARTED', { data: { phase, proposals: items.map((i) => ({ role: i.role, proposal: proposalDigest(i.signed.proposal), requested: amountViews(i.signed.proposal.requested) })), path: 'Mandate Room → Portfolio Verifier → ledger reservation → domain executor' } });
+      const run = await runProtocol(active.core, active.signature, now, items.map((i) => i.signed));
+      const r = run.run;
+      const children = r.verification.status === 'VERIFIED' ? r.verification.children : [];
+      let reserved = 0n;
+      const proposals: FinalProposal[] = items.map((i) => {
+        const d = proposalDigest(i.signed.proposal);
+        const decision = r.room.decisions.filter((x) => x.proposal === d).at(-1);
+        const child = children.find((c) => c.proposal === d);
+        const reservation = child === undefined ? undefined : r.reservations.find((x) => x.child === child.digest);
+        const requested = i.signed.proposal.requested.find((a) => a.resource === 'portfolio-notional')?.atoms ?? 0n;
+        const reasons: Reason[] = [...(decision?.reasons ?? []), ...(reservation?.reasons ?? [])];
+        if (reservation?.status === 'RESERVED') {
+          reserved += requested;
+          return { role: i.role, proposal: d, requested, outcome: 'RESERVED', reasons: [] };
+        }
+        const stale = reasons.some((x) => x.code === 'QUOTE_STALE');
+        if (stale) this.events.emit('PROPOSAL_STALE', { agent: i.role, data: { cause: 'QUOTE_STALE', proposal: d, reasons: reasonCodes(reasons), next: 'REFRESH_REQUIRED', note: 'A stale quote is never re-stamped: only a new observation and a new decision can replace it.' } });
+        return { role: i.role, proposal: d, requested, outcome: stale ? 'STALE' : 'REFUSED', reasons: reasonCodes(reasons) };
+      });
+      reservedAny = reserved > 0n;
+      const ledger = await ledgerView(active.core);
+      const summary = {
+        phase,
+        verification: r.verification.status,
+        verificationReasons: r.verification.status === 'REFUSED' ? reasonCodes(r.verification.reasons) : [],
+        proposals: proposals.map((p) => ({ role: p.role, outcome: p.outcome, requested: usdcText(p.requested), reasons: p.reasons })),
+        reserved: { atoms: reserved, amount: usdcText(reserved) },
+        executions: r.executions.map((e) => ({ status: e.status, evidence: e.evidence, integration: e.integration })),
+        receiptDigest: r.digest,
+        executorCalls: run.executorCalls,
+        transactions: run.transactions,
+        ledgerVersion: ledger.version,
+      };
+      this.events.emit(reservedAny ? 'PORTFOLIO_AUTHORIZED' : 'PORTFOLIO_REFUSED', { data: summary });
+      return { run, proposals, reserved };
+    } finally {
+      this.versions.endReservation(reservedAny);
+    }
+  }
+
+  async #authorizeFinal(active: ActiveMandate, epoch: number, outcomes: readonly AgentOutcome[], room: RoomResult | null, participants: readonly Participant[], requests: ReadonlyMap<Role, bigint>): Promise<RunResult> {
+    const now = this.protocolNow();
+    const items: { role: Role; signed: SignedProposal }[] = [];
+    for (const p of participants) {
+      const atoms = requests.get(p.role) ?? 0n;
+      if (atoms === 0n) continue;
+      const signer = this.signers.get(p.role) as LocalAgentSigner;
+      // The agreed size, the original quote time, a new sequence: a fresh signature, never a fresh quote.
+      const built = buildProposal({ mandate: active.mandate, bindings: active.compiled.bindings, agent: signer.party, candidate: p.candidate.build(atoms, p.observedAt), sizeAtoms: atoms, minimumAtoms: p.minimumAtoms < atoms ? p.minimumAtoms : atoms, sequence: this.#sequences.next(signer.party), now });
+      if (!built.ok) continue;
+      const signed = signer.sign(built.proposal);
+      this.events.emit('PROPOSAL_SIGNED', { agent: p.role, data: { phase: 'FINAL', proposal: proposalDigest(signed.proposal), signer: signer.party.value, sequence: signed.proposal.sequence, requested: amountViews(built.demand), quoteObservedAt: p.observedAt } });
+      items.push({ role: p.role, signed });
+    }
+    if (items.length === 0) return this.#result('NOTHING_TO_AUTHORIZE', active.version, epoch, outcomes, room);
+    const first = await this.#reverify(active, 'FINAL', items);
+    let reserved = first.reserved;
+    let executorCalls = first.run?.executorCalls ?? 0;
+    const receipts = first.run === null ? [] : [first.run.run.digest as string];
+
+    // Freshness: a stale proposal gets one genuinely fresh cycle — a new quote and a new decision — bounded by what the Room agreed.
+    const refreshed: FinalProposal[] = [];
+    const stale = first.proposals.filter((p) => p.outcome === 'STALE');
+    if (stale.length > 0 && (this.#o.maxRefreshes ?? 1) > 0 && this.versions.active?.version === active.version) {
+      const fresh = await Promise.all(
+        stale.map((s) => {
+          const p = participants.find((x) => x.role === s.role) as Participant;
+          const agreed = requests.get(s.role) ?? p.originalAtoms;
+          const c = p.candidate;
+          const bounded: TrustedCandidate = { ...c, minAtoms: c.minAtoms < agreed ? c.minAtoms : agreed, maxAtoms: agreed };
+          return discoverAgent(this.#deps(), active, s.role, { candidates: [bounded] });
+        }),
+      );
+      const ready = fresh.filter((o) => o.state === 'ADMISSIBLE' && o.signed !== null).map((o) => ({ role: o.role, signed: o.signed as SignedProposal }));
+      if (ready.length > 0) {
+        const second = await this.#reverify(active, 'REFRESH', ready);
+        refreshed.push(...second.proposals);
+        reserved += second.reserved;
+        executorCalls += second.run?.executorCalls ?? 0;
+        if (second.run !== null) receipts.push(second.run.run.digest as string);
+      }
+    }
+    const reservedCount = [...first.proposals, ...refreshed].filter((p) => p.outcome === 'RESERVED').length;
+    const status: RunStatus = reservedCount === 0 ? 'REFUSED' : reservedCount === items.length ? 'AUTHORIZED' : 'PARTIALLY_AUTHORIZED';
+    return this.#result(status, active.version, epoch, outcomes, room, { final: first.proposals, refreshed, receipts, reservedAtoms: reserved, executorCalls, transactions: 0 });
+  }
+
+  /** Wait for every late reply to land (each is bounded by its own timeout), then close the stream. */
+  async complete(summary: { readonly [k: string]: unknown } = {}): Promise<void> {
+    await Promise.all(this.#drains.map((d) => d()));
+    this.events.emit('SESSION_COMPLETED', { data: { versions: this.versions.records.map((r) => ({ version: r.version, status: r.status, digest: r.digest })), ...summary } });
+  }
+}
