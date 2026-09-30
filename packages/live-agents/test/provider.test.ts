@@ -11,7 +11,8 @@ import { parseDecision, parseNegotiation } from '../src/runtime/schemas.ts';
 import { readConfig, describeConfig } from '../src/config.ts';
 import { ScriptedProvider, json } from './support/providers.ts';
 
-const KEY = 'sk-test-THIS-IS-NOT-A-REAL-KEY-0123456789abcdef';
+/** A placeholder, deliberately not key-shaped so the repository credential scan stays meaningful. */
+const KEY = 'FAKEKEY-q7Zx';
 
 const decision: DecisionRequest = {
   kind: 'DECISION',
@@ -59,8 +60,8 @@ describe('OpenAI Responses provider (offline, fake network)', () => {
     assert.equal(body.text.format.strict, true);
     assert.equal(body.text.format.schema.additionalProperties, false);
     assert.deepEqual(body.text.format.schema.properties.candidateId.enum, ['route-a', 'route-b', null]);
-    assert.doesNotMatch(p.body(decision), /sk-test/);
-    assert.doesNotMatch(JSON.stringify(p), /sk-test/);
+    assert.doesNotMatch(p.body(decision), /FAKEKEY/);
+    assert.doesNotMatch(JSON.stringify(p), /FAKEKEY/);
   });
 
   it('reads the stream, times the first chunk once, and prefers the final text', async () => {
@@ -84,7 +85,7 @@ describe('OpenAI Responses provider (offline, fake network)', () => {
     assert.equal(out.status, 'FAILED');
     if ('error' in out) {
       assert.match(out.error, /HTTP 401.*invalid_api_key/);
-      assert.doesNotMatch(out.error, /sk-test|Incorrect/);
+      assert.doesNotMatch(out.error, /FAKEKEY|Incorrect/);
     }
   });
 
@@ -114,7 +115,7 @@ describe('OpenAI Responses provider (offline, fake network)', () => {
     assert.throws(() => new OpenAIProvider({ apiKey: ' ', model: 'm' }), ProviderError);
     const c = readConfig({ OPENAI_API_KEY: KEY });
     assert.match(describeConfig(c), /OPENAI_API_KEY present/);
-    assert.doesNotMatch(describeConfig(c), /sk-test/);
+    assert.doesNotMatch(describeConfig(c), /FAKEKEY/);
     assert.equal(readConfig({}).openaiApiKey, null);
     assert.equal(describeFailure(new Error(KEY)), 'provider error');
   });

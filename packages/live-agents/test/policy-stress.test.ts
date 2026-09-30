@@ -59,12 +59,12 @@ describe('the policy-stress model interface is closed', () => {
   });
 
   it('the request carries no address, no key and no tool; the provider body declares no tools', () => {
-    const body = new OpenAIProvider({ apiKey: 'test-key-not-real', model: 'm', fetch: () => Promise.reject(new Error('offline')) }).body(request);
+    const body = new OpenAIProvider({ apiKey: 'FAKEKEY-p0l1', model: 'm', fetch: () => Promise.reject(new Error('offline')) }).body(request);
     const parsed = JSON.parse(body) as { [k: string]: unknown };
     assert.equal(parsed['tools'], undefined);
     assert.equal(parsed['store'], false);
     assert.doesNotMatch(body, /0x[0-9a-fA-F]{40}/);
-    assert.doesNotMatch(body, /test-key-not-real/);
+    assert.doesNotMatch(body, /FAKEKEY/);
     assert.equal(containsKey(body), false);
     assert.doesNotMatch(body, /bypass|evade|exploit|maximi[sz]e|attacker/i);
   });

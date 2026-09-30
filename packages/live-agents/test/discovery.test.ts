@@ -107,7 +107,7 @@ describe('trust boundaries in discovery', () => {
     const out = await discover(w.deps(provider), w.active(), ROLES);
     assert.ok(out.every((o) => o.signed !== null));
     for (const r of provider.requests) assert.equal(containsKey(JSON.stringify(r)), false);
-    const openai = new OpenAIProvider({ apiKey: 'sk-test-not-real-0000000000000000000000', model: 'm' });
+    const openai = new OpenAIProvider({ apiKey: 'FAKEKEY-d1sc', model: 'm' });
     for (const r of provider.requests) assert.equal(containsKey(openai.body(r as ModelRequest)), false);
     assert.equal(containsKey(JSON.stringify(w.events.events)), false);
     assert.equal(containsKey(JSON.stringify(out.map((o) => ({ ...o, candidate: null })), (_k, v) => (typeof v === 'bigint' ? v.toString() : v))), false);

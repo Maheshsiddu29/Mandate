@@ -10,7 +10,8 @@ import { realClock } from '../src/runtime/clock.ts';
 import type { JsonObject, JsonValue } from '../src/runtime/strict-json.ts';
 import { containsKey } from './support/world.ts';
 
-const FAKE_KEY = 'sk-test-THIS-IS-NOT-A-REAL-KEY-000000000000000000';
+/** A placeholder, deliberately not key-shaped so the repository credential scan stays meaningful. */
+const FAKE_KEY = 'FAKEKEY-s3rv';
 const ORIGIN = 'http://localhost:3000';
 
 function lab(live = false): LiveLab {
@@ -35,7 +36,7 @@ describe('the local API (transport-independent)', () => {
       const r = await lab(live).handle(req('GET', '/api/live/status'));
       assert.equal(r.status, 200);
       assert.equal(obj(obj(obj(r.body)['providers'])['openai'])['available'], live);
-      assert.doesNotMatch(JSON.stringify(r.body), /sk-test|NOT-A-REAL-KEY/);
+      assert.doesNotMatch(JSON.stringify(r.body), /FAKEKEY/);
     }
   });
 
@@ -88,7 +89,7 @@ describe('the local API (transport-independent)', () => {
     const stop = l.subscribe(id, -1, (e) => events.push(JSON.stringify(e)));
     stop?.();
     const all = `${JSON.stringify(bodies)}\n${events.join('\n')}`;
-    assert.doesNotMatch(all, /sk-test|NOT-A-REAL-KEY|OPENAI_API_KEY=/);
+    assert.doesNotMatch(all, /FAKEKEY|OPENAI_API_KEY=/);
     assert.equal(containsKey(all), false);
   });
 
@@ -145,7 +146,7 @@ describe('the HTTP binding', () => {
     const okay = await raw({ method: 'GET', path: '/api/live/status', headers: { origin: ORIGIN } });
     assert.equal(okay.status, 200);
     assert.equal(okay.headers['access-control-allow-origin'], ORIGIN);
-    assert.doesNotMatch(okay.text, /NOT-A-REAL-KEY/);
+    assert.doesNotMatch(okay.text, /FAKEKEY/);
   });
 
   it('requires JSON bodies of bounded size', async () => {
