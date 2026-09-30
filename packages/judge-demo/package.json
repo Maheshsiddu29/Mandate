@@ -1,0 +1,18 @@
+{
+  "name": "@mandate/judge-demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Buildathon Milestone A: the judge-facing Mandate demo. A thin, additive orchestration layer over the frozen Portfolio Mandate (Phase 7F-7F.3) that runs the real protocol once, offline and deterministically, and turns what it returned into a versioned event transcript (MANDATE_JUDGE_DEMO.V1) for UI playback. Presentation only: it holds no authority and changes no protocol semantics.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "dependencies": {
+    "@mandate/core": "0.1.0",
+    "@mandate/portfolio": "0.1.0",
+    "@noble/hashes": "2.4.0"
+  }
+}
