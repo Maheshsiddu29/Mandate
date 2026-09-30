@@ -20,11 +20,12 @@ import {
   vectorsEqual,
 } from '@mandate/portfolio';
 import type { SceneContext } from './context.ts';
-import { codesOf, jsonOf, type Json } from './events.ts';
+import { codesOf, jsonOf, reasonViews, type Json } from './events.ts';
+import { because } from './explain.ts';
 import { changedFields } from './malicious-agent.ts';
 import { proposalEntries } from './proposals.ts';
 import { emitRoom } from './room.ts';
-import { ATTACK_TIME, COMPLIANT_TIME } from './scenario.ts';
+import { ATTACK_TIME, COMPLIANT_TIME, CONFLICT_TIME } from './scenario.ts';
 import { emitVerification } from './verification.ts';
 
 /** Scene 7: block the bad action, not the healthy portfolio. Every value is read from the ledger after the attack. */
@@ -160,4 +161,54 @@ export function emitCompliant(x: SceneContext): void {
       transactions: run.receipt.transactions,
     },
   });
+}
+
+/**
+ * Scene 9: INDIVIDUAL VALIDITY != PORTFOLIO VALIDITY. The request passes
+ * screening — the action is inside the agent's authority and its own hard
+ * maximum — but the portfolio, as a whole, has less left than it asks for.
+ * That is a negotiation, not a block.
+ */
+export function emitPortfolioConflict(x: SceneContext): void {
+  const p = x.p;
+  const run = p.conflict;
+  const entries = proposalEntries(x.m, p.core.compiled.bindings, run.room, CONFLICT_TIME);
+  const first = entries[0];
+  if (first === undefined) throw new Error('the conflict run recorded no proposal');
+  const id = first.agent;
+  const d = first.decision;
+  const requested = first.signed.proposal.requested;
+  const ownHeadroom = run.before.agents.get(id) ?? [];
+  const time = CONFLICT_TIME.toString();
+  x.log.scene(9);
+  x.log.emit({
+    kind: 'PORTFOLIO_RESOURCE_CONFLICT',
+    status: 'CONFLICT',
+    run: 'conflict',
+    round: d.round,
+    protocolTime: time,
+    agent: x.agent(id),
+    domain: x.domainOf(first.signed.proposal.candidate.kind),
+    proposal: first.digest,
+    candidate: candidateDigest(first.signed.proposal.candidate),
+    requested: x.amounts(requested),
+    approved: x.amounts(d.target),
+    reasons: reasonViews(d.reasons),
+    artifacts: [{ name: 'proposalDigest', value: first.digest }],
+    message: `${x.label(id)} asks to add ${x.money(requested)} to its approved vault. Individually VALID (screening passes; its own headroom is ${x.money(ownHeadroom)}), but ${x.money(run.before.reserved)} of ${x.money(x.m.limits)} is already reserved and only ${x.money(run.before.portfolio)} is left: PORTFOLIO RESOURCE CONFLICT — ${because(codesOf(d.reasons))}. Not malicious: back to the Mandate Room`,
+    data: {
+      individuallyValid: first.verdict === 'ADMISSIBLE',
+      screeningCodes: codesOf(first.screening.reasons),
+      portfolioValid: d.outcome === 'ACCEPTED',
+      roomOutcome: d.outcome,
+      limit: x.amounts(x.m.limits.filter((l) => l.resource === 'portfolio-notional')),
+      reservedBefore: x.amounts(run.before.reserved.filter((r) => r.atoms > 0n)),
+      availableBefore: x.amounts(run.before.portfolio.filter((r) => r.resource === 'portfolio-notional')),
+      agentHeadroom: x.amounts(ownHeadroom),
+      target: x.amounts(d.target),
+      malicious: false,
+    },
+  });
+  emitRoom(x, { run: 'conflict', time: CONFLICT_TIME, room: run.room, entries });
+  emitVerification(x, { run: 'conflict', time: CONFLICT_TIME, result: run, requested, ledgerBefore: p.afterCompliant, ledgerAfter: p.afterConflict, forgery: null });
 }

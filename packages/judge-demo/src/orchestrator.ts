@@ -12,7 +12,7 @@ import { sceneContext } from './context.ts';
 import { EventLog, JUDGE_DEMO_SCHEMA, JUDGE_DEMO_SCHEMA_VERSION, presentationDigest, type JudgeEvent } from './events.ts';
 import { addVectors, type ResourceVector } from '@mandate/portfolio';
 import { emitAttack } from './attack-scenes.ts';
-import { emitCompliant, emitFaultIsolation } from './continuation-scenes.ts';
+import { emitCompliant, emitFaultIsolation, emitPortfolioConflict } from './continuation-scenes.ts';
 import { emitAgentSearch, emitPortfolioCreated, emitResourceConflict } from './portfolio-scenes.ts';
 import { proposalEntries } from './proposals.ts';
 import { runJudgeProtocol, type JudgeProtocol } from './protocol.ts';
@@ -58,6 +58,7 @@ export async function runJudgeDemo(): Promise<JudgeDemo> {
   emitAttack(x);
   emitFaultIsolation(x);
   emitCompliant(x);
+  emitPortfolioConflict(x);
   return {
     protocol,
     transcript: { schema: JUDGE_DEMO_SCHEMA, version: JUDGE_DEMO_SCHEMA_VERSION, presentationOnly: true, events: log.events, presentationDigest: presentationDigest(log.events) },

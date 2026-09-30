@@ -36,7 +36,8 @@ import {
 import { runDemo, type DemoRun } from '@mandate/portfolio/demo';
 import { AgentIdentity, ContinuationAgent, nextSequence } from './agents.ts';
 import { compliantSwap, maliciousSwap } from './malicious-agent.ts';
-import { ATTACK_TIME, COMPLIANT_TIME, COMPROMISED_ROLE, CONTINUATION_SWAP_ATOMS, INITIAL_TIME, REPLAY_PROBE_TIME } from './scenario.ts';
+import { yieldTopUp } from './opportunities.ts';
+import { ATTACK_TIME, COMPLIANT_TIME, COMPROMISED_ROLE, CONFLICT_TIME, CONTINUATION_SWAP_ATOMS, INITIAL_TIME, REPLAY_PROBE_TIME, TOP_UP } from './scenario.ts';
 
 export type LedgerSnapshot = Awaited<ReturnType<PortfolioCore['engine']['read']>>;
 
@@ -86,6 +87,9 @@ export interface JudgeProtocol {
   readonly compliant: PortfolioRun;
   readonly compliantKeyUses: { readonly before: number; readonly after: number };
   readonly afterCompliant: LedgerSnapshot;
+  /** Scene 9: an individually valid top-up larger than what the portfolio still has, negotiated in a new run. */
+  readonly conflict: PortfolioRun;
+  readonly afterConflict: LedgerSnapshot;
 }
 
 /** The verifier's complete input for a run, exactly as `runPortfolio` assembles it. */
@@ -159,6 +163,12 @@ export async function runJudgeProtocol(): Promise<JudgeProtocol> {
   const compliantKeyUses = { before: beforeCompliant, after: compromised.uses };
   const afterCompliant = await core.engine.read(mandate.principal);
 
+  // Scene 9: a healthy agent asks for more than the portfolio has left; the Room negotiates it down.
+  const topUpIdentity = new AgentIdentity(TOP_UP.role);
+  const topUp = new ContinuationAgent(topUpIdentity, mandate, bindings, CONFLICT_TIME, yieldTopUp(TOP_UP.atoms, TOP_UP.minimum, CONFLICT_TIME), nextSequence(initial.room.proposals, topUpIdentity.party));
+  const conflict = await runPortfolio({ core, signature: initial.signature, now: CONFLICT_TIME, agents: [topUp], execute: defaultExecutor(core) });
+  const afterConflict = await core.engine.read(mandate.principal);
+
   return {
     core,
     mandate,
@@ -177,5 +187,7 @@ export async function runJudgeProtocol(): Promise<JudgeProtocol> {
     compliant,
     compliantKeyUses,
     afterCompliant,
+    conflict,
+    afterConflict,
   };
 }

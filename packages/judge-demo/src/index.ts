@@ -17,6 +17,7 @@ export * from './protocol.ts';
 export * from './proposals.ts';
 export * from './agents.ts';
 export * from './malicious-agent.ts';
+export * from './opportunities.ts';
 export * from './room.ts';
 export * from './verification.ts';
 export * from './orchestrator.ts';
