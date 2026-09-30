@@ -1,6 +1,10 @@
 # Mandate — Live AI Lab
 
 > **Status: buildathon Milestone B.5, implemented locally, awaiting review.**
+> Milestone B.6 is the `/demo/live` product client only. It reads the
+> existing session API and `MANDATE_LIVE_AI.V1` events. It does not
+> authorize, does not send transactions, and does not import
+> `packages/live-settlement`.
 > A second demo mode beside Protocol Replay. Model-backed agents act
 > autonomously under a Portfolio Mandate the principal authors live; the
 > frozen Phase 7F Portfolio Mandate decides what may settle. Additive only:

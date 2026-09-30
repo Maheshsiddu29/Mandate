@@ -6,6 +6,7 @@ import { judgeDemoProvider } from "@/lib/mandate/browser-provider";
 import { useReducedMotion } from "@/lib/motion";
 import { PresentationPlayback, stepDelayMs, type PlaybackState } from "@/lib/mandate/playback";
 import { SCENE_COUNT, SCENE_TITLES } from "@/lib/mandate/timeline";
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import "./judge-demo.css";
 
@@ -110,6 +111,7 @@ export function JudgeExperience(): ReactNode {
             <h1>Portfolio Mandate</h1>
             <p>Agents propose. Agents negotiate. Mandate authorizes. Markets settle.</p>
             <p className="status-pill">Judge mode · transcript · no wallet · no network</p>
+            <p><Link href="/demo/live">Live AI Lab</Link></p>
           </div>
           <dl className="judge-metrics">
             <div>

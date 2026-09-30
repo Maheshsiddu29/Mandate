@@ -72,5 +72,6 @@ provider server-side, and streams `MANDATE_LIVE_AI.V1` events. The browser
 bundle contains no key and no provider endpoint. `NEXT_PUBLIC_LIVE_AGENTS_URL`
 may point the page at another loopback port; any non-loopback URL is refused.
 The Cloudflare Pages build needs no variable or secret for this route; without
-a local server the page says the server is unreachable. Nothing is deployed for
-the Live AI Lab in this milestone.
+a local server the page says the server is unreachable. The page does not send
+transactions and does not import the settlement package. Nothing is deployed
+for the Live AI Lab in this milestone.
