@@ -1,0 +1,206 @@
+.live-lab {
+  min-height: 100svh;
+  padding: 6.25rem 0 4rem;
+  background: var(--mandate-background);
+  color: var(--mandate-text);
+  display: grid;
+  gap: 1rem;
+}
+
+.live-head h1 {
+  margin: 0.4rem 0;
+  font-size: clamp(1.4rem, 2.6vw, 2rem);
+  font-weight: 540;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.live-eyebrow {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--mandate-primary-light);
+}
+
+.live-sub,
+.live-small {
+  color: var(--mandate-text-secondary);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.live-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1rem;
+  margin: 0.6rem 0;
+}
+
+.live-panel {
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--mandate-border);
+  border-radius: var(--mandate-radius);
+  background: var(--mandate-surface);
+}
+
+.live-panel h2 {
+  margin: 0 0 0.4rem;
+  font-size: 1.05rem;
+}
+
+.live-panel h3 {
+  margin: 0.8rem 0 0.3rem;
+  font-size: 0.92rem;
+}
+
+.live-lab input,
+.live-lab textarea,
+.live-lab select {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--mandate-border-strong);
+  border-radius: 8px;
+  background: var(--mandate-background);
+  color: var(--mandate-text);
+  font: inherit;
+  font-size: 0.86rem;
+}
+
+.live-row label {
+  min-width: 14rem;
+  font-size: 0.82rem;
+}
+
+.live-block {
+  display: block;
+  font-size: 0.82rem;
+}
+
+.live-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: 0.6rem;
+  margin: 0.8rem 0;
+  font-size: 0.8rem;
+}
+
+.live-agents,
+.live-attempts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.7rem;
+  margin-top: 0.8rem;
+}
+
+.live-agent,
+.live-attempt {
+  padding: 0.75rem;
+  border: 1px solid var(--mandate-border);
+  border-radius: 10px;
+  background: var(--mandate-surface-raised);
+}
+
+.live-agent h3,
+.live-attempt h3 {
+  margin: 0 0 0.35rem;
+}
+
+.live-agent dl,
+.live-attempt dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.2rem 0.6rem;
+  margin: 0.5rem 0;
+  font-size: 0.8rem;
+}
+
+.live-agent dt,
+.live-attempt dt {
+  color: var(--mandate-text-secondary);
+}
+
+.live-agent dd,
+.live-attempt dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.live-rationale {
+  font-size: 0.8rem;
+  font-style: italic;
+  color: var(--mandate-text-secondary);
+}
+
+.live-badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--mandate-radius-pill);
+  border: 1px solid var(--mandate-border-strong);
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+
+.live-badge--good {
+  color: var(--mandate-authorized);
+  border-color: var(--mandate-authorized);
+}
+
+.live-badge--bad {
+  color: var(--mandate-blocked);
+  border-color: var(--mandate-blocked);
+}
+
+.live-badge--warn {
+  color: var(--mandate-warning);
+  border-color: var(--mandate-warning);
+}
+
+.live-headline {
+  margin: 0.2rem 0;
+  font-size: 1.5rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.live-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.live-table th,
+.live-table td {
+  padding: 0.3rem 0.4rem;
+  border-bottom: 1px solid var(--mandate-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.live-log {
+  max-height: 22rem;
+  overflow: auto;
+  padding-left: 1.2rem;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.76rem;
+  line-height: 1.55;
+}
+
+.live-time {
+  color: var(--mandate-text-secondary);
+}
+
+.live-issues,
+.live-versions {
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.live-message {
+  color: var(--mandate-warning);
+  font-size: 0.86rem;
+}

@@ -3,7 +3,7 @@
 This directory is the static public website for Mandate. It plays the
 canonical judge-demo transcript. It does not run the protocol.
 
-Routes: `/`, `/demo`, `/developers`, and `/docs`.
+Routes: `/`, `/demo`, `/demo/live`, `/developers`, and `/docs`.
 
 ## Local development
 
@@ -55,3 +55,22 @@ Playback does not re-run Mandate, read a key, or call a network. Historical
 explorer links are optional. The demo still plays if the explorer is down.
 
 `/developers` is a placeholder for a later integration surface. It is not an SDK.
+
+## Live AI Lab (`/demo/live`)
+
+`/demo/live` is the Live AI Lab client (docs/demo/live-ai-lab.md). It is a
+static page that talks only to a local server started from the repository
+root:
+
+```sh
+npm run agents:serve
+```
+
+That server binds to `127.0.0.1:8787`, holds `OPENAI_API_KEY` when one is set
+(otherwise it offers only the deterministic stub provider), calls the model
+provider server-side, and streams `MANDATE_LIVE_AI.V1` events. The browser
+bundle contains no key and no provider endpoint. `NEXT_PUBLIC_LIVE_AGENTS_URL`
+may point the page at another loopback port; any non-loopback URL is refused.
+The Cloudflare Pages build needs no variable or secret for this route; without
+a local server the page says the server is unreachable. Nothing is deployed for
+the Live AI Lab in this milestone.

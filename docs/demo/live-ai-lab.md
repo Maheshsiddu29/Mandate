@@ -295,11 +295,36 @@ model output, no reasoning trace. Kinds are listed in
 
 `apps/web` stays a static export. `/demo` is Protocol Replay, unchanged;
 `/demo/live` is the Live AI Lab client. It talks to a separate local server
-(`npm run agents:serve`, bound to `127.0.0.1`) that holds `OPENAI_API_KEY`,
-calls the OpenAI Responses API server-side and streams `MANDATE_LIVE_AI.V1`
-events. The browser bundle contains no key and no OpenAI endpoint. A future
-deployment would put the server in a Cloudflare Worker with the key as a
-secret; nothing is deployed in this milestone.
+(`npm run agents:serve`) that holds `OPENAI_API_KEY`, calls the OpenAI
+Responses API server-side and streams `MANDATE_LIVE_AI.V1` events. The
+browser bundle contains no key and no OpenAI endpoint, and the client
+refuses a server URL that is not loopback. A future deployment would put
+the server in a Cloudflare Worker with the key as a secret; nothing is
+deployed in this milestone.
+
+The server (`packages/live-agents/src/server/`):
+
+- binds `127.0.0.1` only; refuses a `Host` other than its loopback address
+  (DNS rebinding) and an `Origin` not in `LIVE_ALLOWED_ORIGINS` (default
+  `http://localhost:3000,http://127.0.0.1:3000`);
+- accepts `application/json` POST bodies of at most 32 KiB, parsed field by
+  field; a draft changes only through the typed field table (set fields
+  take only ids of their reviewed catalog set);
+- keeps at most four in-memory sessions, which expire when idle;
+- reports only whether the OpenAI provider is available, never the key;
+  an unexpected failure is a 500 without detail;
+- allows development latency chaos only when started with `--dev-chaos`.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/live/status` | providers available, presets, roles, catalog, policy cases |
+| `POST /api/live/sessions` | `{ provider: "openai" \| "stub", seed?, chaos? }` |
+| `GET /api/live/sessions/:id` | draft, validation, guardrails, versions, last run and policy-stress summaries |
+| `POST …/draft` | `{ preset }`, `{ prompt }` or `{ from: "active" }` (to amend) |
+| `POST …/draft/fill`, `…/draft/field`, `…/draft/resolve` | fill unset fields from a preset; set one field; resolve one interpretation issue |
+| `POST …/authorize`, `…/pause` | need the exact confirmation text |
+| `POST …/run`, `…/policy-stress` | start in the background; progress is the event stream |
+| `GET …/events?after=N` | Server-Sent Events, replayed from `N` then live |
 
 ## 11. Commands
 
@@ -307,8 +332,24 @@ secret; nothing is deployed in this milestone.
 npm run agents:stub        # offline: deterministic stub provider, text output
 npm run agents:live        # OpenAI: requires OPENAI_API_KEY (and optionally OPENAI_MODEL)
 npm run agents:live:json   # OpenAI: MANDATE_LIVE_AI.V1 events as JSON lines
-npm run agents:serve       # local API for /demo/live (OpenAI, or --provider=stub)
+npm run agents:serve       # local API for /demo/live on 127.0.0.1:8787 (OpenAI when a key is set; the stub always)
 ```
 
-`OPENAI_API_KEY` may also be put in a gitignored `.env` at the repository
-root. CI and `npm test` use only stub and scripted providers.
+Runner options: `--preset=…`, `--prompt="…" [--fill=<preset>]`,
+`--policy-attempts=N`, `--no-policy-stress`, `--seed=N` (stub) and
+`--chaos=<spec>` (development only). A draft with blocking issues exits 3
+and is never authorized; the OpenAI modes exit 2 without a key. The
+principal's confirmation in a command-line run is supplied by the runner
+and printed as such.
+
+`OPENAI_API_KEY` (and optionally `OPENAI_MODEL`, `AGENT_TIMEOUT_MS`,
+`ROOM_ROUND_TIMEOUT_MS`, `LIVE_AGENTS_PORT`, `LIVE_ALLOWED_ORIGINS`) may
+also be put in a gitignored `.env` at the repository root, which the
+`agents:live*` and `agents:serve` scripts load. CI and `npm test` use only
+stub and scripted providers.
+
+Live runs pass `executeAfter = 0` to `runPortfolio`: the protocol clock
+follows real time and the executor runs immediately, so execution is
+stamped when it happens. The default (now + 5 s) would put a ledger event
+in the future and make the ledger refuse any later reservation in the
+session within five seconds as `EVALUATION_TIME_REGRESSED`.

@@ -1,0 +1,46 @@
+import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
+import test from 'node:test';
+import { liveServerUrl } from '../components/demo/live/live-client.ts';
+
+const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
+const LIVE_DIR = new URL('../components/demo/live/', import.meta.url);
+const liveSources = readdirSync(LIVE_DIR)
+  .filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'))
+  .map((f) => ({ file: f, text: readFileSync(new URL(f, LIVE_DIR), 'utf8') }));
+
+test('the Live AI Lab is a separate route; Protocol Replay is unchanged', () => {
+  const live = read('../app/demo/live/page.tsx');
+  const replay = read('../app/demo/page.tsx');
+  assert.match(live, /<LiveLab\s*\/>/);
+  assert.match(replay, /<JudgeExperience\s*\/>/);
+  assert.doesNotMatch(replay, /LiveLab|live-client/);
+});
+
+test('the browser holds no key and never talks to a model provider', () => {
+  for (const { file, text } of liveSources) {
+    assert.doesNotMatch(text, /api\.openai\.com|OPENAI_API_KEY|OPENAI_MODEL|\bsk-[A-Za-z0-9]{8}|['"]authorization['"]\s*:|\bBearer\s/i, file);
+    assert.doesNotMatch(text, /@mandate\/live-agents|packages\/live-agents/, file);
+    assert.doesNotMatch(text, /sendTransaction|signTransaction|eth_sign|privateKey/i, file);
+  }
+  // The only public configuration is the local server's URL.
+  const env = liveSources.flatMap(({ text }) => [...text.matchAll(/process\.env\.([A-Z_]+)/g)].map((m) => m[1]));
+  assert.deepEqual([...new Set(env)], ['NEXT_PUBLIC_LIVE_AGENTS_URL']);
+  // Network access goes through the one client module.
+  for (const { file, text } of liveSources) if (file !== 'live-client.ts') assert.doesNotMatch(text, /\bfetch\(|new EventSource/, file);
+});
+
+test('the browser talks only to a loopback server', () => {
+  assert.equal(liveServerUrl(undefined), 'http://127.0.0.1:8787');
+  assert.equal(liveServerUrl(''), 'http://127.0.0.1:8787');
+  assert.equal(liveServerUrl('http://localhost:9000/'), 'http://localhost:9000');
+  for (const bad of ['https://api.openai.com', 'http://evil.example:8787', 'https://127.0.0.1:8787', 'file:///etc/passwd', 'not a url', 'http://127.0.0.1.evil.example']) assert.equal(liveServerUrl(bad), null, bad);
+});
+
+test('the policy stress panel uses neutral wording and shows the real result', () => {
+  const ui = read('../components/demo/live/live-lab.tsx');
+  assert.match(ui, /POLICY STRESS TEST/);
+  assert.match(ui, /VALID AGENT ≠ VALID ACTION/);
+  for (const row of ['Agent identity', 'Membership', 'Delegation', 'Selected test case', 'Signature', 'Mandate result']) assert.match(ui, new RegExp(row));
+  assert.doesNotMatch(ui, /hacker|escaped|jailbreak|rogue/i);
+});
