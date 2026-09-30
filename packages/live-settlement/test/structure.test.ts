@@ -87,7 +87,7 @@ describe('live-settlement structural boundary', () => {
     assert.match(scripts['agents:live:testnet'] ?? '', /live-settlement\/scripts\/testnet\.ts --provider=openai$/);
     // A send needs the operator's phrase on stdin; model-provider choice is a separate control.
     const runner = SCRIPTS.find((s) => s.file === 'testnet.ts')?.text ?? '';
-    assert.match(runner, /gate\.authorize\(line\)/);
+    assert.match(runner, /gate\.authorize\(input\.line\)/);
     assert.match(runner, /A stub decision is never settled/);
   });
 

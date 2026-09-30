@@ -32,10 +32,10 @@
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
 import { LiveSession, OpenAIProvider, PRESETS, StubProvider, describeConfig, readConfig, renderEvent, summarizeRun, type AgentModelProvider, type LiveEvent, type Preset } from '@mandate/live-agents';
 import { loadKeys, MANIFEST_PATH, REPO } from '../../evm-robinhood/scripts/lib.ts';
+import { readAuthorizationLine } from './authorization-input.ts';
 import { LiveSettlement, RobinhoodTestnetRpc, SEND_AUTHORIZATION_PHRASE, SendGate, parseDeployment, type SettlementOutcome, type SettlementRecord } from '../src/index.ts';
 
 const { values } = parseArgs({
@@ -159,25 +159,10 @@ if (dryRun) await finish(0, { status: 'DRY_RUN_READY', broadcasts: 0 });
 // --- The explicit send gate -----------------------------------------------------------------------------
 session.events.emit('TESTNET_SEND_AUTHORIZATION_REQUIRED', { agent: 'stock', data: { required: SEND_AUTHORIZATION_PHRASE, wouldSend: ready.wouldSend, timeoutSeconds } });
 say(`\nREADY FOR ROBINHOOD TESTNET SEND. Type exactly "${SEND_AUTHORIZATION_PHRASE}" within ${timeoutSeconds} s to broadcast ONE transaction; anything else sends nothing.`);
-const line = await new Promise<string | null>((resolve) => {
-  const rl = createInterface({ input: process.stdin, terminal: false });
-  const timer = setTimeout(() => {
-    rl.close();
-    resolve(null);
-  }, timeoutSeconds * 1_000);
-  rl.once('line', (l) => {
-    clearTimeout(timer);
-    rl.close();
-    resolve(l);
-  });
-  rl.once('close', () => {
-    clearTimeout(timer);
-    resolve(null);
-  });
-});
+const input = await readAuthorizationLine(process.stdin, timeoutSeconds * 1_000);
 const gate = new SendGate();
-if (line === null || !gate.authorize(line)) {
-  session.events.emit('TESTNET_SEND_AUTHORIZATION_REFUSED', { agent: 'stock', data: { required: SEND_AUTHORIZATION_PHRASE, received: line === null ? 'nothing' : 'another text', transactions: 0 } });
+if (input.kind !== 'LINE' || !gate.authorize(input.line)) {
+  session.events.emit('TESTNET_SEND_AUTHORIZATION_REFUSED', { agent: 'stock', data: { required: SEND_AUTHORIZATION_PHRASE, received: input.kind === 'LINE' ? 'another text' : input.kind, transactions: 0 } });
   say('Not authorized. Nothing was broadcast.');
   await finish(6, { status: 'NOT_AUTHORIZED', broadcasts: 0 });
 }

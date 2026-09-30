@@ -14,13 +14,22 @@ export const SEND_AUTHORIZATION_PHRASE = 'AUTHORIZE ROBINHOOD TESTNET SEND';
 
 export type SendGateState = 'LOCKED' | 'AUTHORIZED' | 'CONSUMED';
 
+/**
+ * Whether one line of operator input is the authorization phrase. Exactly
+ * one terminating line ending (LF, CRLF or CR) is removed and nothing else:
+ * no trimming, no case folding, no prefix, substring or extra word.
+ */
+export function isSendAuthorization(input: string): boolean {
+  return input.replace(/(?:\r\n|\n|\r)$/, '') === SEND_AUTHORIZATION_PHRASE;
+}
+
 export class SendGate {
   #state: SendGateState = 'LOCKED';
 
   /** Opens the gate for one broadcast if `phrase` is exactly the authorization phrase. A line ending is not part of it. */
   authorize(phrase: string): boolean {
     if (this.#state !== 'LOCKED') return false;
-    if (phrase.replace(/\r?\n$/, '') !== SEND_AUTHORIZATION_PHRASE) return false;
+    if (!isSendAuthorization(phrase)) return false;
     this.#state = 'AUTHORIZED';
     return true;
   }
