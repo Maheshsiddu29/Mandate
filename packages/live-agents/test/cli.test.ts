@@ -25,6 +25,11 @@ describe('the command-line runner', () => {
     assert.equal(events.at(-1)?.kind, 'SESSION_COMPLETED');
     for (const k of ['PROPOSAL_BLOCKED', 'ROOM_FINALIZED', 'PORTFOLIO_AUTHORIZED', 'POLICY_STRESS_PROPOSAL_BLOCKED', 'POLICY_STRESS_PROPOSAL_AUTHORIZED']) assert.ok(events.some((e) => e.kind === k), k);
     assert.equal(containsKey(r.stdout), false);
+    // B.5.2: the default runs are offchain. No settlement event, and every Mandate verdict reports 0 transactions.
+    assert.ok(events.every((e) => !/^(TESTNET_|DOMAIN_EXECUTION_)/.test(e.kind)));
+    for (const e of events.filter((x) => x.kind === 'PORTFOLIO_AUTHORIZED' || x.kind === 'PORTFOLIO_REFUSED')) assert.equal(e.data['transactions'], 0);
+    const completed = events.at(-1)?.data['run'] as { readonly transactions?: number } | undefined;
+    assert.equal(completed?.transactions, 0);
   });
 
   it('the live mode refuses to run without OPENAI_API_KEY and exits 2', () => {

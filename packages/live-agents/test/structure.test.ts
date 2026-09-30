@@ -50,6 +50,12 @@ describe('live-agents structural boundary', () => {
     }
   });
 
+  it('has no path to a chain: no settlement package, RPC client or transaction signer, and it never emits a settlement event', () => {
+    // B.5.2: Robinhood Chain testnet settlement lives in @mandate/live-settlement, which depends on this package — never the reverse.
+    for (const { file, text } of [...SRC, ...SCRIPTS]) assert.doesNotMatch(text, /@mandate\/(live-settlement|evm-robinhood|ledger-sqlite|execution-gate)|ChainClient|JsonRpcClient|TxSender|eth_sendRawTransaction/, file);
+    only(/'(TESTNET_[A-Z_]+|DOMAIN_EXECUTION_[A-Z_]+)'/, ['telemetry/events.ts', 'telemetry/render.ts']);
+  });
+
   it('nothing in the protocol, the judge demo or the browser app depends on it', () => {
     for (const p of ['kernel', 'core', 'registry', 'ledger', 'control', 'ledger-sqlite', 'execution-gate', 'evm-robinhood', 'perp-lighter', 'portfolio', 'judge-demo', 'router', 'jev', 'adapter-robinhood']) {
       assert.doesNotMatch(readFileSync(new URL(`packages/${p}/package.json`, REPO), 'utf8'), /@mandate\/live-agents/, p);
