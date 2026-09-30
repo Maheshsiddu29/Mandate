@@ -92,3 +92,13 @@ export const amount = (v: Json | undefined): string => {
 export const ms = (v: Json | undefined): string => (typeof v === "number" ? `${v} ms` : "—");
 /** A reason code without its subject, e.g. `RECIPIENT_NOT_ALLOWED`. */
 export const code = (v: Json): string => str(v).split(":")[0] ?? str(v);
+/**
+ * An event's typed-resource conflicts, one per resource and never summed, e.g.
+ * `derivative-notional 600 USDC > 400 USDC (reduce 200 USDC)`, or once the Room
+ * has proposed, `derivative-notional 600 USDC → 400 USDC ≤ 400 USDC SATISFIED`.
+ */
+export const conflicts = (v: Json | undefined): string =>
+  arr(v)
+    .map(rec)
+    .map((c) => (c.status === undefined ? `${str(c.resource)} ${amount(c.demand)} > ${amount(c.authority)} (reduce ${amount(c.requiredReduction)})` : `${str(c.resource)} ${amount(c.demand)} → ${amount(c.demandAfter)} ${c.status === "SATISFIED" ? "≤" : ">"} ${amount(c.authority)} ${str(c.status)}`))
+    .join("; ");

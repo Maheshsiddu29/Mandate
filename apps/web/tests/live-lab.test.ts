@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import test from 'node:test';
-import { liveServerUrl } from '../components/demo/live/live-client.ts';
+import { conflicts, liveServerUrl } from '../components/demo/live/live-client.ts';
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const LIVE_DIR = new URL('../components/demo/live/', import.meta.url);
@@ -43,4 +43,19 @@ test('the policy stress panel uses neutral wording and shows the real result', (
   assert.match(ui, /VALID AGENT ≠ VALID ACTION/);
   for (const row of ['Agent identity', 'Membership', 'Delegation', 'Selected test case', 'Signature', 'Mandate result']) assert.match(ui, new RegExp(row));
   assert.doesNotMatch(ui, /hacker|escaped|jailbreak|rogue/i);
+});
+
+test('the Room log shows typed-resource conflicts per resource, and their resolution', () => {
+  const v = (amount: string) => ({ atoms: `${amount}000000`, amount });
+  const open = [{ resource: 'derivative-notional', authority: v('400'), demand: v('600'), requiredReduction: v('200') }];
+  assert.equal(conflicts(open), 'derivative-notional 600 USDC > 400 USDC (reduce 200 USDC)');
+  const done = [{ ...open[0]!, demandAfter: v('400'), remainingReduction: v('0'), status: 'SATISFIED' }];
+  assert.equal(conflicts(done), 'derivative-notional 600 USDC → 400 USDC ≤ 400 USDC SATISFIED');
+  // Two resources stay two lines; there is no total.
+  const two = [...open, { resource: 'portfolio-notional', authority: v('2000'), demand: v('2500'), requiredReduction: v('500') }];
+  assert.equal(conflicts(two), 'derivative-notional 600 USDC > 400 USDC (reduce 200 USDC); portfolio-notional 2500 USDC > 2000 USDC (reduce 500 USDC)');
+  assert.equal(conflicts(undefined), '');
+  const lab = read('../components/demo/live/live-lab.tsx');
+  assert.match(lab, /conflicts\(e\.data\.conflicts\)/);
+  assert.doesNotMatch(lab, /data\.requiredReduction/);
 });

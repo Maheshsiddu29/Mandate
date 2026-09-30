@@ -291,6 +291,15 @@ event: `schema`, `sessionId`, `sequence`, `kind`, `at` (wall clock, ISO),
 model output, no reasoning trace. Kinds are listed in
 `packages/live-agents/src/telemetry/events.ts`.
 
+Resource conflicts are typed and never summed. `PORTFOLIO_CONFLICT`,
+`ROOM_OPENED`, `ROOM_GENERATION_STARTED`, `ROOM_PROPOSAL_CREATED` and
+`ROOM_NO_FEASIBLE_PORTFOLIO` carry `conflicts`: one entry per resource over
+its limit (`resource`, `authority`, `demand`, `requiredReduction`), taken from
+the `constraints` lines. The last two add `demandAfter`, `remainingReduction`
+and `status` (`SATISFIED` or `UNRESOLVED`). `authority`, `admissibleDemand`
+and `portfolioNotionalRequiredReduction` describe portfolio notional alone:
+it can be `0` while derivative notional still needs a reduction.
+
 ## 10. Server and browser
 
 `apps/web` stays a static export. `/demo` is Protocol Replay, unchanged;

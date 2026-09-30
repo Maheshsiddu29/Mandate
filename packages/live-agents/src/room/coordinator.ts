@@ -23,7 +23,7 @@ import type { AgentModelProvider, NegotiationRequest } from '../runtime/provider
 import { parseNegotiation, type NegotiationDecision } from '../runtime/schemas.ts';
 import type { EventLog } from '../telemetry/events.ts';
 import { GenerationGate } from './generation.ts';
-import { assess, permittedActions, type DemandAt, type Fit, type Participant } from './negotiation.ts';
+import { assess, conflictsOf, permittedActions, resolutionOf, type DemandAt, type Fit, type Participant } from './negotiation.ts';
 
 export const DEFAULT_MAX_GENERATIONS = 3;
 
@@ -95,7 +95,8 @@ export async function runLiveRoom(deps: RoomDeps, input: RoomInput): Promise<Roo
     participants: participants.map((p) => ({ role: p.role, candidate: p.candidate.id, request: text(p.originalAtoms), minimum: text(p.minimumAtoms) })),
     authority: text(initial.authorityAtoms),
     admissibleDemand: text(initial.demandAtoms),
-    requiredReduction: text(initial.requiredAtoms),
+    portfolioNotionalRequiredReduction: text(initial.requiredAtoms),
+    conflicts: conflictsOf(initial),
     constraints: initial.lines,
     agentExcess: initial.agentExcess.map((x) => ({ ...x, requestedAtoms: x.requestedAtoms.toString(), limitAtoms: x.limitAtoms.toString() })),
   });
@@ -105,7 +106,8 @@ export async function runLiveRoom(deps: RoomDeps, input: RoomInput): Promise<Roo
     if (status === 'PROPOSED') {
       emit('ROOM_PROPOSAL_CREATED', gate.generation, {
         requests: participants.map((p) => ({ role: p.role, from: text(p.originalAtoms), to: text(requests.get(p.role) ?? 0n) })),
-        requiredReduction: text(initial.requiredAtoms),
+        portfolioNotionalRequiredReduction: text(initial.requiredAtoms),
+        conflicts: resolutionOf(initial, fit),
         offeredReduction: text(stats().offeredAtoms),
         demand: text(fit.demandAtoms),
         authority: text(fit.authorityAtoms),
@@ -113,7 +115,7 @@ export async function runLiveRoom(deps: RoomDeps, input: RoomInput): Promise<Roo
       });
     }
     if (status === 'NO_FEASIBLE_PORTFOLIO') {
-      emit('ROOM_NO_FEASIBLE_PORTFOLIO', gate.generation, { requiredReduction: text(initial.requiredAtoms), offeredReduction: text(stats().offeredAtoms), remaining: fit.lines.filter((l) => l.requiredReductionAtoms !== '0'), agentExcess: fit.agentExcess.map((x) => ({ role: x.role, resource: x.resource })), execution: 'NONE' });
+      emit('ROOM_NO_FEASIBLE_PORTFOLIO', gate.generation, { portfolioNotionalRequiredReduction: text(initial.requiredAtoms), conflicts: resolutionOf(initial, fit), offeredReduction: text(stats().offeredAtoms), remaining: fit.lines.filter((l) => l.requiredReductionAtoms !== '0'), agentExcess: fit.agentExcess.map((x) => ({ role: x.role, resource: x.resource })), execution: 'NONE' });
     }
     const s = stats();
     emit('ROOM_FINALIZED', gate.generation, { result: status, generations: s.generations, durationMs: s.durationMs, replies: s.replies.length, timeouts: s.replies.filter((r) => r.status === 'TIMED_OUT').length, failures: s.replies.filter((r) => r.status === 'FAILED' || r.status === 'INVALID_RESPONSE').length });
@@ -125,7 +127,7 @@ export async function runLiveRoom(deps: RoomDeps, input: RoomInput): Promise<Roo
     const generation = gate.open();
     const before = assess(participants, requests, av, demandAt);
     const active = participants.filter((p) => (requests.get(p.role) ?? 0n) > 0n);
-    emit('ROOM_GENERATION_STARTED', generation, { participants: active.map((p) => p.role), admissibleDemand: text(before.demandAtoms), requiredReduction: text(before.requiredAtoms), constraints: before.lines, roundTimeoutMs: deps.roundTimeoutMs });
+    emit('ROOM_GENERATION_STARTED', generation, { participants: active.map((p) => p.role), admissibleDemand: text(before.demandAtoms), portfolioNotionalRequiredReduction: text(before.requiredAtoms), conflicts: conflictsOf(before), constraints: before.lines, roundTimeoutMs: deps.roundTimeoutMs });
 
     const answers = new Map<Role, NegotiationDecision>();
     const pending = new Set<Role>(active.map((p) => p.role));

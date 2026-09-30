@@ -13,7 +13,7 @@ import { amountOf, headroom, type ResourceAvailability, type ResourceVector } fr
 import type { TrustedCandidate } from '../agents/spec.ts';
 import type { Party } from '../mandate/signer.ts';
 import type { NegotiationAction, ResourceLine } from '../runtime/provider.ts';
-import type { Role } from '../types.ts';
+import { usdcText, type Role } from '../types.ts';
 
 export interface Participant {
   readonly role: Role;
@@ -41,7 +41,7 @@ export interface Fit {
   /** One line per portfolio resource anyone demands. */
   readonly lines: readonly ResourceLine[];
   readonly agentExcess: readonly AgentExcess[];
-  /** Portfolio notional: the headline. */
+  /** Portfolio notional only — not a total: other resources are in `lines`. */
   readonly demandAtoms: bigint;
   readonly authorityAtoms: bigint;
   readonly requiredAtoms: bigint;
@@ -77,6 +77,27 @@ export function assess(participants: readonly Participant[], requests: ReadonlyM
     authorityAtoms: amountOf(av.portfolio, 'portfolio-notional'),
     requiredAtoms: pn === undefined ? 0n : BigInt(pn.requiredReductionAtoms),
   };
+}
+
+const view = (atoms: string) => ({ atoms, amount: usdcText(BigInt(atoms)) });
+
+/**
+ * The typed-resource conflicts of a fit, one per resource, for telemetry:
+ * the constraint lines that need a reduction, as they are. Never summed —
+ * a USDC of derivative notional and a USDC of portfolio notional are
+ * different limits, and reducing one request can satisfy both.
+ */
+export function conflictsOf(fit: Fit) {
+  return fit.lines.filter((l) => l.requiredReductionAtoms !== '0').map((l) => ({ resource: l.resource, authority: view(l.authorityAtoms), demand: view(l.demandAtoms), requiredReduction: view(l.requiredReductionAtoms) }));
+}
+
+/** Each conflict the Room opened with, and what is left of it under the requests now in hand. */
+export function resolutionOf(opened: Fit, now: Fit) {
+  return conflictsOf(opened).map((c) => {
+    const line = now.lines.find((l) => l.resource === c.resource);
+    const remaining = line?.requiredReductionAtoms ?? '0';
+    return { ...c, demandAfter: view(line?.demandAtoms ?? '0'), remainingReduction: view(remaining), status: remaining === '0' ? 'SATISFIED' : 'UNRESOLVED' };
+  });
 }
 
 export function permittedActions(p: Participant): readonly NegotiationAction[] {

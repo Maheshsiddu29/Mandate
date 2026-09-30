@@ -32,7 +32,7 @@ import { buildProposal, demandOf, SequenceBook } from './mandate/proposal-builde
 import { LocalPrincipalSigner, createAgentSigners, type LocalAgentSigner } from './mandate/signer.ts';
 import { reasonCodes, screen } from './mandate/verifier-adapter.ts';
 import { DEFAULT_MAX_GENERATIONS, runLiveRoom, type RoomResult } from './room/coordinator.ts';
-import { assess, type Participant } from './room/negotiation.ts';
+import { assess, conflictsOf, type Participant } from './room/negotiation.ts';
 import { protocolClock, realClock, type Clock } from './runtime/clock.ts';
 import type { AgentModelProvider } from './runtime/provider.ts';
 import { EventLog } from './telemetry/events.ts';
@@ -239,7 +239,8 @@ export class LiveSession {
             data: {
               authority: { atoms: fit.authorityAtoms, amount: usdcText(fit.authorityAtoms) },
               admissibleDemand: { atoms: fit.demandAtoms, amount: usdcText(fit.demandAtoms) },
-              requiredReduction: { atoms: fit.requiredAtoms, amount: usdcText(fit.requiredAtoms) },
+              portfolioNotionalRequiredReduction: { atoms: fit.requiredAtoms, amount: usdcText(fit.requiredAtoms) },
+              conflicts: conflictsOf(fit),
               constraints: fit.lines,
               agentExcess: fit.agentExcess.map((x) => ({ role: x.role, resource: x.resource, requested: usdcText(x.requestedAtoms), limit: usdcText(x.limitAtoms) })),
               excludedAtScreening: outcomes.filter((o) => o.state === 'BLOCKED').map((o) => o.role),

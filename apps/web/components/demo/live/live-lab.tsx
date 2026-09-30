@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { amount, api, arr, code, liveServerUrl, ms, rec, str, streamEvents, type Json, type JsonRecord, type LiveEvent } from "./live-client";
+import { amount, api, arr, code, conflicts, liveServerUrl, ms, rec, str, streamEvents, type Json, type JsonRecord, type LiveEvent } from "./live-client";
 import "./live-lab.css";
 
 const SERVER = liveServerUrl(process.env.NEXT_PUBLIC_LIVE_AGENTS_URL);
@@ -393,7 +393,7 @@ export function LiveLab(): ReactNode {
             {roomEvents.length === 0 ? <p className="live-small">No resource conflict yet.</p> : (
               <ol className="live-log">
                 {roomEvents.map((e) => (
-                  <li key={e.sequence}><span className="live-time">+{e.elapsedMs} ms</span> {e.agent === null ? "" : `[${e.agent}] `}{e.kind}{e.generation === null ? "" : ` g${e.generation}`} {e.kind === "ROOM_FINALIZED" ? <Badge value={str(e.data.result)} /> : null}{e.kind === "ROOM_AGENT_RESPONSE" && e.data.rationale !== undefined ? ` — ${str(e.data.action)} ${amount(e.data.from)} → ${amount(e.data.to)} “${str(e.data.rationale)}”` : ""}</li>
+                  <li key={e.sequence}><span className="live-time">+{e.elapsedMs} ms</span> {e.agent === null ? "" : `[${e.agent}] `}{e.kind}{e.generation === null ? "" : ` g${e.generation}`} {e.kind === "ROOM_FINALIZED" ? <Badge value={str(e.data.result)} /> : null}{e.kind === "ROOM_AGENT_RESPONSE" && e.data.rationale !== undefined ? ` — ${str(e.data.action)} ${amount(e.data.from)} → ${amount(e.data.to)} “${str(e.data.rationale)}”` : ""}{conflicts(e.data.conflicts) === "" ? "" : ` — ${conflicts(e.data.conflicts)}`}</li>
                 ))}
               </ol>
             )}

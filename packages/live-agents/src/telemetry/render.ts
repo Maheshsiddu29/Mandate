@@ -22,6 +22,17 @@ const binding = (lines: JsonValue | undefined): string => {
   const over = lines.map((x) => x as JsonObject).filter((l) => l['requiredReductionAtoms'] !== '0');
   return over.map((l) => `${str(l['resource'])} ${usdc(l['demandAtoms'])} > ${usdc(l['authorityAtoms'])} USDC (reduce ${usdc(l['requiredReductionAtoms'])})`).join('; ');
 };
+/** What became of each opened conflict, e.g. `derivative-notional 600 → 400 ≤ 400 USDC SATISFIED`. */
+const resolved = (conflicts: JsonValue | undefined): string => {
+  if (!Array.isArray(conflicts)) return '';
+  return conflicts
+    .map((x) => x as JsonObject)
+    .map((c) => {
+      const atoms = (v: JsonValue | undefined) => usdc(((v ?? {}) as JsonObject)['atoms']);
+      return `${str(c['resource'])} ${atoms(c['demand'])} → ${atoms(c['demandAfter'])} ${c['status'] === 'SATISFIED' ? '≤' : '>'} ${atoms(c['authority'])} USDC ${str(c['status'])}`;
+    })
+    .join('; ');
+};
 
 function detail(e: LiveEvent): string {
   const d = e.data;
@@ -72,9 +83,9 @@ function detail(e: LiveEvent): string {
     case 'ROOM_AGENT_STALE_RESPONSE':
       return `generation ${str(d['answeredGeneration'])} answered ${str(d['action'])} (${str(d['reason'])}) · ${str(d['effect'])}`;
     case 'ROOM_PROPOSAL_CREATED':
-      return `proposed: ${Array.isArray(d['requests']) ? d['requests'].map((x) => { const o = x as JsonObject; return `${str(o['role'])} ${amount(o['from'])}→${amount(o['to'])}`; }).join(', ') : ''}`;
+      return `proposed: ${Array.isArray(d['requests']) ? d['requests'].map((x) => { const o = x as JsonObject; return `${str(o['role'])} ${amount(o['from'])}→${amount(o['to'])}`; }).join(', ') : ''}${resolved(d['conflicts']) === '' ? '' : ` · ${resolved(d['conflicts'])}`}`;
     case 'ROOM_NO_FEASIBLE_PORTFOLIO':
-      return `offers ${amount(d['offeredReduction'])} < required ${amount(d['requiredReduction'])} · execution ${str(d['execution'])}`;
+      return `offers ${amount(d['offeredReduction'])} · still over: ${binding(d['remaining']) || 'agent limits'} · execution ${str(d['execution'])}`;
     case 'ROOM_FINALIZED':
       return `${str(d['result'])} after ${str(d['generations'])} generation(s), ${ms(d['durationMs'])} · timeouts ${str(d['timeouts'])} · failures ${str(d['failures'])}`;
     case 'MANDATE_REVERIFY_STARTED':
