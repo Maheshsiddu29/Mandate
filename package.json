@@ -71,7 +71,11 @@
     "demo:judge": "node packages/judge-demo/scripts/judge-demo.ts",
     "demo:judge:json": "node packages/judge-demo/scripts/judge-demo.ts --json",
     "web:demo:generate": "node scripts/generate-judge-demo-asset.ts",
-    "web:demo:check": "node scripts/check-judge-demo-asset.ts"
+    "web:demo:check": "node scripts/check-judge-demo-asset.ts",
+    "agents:stub": "node packages/live-agents/scripts/live.ts --provider=stub",
+    "agents:live": "node --env-file-if-exists=.env packages/live-agents/scripts/live.ts --provider=openai",
+    "agents:live:json": "node --env-file-if-exists=.env packages/live-agents/scripts/live.ts --provider=openai --json",
+    "agents:serve": "node --env-file-if-exists=.env packages/live-agents/scripts/serve.ts"
   },
   "devDependencies": {
     "@openzeppelin/contracts": "5.6.1",

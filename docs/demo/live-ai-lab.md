@@ -260,8 +260,8 @@ The result shown is what that path returned; the lab hardcodes no verdict.
 A quantity-only refusal (`OVER_LIMIT`) passes screening as negotiable and is
 refused by the Room and verifier, because a fixed proposal does not resize.
 
-The run is bounded (`maxAttempts`, default 4) and each case can be selected
-once; ABSTAIN is always offered. A refusal revokes nothing: the swap
+The run is bounded (`maxAttempts`, at most and by default 5 — every case
+once) and each case can be selected once; ABSTAIN is always offered. A refusal revokes nothing: the swap
 agent's delegation and any earlier reservation stay as they were, and the
 ledger version before and after a refused case is reported. When
 `COMPLIANT_CONTROL` is authorized afterwards, it is the same agent identity

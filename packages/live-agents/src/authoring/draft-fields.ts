@@ -1,0 +1,63 @@
+/**
+ * Every editable draft field and the JSON type it takes.
+ *
+ * An edit from outside the process (the local API, the browser) names a
+ * path from this table and a value of its type, or `null` to unset it.
+ * Anything else is refused here; the *meaning* of an accepted value —
+ * whether "2,000" is an amount, whether "nvda" is a catalog id — is still
+ * the validator's question, and an edit never authorizes anything.
+ */
+
+import { CATALOG_SETS } from './catalog.ts';
+import type { MandateDraft } from './draft-types.ts';
+import { ROLES } from '../types.ts';
+
+export type FieldType = 'text' | 'boolean' | 'ids';
+
+export interface DraftFieldPath {
+  readonly path: string;
+  readonly type: FieldType;
+}
+
+const text = (path: string): DraftFieldPath => ({ path, type: 'text' });
+
+export const DRAFT_FIELD_PATHS: readonly DraftFieldPath[] = [
+  ...['totalCapital', 'minUnallocated', 'maxDeployed'].map((f) => text(`portfolio.${f}`)),
+  { path: 'portfolio.deployAll', type: 'boolean' },
+  ...['maxDerivative', 'maxIlliquid', 'validityMinutes'].map((f) => text(`portfolio.${f}`)),
+  ...ROLES.flatMap((r) => [{ path: `agents.${r}.enabled`, type: 'boolean' as const }, text(`agents.${r}.maxAllocation`), text(`agents.${r}.maxExposure`)]),
+  ...CATALOG_SETS.filter((s) => s !== 'recipients').map((s) => ({ path: `market.${s}`, type: 'ids' as const })),
+  ...['maxLeverage', 'maxSlippageBps', 'maxQuoteAgeSeconds'].map((f) => text(`market.${f}`)),
+  { path: 'execution.recipients', type: 'ids' },
+];
+
+const MAX_TEXT = 64;
+const MAX_IDS = 32;
+
+type FieldValue = string | boolean | readonly string[] | null;
+
+/** The value for `path` if `raw` has its type (or is null); otherwise an error. */
+export function parseFieldValue(path: unknown, raw: unknown): { readonly ok: true; readonly path: string; readonly value: FieldValue } | { readonly ok: false; readonly error: string } {
+  const field = DRAFT_FIELD_PATHS.find((f) => f.path === path);
+  if (field === undefined) return { ok: false, error: 'unknown draft field' };
+  if (raw === null) return { ok: true, path: field.path, value: null };
+  switch (field.type) {
+    case 'boolean':
+      return typeof raw === 'boolean' ? { ok: true, path: field.path, value: raw } : { ok: false, error: `${field.path} takes true, false or null` };
+    case 'text':
+      return typeof raw === 'string' && raw.length <= MAX_TEXT && !/[\u0000-\u001f\u007f]/.test(raw) ? { ok: true, path: field.path, value: raw.trim() } : { ok: false, error: `${field.path} takes a short string or null` };
+    case 'ids':
+      return Array.isArray(raw) && raw.length <= MAX_IDS && raw.every((x): x is string => typeof x === 'string' && /^[a-z0-9-]{1,48}$/.test(x))
+        ? { ok: true, path: field.path, value: [...new Set(raw)] }
+        : { ok: false, error: `${field.path} takes a list of catalog ids or null` };
+  }
+}
+
+/** Paths as the versioning diff lists them. */
+export const draftPaths = (): readonly string[] => DRAFT_FIELD_PATHS.map((f) => f.path);
+
+/** A draft with interpretation issue `index` removed: the principal has resolved it themselves. */
+export function resolveIssue(d: MandateDraft, index: number): MandateDraft | null {
+  if (!Number.isSafeInteger(index) || index < 0 || index >= d.issues.length) return null;
+  return { ...d, issues: d.issues.filter((_, i) => i !== index) };
+}

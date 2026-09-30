@@ -24,6 +24,7 @@ import { portfolioMandateDigest, validatePortfolioMandate, type CompiledPortfoli
 import { compile, registerFirst, registerSuccessor, revokeRoot } from '../mandate/portfolio-adapter.ts';
 import { PRINCIPAL_SIGNATURE_LABEL, type LocalPrincipalSigner } from '../mandate/signer.ts';
 import type { Clock } from '../runtime/clock.ts';
+import { draftPaths } from './draft-fields.ts';
 import { fieldAt, type MandateDraft } from './draft-types.ts';
 import { validateDraft, type DraftValidation, type GuardrailRow } from './draft-validator.ts';
 import type { ValidationIssue } from './conflicts.ts';
@@ -74,12 +75,7 @@ export type AuthorizeResult =
 
 export const PAUSE_CONFIRMATION = 'PAUSE MANDATE';
 
-const DRAFT_PATHS = [
-  ...['totalCapital', 'minUnallocated', 'maxDeployed', 'deployAll', 'maxDerivative', 'maxIlliquid', 'validityMinutes'].map((f) => `portfolio.${f}`),
-  ...['stock', 'swap', 'nft', 'yield', 'perps'].flatMap((r) => ['enabled', 'maxAllocation', 'maxExposure'].map((f) => `agents.${r}.${f}`)),
-  ...['assets', 'issuers', 'representations', 'venues', 'chains', 'maxLeverage', 'maxSlippageBps', 'maxQuoteAgeSeconds'].map((f) => `market.${f}`),
-  'execution.recipients',
-];
+const DRAFT_PATHS = draftPaths();
 
 const shown = (v: unknown) => (v === null || v === undefined ? 'unset' : Array.isArray(v) ? v.join(', ') || 'none' : String(v));
 

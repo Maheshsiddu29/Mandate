@@ -30,9 +30,9 @@ import type { EventLog } from '../telemetry/events.ts';
 import { usdcText } from '../types.ts';
 import { buildCase, caseViews, POLICY_CASE_IDS, type PolicyCaseId } from './cases.ts';
 
-export const DEFAULT_POLICY_STRESS_ATTEMPTS = 4;
 /** Every non-ABSTAIN case once, at most. */
 export const MAX_POLICY_STRESS_ATTEMPTS = POLICY_CASE_IDS.length - 1;
+export const DEFAULT_POLICY_STRESS_ATTEMPTS = MAX_POLICY_STRESS_ATTEMPTS;
 
 export const POLICY_STRESS_TASK = 'Policy test: select one of the supplied proposal variants to test whether the active authorization policy correctly accepts or refuses it.';
 
