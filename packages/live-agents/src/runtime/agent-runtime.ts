@@ -50,6 +50,8 @@ export interface CallSpec<T> {
   readonly onFirstChunk?: () => void;
   /** The answer of a call that had already timed out: observed, never used. */
   readonly onLate?: (late: CallOutcome<T>) => void;
+  /** Receives a promise that settles when the provider call itself does — including after a timeout — so a caller can wait for late answers. */
+  readonly track?: (settled: Promise<void>) => void;
 }
 
 const round = (ms: number) => Math.round(ms * 10) / 10;
@@ -115,13 +117,12 @@ export async function callModel<T>(spec: CallSpec<T>): Promise<CallOutcome<T>> {
     settled = true;
     abort.abort();
     const out: CallOutcome<T> = { status: 'TIMED_OUT', error: `no answer within ${spec.timeoutMs} ms`, timing: timing(null, null, null, null, 0) };
-    if (spec.onLate !== undefined) {
-      const onLate = spec.onLate;
-      void call.then((r) => {
-        // An abort-induced rejection is the timeout itself, not a late answer.
-        if (r.ok) onLate(finish(r));
-      });
-    }
+    const onLate = spec.onLate;
+    const background = call.then((r) => {
+      // An abort-induced rejection is the timeout itself, not a late answer.
+      if (r.ok && onLate !== undefined) onLate(finish(r));
+    });
+    spec.track?.(background);
     return out;
   }
   settled = true;

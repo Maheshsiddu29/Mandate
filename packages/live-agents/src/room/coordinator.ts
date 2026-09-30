@@ -189,6 +189,7 @@ export async function runLiveRoom(deps: RoomDeps, input: RoomInput): Promise<Roo
         timeoutMs: deps.roundTimeoutMs,
         clock,
         onLate: (late) => ignored(p, gen, late, true),
+        track: (settled) => outstanding.push(settled),
       }).then((o) => {
         // A reply that lands after this generation decided to close changes nothing, even before the gate records it.
         if (gate.classify(roomId, gen) !== 'CURRENT' || round.closed !== null) {
