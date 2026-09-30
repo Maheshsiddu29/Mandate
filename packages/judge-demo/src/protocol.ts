@@ -15,8 +15,10 @@
 
 import type { Identifier } from '@mandate/kernel';
 import {
+  defaultExecutor,
   proposalDigest,
   reserveChild,
+  runPortfolio,
   screenProposal,
   verificationTranscript,
   verifyTranscript,
@@ -32,7 +34,9 @@ import {
   type VerifierResult,
 } from '@mandate/portfolio';
 import { runDemo, type DemoRun } from '@mandate/portfolio/demo';
-import { INITIAL_TIME, REPLAY_PROBE_TIME } from './scenario.ts';
+import { AgentIdentity, ContinuationAgent, nextSequence } from './agents.ts';
+import { maliciousSwap } from './malicious-agent.ts';
+import { ATTACK_TIME, COMPROMISED_ROLE, CONTINUATION_SWAP_ATOMS, INITIAL_TIME, REPLAY_PROBE_TIME } from './scenario.ts';
 
 export type LedgerSnapshot = Awaited<ReturnType<PortfolioCore['engine']['read']>>;
 
@@ -69,6 +73,15 @@ export interface JudgeProtocol {
   /** Scene 5: every reserved child of the initial run, presented again through `reserveChild`. */
   readonly replay: readonly ReplayProbe[];
   readonly afterReplay: LedgerSnapshot;
+  /** Scene 6: the compromised agent's identity — the same key that signed its scene-2 proposals. */
+  readonly compromised: AgentIdentity;
+  /** How many times this identity's key signed, before and after the attack run. */
+  readonly attackKeyUses: { readonly before: number; readonly after: number };
+  /** Scene 6: a Portfolio run whose only message is the compromised agent's signed attack. */
+  readonly attack: PortfolioRun;
+  /** Scene 6: a compromised Room that accepts the attack anyway, handed to the verifier. */
+  readonly attackBackstop: RoomForgery | null;
+  readonly afterAttack: LedgerSnapshot;
 }
 
 /** The verifier's complete input for a run, exactly as `runPortfolio` assembles it. */
@@ -124,5 +137,16 @@ export async function runJudgeProtocol(): Promise<JudgeProtocol> {
   }
   const afterReplay = await core.engine.read(mandate.principal);
 
-  return { core, mandate, signature: initial.signature, initial, initialTranscript, afterInitial, roomForgery, replay, afterReplay };
+  // Scene 6: the swap agent is compromised. Same key, same identity, same delegation; it signs a swap paying an attacker.
+  const bindings = core.compiled.bindings;
+  const compromised = new AgentIdentity(COMPROMISED_ROLE);
+  const before = compromised.uses;
+  const attacker = new ContinuationAgent(compromised, mandate, bindings, ATTACK_TIME, maliciousSwap(CONTINUATION_SWAP_ATOMS, ATTACK_TIME), nextSequence(initial.room.proposals, compromised.party));
+  const attack = await runPortfolio({ core, signature: initial.signature, now: ATTACK_TIME, agents: [attacker], execute: defaultExecutor(core) });
+  const attackKeyUses = { before, after: compromised.uses };
+  const signedAttack = attack.room.proposals[0];
+  const attackBackstop = signedAttack === undefined ? null : forgeRoomAcceptance(mandate, core, transcriptOf(core, initial.signature, attack, ATTACK_TIME), signedAttack);
+  const afterAttack = await core.engine.read(mandate.principal);
+
+  return { core, mandate, signature: initial.signature, initial, initialTranscript, afterInitial, roomForgery, replay, afterReplay, compromised, attackKeyUses, attack, attackBackstop, afterAttack };
 }
