@@ -115,7 +115,7 @@ authorization.
 
 The dependency directions are `adapter → registry → kernel`,
 `router → registry → kernel`, `jev → router → registry → kernel`,
-`execution-gate → kernel`, `core → kernel`, `ledger → core → kernel`, `control → ledger → core → kernel`, `ledger-sqlite → ledger → core` and `perp-lighter → control, ledger-sqlite, ledger, core, kernel` and `evm-robinhood → control, ledger-sqlite, ledger, core, execution-gate, kernel` and `portfolio → evm-robinhood, perp-lighter, control, ledger, registry, execution-gate, core, kernel` and `judge-demo → portfolio, core, kernel`, never the reverse, and it is enforced by structural tests
+`execution-gate → kernel`, `core → kernel`, `ledger → core → kernel`, `control → ledger → core → kernel`, `ledger-sqlite → ledger → core` and `perp-lighter → control, ledger-sqlite, ledger, core, kernel` and `evm-robinhood → control, ledger-sqlite, ledger, core, execution-gate, kernel` and `portfolio → evm-robinhood, perp-lighter, control, ledger, registry, execution-gate, core, kernel` and `judge-demo → portfolio, core, kernel` and `live-agents → portfolio, control, ledger, core, kernel`, never the reverse, and it is enforced by structural tests
 ([ADR 0004](docs/adr/0004-registry-package-boundary.md),
 [ADR 0012](docs/adr/0012-jev-closed-set-authority-boundary.md)). The kernel,
 registry and router perform no I/O; the Robinhood adapter and the Jev client
@@ -379,6 +379,26 @@ canonical JSON runner and writes `apps/web/generated/judge-demo.v1.json`.
 `npm run web:demo:check` fails if that file drifts. The site is a Next.js
 static export intended for Cloudflare Pages. Judge mode requires no secrets.
 See [docs/demo/web.md](docs/demo/web.md).
+
+`packages/live-agents` (buildathon Milestone B.5, [docs/demo/live-ai-lab.md](docs/demo/live-ai-lab.md))
+is the Live AI Lab: model-backed agents act under a Portfolio Mandate the
+principal authors live, and the frozen portfolio path decides. It changes no
+protocol semantics, nothing depends on it, and it emits its own
+`MANDATE_LIVE_AI.V1` stream (never `MANDATE_JUDGE_DEMO.V1`). Its
+dependencies are fixed to `@mandate/portfolio`, `@mandate/control`,
+`@mandate/ledger`, `@mandate/core` and `@mandate/kernel`. Only
+`src/config.ts` reads the environment, only
+`src/runtime/openai-provider.ts` makes a network call (the OpenAI Responses
+API), only `src/runtime/clock.ts` reads a clock, only `src/server/http.ts`
+listens (on 127.0.0.1), and only `src/mandate/signer.ts` holds a
+demonstration key; no source reads a file. Models answer closed schemas
+(candidate ids, bounded amounts, case identifiers) and never supply an
+address, venue, amount outside supplied bounds, calldata or signature.
+`structure.test.ts` enforces all of it. `npm run agents:stub` runs offline;
+`npm run agents:live`, `agents:live:json` and `agents:serve` contact OpenAI
+only when `OPENAI_API_KEY` is set (environment or gitignored `.env`) and
+the live modes exit 2 without it. Never commit the key. `npm test` uses
+stub and scripted providers only.
 
 `jev:characterize` is the only command that contacts TypeSafe. It refuses to
 run without a credential and exits with code 2, so a blocked run is never
