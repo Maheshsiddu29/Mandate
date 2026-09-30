@@ -112,9 +112,10 @@ export default function DocsPage(): ReactNode {
             <section id="demo">
               <h2>Demo boundary</h2>
               <p>
-                The public demo is a scripted review of one $2,000 portfolio
-                mandate. It does not connect a wallet, submit an order, or
-                claim a live execution. The receipt id is a demo identifier.
+                Judge mode plays a deterministic transcript of one Portfolio
+                Mandate. It does not connect a wallet, submit an order, or
+                send a transaction. Historical Robinhood Chain evidence is
+                labelled LIVE_TESTNET. Fixture venues are not live markets.
               </p>
             </section>
 
@@ -122,9 +123,8 @@ export default function DocsPage(): ReactNode {
               <h2>Build</h2>
               <p>
                 Build agents that propose. Let Mandate handle authority. The
-                pages on this site read mock contracts in <code>lib/mandate/contracts.ts</code>.
-                A later backend can replace that module. The page components
-                should keep the same portfolio, agent, and receipt shape.
+                integration page describes the boundary a later SDK will harden.
+                This site does not ship that SDK.
               </p>
             </section>
 

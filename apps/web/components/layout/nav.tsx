@@ -21,7 +21,7 @@ type NavItem = {
 const NAV_ITEMS: readonly NavItem[] = [
   { label: "Product", href: "/#product" },
   { label: "Marketplace", href: "/#marketplace" },
-  { label: "Developers", href: "/docs#build" },
+  { label: "Developers", href: "/developers" },
   { label: "Security", href: "/#security" },
   { label: "Docs", href: "/docs" },
 ];
@@ -33,6 +33,8 @@ function itemHash(href: string): string {
 
 function isItemActive(pathname: string, hash: string, item: NavItem): boolean {
   const itemAnchor = itemHash(item.href);
+  if (item.href === "/developers") return pathname.startsWith("/developers");
+
   if (item.href.startsWith("/docs")) {
     if (!pathname.startsWith("/docs")) {
       return false;

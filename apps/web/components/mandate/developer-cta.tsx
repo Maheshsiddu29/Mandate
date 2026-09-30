@@ -7,15 +7,15 @@ export function DeveloperCta(): ReactNode {
       <div className="developer-cta">
         <p className="mandate-kicker">Developers</p>
         <h2 id="developer-title">
-          Build agents.
+          Integrate Mandate.
           <span>Let Mandate handle authority.</span>
         </h2>
         <div className="hero-actions">
-          <Link className="button button--primary focus-ring" href="/docs">
-            Read Docs
-          </Link>
-          <Link className="button button--secondary focus-ring" href="/demo">
+          <Link className="button button--primary focus-ring" href="/demo">
             Launch Demo
+          </Link>
+          <Link className="button button--secondary focus-ring" href="/developers">
+            View Integration
           </Link>
         </div>
       </div>

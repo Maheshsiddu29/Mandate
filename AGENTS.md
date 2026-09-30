@@ -372,6 +372,14 @@ only `src/agents.ts` holds a demonstration key. `structure.test.ts`
 enforces all of it. `npm run demo:judge` prints the demo; `npm run
 demo:judge:json` prints the transcript a UI plays back.
 
+`apps/web` (buildathon Milestone B) is a static playback client for that
+transcript. It does not import `@mandate/judge-demo` into the browser and it
+does not change protocol semantics. `npm run web:demo:generate` runs the
+canonical JSON runner and writes `apps/web/generated/judge-demo.v1.json`.
+`npm run web:demo:check` fails if that file drifts. The site is a Next.js
+static export intended for Cloudflare Pages. Judge mode requires no secrets.
+See [docs/demo/web.md](docs/demo/web.md).
+
 `jev:characterize` is the only command that contacts TypeSafe. It refuses to
 run without a credential and exits with code 2, so a blocked run is never
 mistaken for a passing one. Never commit the key.

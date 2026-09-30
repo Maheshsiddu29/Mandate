@@ -24,6 +24,7 @@ export function SiteFooter(): ReactNode {
         <nav className="site-footer__nav" aria-label="Footer navigation">
           <Link className="focus-ring" href="/#product">Product</Link>
           <Link className="focus-ring" href="/#security">Security</Link>
+          <Link className="focus-ring" href="/developers">Developers</Link>
           <Link className="focus-ring" href="/docs">Docs</Link>
           <Link className="focus-ring" href="/demo">Demo</Link>
         </nav>

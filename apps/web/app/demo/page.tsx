@@ -1,15 +1,15 @@
-import { MandateDemo } from "@/components/demo/mandate-demo";
+import { JudgeExperience } from "@/components/demo/judge/judge-experience";
 import { createMetadata } from "@/lib/metadata";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 export const metadata: Metadata = createMetadata({
-  title: "Mandate Demo — One portfolio review",
+  title: "Mandate Demo — Portfolio Mandate",
   description:
-    "A scripted walkthrough of one portfolio mandate, from five agent proposals through policy verification to a receipt. Not a live market execution.",
+    "Judge mode plays the deterministic Mandate transcript: five agents, the Mandate Room, independent verification, and a portfolio receipt. No wallet and no network.",
   path: "/demo",
 });
 
 export default function DemoPage(): ReactNode {
-  return <MandateDemo />;
+  return <JudgeExperience />;
 }

@@ -1,59 +1,57 @@
 # Mandate public web app
 
-This directory is the isolated Next.js public website for Mandate. It owns
-the three public page routes: `/`, `/demo`, and `/docs`.
+This directory is the static public website for Mandate. It plays the
+canonical judge-demo transcript. It does not run the protocol.
 
-The page structure, mock contracts, tokens, and motion choices are described in
-the repository document `docs/public-web.md`.
+Routes: `/`, `/demo`, `/developers`, and `/docs`.
 
 ## Local development
 
-Use Node.js 22.18 or newer. Install and run from this directory so the app uses
-its own lockfile and TypeScript 5 toolchain instead of the repository-root
-TypeScript 7 toolchain.
+Use Node.js 22.18 or newer, and stay below Node 23. Install and run from this
+directory so the app uses its own lockfile.
 
 ```sh
-npm install
+npm ci
 npm run dev
 ```
 
-`NEXT_PUBLIC_SITE_URL` may be set to the canonical production URL, including
-its `https://` scheme. Vercel's `VERCEL_PROJECT_PRODUCTION_URL` and
-`VERCEL_URL` values are used automatically when that variable is absent; local
-development falls back to `http://localhost:3000`. Once the production domain
-is known, configure `NEXT_PUBLIC_SITE_URL` in Vercel for Production so canonical,
-Open Graph, robots, and sitemap URLs use that domain. Preview deployments work
-without it.
+`npm run build` writes a static export to `out/`. `next start` does not serve
+that export. Preview the production files with any static file server pointed
+at `out/`.
 
-## Vercel configuration
+## Transcript asset
+
+The browser plays `generated/judge-demo.v1.json`. That file is produced from
+the repository root, before the site is built:
+
+```sh
+npm run web:demo:generate
+npm run web:demo:check
+```
+
+Cloudflare Pages does not run those commands. The committed asset is the
+playback source. Regenerate it when the judge-demo transcript changes, then
+commit the new file.
+
+## Cloudflare Pages
 
 - Root Directory: `apps/web`
-- Framework Preset: Next.js
-- Install Command: `npm install`
+- Node.js: 22.x (`>=22.18.0 <23`)
+- Install Command: `npm ci`
 - Build Command: `npm run build`
-- Output Directory: leave unset
-- Node.js: 22.x
+- Output Directory: `out`
+- Required environment variables: none
+- Required secrets: none
 
-No `vercel.json` is required. The site uses framework defaults.
-The production script selects Next's supported Webpack builder so it does not
-depend on Turbopack's loopback PostCSS worker in constrained build sandboxes.
+Judge mode needs no wallet, no API key, and no runtime environment variable.
+`NEXT_PUBLIC_SITE_URL` is optional and only affects canonical and Open Graph
+URLs baked in at build time. If it is unset, those URLs fall back to
+`http://localhost:3000`.
 
-## Template attribution
+## What the site is
 
-The site foundation adapts the App Router layout, fixed site frame, floating
-animated navigation, Lenis integration, Motion primitives, reduced-motion
-provider, metadata helpers, spacing approach, and responsive conventions from
-[DavidHDev/rbp-portfolio](https://github.com/DavidHDev/rbp-portfolio), reviewed
-at commit `1581b9b8e5876f60e5eb844970747506980c4412`.
+The `/demo` route is a presentation cursor over the generated transcript.
+Playback does not re-run Mandate, read a key, or call a network. Historical
+explorer links are optional. The demo still plays if the explorer is down.
 
-Portfolio-specific copy, portraits, About/Projects/Contact sections, external
-portfolio imagery, Matter.js physics, dark-theme machinery, and that
-portfolio's OGL WebGL shader were intentionally not carried into this site.
-
-`components/react-bits/` still contains adaptations of React Bits' Scroll Expand
-and Gradient Waves, reviewed at commit
-`b6666e9f3a03a062143ce409f3aac53e27fdfaa8`. The public Mandate pages do not mount
-them. The hero uses an original canvas field. See `THIRD_PARTY_NOTICES.md`.
-
-Manrope is self-hosted through `@fontsource-variable/manrope`; no font or image
-asset is requested from a third-party origin at runtime.
+`/developers` is a placeholder for a later integration surface. It is not an SDK.

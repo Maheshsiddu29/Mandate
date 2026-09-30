@@ -15,7 +15,5 @@ export default defineConfig([
       "react/jsx-no-target-blank": ["error", { enforceDynamicLinks: "always" }],
     },
   },
-  // `public/` is served verbatim, and holds the locally built live-demo
-  // adapter bundle, which is generated output rather than source.
-  globalIgnores([".next/**", "out/**", "public/**", "next-env.d.ts"]),
+  globalIgnores([".next/**", "out/**", "public/**", "next-env.d.ts", "generated/**"]),
 ]);

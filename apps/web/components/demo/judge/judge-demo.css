@@ -1,0 +1,656 @@
+.judge-demo {
+  min-height: 100svh;
+  padding: 6.25rem 0 4rem;
+  background: var(--mandate-background);
+  color: var(--mandate-text);
+}
+
+.judge-demo__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
+  gap: 1rem;
+  align-items: start;
+}
+
+.judge-top {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 1rem 2rem;
+  margin-bottom: 1rem;
+}
+
+.judge-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.judge-brand strong {
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.16em;
+}
+
+.judge-brand h1 {
+  margin: 0;
+  font-size: clamp(1.7rem, 3vw, 2.4rem);
+  font-weight: 520;
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+
+.judge-brand p {
+  margin: 0;
+  max-width: 36rem;
+  color: var(--mandate-text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.judge-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7.2rem, 1fr));
+  gap: 0.55rem;
+  min-width: min(100%, 34rem);
+  margin: 0;
+}
+
+.judge-metrics div {
+  padding: 0.7rem 0.75rem;
+  border: 1px solid var(--mandate-border);
+  border-radius: var(--mandate-radius);
+  background: var(--mandate-surface);
+}
+
+.judge-metrics dt {
+  color: var(--mandate-text-secondary);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.judge-metrics dd {
+  margin: 0.28rem 0 0;
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+
+.judge-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.25rem 0 0.85rem;
+}
+
+.judge-controls button {
+  min-height: 2.5rem;
+}
+
+.judge-demo .button--primary {
+  background: var(--mandate-primary-light);
+  color: var(--mandate-background);
+  box-shadow: none;
+}
+
+.judge-demo .button--secondary {
+  border: 1px solid var(--mandate-border-strong);
+  background: var(--mandate-surface-raised);
+  color: var(--mandate-text);
+  box-shadow: none;
+}
+
+.judge-progress {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.judge-progress__label {
+  margin: 0;
+  color: var(--mandate-primary-light);
+  font-size: 0.75rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.judge-scenes {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.judge-scenes button {
+  width: 100%;
+  min-height: 2.2rem;
+  padding: 0.2rem;
+  border: 1px solid var(--mandate-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--mandate-text-secondary);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.judge-scenes button[aria-current="step"] {
+  border-color: var(--mandate-primary-light);
+  background: rgba(92, 92, 153, 0.35);
+  color: var(--mandate-text);
+}
+
+.judge-meter {
+  height: 0.35rem;
+  margin-top: 0.55rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--mandate-surface-raised);
+}
+
+.judge-meter span {
+  display: block;
+  height: 100%;
+  background: var(--mandate-primary-light);
+}
+
+.judge-stage {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.judge-now {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border-left: 3px solid var(--mandate-primary-light);
+  background: var(--mandate-surface);
+  color: var(--mandate-text);
+  font-size: 0.98rem;
+  line-height: 1.45;
+}
+
+.agent-row,
+.room-agents {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.agent-card,
+.proposal-card,
+.room-panel,
+.verifier-panel,
+.attack-panel,
+.receipt-panel,
+.evidence-panel,
+.conflict-banner,
+.resource-bar {
+  border: 1px solid var(--mandate-border);
+  border-radius: var(--mandate-radius);
+  background: var(--mandate-surface);
+}
+
+.agent-card {
+  display: grid;
+  gap: 0.35rem;
+  min-height: 8.5rem;
+  padding: 0.8rem;
+}
+
+.agent-card.is-in-room {
+  border-color: var(--mandate-border-strong);
+  background: var(--mandate-surface-raised);
+}
+
+.agent-card.is-compromised {
+  box-shadow: inset 0 0 0 1px rgba(255, 125, 145, 0.45);
+}
+
+.agent-card header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.4rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.agent-card h3,
+.proposal-card h3,
+.room-panel h2,
+.verifier-panel h2,
+.attack-panel h2,
+.receipt-panel h2,
+.conflict-banner h2 {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.agent-card h3 {
+  font-size: 0.98rem;
+}
+
+.agent-card p,
+.proposal-card p,
+.room-step p {
+  margin: 0;
+  color: var(--mandate-text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.18rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(204, 204, 255, 0.08);
+  color: var(--mandate-primary-light);
+  font-size: 0.66rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  line-height: 1.25;
+  text-transform: uppercase;
+  white-space: normal;
+}
+
+.status-pill::before {
+  content: "";
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.status-pill--blocked,
+.status-pill--compromised {
+  background: rgba(255, 125, 145, 0.12);
+  color: var(--mandate-blocked);
+}
+
+.status-pill--authorized,
+.status-pill--active,
+.status-pill--valid {
+  background: rgba(99, 214, 181, 0.12);
+  color: var(--mandate-authorized);
+}
+
+.status-pill--conflict,
+.status-pill--negotiating,
+.status-pill--releasing {
+  background: rgba(232, 197, 107, 0.12);
+  color: var(--mandate-warning);
+}
+
+.proposal-list,
+.room-rounds,
+.check-list,
+.reservation-list,
+.receipt-facts {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.proposal-card {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.85rem 0.95rem;
+}
+
+.proposal-card.is-blocked {
+  background: rgba(255, 125, 145, 0.05);
+}
+
+.proposal-card.is-outside {
+  opacity: 0.92;
+}
+
+.fact-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.fact-row span {
+  padding: 0.25rem 0.45rem;
+  border-radius: 8px;
+  background: var(--mandate-surface-raised);
+  font-size: 0.75rem;
+}
+
+.fact-row span strong {
+  font-weight: 700;
+}
+
+.fact-row .is-blocked {
+  color: var(--mandate-blocked);
+}
+
+.fact-row .is-warning {
+  color: var(--mandate-warning);
+}
+
+.conflict-banner,
+.attack-panel,
+.verifier-panel,
+.room-panel,
+.receipt-panel {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.conflict-banner h2,
+.attack-panel h2,
+.receipt-panel h2 {
+  font-size: clamp(1.6rem, 3vw, 2.4rem);
+  line-height: 0.98;
+}
+
+.conflict-banner p,
+.attack-panel p,
+.receipt-panel p,
+.verifier-panel p {
+  margin: 0;
+  color: var(--mandate-text-secondary);
+  line-height: 1.5;
+}
+
+.resource-bar {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.9rem 1rem;
+}
+
+.resource-bar__labels {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+  color: var(--mandate-text-secondary);
+  font-size: 0.82rem;
+}
+
+.resource-bar__labels strong {
+  color: var(--mandate-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.resource-track {
+  position: relative;
+  height: 0.7rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #12121f;
+}
+
+.resource-track i {
+  display: block;
+  height: 100%;
+  background: var(--mandate-primary-light);
+}
+
+.resource-track i.is-over {
+  background: var(--mandate-warning);
+}
+
+.resource-track i.is-reserved {
+  background: var(--mandate-authorized);
+}
+
+.room-panel {
+  background:
+    linear-gradient(180deg, rgba(92, 92, 153, 0.18), transparent 8rem),
+    var(--mandate-surface);
+}
+
+.room-round {
+  display: grid;
+  gap: 0.45rem;
+  padding-top: 0.35rem;
+}
+
+.room-round h3 {
+  margin: 0;
+  color: var(--mandate-primary-light);
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.room-step {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  background: rgba(14, 14, 27, 0.45);
+}
+
+.room-step strong {
+  font-size: 0.86rem;
+}
+
+.check-list li,
+.reservation-list li,
+.receipt-facts li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--mandate-border);
+  font-size: 0.88rem;
+}
+
+.check-list li span:last-child,
+.reservation-list li span:last-child {
+  font-weight: 750;
+  letter-spacing: 0.04em;
+}
+
+.is-pass {
+  color: var(--mandate-authorized);
+}
+
+.is-fail {
+  color: var(--mandate-blocked);
+}
+
+.attack-grid,
+.receipt-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.attack-grid div,
+.receipt-grid div {
+  padding: 0.7rem;
+  border-radius: 10px;
+  background: var(--mandate-surface-raised);
+}
+
+.attack-grid dt,
+.receipt-grid dt {
+  color: var(--mandate-text-secondary);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.attack-grid dd,
+.receipt-grid dd {
+  margin: 0.25rem 0 0;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.mutation {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.mutation s {
+  color: var(--mandate-text-secondary);
+}
+
+.mutation strong {
+  color: var(--mandate-blocked);
+  font-weight: 700;
+}
+
+.evidence-panel {
+  position: sticky;
+  top: 5.5rem;
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.9rem;
+}
+
+.evidence-panel h2 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.evidence-card {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.65rem;
+  border-radius: 10px;
+  background: var(--mandate-surface-raised);
+}
+
+.evidence-card header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.evidence-card p,
+.evidence-card li {
+  margin: 0;
+  color: var(--mandate-text-secondary);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.evidence-card ul {
+  display: grid;
+  gap: 0.2rem;
+  margin: 0.2rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.evidence-card a {
+  color: var(--mandate-primary-light);
+  text-decoration: underline;
+}
+
+.evidence-card.is-historical {
+  box-shadow: inset 3px 0 0 var(--mandate-primary-light);
+}
+
+.evidence-card.is-fixture {
+  box-shadow: inset 3px 0 0 var(--mandate-secondary);
+}
+
+.technical-receipt {
+  color: var(--mandate-text-secondary);
+  font-size: 0.8rem;
+}
+
+.technical-receipt summary {
+  cursor: pointer;
+  color: var(--mandate-primary-light);
+  font-weight: 700;
+}
+
+.technical-receipt pre {
+  margin: 0.6rem 0 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.judge-footnote {
+  margin: 0.4rem 0 0;
+  color: var(--mandate-text-secondary);
+  font-size: 0.78rem;
+}
+
+@media (max-width: 1100px) {
+  .judge-demo__layout,
+  .attack-grid,
+  .receipt-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .evidence-panel {
+    position: static;
+  }
+}
+
+@media (max-width: 860px) {
+  .agent-row,
+  .room-agents,
+  .judge-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .judge-scenes {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .judge-demo {
+    padding-top: 5.4rem;
+  }
+
+  .agent-row,
+  .room-agents,
+  .judge-metrics,
+  .judge-progress {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .judge-demo *,
+  .judge-demo *::before,
+  .judge-demo *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.judge-demo--motion .agent-card,
+.judge-demo--motion .proposal-card,
+.judge-demo--motion .room-step,
+.judge-demo--motion .resource-track i {
+  transition: border-color 240ms var(--mandate-ease), background 240ms var(--mandate-ease), transform 280ms var(--mandate-ease);
+}
+
+.judge-demo--motion .agent-card.is-in-room {
+  transform: translateY(-2px);
+}

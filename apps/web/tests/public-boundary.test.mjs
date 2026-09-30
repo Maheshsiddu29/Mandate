@@ -6,7 +6,7 @@ const APP_URL = new URL("../app/", import.meta.url);
 const COMPONENT_URL = new URL("../components/", import.meta.url);
 const PUBLIC_URL = new URL("../public/", import.meta.url);
 
-test("the public app exposes exactly the three requested page routes", async () => {
+test("the public app exposes the judge demo, developer placeholder, and docs", async () => {
   const rootEntries = await readdir(APP_URL, { withFileTypes: true });
   const nestedRouteNames = rootEntries
     .filter((entry) => entry.isDirectory())
@@ -14,28 +14,30 @@ test("the public app exposes exactly the three requested page routes", async () 
     .filter((name) => !name.startsWith("_"))
     .sort();
 
-  assert.deepEqual(nestedRouteNames, ["demo", "docs"]);
+  assert.deepEqual(nestedRouteNames, ["demo", "developers", "docs"]);
   await Promise.all([
     readFile(new URL("page.tsx", APP_URL), "utf8"),
     readFile(new URL("demo/page.tsx", APP_URL), "utf8"),
+    readFile(new URL("developers/page.tsx", APP_URL), "utf8"),
     readFile(new URL("docs/page.tsx", APP_URL), "utf8"),
   ]);
 });
 
-test("the public demo is a scripted mandate review", async () => {
+test("the public demo plays the judge transcript without a network call", async () => {
   const pageSource = await readFile(new URL("demo/page.tsx", APP_URL), "utf8");
   const componentSource = await readFile(
-    new URL("demo/mandate-demo.tsx", COMPONENT_URL),
+    new URL("demo/judge/judge-experience.tsx", COMPONENT_URL),
     "utf8"
   );
+  const stageSource = await readFile(new URL("demo/judge/stage.tsx", COMPONENT_URL), "utf8");
 
-  assert.match(pageSource, /MandateDemo/);
+  assert.match(pageSource, /JudgeExperience/);
   assert.doesNotMatch(pageSource, /kox-trade-replay|ActivationPhaseChanged|sendTransaction/);
-  assert.match(componentSource, /Scripted walkthrough/);
-  assert.match(componentSource, /not live markets/);
-  assert.match(componentSource, /role="tablist"/);
-  assert.match(componentSource, /prefersReducedMotion/);
-  assert.doesNotMatch(componentSource, /fetch\(|sendTransaction|signTransaction/);
+  assert.match(componentSource, /Judge mode/);
+  assert.match(componentSource, /useReducedMotion/);
+  assert.match(stageSource, /not a live market/);
+  assert.match(componentSource, /role="progressbar"/);
+  assert.doesNotMatch(`${componentSource}\n${stageSource}`, /fetch\(|sendTransaction|signTransaction/);
 });
 
 test("the landing page tells the Mandate product story", async () => {
@@ -86,7 +88,7 @@ test("the hero field pauses outside the viewport and when motion is reduced", as
 
 test("the public routes stay on the dark Mandate surface", async () => {
   const demoSource = await readFile(
-    new URL("demo/mandate-demo.tsx", COMPONENT_URL),
+    new URL("demo/judge/judge-experience.tsx", COMPONENT_URL),
     "utf8"
   );
   const docsSource = await readFile(new URL("docs/page.tsx", APP_URL), "utf8");
@@ -100,7 +102,7 @@ test("the public routes stay on the dark Mandate surface", async () => {
   );
 
   assert.doesNotMatch(backdropSource, /grid/);
-  assert.match(demoSource, /mandate-demo/);
+  assert.match(demoSource, /judge-demo/);
   assert.match(docsSource, /mandate-docs/);
   assert.doesNotMatch(`${demoSource}\n${docsSource}`, /StateGuard|Solana/);
   assert.match(visualSystem, /Manrope Variable/);
@@ -156,7 +158,8 @@ test("public routes use the Mandate name", async () => {
     readFile(new URL("mandate/hero.tsx", COMPONENT_URL), "utf8"),
     readFile(new URL("layout/nav.tsx", COMPONENT_URL), "utf8"),
     readFile(new URL("layout/site-footer.tsx", COMPONENT_URL), "utf8"),
-    readFile(new URL("demo/mandate-demo.tsx", COMPONENT_URL), "utf8"),
+    readFile(new URL("demo/judge/judge-experience.tsx", COMPONENT_URL), "utf8"),
+    readFile(new URL("developers/page.tsx", APP_URL), "utf8"),
     readFile(new URL("../lib/metadata.ts", import.meta.url), "utf8"),
   ]);
   const visible = sources.join("\n");
@@ -185,7 +188,7 @@ test("production metadata, icons, social preview, and 404 are complete", async (
   assert.match(notFoundSource, /Page not found/);
   assert.match(notFoundSource, /Back to Mandate/);
   assert.match(readmeSource, /Root Directory: `apps\/web`/);
-  assert.match(readmeSource, /Output Directory: leave unset/);
+  assert.match(readmeSource, /Output Directory: `out`/);
   assert.match(ignoreSource, /^next-env\.d\.ts$/m);
 
   const openGraphImage = await readFile(new URL("opengraph-image.png", APP_URL));
