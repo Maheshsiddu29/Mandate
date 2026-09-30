@@ -117,6 +117,9 @@ export function countingExecutor(core: PortfolioCore): { readonly execute: Child
   };
 }
 
+/** Seconds between reservation and execution in a live run: none — see runProtocol. */
+export const LIVE_EXECUTE_AFTER_SECONDS = 0n;
+
 export interface ProtocolRun {
   readonly run: PortfolioRun;
   /** Executor calls this run made; each one is for a child the verifier derived and the ledger reserved. */
@@ -131,7 +134,10 @@ export interface ProtocolRun {
  */
 export async function runProtocol(core: PortfolioCore, signature: string, now: bigint, proposals: readonly SignedProposal[]): Promise<ProtocolRun> {
   const executor = countingExecutor(core);
-  const run = await runPortfolio({ core, signature, now, agents: proposals.map((s) => new FixedProposalStrategy(s)), execute: executor.execute });
+  // The lab's protocol clock follows real time and the executor runs now, so execution is stamped now. The default
+  // (now + 5 s) would put a ledger event in the future and refuse the session's next reservation within five
+  // seconds as EVALUATION_TIME_REGRESSED — a refresh or a policy-stress case after the final pass.
+  const run = await runPortfolio({ core, signature, now, agents: proposals.map((s) => new FixedProposalStrategy(s)), execute: executor.execute, executeAfter: LIVE_EXECUTE_AFTER_SECONDS });
   return { run, executorCalls: executor.calls(), transactions: run.receipt.transactions };
 }
 

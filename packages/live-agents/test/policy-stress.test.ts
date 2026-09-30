@@ -226,3 +226,19 @@ describe('the policy-stress run is bounded and fails closed', () => {
     assert.deepEqual(signed?.data['requested'], [{ resource: 'portfolio-notional', atoms: POLICY_CASE_ATOMS.toString(), amount: '100' }]);
   });
 });
+
+describe('ledger time after a reservation', () => {
+  it('a compliant case in the same protocol second as the final pass is not refused as a time regression', async () => {
+    const time = new TestTime();
+    const provider = new ScriptedProvider({
+      decide: (r) => ({ text: r.role === 'swap' ? json({ action: 'PROPOSE', candidateId: 'route-a', requestedAtoms: '200000000', rationale: 'reviewed route' }) : json({ action: 'ABSTAIN', candidateId: null, requestedAtoms: null, rationale: 'no' }) }),
+      policyCase: () => ({ text: pick('COMPLIANT_CONTROL') }),
+    });
+    const s = new LiveSession({ provider, sessionId: 'ledger-time', agentTimeoutMs: 1_000, roomRoundTimeoutMs: 1_000, protocolNow: time.read });
+    assert.ok((await s.authorize(presetDraft('balanced'), 'AUTHORIZE MANDATE V1')).ok);
+    const run = await s.run();
+    assert.equal(run.status, 'AUTHORIZED');
+    const r = await s.runPolicyStress({ maxAttempts: 1 });
+    assert.deepEqual(r.attempts.map((a) => [a.caseId, a.outcome, a.reasons.join(',')]), [['COMPLIANT_CONTROL', 'AUTHORIZED', '']]);
+  });
+});
