@@ -18,6 +18,8 @@ import { DEMO_NOW, USDC } from '@mandate/portfolio/demo';
 
 /** The canonical demonstration's decision time: scenes 1–5. */
 export const INITIAL_TIME = DEMO_NOW;
+/** Seconds after a run's decision time at which its executor runs: `runPortfolio`'s default. */
+export const EXECUTE_AFTER = 5n;
 /** When the replay probe presents every reserved child again (scene 5). */
 export const REPLAY_PROBE_TIME = DEMO_NOW + 10n;
 /** Scene 6: the compromised agent's attempt. */
