@@ -26,6 +26,7 @@ import { amountViews, enabledRoles } from './context.ts';
 import { discover, discoverAgent, type AgentOutcome, type DiscoveryDeps } from './discovery.ts';
 import type { JevAdvisor } from './jev/advisor.ts';
 import { NoopJevAdvisor } from './jev/noop-advisor.ts';
+import { runPolicyStress, type PolicyStressResult, type Submission } from './policy-stress/runner.ts';
 import { availabilityAt, ledgerView, runProtocol, sessionBindings, type ProtocolRun } from './mandate/portfolio-adapter.ts';
 import { buildProposal, demandOf, SequenceBook } from './mandate/proposal-builder.ts';
 import { LocalPrincipalSigner, createAgentSigners, type LocalAgentSigner } from './mandate/signer.ts';
@@ -367,6 +368,71 @@ export class LiveSession {
     const reservedCount = [...first.proposals, ...refreshed].filter((p) => p.outcome === 'RESERVED').length;
     const status: RunStatus = reservedCount === 0 ? 'REFUSED' : reservedCount === items.length ? 'AUTHORIZED' : 'PARTIALLY_AUTHORIZED';
     return this.#result(status, active.version, epoch, outcomes, room, { final: first.proposals, refreshed, receipts, reservedAtoms: reserved, executorCalls, transactions: 0 });
+  }
+
+  // --- Policy stress ------------------------------------------------------------------------
+
+  /**
+   * The policy-stress run (docs/demo/live-ai-lab.md §7): a model selects
+   * preconstructed cases, each signed by the swap agent's own signer and
+   * decided by the real Mandate path under the version active at the time.
+   */
+  async runPolicyStress(o: { readonly maxAttempts?: number } = {}): Promise<PolicyStressResult> {
+    if (this.#running) throw new Error('this session is already running');
+    this.#running = true;
+    try {
+      const signer = this.signers.get('swap') as LocalAgentSigner;
+      return await runPolicyStress(
+        {
+          provider: this.provider,
+          clock: this.clock,
+          events: this.events,
+          signer,
+          sameSignerAsSwapAgent: signer === this.signers.get('swap'),
+          sequences: this.#sequences,
+          protocolNow: this.protocolNow,
+          timeoutMs: this.#o.agentTimeoutMs,
+          current: () => this.versions.active,
+          submit: (active, signed) => this.#submitOne(active, signed),
+        },
+        o,
+      );
+    } finally {
+      this.#running = false;
+    }
+  }
+
+  /** One signed proposal through runPortfolio, holding the version still; reports what the ledger looked like before and after. */
+  async #submitOne(active: ActiveMandate, signed: SignedProposal): Promise<Submission> {
+    const before = await ledgerView(active.core);
+    if (!this.versions.beginReservation()) {
+      return { submitted: false, reserved: false, reasons: [], verification: 'NOT_RUN', receiptDigest: null, ledgerVersionBefore: before.version, ledgerVersionAfter: before.version, reservationsBefore: before.reservations.length, reservationsAfter: before.reservations.length, runtime: 'SESSION:AUTHORIZATION_IN_PROGRESS' };
+    }
+    let reserved = false;
+    try {
+      const run = (await runProtocol(active.core, active.signature, this.protocolNow(), [signed])).run;
+      const d = proposalDigest(signed.proposal);
+      const decision = run.room.decisions.filter((x) => x.proposal === d).at(-1);
+      const child = run.verification.status === 'VERIFIED' ? run.verification.children.find((c) => c.proposal === d) : undefined;
+      const reservation = child === undefined ? undefined : run.reservations.find((x) => x.child === child.digest);
+      reserved = reservation?.status === 'RESERVED';
+      const reasons: Reason[] = [...(decision?.reasons ?? []), ...(run.verification.status === 'REFUSED' ? run.verification.reasons : []), ...(reservation?.reasons ?? [])];
+      const after = await ledgerView(active.core);
+      return {
+        submitted: true,
+        reserved,
+        reasons: reserved ? [] : [...new Set(reasonCodes(reasons))],
+        verification: run.verification.status,
+        receiptDigest: run.digest,
+        ledgerVersionBefore: before.version,
+        ledgerVersionAfter: after.version,
+        reservationsBefore: before.reservations.length,
+        reservationsAfter: after.reservations.length,
+        runtime: null,
+      };
+    } finally {
+      this.versions.endReservation(reserved);
+    }
   }
 
   /** Wait for every late reply to land (each is bounded by its own timeout), then close the stream. */
