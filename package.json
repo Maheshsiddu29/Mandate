@@ -19,7 +19,8 @@
     "packages/perp-lighter",
     "packages/evm-robinhood",
     "packages/portfolio",
-    "packages/judge-demo"
+    "packages/judge-demo",
+    "packages/live-agents"
   ],
   "scripts": {
     "audit:security": "npm audit --audit-level=high",

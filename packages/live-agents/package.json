@@ -1,0 +1,20 @@
+{
+  "name": "@mandate/live-agents",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Buildathon Milestone B.5: the Live AI Lab. Model-backed agents act autonomously under a Portfolio Mandate the principal authors live; the frozen Portfolio Mandate (Phase 7F) remains the only authorization boundary. Models return candidate ids and amounts from closed sets; trusted local code builds, signs and hands every proposal to the real screening, Mandate Room, Portfolio Verifier and ledger. Emits the MANDATE_LIVE_AI.V1 event stream.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "dependencies": {
+    "@mandate/control": "0.1.0",
+    "@mandate/core": "0.1.0",
+    "@mandate/kernel": "0.1.0",
+    "@mandate/ledger": "0.1.0",
+    "@mandate/portfolio": "0.1.0"
+  }
+}
