@@ -115,7 +115,7 @@ authorization.
 
 The dependency directions are `adapter → registry → kernel`,
 `router → registry → kernel`, `jev → router → registry → kernel`,
-`execution-gate → kernel`, `core → kernel`, `ledger → core → kernel`, `control → ledger → core → kernel`, `ledger-sqlite → ledger → core` and `perp-lighter → control, ledger-sqlite, ledger, core, kernel` and `evm-robinhood → control, ledger-sqlite, ledger, core, execution-gate, kernel` and `portfolio → evm-robinhood, perp-lighter, control, ledger, registry, execution-gate, core, kernel`, never the reverse, and it is enforced by structural tests
+`execution-gate → kernel`, `core → kernel`, `ledger → core → kernel`, `control → ledger → core → kernel`, `ledger-sqlite → ledger → core` and `perp-lighter → control, ledger-sqlite, ledger, core, kernel` and `evm-robinhood → control, ledger-sqlite, ledger, core, execution-gate, kernel` and `portfolio → evm-robinhood, perp-lighter, control, ledger, registry, execution-gate, core, kernel` and `judge-demo → portfolio, core, kernel`, never the reverse, and it is enforced by structural tests
 ([ADR 0004](docs/adr/0004-registry-package-boundary.md),
 [ADR 0012](docs/adr/0012-jev-closed-set-authority-boundary.md)). The kernel,
 registry and router perform no I/O; the Robinhood adapter and the Jev client
@@ -359,6 +359,18 @@ enforces all of it. `npm run portfolio-corpus:generate` regenerates
 `corpus/portfolio-demo-v1` (part of `generated:check`); `npm run
 portfolio:demo` prints the offline demonstration and `npm run
 portfolio:benchmark` measures it.
+
+`packages/judge-demo` (buildathon Milestone A, [docs/demo/judge-demo.md](docs/demo/judge-demo.md))
+is presentation only: it runs the frozen portfolio layer once, offline, and
+narrates what it returned as the `MANDATE_JUDGE_DEMO.V1` event transcript.
+It changes no protocol semantics and nothing depends on it. Its
+dependencies are fixed to `@mandate/portfolio`, `@mandate/core`,
+`@mandate/kernel` and `@noble/hashes`; its source reads no clock,
+randomness or environment and makes no network call; only
+`src/evidence-files.ts` reads files (the committed Phase 7E.3 records) and
+only `src/agents.ts` holds a demonstration key. `structure.test.ts`
+enforces all of it. `npm run demo:judge` prints the demo; `npm run
+demo:judge:json` prints the transcript a UI plays back.
 
 `jev:characterize` is the only command that contacts TypeSafe. It refuses to
 run without a credential and exits with code 2, so a blocked run is never

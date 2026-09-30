@@ -100,3 +100,149 @@ the evidence event.
 
 Never claimed: five live integrations, five live executions, any real asset
 traded, any guaranteed return.
+
+## 6. How to run
+
+```bash
+npm run demo:judge        # human-readable: one line per event, scene by scene
+npm run demo:judge:json   # the complete MANDATE_JUDGE_DEMO.V1 transcript, for a UI
+```
+
+Both are offline and deterministic: no network, no RPC, no key file, no
+environment variable, no transaction. They run the real Mandate code once
+against a fresh in-memory ledger and read the two committed Phase 7E.3
+records. The output is byte-identical on every run (asserted in
+`determinism.test.ts`).
+
+## 7. The run
+
+Every value below is what the current code produces; the tests assert it.
+
+| Scene | What the protocol returned |
+| ---: | --- |
+| 1 | Principal `0x51f0…5904`, HYBRID, `portfolio-notional` 2,000 USDC (plus `derivative-notional` 400, `illiquid-notional` 400, `spot-capital` 800, `perp-margin` 400); five agents; mandate digest `0x489a…da3c` |
+| 2 | The agents first ask for **2,550**. Blocked (security invalid): stock's same-ticker look-alike (`REGISTRY:ISSUER_NOT_ALLOWED`, `REGISTRY:SYNTHETIC_NOT_ALLOWED`); swap's unknown router quoting 4.16 % more (`VENUE_NOT_ALLOWED`); NFT's same-name impostor (`ASSET_NOT_ALLOWED`, `REPRESENTATION_NOT_ALLOWED`); yield's 12.60 % advertised APY vault (`ASSET_NOT_ALLOWED`, `ISSUER_NOT_ALLOWED`, `REPRESENTATION_NOT_ALLOWED`, `VENUE_NOT_ALLOWED`). Admissible: stock 600, swap 300, yield 700. Locally valid, in conflict: perps 600 (`PORTFOLIO_LIMIT_EXCEEDED` on `derivative-notional`). NFT: no compliant opportunity |
+| 3 | Admissible demand 2,200 > 2,000 `portfolio-notional`; 600 > 400 `derivative-notional` |
+| 4 | Round 1: perps asked to reduce. Round 2: NFT releases 250 (+400 illiquid); stock claims 100 of it, swap 50; perps resubmits 400 (claims 400 `derivative-notional` from the unallocated remainder); yield asked to reduce to 600 (`ALLOCATION_INSUFFICIENT`). Round 3: yield resubmits 600, claims the last 100. Proposed: 1,900 — not authorized |
+| 5 | 17 of 17 verifier checks pass; a forged Room output also accepting the look-alike is refused (`REGISTRY:*`); four children reserved; **1,900 of 2,000 reserved, 100 available**; swap and yield settle `SIMULATED`, stock and perps `AWAITING_DOMAIN_SIGNER`; every child presented again is refused `LEDGER:REQUEST_INVALID/RESERVATION_EXISTS`, ledger version unchanged |
+| 6 | The swap agent, same key, signs the approved swap with `recipient` → `eip155:421614/account:0x9999…9999`. Signature valid, identity valid, capability active; **`RECIPIENT_NOT_ALLOWED`**; a Room accepting it anyway is refused by the verifier. 0 reservations, 0 attempts, 0 executor calls, 0 transactions; ledger version unchanged |
+| 7 | All four reservations still live (swap, yield `ADMITTED`; stock, perps `RESERVED`), 1,900 reserved, every agent's headroom unchanged |
+| 8 | The same key signs the swap paying the principal (50 USDC): verified, reserved, `SIMULATED`; **1,950 of 2,000** |
+| 9 | Yield asks to add 200 — screening passes, its own headroom is 200 — but 50 is left: `REDUCE_REQUESTED` / `ALLOCATION_INSUFFICIENT`, target 50; it resubmits 50; verified and reserved: **2,000 of 2,000** |
+| 10 | Receipt V2 digests — initial `0x6d47bd67…41e1ad` (the committed `portfolio-demo-v1` receipt), attack `0x57726245…b11ab8`, compliant `0x03d3b1dc…709950`, conflict `0xfbba37ba…8d9bc4`; the 7E.3 BUY `0x7144f09f…dff344`; **0 transactions** |
+
+89 events in all (scene 1: 1, 2: 22, 3: 1, 4: 15, 5: 17, 6: 3, 7: 1, 8: 11, 9: 12, 10: 6).
+
+### Sources
+
+- Scenes 1–5: `runDemo()` from `@mandate/portfolio/demo` — the canonical Phase
+  7F mandate, markets and agents (`packages/portfolio/src/demo/*`), whose
+  receipt is `corpus/portfolio-demo-v1/receipt.json`.
+- Scenes 6–9: `runPortfolio` against the same ledger with the inputs in
+  `packages/judge-demo/src/scenario.ts` (when, what the compromised agent
+  tries, what it then does, the top-up) — inputs only, no outcomes.
+- Scene 10: every run's own receipt; `docs/phase-7e/deployment-manifest.json`
+  and `docs/phase-7e/robinhood-demo-receipt.json`.
+
+## 8. Continuation semantics and limits
+
+- **Scenes 6, 8 and 9 are new Portfolio runs on the same ledger.** That is the
+  frozen API's own model for a portfolio over time: each run reads the
+  ledger's availability, and the ledger alone enforces the hard limits. No
+  replay store or allocation ledger is added.
+- **The allocation book starts from the mandate each run.** Allocation is
+  coordination, not ledger state (implementation-7f.md §3.2). A later run's
+  Room therefore sees each agent's preferred allocation again, capped by
+  what the ledger says is left; a continuation can give an agent more than
+  its preferred share, never more than its hard maximum or the portfolio
+  limit. Durable allocation would need allocation events in Core.
+- **Agent sequences continue** across runs (the swap agent signs 3, then 4;
+  yield 4, then 5), but the verifier enforces monotonicity only within one
+  transcript; replay of the *same* signed proposal is refused by the ledger
+  (security-fixes-7f2.md §4–§5).
+- **A refused action revokes nothing.** The compromised agent's earlier
+  legitimate reservation stays live; a principal emergency stop is out of
+  scope.
+- **A Core bypass is not narrated.** Going around the Portfolio straight to
+  the control engine is covered by `packages/portfolio/test/malicious.test.ts`;
+  at the attack's time Core refuses the forged child because its window has
+  ended, which is true but would not show the recipient rule.
+- Nothing is executed on a live venue: stock and perps children are handed
+  to their domains' signers; swap, NFT and yield venues are fixtures.
+
+## 9. UI integration contract
+
+The UI consumes `npm run demo:judge:json` (or `runJudgeDemo(...).transcript`)
+and plays it back. It never re-runs the protocol per frame.
+
+```text
+protocol run  →  deterministic event transcript  →  UI playback
+```
+
+**Transcript.** `{ schema: "MANDATE_JUDGE_DEMO.V1", version: 1,
+presentationOnly: true, events, presentationDigest }`.
+
+**Event.** Every event has every field:
+
+| Field | Meaning |
+| --- | --- |
+| `sequence` | 0, 1, 2, … — the logical tick and the only order |
+| `scene` | 1–10 (`SCENES` gives titles) |
+| `kind` | one of `EVENT_KINDS` |
+| `run` | `initial`, `attack`, `compliant`, `conflict`, or `null` |
+| `round` | the Mandate Room round, for events the Room produced |
+| `protocolTime` | the decision time passed to the protocol (unix seconds, decimal text) — a parameter, not a clock |
+| `agent` | `{ id, label }` — `id` is the agent's address; key animations by it |
+| `domain` | `robinhood-evm`, `swap-fixture`, `nft-fixture`, `yield-fixture`, `lighter-perp` |
+| `proposal`, `candidate` | the signed proposal's and its candidate's digests — stable identities |
+| `requested`, `approved` | `AmountView[]`: `{ resource, unit, decimals, atoms, amount }`, exact decimal text |
+| `status` | one of `EVENT_STATUSES`, for colour |
+| `reasons` | `{ code, subject }[]` — real protocol reason codes |
+| `evidence` | an evidence class where the event is about evidence or an execution |
+| `artifacts` | `{ name, value }[]` — digests, reservation ids, transaction hashes |
+| `message` | one presentation line; the values are in `data` |
+| `data` | kind-specific detail (checklists, changed fields, per-agent states, receipt summaries) |
+
+**The breakout room.** `MANDATE_ROOM_OPENED.data.participants` lists who
+enters; `AGENT_RELEASED_AUTHORITY`, `AGENT_REDUCTION_REQUESTED`,
+`AGENT_PROPOSAL_REDUCED`, `AUTHORITY_REALLOCATED` (with `data.from` and
+`data.lot`) and `PROPOSAL_ACCEPTED` follow in the Room's own order, grouped
+by `round`; `MANDATE_ROOM_PROPOSED_PORTFOLIO` closes it, still unauthorized.
+Blocked proposals are listed in `data.excludedAtScreening` and must not be
+drawn inside the room.
+
+**Controls.** `new DemoPlayback(events)` gives `start`, `pause`, `resume`,
+`next`, `restart`, `state`, `position` and `shown`. It is a cursor with no
+timer: the UI decides when to call `next()`.
+
+**The UI must not** treat any event, summary or digest as authority; compute
+amounts with floats (use `atoms`); present `presentationDigest` as a protocol
+commitment (it is keccak over canonical JSON, for detecting drift between a
+UI build and the protocol; the commitments are the receipt digests); or
+label anything LIVE_TESTNET except the `LIVE_TESTNET_EVIDENCE` event and the
+Robinhood integration it backs.
+
+## 10. Package and tests
+
+`packages/judge-demo` (`@mandate/judge-demo`) depends on `@mandate/portfolio`,
+`@mandate/core`, `@mandate/kernel` and `@noble/hashes`; nothing depends on
+it. Its source reads no clock, randomness or environment and makes no
+network call; `evidence-files.ts` is its only filesystem access, and
+`agents.ts` its only key holder. There is no model in it.
+
+| Module | Role |
+| --- | --- |
+| `protocol.ts` | runs the real protocol once, in order, and the probes; snapshots the ledger |
+| `scenario.ts` | continuation inputs and decision times |
+| `agents.ts` | `AgentIdentity` (the key, private, counted) and `ContinuationAgent` |
+| `malicious-agent.ts`, `opportunities.ts` | the attack, the compliant swap, the top-up |
+| `proposals.ts`, `explain.ts` | real screening beside each Room decision; plain language over real codes |
+| `portfolio-scenes.ts`, `room.ts`, `verification.ts`, `attack-scenes.ts`, `continuation-scenes.ts`, `receipt.ts` | scenes 1–10 |
+| `evidence.ts`, `evidence-files.ts` | the Phase 7E.3 evidence parser and its loader |
+| `events.ts`, `playback.ts`, `render.ts`, `orchestrator.ts` | the contract, controls, text output, and `runJudgeDemo` |
+
+Tests (`packages/judge-demo/test`): `structure`, `events`, `playback`,
+`scenario` (scenes 1–3), `room` (4–5), `malicious-agent` (6),
+`continuation` (7–9), `receipt` and `evidence` (10), `adversarial` (the
+end-to-end security test through the public API, reproducing the demo's
+receipts), `determinism`.
