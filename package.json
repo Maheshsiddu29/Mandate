@@ -68,7 +68,9 @@
     "portfolio:demo": "node packages/portfolio/scripts/demo.ts",
     "portfolio:benchmark": "node packages/portfolio/scripts/benchmark.ts",
     "demo:judge": "node packages/judge-demo/scripts/judge-demo.ts",
-    "demo:judge:json": "node packages/judge-demo/scripts/judge-demo.ts --json"
+    "demo:judge:json": "node packages/judge-demo/scripts/judge-demo.ts --json",
+    "web:demo:generate": "node scripts/generate-judge-demo-asset.ts",
+    "web:demo:check": "node scripts/check-judge-demo-asset.ts"
   },
   "devDependencies": {
     "@openzeppelin/contracts": "5.6.1",
