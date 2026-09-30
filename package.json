@@ -20,7 +20,8 @@
     "packages/evm-robinhood",
     "packages/portfolio",
     "packages/judge-demo",
-    "packages/live-agents"
+    "packages/live-agents",
+    "packages/live-settlement"
   ],
   "scripts": {
     "audit:security": "npm audit --audit-level=high",

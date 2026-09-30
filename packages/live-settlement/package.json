@@ -1,0 +1,24 @@
+{
+  "name": "@mandate/live-settlement",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Buildathon Milestone B.5.2: the one explicit Robinhood Chain TESTNET settlement path for the Live AI Lab. A Stock child the real Mandate path verified and reserved is mapped, by a declared testnet settlement fixture, onto a valueless MDEMO BUY on the deployed Phase 7E.3 MandateExecutionGate and handed to the existing robinhood-gate-signer (ADMIT_ATTEMPT, custody, preflight). Dry-run by default; a broadcast needs the operator's exact authorization phrase. The only package in the Live AI Lab with RPC or signing capability.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "dependencies": {
+    "@mandate/control": "0.1.0",
+    "@mandate/core": "0.1.0",
+    "@mandate/evm-robinhood": "0.1.0",
+    "@mandate/execution-gate": "0.1.0",
+    "@mandate/kernel": "0.1.0",
+    "@mandate/ledger": "0.1.0",
+    "@mandate/ledger-sqlite": "0.1.0",
+    "@mandate/live-agents": "0.1.0",
+    "@mandate/portfolio": "0.1.0"
+  }
+}
