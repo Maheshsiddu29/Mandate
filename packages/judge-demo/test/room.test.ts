@@ -9,9 +9,10 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { addVectors, amountOf, releaseDigest, verifyTranscript, type ResourceVector } from '@mandate/portfolio';
 import { USDC, demoParty } from '@mandate/portfolio/demo';
-import { claimsByCommit, runJudgeDemo, type JudgeEvent } from '../src/index.ts';
+import { claimsByCommit, type JudgeEvent } from '../src/index.ts';
+import { judgeDemo } from './support/demo.ts';
 
-const demo = runJudgeDemo();
+const demo = judgeDemo();
 const scene = (events: readonly JudgeEvent[], n: number, kind?: string) => events.filter((e) => e.scene === n && (kind === undefined || e.kind === kind));
 
 describe('scene 4: the Mandate Room', () => {

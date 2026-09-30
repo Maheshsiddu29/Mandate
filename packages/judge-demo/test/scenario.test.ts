@@ -9,9 +9,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { addVectors, amountOf, portfolioMandateDigest, proposalDigest, screenProposal, type ResourceVector } from '@mandate/portfolio';
 import { DEMO_OPPORTUNITIES, USDC } from '@mandate/portfolio/demo';
-import { INITIAL_TIME, ROLES, runJudgeDemo, type JudgeEvent } from '../src/index.ts';
+import { INITIAL_TIME, ROLES, type JudgeEvent } from '../src/index.ts';
+import { judgeDemo } from './support/demo.ts';
 
-const demo = runJudgeDemo();
+const demo = judgeDemo();
 const of = (events: readonly JudgeEvent[], kind: string) => events.filter((e) => e.kind === kind);
 const corpus = JSON.parse(readFileSync(new URL('../../../corpus/portfolio-demo-v1/receipt.json', import.meta.url), 'utf8')) as { receiptDigest: string };
 

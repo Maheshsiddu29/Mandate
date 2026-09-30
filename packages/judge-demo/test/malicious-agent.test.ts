@@ -9,9 +9,10 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { agentPolicyOf, proposalSignedByAgent, screenProposal, validateAgentProposal, agentProposalInputOf } from '@mandate/portfolio';
 import { PRINCIPAL_ON_ARBITRUM, demoParty } from '@mandate/portfolio/demo';
-import { ATTACKER_RECIPIENT, ATTACK_TIME, AgentIdentity, runJudgeDemo, type JudgeEvent } from '../src/index.ts';
+import { ATTACKER_RECIPIENT, ATTACK_TIME, AgentIdentity, type JudgeEvent } from '../src/index.ts';
+import { judgeDemo } from './support/demo.ts';
 
-const demo = runJudgeDemo();
+const demo = judgeDemo();
 const one = (events: readonly JudgeEvent[], kind: string): JudgeEvent => {
   const found = events.filter((e) => e.kind === kind);
   assert.equal(found.length, 1, kind);

@@ -10,9 +10,10 @@ import assert from 'node:assert/strict';
 import { actionId } from '@mandate/core';
 import { amountOf, checkChildAuthorization, compileAction, proposalSignedByAgent, reservationPhase, screenProposal } from '@mandate/portfolio';
 import { PRINCIPAL_ON_ARBITRUM, USDC } from '@mandate/portfolio/demo';
-import { COMPLIANT_TIME, CONFLICT_TIME, runJudgeDemo, type JudgeEvent } from '../src/index.ts';
+import { COMPLIANT_TIME, CONFLICT_TIME, type JudgeEvent } from '../src/index.ts';
+import { judgeDemo } from './support/demo.ts';
 
-const demo = runJudgeDemo();
+const demo = judgeDemo();
 const one = (events: readonly JudgeEvent[], kind: string): JudgeEvent => {
   const found = events.filter((e) => e.kind === kind);
   assert.equal(found.length, 1, kind);

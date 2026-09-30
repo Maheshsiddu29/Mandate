@@ -17,7 +17,9 @@ import { emitAgentSearch, emitPortfolioCreated, emitResourceConflict } from './p
 import { proposalEntries } from './proposals.ts';
 import { runJudgeProtocol, type JudgeProtocol } from './protocol.ts';
 import { emitRoom } from './room.ts';
-import { INITIAL_TIME, REPLAY_PROBE_TIME } from './scenario.ts';
+import type { RobinhoodLiveEvidence } from './evidence.ts';
+import { emitCompleted, emitLiveEvidence, emitReceipts, type ReceiptRun } from './receipt.ts';
+import { ATTACK_TIME, COMPLIANT_TIME, CONFLICT_TIME, INITIAL_TIME, REPLAY_PROBE_TIME } from './scenario.ts';
 import { emitReplayProbe, emitVerification } from './verification.ts';
 
 export interface JudgeTranscript {
@@ -37,8 +39,31 @@ export interface JudgeDemo {
 
 const sum = (vs: readonly ResourceVector[]): ResourceVector => vs.reduce<ResourceVector>((v, w) => addVectors(v, w), []);
 
-export async function runJudgeDemo(): Promise<JudgeDemo> {
+/**
+ * Evidence claims must be backed. A domain may be labelled LIVE_TESTNET only
+ * when recorded testnet evidence exists for a chain its agents are
+ * authorized on; and nothing executed in this run may be LIVE_TESTNET,
+ * because this run sends nothing.
+ */
+export function checkEvidenceClaims(p: JudgeProtocol, evidence: RobinhoodLiveEvidence): void {
+  for (const b of p.core.compiled.bindings) {
+    if (b.evidence !== 'LIVE_TESTNET') continue;
+    const chains = p.mandate.agents.filter((a) => a.scope.domains.includes(b.domain)).flatMap((a) => a.scope.chains as readonly string[]);
+    if (!chains.includes(evidence.chain)) throw new Error(`${b.domain} is labelled LIVE_TESTNET without recorded evidence on its chain`);
+  }
+  for (const r of [p.initial, p.attack, p.compliant, p.conflict]) {
+    for (const e of r.executions) if (e.evidence === 'LIVE_TESTNET' || e.transactions !== 0) throw new Error(`an execution in this offline run claims ${e.evidence} with ${e.transactions} transactions`);
+  }
+}
+
+export interface JudgeDemoInput {
+  /** The recorded Phase 7E.3 evidence (evidence-files.ts). */
+  readonly evidence: RobinhoodLiveEvidence;
+}
+
+export async function runJudgeDemo(input: JudgeDemoInput): Promise<JudgeDemo> {
   const protocol = await runJudgeProtocol();
+  checkEvidenceClaims(protocol, input.evidence);
   const log = new EventLog();
   const x = sceneContext(log, protocol);
   const initial = proposalEntries(protocol.mandate, protocol.core.compiled.bindings, protocol.initial.room, INITIAL_TIME);
@@ -59,6 +84,17 @@ export async function runJudgeDemo(): Promise<JudgeDemo> {
   emitFaultIsolation(x);
   emitCompliant(x);
   emitPortfolioConflict(x);
+
+  log.scene(10);
+  emitLiveEvidence(x, input.evidence);
+  const runs: ReceiptRun[] = [
+    { run: 'initial', time: INITIAL_TIME, receipt: p.initial.receipt, digest: p.initial.digest },
+    { run: 'attack', time: ATTACK_TIME, receipt: p.attack.receipt, digest: p.attack.digest },
+    { run: 'compliant', time: COMPLIANT_TIME, receipt: p.compliant.receipt, digest: p.compliant.digest },
+    { run: 'conflict', time: CONFLICT_TIME, receipt: p.conflict.receipt, digest: p.conflict.digest },
+  ];
+  emitReceipts(x, runs);
+  emitCompleted(x, runs, input.evidence);
   return {
     protocol,
     transcript: { schema: JUDGE_DEMO_SCHEMA, version: JUDGE_DEMO_SCHEMA_VERSION, presentationOnly: true, events: log.events, presentationDigest: presentationDigest(log.events) },
