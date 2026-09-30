@@ -29,9 +29,9 @@ const IO_MODULES = ['evidence-files.ts'];
 const KEY_MODULES = ['agents.ts'];
 
 describe('judge-demo structural boundary', () => {
-  it('depends only on Core, the portfolio layer and the kernel’s pinned hash package', () => {
+  it('depends only on the kernel, Core, the portfolio layer and the kernel’s pinned hash package', () => {
     const manifest = JSON.parse(readFileSync(new URL('package.json', ROOT), 'utf8')) as { dependencies?: { [name: string]: string } };
-    assert.deepEqual(manifest.dependencies, { '@mandate/core': '0.1.0', '@mandate/portfolio': '0.1.0', '@noble/hashes': '2.4.0' });
+    assert.deepEqual(manifest.dependencies, { '@mandate/core': '0.1.0', '@mandate/kernel': '0.1.0', '@mandate/portfolio': '0.1.0', '@noble/hashes': '2.4.0' });
   });
 
   it('reads no clock, randomness or environment, and makes no network call', () => {

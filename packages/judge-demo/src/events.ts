@@ -112,7 +112,7 @@ export type RunId = (typeof RUN_IDS)[number];
 
 export type Json = string | number | boolean | null | readonly Json[] | { readonly [key: string]: Json };
 
-export interface AmountView {
+export type AmountView = {
   readonly resource: string;
   readonly unit: string;
   readonly decimals: number;
@@ -120,25 +120,25 @@ export interface AmountView {
   readonly atoms: string;
   /** Exact decimal text at the resource's declared decimals, trailing zeros trimmed. */
   readonly amount: string;
-}
+};
 
-export interface AgentRef {
+export type AgentRef = {
   /** The agent's party value (its address). */
   readonly id: string;
   /** The mandate's own label for it. */
   readonly label: string;
-}
+};
 
-export interface ReasonView {
+export type ReasonView = {
   readonly code: string;
   readonly subject: string;
-}
+};
 
-export interface ArtifactRef {
+export type ArtifactRef = {
   /** What the value is, e.g. `proposalDigest`, `receiptDigest`, `reservation`. */
   readonly name: string;
   readonly value: string;
-}
+};
 
 export interface JudgeEvent {
   readonly schema: typeof JUDGE_DEMO_SCHEMA;

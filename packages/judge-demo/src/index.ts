@@ -11,3 +11,8 @@
 
 export * from './events.ts';
 export * from './playback.ts';
+export * from './scenario.ts';
+export * from './explain.ts';
+export * from './protocol.ts';
+export * from './proposals.ts';
+export * from './orchestrator.ts';
