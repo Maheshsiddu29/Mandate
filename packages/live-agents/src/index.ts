@@ -9,11 +9,11 @@
 
 export { ROLES, ROLE_LABELS, AGENT_RUNTIME_STATES, usdcText, parseUsdc, isRole, type Role, type AgentRuntimeState } from './types.ts';
 export { readConfig, describeConfig, DEFAULTS, type LiveConfig } from './config.ts';
-export { LiveSession, type SessionOptions, type RunResult, type RunStatus, type FinalProposal } from './session.ts';
+export { LiveSession, type SessionOptions, type RunResult, type RunStatus, type FinalProposal, type ReservedExecution } from './session.ts';
 export { emptyDraft, presetDraft, applyPreset, withField, fieldAt, PRESETS, ISSUE_KINDS, type MandateDraft, type Preset, type DraftIssue } from './authoring/draft-types.ts';
 export { DRAFT_FIELD_PATHS, parseFieldValue } from './authoring/draft-fields.ts';
 export { CATALOG, CATALOG_SETS, AGENT_DOMAINS, REVIEWED_BOUNDS } from './authoring/catalog.ts';
-export { PAUSE_CONFIRMATION, type VersionRecord, type AuthorizeResult } from './authoring/mandate-versioning.ts';
+export { PAUSE_CONFIRMATION, type VersionRecord, type AuthorizeResult, type ActiveMandate } from './authoring/mandate-versioning.ts';
 export type { DraftValidation, GuardrailRow } from './authoring/draft-validator.ts';
 export { DOMAIN_AGENTS } from './agents/index.ts';
 export { POLICY_CASE_IDS, POLICY_CASES, type PolicyCaseId } from './policy-stress/cases.ts';
@@ -25,3 +25,5 @@ export { ProviderError } from './runtime/errors.ts';
 export { realClock, type Clock } from './runtime/clock.ts';
 export type { AgentModelProvider, ProviderKind } from './runtime/provider.ts';
 export { LIVE_SCHEMA, LIVE_EVENT_KINDS, type LiveEvent, type LiveEventKind } from './telemetry/events.ts';
+export { renderEvent } from './telemetry/render.ts';
+export { summarizeRun } from './telemetry/summary.ts';

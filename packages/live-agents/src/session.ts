@@ -16,7 +16,8 @@
  * The principal never edits a Room allocation.
  */
 
-import { proposalDigest, type Reason, type SignedProposal } from '@mandate/portfolio';
+import type { AuthorizationRecord } from '@mandate/control';
+import { proposalDigest, verificationTranscript, type Reason, type SignedProposal, type VerificationTranscript, type VerifiedChild } from '@mandate/portfolio';
 import type { TrustedCandidate } from './agents/spec.ts';
 import { applyPreset, presetDraft, type MandateDraft, type Preset } from './authoring/draft-types.ts';
 import type { DraftValidation } from './authoring/draft-validator.ts';
@@ -66,6 +67,30 @@ export interface FinalProposal {
   readonly reasons: readonly string[];
 }
 
+/**
+ * A child the real Mandate path verified and reserved, exactly as it
+ * returned it: the signed proposal, the verifier's child, the ledger's
+ * authorization record and the transcript the verifier re-derives. What a
+ * domain executor downstream may act on — and only on this object, never on
+ * a reconstruction of it. Holds no key and grants nothing by itself: the
+ * ledger's reservation does, and it stays checkable against the ledger.
+ */
+export interface ReservedExecution {
+  readonly role: Role;
+  /** The mandate version it was reserved under. */
+  readonly version: number;
+  readonly phase: 'FINAL' | 'REFRESH';
+  /** The trusted candidate id the model chose (a closed-set id, never a value). */
+  readonly candidateId: string;
+  readonly signed: SignedProposal;
+  readonly verified: VerifiedChild;
+  readonly record: AuthorizationRecord;
+  readonly transcript: VerificationTranscript;
+  readonly receiptDigest: string;
+  /** Protocol time of the reservation. */
+  readonly reservedAt: bigint;
+}
+
 export interface RunResult {
   readonly status: RunStatus;
   readonly version: number | null;
@@ -94,6 +119,7 @@ export class LiveSession {
   readonly #sequences = new SequenceBook();
   readonly #jev: JevAdvisor;
   readonly #drains: (() => Promise<void>)[] = [];
+  readonly #reserved: ReservedExecution[] = [];
   #epoch = new AbortController();
   #running = false;
   #rooms = 0;
@@ -193,6 +219,11 @@ export class LiveSession {
 
   // --- Autonomous operation ----------------------------------------------------------------
 
+  /** Every child the real Mandate path reserved in this session, in reservation order. */
+  get reservedExecutions(): readonly ReservedExecution[] {
+    return this.#reserved;
+  }
+
   #deps(): DiscoveryDeps {
     return { provider: this.provider, jev: this.#jev, clock: this.clock, events: this.events, signers: this.signers, sequences: this.#sequences, protocolNow: this.protocolNow, timeoutMs: this.#o.agentTimeoutMs, current: () => this.versions.active };
   }
@@ -276,7 +307,7 @@ export class LiveSession {
   }
 
   /** Sign what the Room agreed, hand it to the real Mandate path, and account for every proposal. */
-  async #reverify(active: ActiveMandate, phase: 'FINAL' | 'REFRESH', items: readonly { readonly role: Role; readonly signed: SignedProposal }[]): Promise<{ readonly run: ProtocolRun | null; readonly proposals: readonly FinalProposal[]; readonly reserved: bigint }> {
+  async #reverify(active: ActiveMandate, phase: 'FINAL' | 'REFRESH', items: readonly { readonly role: Role; readonly candidateId: string; readonly signed: SignedProposal }[]): Promise<{ readonly run: ProtocolRun | null; readonly proposals: readonly FinalProposal[]; readonly reserved: bigint }> {
     if (!this.versions.beginReservation()) {
       return { run: null, proposals: items.map((i) => ({ role: i.role, proposal: proposalDigest(i.signed.proposal), requested: 0n, outcome: 'REFUSED', reasons: ['SESSION:AUTHORIZATION_IN_PROGRESS'] })), reserved: 0n };
     }
@@ -287,6 +318,8 @@ export class LiveSession {
       const run = await runProtocol(active.core, active.signature, now, items.map((i) => i.signed));
       const r = run.run;
       const children = r.verification.status === 'VERIFIED' ? r.verification.children : [];
+      // The transcript runPortfolio verified, re-formed from what it returned (a pure projection of its inputs).
+      const transcript = verificationTranscript({ mandate: active.mandate, signature: active.signature, bindings: active.compiled.bindings, availability: r.before, now, candidate: r.room.candidate, proposals: r.room.proposals, releases: r.room.signedReleases });
       let reserved = 0n;
       const proposals: FinalProposal[] = items.map((i) => {
         const d = proposalDigest(i.signed.proposal);
@@ -295,8 +328,10 @@ export class LiveSession {
         const reservation = child === undefined ? undefined : r.reservations.find((x) => x.child === child.digest);
         const requested = i.signed.proposal.requested.find((a) => a.resource === 'portfolio-notional')?.atoms ?? 0n;
         const reasons: Reason[] = [...(decision?.reasons ?? []), ...(reservation?.reasons ?? [])];
-        if (reservation?.status === 'RESERVED') {
+        const record = child === undefined ? undefined : r.records.get(child.digest);
+        if (reservation?.status === 'RESERVED' && child !== undefined && record !== undefined) {
           reserved += requested;
+          this.#reserved.push({ role: i.role, version: active.version, phase, candidateId: i.candidateId, signed: i.signed, verified: child, record, transcript, receiptDigest: r.digest, reservedAt: now });
           return { role: i.role, proposal: d, requested, outcome: 'RESERVED', reasons: [] };
         }
         const stale = reasons.some((x) => x.code === 'QUOTE_STALE');
@@ -326,7 +361,7 @@ export class LiveSession {
 
   async #authorizeFinal(active: ActiveMandate, epoch: number, outcomes: readonly AgentOutcome[], room: RoomResult | null, participants: readonly Participant[], requests: ReadonlyMap<Role, bigint>): Promise<RunResult> {
     const now = this.protocolNow();
-    const items: { role: Role; signed: SignedProposal }[] = [];
+    const items: { role: Role; candidateId: string; signed: SignedProposal }[] = [];
     for (const p of participants) {
       const atoms = requests.get(p.role) ?? 0n;
       if (atoms === 0n) continue;
@@ -336,7 +371,7 @@ export class LiveSession {
       if (!built.ok) continue;
       const signed = signer.sign(built.proposal);
       this.events.emit('PROPOSAL_SIGNED', { agent: p.role, data: { phase: 'FINAL', proposal: proposalDigest(signed.proposal), signer: signer.party.value, sequence: signed.proposal.sequence, requested: amountViews(built.demand), quoteObservedAt: p.observedAt } });
-      items.push({ role: p.role, signed });
+      items.push({ role: p.role, candidateId: p.candidate.id, signed });
     }
     if (items.length === 0) return this.#result('NOTHING_TO_AUTHORIZE', active.version, epoch, outcomes, room);
     const first = await this.#reverify(active, 'FINAL', items);
@@ -357,7 +392,7 @@ export class LiveSession {
           return discoverAgent(this.#deps(), active, s.role, { candidates: [bounded] });
         }),
       );
-      const ready = fresh.filter((o) => o.state === 'ADMISSIBLE' && o.signed !== null).map((o) => ({ role: o.role, signed: o.signed as SignedProposal }));
+      const ready = fresh.filter((o) => o.state === 'ADMISSIBLE' && o.signed !== null && o.candidate !== null).map((o) => ({ role: o.role, candidateId: (o.candidate as TrustedCandidate).id, signed: o.signed as SignedProposal }));
       if (ready.length > 0) {
         const second = await this.#reverify(active, 'REFRESH', ready);
         refreshed.push(...second.proposals);

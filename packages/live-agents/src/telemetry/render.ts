@@ -107,6 +107,40 @@ function detail(e: LiveEvent): string {
       return `attempt ${str(d['attempt'])} ${str(d['caseId'])} → AUTHORIZED · reserved ${amount(d['reserved'])} · ${str(d['note'])}`;
     case 'POLICY_STRESS_COMPLETED':
       return `ended: ${str(d['endedBy'])}${d['authorized'] === undefined ? `${d['error'] === undefined ? '' : ` (${str(d['error'])})`}` : ` · refused ${str(d['refused'])} · authorized ${str(d['authorized'])}`}`;
+    case 'TESTNET_PREFLIGHT_STARTED':
+      return `${str(d['network'])} · expecting chain ${str(d['expectedChainId'])}`;
+    case 'TESTNET_PREFLIGHT_PASSED':
+    case 'TESTNET_PREFLIGHT_FAILED': {
+      const p = (d['principal'] ?? {}) as JsonObject;
+      return `chain ${str(d['chainId'])} · block ${str(d['block'])} · principal MDUSD ${str(p['mdusdAtoms'])} atoms, gate allowance ${str(p['mdusdAllowanceToGate'])} · failures ${list(d['failures'])}`;
+    }
+    case 'DOMAIN_EXECUTION_INELIGIBLE':
+      return `${str(d['stage'])}: ${str(d['reason'])} · nothing signed, transactions 0`;
+    case 'DOMAIN_EXECUTION_READY': {
+      const a = (d['authorized'] ?? {}) as JsonObject;
+      return `${str(d['domain'])} via ${str(d['adapter'])} · ${str(a['notionalUsdc'])} USDC authorized → ${str(a['quantityMdemoAtoms'])} MDEMO atoms for ${str(a['debitMdusdAtoms'])} MDUSD atoms (fixture)`;
+    }
+    case 'TESTNET_SIMULATION_STARTED':
+      return `${str(d['method'])} → ${str(d['target'])}`;
+    case 'TESTNET_SIMULATION_PASSED':
+      return `eth_call passed · estimated gas ${str(d['gasEstimate'])}`;
+    case 'TESTNET_SIMULATION_FAILED':
+      return `${str(d['reason'])} · nothing broadcast`;
+    case 'TESTNET_SEND_AUTHORIZATION_REQUIRED':
+      return `type exactly: ${str(d['required'])}`;
+    case 'TESTNET_SEND_AUTHORIZATION_REFUSED':
+      return 'not authorized · transactions 0';
+    case 'TESTNET_TX_SUBMISSION_STARTED':
+      return `tx ${str(d['txHash'])} → ${str(d['to'])} · nonce ${str(d['nonce'])}`;
+    case 'TESTNET_TX_SUBMITTED':
+      return `tx ${str(d['txHash'])} ${str(d['broadcast'])} · not settled until a receipt`;
+    case 'TESTNET_TX_CONFIRMED':
+    case 'TESTNET_TX_FAILED':
+      return `tx ${str(d['txHash'])} · block ${str(d['block'])} · ${str(d['status'])} · gas ${str(d['gasUsed'])} · ${str(d['evidence'])}`;
+    case 'DOMAIN_EXECUTION_SETTLED':
+      return `${str(d['evidence'])} · ${str(d['assets'])} · ${str(d['explorerUrl'])}`;
+    case 'DOMAIN_EXECUTION_FAILED':
+      return `${str(d['stage'])}: ${str(d['reason'])}`;
     default:
       return '';
   }
