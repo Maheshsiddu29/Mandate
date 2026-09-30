@@ -9,7 +9,9 @@
 > `ledger-sqlite`, `execution-gate`, `evm-robinhood`, `perp-lighter`,
 > `packages/portfolio`, `packages/judge-demo`, any corpus, the Phase 7E
 > evidence or `MANDATE_JUDGE_DEMO.V1`. No transaction is sent; nothing is
-> deployed.
+> deployed. The one explicit Robinhood Chain testnet settlement path for a
+> reserved Stock decision (B.5.2) is a separate package and separate
+> commands: [live-testnet-settlement.md](live-testnet-settlement.md).
 
 ```text
 Humans define authority.  Agents operate autonomously.  Mandate decides what may settle.
@@ -289,7 +291,11 @@ event: `schema`, `sessionId`, `sequence`, `kind`, `at` (wall clock, ISO),
 `elapsedMs` (monotonic), `protocolTime`, `mandateVersion`, `agent`, `roomId`,
 `generation`, `data`. Only explicit, safe fields: no key, no prompt, no raw
 model output, no reasoning trace. Kinds are listed in
-`packages/live-agents/src/telemetry/events.ts`.
+`packages/live-agents/src/telemetry/events.ts`. The `TESTNET_*` and
+`DOMAIN_EXECUTION_*` kinds (B.5.2) are emitted only by
+`@mandate/live-settlement` in its explicit testnet modes
+([live-testnet-settlement.md §7](live-testnet-settlement.md#7-lifecycle-and-evidence));
+the runs below never emit them.
 
 Resource conflicts are typed and never summed. `PORTFOLIO_CONFLICT`,
 `ROOM_OPENED`, `ROOM_GENERATION_STARTED`, `ROOM_PROPOSAL_CREATED` and
@@ -344,6 +350,10 @@ npm run agents:live:json   # OpenAI: MANDATE_LIVE_AI.V1 events as JSON lines
 npm run agents:serve       # local API for /demo/live on 127.0.0.1:8787 (OpenAI when a key is set; the stub always)
 ```
 
+These are offchain: every one of them reports 0 transactions. The testnet
+settlement commands (`agents:live:testnet:dry-run`, `agents:live:testnet`)
+are separate; see [live-testnet-settlement.md](live-testnet-settlement.md).
+
 Runner options: `--preset=…`, `--prompt="…" [--fill=<preset>]`,
 `--policy-attempts=N`, `--no-policy-stress`, `--seed=N` (stub) and
 `--chaos=<spec>` (development only). A draft with blocking issues exits 3
@@ -361,4 +371,7 @@ Live runs pass `executeAfter = 0` to `runPortfolio`: the protocol clock
 follows real time and the executor runs immediately, so execution is
 stamped when it happens. The default (now + 5 s) would put a ledger event
 in the future and make the ledger refuse any later reservation in the
-session within five seconds as `EVALUATION_TIME_REGRESSED`.
+session within five seconds as `EVALUATION_TIME_REGRESSED`. No protocol
+security property needs a positive delay (re-examined in B.5.2:
+[live-testnet-settlement.md §8](live-testnet-settlement.md#8-executeafter-0n),
+`test/execute-after.test.ts`).

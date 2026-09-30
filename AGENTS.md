@@ -115,7 +115,7 @@ authorization.
 
 The dependency directions are `adapter → registry → kernel`,
 `router → registry → kernel`, `jev → router → registry → kernel`,
-`execution-gate → kernel`, `core → kernel`, `ledger → core → kernel`, `control → ledger → core → kernel`, `ledger-sqlite → ledger → core` and `perp-lighter → control, ledger-sqlite, ledger, core, kernel` and `evm-robinhood → control, ledger-sqlite, ledger, core, execution-gate, kernel` and `portfolio → evm-robinhood, perp-lighter, control, ledger, registry, execution-gate, core, kernel` and `judge-demo → portfolio, core, kernel` and `live-agents → portfolio, control, ledger, core, kernel`, never the reverse, and it is enforced by structural tests
+`execution-gate → kernel`, `core → kernel`, `ledger → core → kernel`, `control → ledger → core → kernel`, `ledger-sqlite → ledger → core` and `perp-lighter → control, ledger-sqlite, ledger, core, kernel` and `evm-robinhood → control, ledger-sqlite, ledger, core, execution-gate, kernel` and `portfolio → evm-robinhood, perp-lighter, control, ledger, registry, execution-gate, core, kernel` and `judge-demo → portfolio, core, kernel` and `live-agents → portfolio, control, ledger, core, kernel` and `live-settlement → live-agents, portfolio, evm-robinhood, execution-gate, ledger-sqlite, control, ledger, core, kernel`, never the reverse, and it is enforced by structural tests
 ([ADR 0004](docs/adr/0004-registry-package-boundary.md),
 [ADR 0012](docs/adr/0012-jev-closed-set-authority-boundary.md)). The kernel,
 registry and router perform no I/O; the Robinhood adapter and the Jev client
@@ -399,6 +399,23 @@ address, venue, amount outside supplied bounds, calldata or signature.
 only when `OPENAI_API_KEY` is set (environment or gitignored `.env`) and
 the live modes exit 2 without it. Never commit the key. `npm test` uses
 stub and scripted providers only.
+
+`packages/live-settlement` (buildathon Milestone B.5.2,
+[docs/demo/live-testnet-settlement.md](docs/demo/live-testnet-settlement.md))
+is the Live AI Lab's one explicit Robinhood Chain **testnet** settlement
+path: a Stock child the real Mandate path reserved is mapped by a declared,
+quantity-preserving testnet settlement fixture onto a valueless MDEMO BUY on
+the deployed Phase 7E.3 gate and handed to the existing
+`robinhood-gate-signer`. Nothing depends on it — not `live-agents`, the web
+app or the protocol. Its source reads no environment, file or clock; only
+`src/rpc.ts` holds an RPC client and the gas payer's key (and can address
+only `execute` on the manifest gate), only `src/domain-leg.ts` hands the
+7E.3 principal and agent keys to the existing custody. `npm run
+agents:live:testnet:dry-run` stops at `eth_call` + `estimateGas`; `npm run
+agents:live:testnet` broadcasts at most one transaction, only after the
+operator types `AUTHORIZE ROBINHOOD TESTNET SEND`, only for a live-model
+decision. Never run the send without that explicit authorization.
+`structure.test.ts` enforces the boundary.
 
 `jev:characterize` is the only command that contacts TypeSafe. It refuses to
 run without a credential and exits with code 2, so a blocked run is never
