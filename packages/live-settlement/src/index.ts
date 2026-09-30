@@ -22,3 +22,4 @@ export { SendGate, SEND_AUTHORIZATION_PHRASE, type SendGateState } from './send-
 export { settlementEvidence, ASSET_QUALIFICATION, SETTLEMENT_EVIDENCE, type SettlementEvidence } from './evidence.ts';
 export { RobinhoodTestnetRpc, PUBLIC_TESTNET_RPC, type TestnetRpc } from './rpc.ts';
 export { preflight, MIN_SUBMITTER_WEI, type PreflightReport } from './preflight.ts';
+export type { DomainKeys } from './domain-leg.ts';
