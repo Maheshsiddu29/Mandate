@@ -7,7 +7,7 @@
  * recognise reviewed instruments, so an identity outside this list could not
  * be authorized anyway, and a model has no way to add one. Every member has
  * a short stable id; drafts, models and the UI speak in ids, and only
- * `mandate-builder.ts` turns ids into protocol identifiers.
+ * `draft-validator.ts` turns ids into protocol identifiers.
  */
 
 import type { AuthorityScopeInput, CanonicalAssetInput } from '@mandate/portfolio';
