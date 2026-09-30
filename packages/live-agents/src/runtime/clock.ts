@@ -7,8 +7,8 @@
  * clock and anchored at the demonstration epoch (`protocolClock`), so real
  * latency ages quotes exactly as much as it really took.
  *
- * This module and `config.ts` are the only places the package reads a
- * clock; tests substitute `ManualClock`.
+ * This module is the only place the package reads a clock; tests may
+ * substitute `ManualClock`.
  */
 
 import { DEMO_NOW } from '@mandate/portfolio/demo';
