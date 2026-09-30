@@ -10,7 +10,7 @@
  */
 
 import { ATOMS_PATTERN, parseAtoms } from '../types.ts';
-import type { DecisionRequest, ModelRequest, NegotiationAction, NegotiationRequest, RogueRequest } from './provider.ts';
+import type { DecisionRequest, ModelRequest, NegotiationAction, NegotiationRequest, PolicyStressRequest } from './provider.ts';
 import { NEGOTIATION_ACTIONS } from './provider.ts';
 import { DRAFT_SCHEMA } from '../authoring/prompt-to-draft.ts';
 import { MAX_RATIONALE, bad, boundedText, enumSchema, exactKeys, good, nullableText, objectSchema, oneOf, parseJsonObject, type JsonObject, type Parsed } from './strict-json.ts';
@@ -109,42 +109,28 @@ export function parseNegotiation(text: string, r: NegotiationRequest): Parsed<Ne
   }
 }
 
-// --- The rogue agent ----------------------------------------------------------------------------
+// --- The policy-stress agent -----------------------------------------------------------------
 
-export interface RogueDecision {
-  readonly attack: string;
-  readonly targetId: string | null;
-  /** Free text asking for something outside the menu. Always answered "capability unavailable"; never interpreted. */
-  readonly capabilityRequest: string | null;
+export interface PolicyCaseSelection {
+  readonly caseId: string;
   readonly rationale: string;
 }
 
-export function rogueSchema(r: RogueRequest): JsonObject {
-  return objectSchema({
-    attack: enumSchema(r.menu.map((m) => m.action)),
-    targetId: enumSchema(r.menu.flatMap((m) => m.targets.map((t) => t.id)), true),
-    capabilityRequest: { type: ['string', 'null'], maxLength: 200 },
-    rationale,
-  });
+/** A supplied case identifier and a rationale. Nothing else exists to return: no address, amount, tool or calldata. */
+export function policyStressSchema(r: PolicyStressRequest): JsonObject {
+  return objectSchema({ caseId: enumSchema(r.cases.map((c) => c.caseId)), rationale });
 }
 
-export function parseRogue(text: string, r: RogueRequest): Parsed<RogueDecision> {
+export function parsePolicyStress(text: string, r: PolicyStressRequest): Parsed<PolicyCaseSelection> {
   const o = parseJsonObject(text);
   if (!o.ok) return o;
-  const k = exactKeys(o.value, ['attack', 'targetId', 'capabilityRequest', 'rationale'], 'attack');
+  const k = exactKeys(o.value, ['caseId', 'rationale'], 'policy case');
   if (!k.ok) return k;
-  const attack = oneOf(o.value['attack'], r.menu.map((m) => m.action), 'attack');
-  if (!attack.ok) return attack;
-  const option = r.menu.find((m) => m.action === attack.value);
-  const target = nullableText(o.value['targetId'], 64, 'targetId');
-  if (!target.ok) return target;
-  if (option !== undefined && option.targets.length === 0 && target.value !== null) return bad('targetId: this action takes no target');
-  if (option !== undefined && option.targets.length > 0 && !option.targets.some((t) => t.id === target.value)) return bad('targetId: not one of the supplied targets for this action');
-  const capability = nullableText(o.value['capabilityRequest'], 200, 'capabilityRequest');
-  if (!capability.ok) return capability;
+  const caseId = oneOf(o.value['caseId'], r.cases.map((c) => c.caseId), 'caseId');
+  if (!caseId.ok) return caseId;
   const why = boundedText(o.value['rationale'], MAX_RATIONALE, 'rationale');
   if (!why.ok) return why;
-  return good({ attack: attack.value, targetId: target.value, capabilityRequest: capability.value, rationale: why.value });
+  return good({ caseId: caseId.value, rationale: why.value });
 }
 
 // --- Dispatch ------------------------------------------------------------------------------------
@@ -157,8 +143,8 @@ export function schemaFor(r: ModelRequest): { readonly name: string; readonly sc
       return { name: 'room_negotiation', schema: negotiationSchema(r) };
     case 'DRAFT':
       return { name: 'mandate_draft', schema: DRAFT_SCHEMA };
-    case 'ROGUE':
-      return { name: 'rogue_attempt', schema: rogueSchema(r) };
+    case 'POLICY_STRESS':
+      return { name: 'policy_case_selection', schema: policyStressSchema(r) };
   }
 }
 

@@ -58,7 +58,7 @@ export class LocalAgentSigner {
   }
 }
 
-/** One signer per role: the swap agent and the rogue agent share the swap signer by construction. */
+/** One signer per role: the swap agent and the policy-stress agent share the swap signer by construction. */
 export function createAgentSigners(): ReadonlyMap<Role, LocalAgentSigner> {
   return new Map(ROLES.map((r) => [r, new LocalAgentSigner(r)]));
 }

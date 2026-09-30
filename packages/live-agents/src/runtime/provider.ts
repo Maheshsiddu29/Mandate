@@ -113,33 +113,37 @@ export interface DraftRequest {
   readonly issueKinds: readonly IssueKind[];
 }
 
-export interface AttackOptionView {
-  readonly action: string;
+/** One preconstructed policy test case, as the policy-stress model sees it: an identifier and a neutral description. */
+export interface PolicyCaseView {
+  readonly caseId: string;
   readonly description: string;
-  readonly targets: readonly { readonly id: string; readonly description: string }[];
 }
 
-export interface AttemptView {
+/** A case already evaluated in this run: what was selected and what Mandate answered (reason codes only). */
+export interface PolicyAttemptView {
   readonly attempt: number;
-  readonly action: string;
-  readonly targetId: string | null;
-  readonly outcome: string;
+  readonly caseId: string;
+  readonly outcome: 'AUTHORIZED' | 'REFUSED' | 'NOT_SUBMITTED';
   readonly reasons: readonly string[];
 }
 
-export interface RogueRequest {
-  readonly kind: 'ROGUE';
+/**
+ * The policy-stress request. The model selects one supplied case identifier
+ * to check whether the active authorization policy accepts or refuses it;
+ * trusted code builds, signs and submits the corresponding fixed proposal.
+ */
+export interface PolicyStressRequest {
+  readonly kind: 'POLICY_STRESS';
   readonly role: 'swap';
-  readonly objective: string;
+  readonly task: string;
   readonly authority: AuthorityView;
-  readonly portfolio: PortfolioView;
-  readonly menu: readonly AttackOptionView[];
-  readonly history: readonly AttemptView[];
+  readonly cases: readonly PolicyCaseView[];
+  readonly history: readonly PolicyAttemptView[];
   readonly attempt: number;
   readonly maxAttempts: number;
 }
 
-export type ModelRequest = DecisionRequest | NegotiationRequest | DraftRequest | RogueRequest;
+export type ModelRequest = DecisionRequest | NegotiationRequest | DraftRequest | PolicyStressRequest;
 
 export type ProviderKind = 'LIVE' | 'STUB' | 'SCRIPTED';
 
@@ -150,7 +154,7 @@ export interface AgentModelProvider {
   decide(request: DecisionRequest, o: CallOptions): Promise<ModelResponse>;
   negotiate(request: NegotiationRequest, o: CallOptions): Promise<ModelResponse>;
   interpretMandateDraft(request: DraftRequest, o: CallOptions): Promise<ModelResponse>;
-  attack(request: RogueRequest, o: CallOptions): Promise<ModelResponse>;
+  selectPolicyCase(request: PolicyStressRequest, o: CallOptions): Promise<ModelResponse>;
 }
 
 /** Dispatch a request to the provider method for its kind. */
@@ -162,7 +166,7 @@ export function callProvider(p: AgentModelProvider, request: ModelRequest, o: Ca
       return p.negotiate(request, o);
     case 'DRAFT':
       return p.interpretMandateDraft(request, o);
-    case 'ROGUE':
-      return p.attack(request, o);
+    case 'POLICY_STRESS':
+      return p.selectPolicyCase(request, o);
   }
 }

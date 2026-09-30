@@ -11,7 +11,7 @@
 
 import type { Clock } from './clock.ts';
 import { ProviderError } from './errors.ts';
-import { callProvider, type AgentModelProvider, type ProviderKind, type CallOptions, type DecisionRequest, type DraftRequest, type ModelRequest, type ModelResponse, type NegotiationRequest, type RogueRequest } from './provider.ts';
+import { callProvider, type AgentModelProvider, type ProviderKind, type CallOptions, type DecisionRequest, type DraftRequest, type ModelRequest, type ModelResponse, type NegotiationRequest, type PolicyStressRequest } from './provider.ts';
 import { isRole, type Role } from '../types.ts';
 
 export const CHAOS_DELAYS_MS = [0, 250, 1000, 3000, 8000] as const;
@@ -103,7 +103,7 @@ export class LatencyChaosProvider implements AgentModelProvider {
   interpretMandateDraft(r: DraftRequest, o: CallOptions): Promise<ModelResponse> {
     return this.#run(r, o);
   }
-  attack(r: RogueRequest, o: CallOptions): Promise<ModelResponse> {
+  selectPolicyCase(r: PolicyStressRequest, o: CallOptions): Promise<ModelResponse> {
     return this.#run(r, o);
   }
 }

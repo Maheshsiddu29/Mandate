@@ -142,7 +142,7 @@ export interface ReservationView {
   readonly committedAt: string;
 }
 
-/** Every reservation in the principal's ledger, and its version: what an attack must leave untouched. */
+/** Every reservation in the principal's ledger, and its version: what a refused proposal must leave untouched. */
 export async function ledgerView(core: PortfolioCore): Promise<{ readonly version: string; readonly reservations: readonly ReservationView[] }> {
   const s = await core.engine.read(core.compiled.mandate.principal);
   return {

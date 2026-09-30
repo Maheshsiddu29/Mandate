@@ -15,7 +15,7 @@
 
 import { ProviderError } from './errors.ts';
 import { instructionsFor, inputFor } from './prompts.ts';
-import type { AgentModelProvider, CallOptions, DecisionRequest, DraftRequest, ModelRequest, ModelResponse, NegotiationRequest, RogueRequest } from './provider.ts';
+import type { AgentModelProvider, CallOptions, DecisionRequest, DraftRequest, ModelRequest, ModelResponse, NegotiationRequest, PolicyStressRequest } from './provider.ts';
 import { schemaFor } from './schemas.ts';
 
 export const OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses';
@@ -179,7 +179,7 @@ export class OpenAIProvider implements AgentModelProvider {
   interpretMandateDraft(r: DraftRequest, o: CallOptions): Promise<ModelResponse> {
     return this.#complete(r, o);
   }
-  attack(r: RogueRequest, o: CallOptions): Promise<ModelResponse> {
+  selectPolicyCase(r: PolicyStressRequest, o: CallOptions): Promise<ModelResponse> {
     return this.#complete(r, o);
   }
 
