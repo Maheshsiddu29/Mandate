@@ -5,10 +5,35 @@
  * It can connect, read the account and the chain, ask the wallet to switch
  * to Robinhood Chain testnet, and sign EIP-712 typed data the local server
  * built. That is all: every request goes through one allowlist, and it has
- * no way to send, sign a transaction or sign raw bytes. A wallet signature
- * here approves a Mandate offchain; it is never a blockchain transaction and
- * never delegates onchain execution authority.
+ * no way to send, sign a transaction or sign raw bytes. The Live demo asks
+ * the wallet to sign PortfolioMandateV2 (spine V2). That signature is not a
+ * transaction. The per-execution gate signature is collected by
+ * `agents:settle:v2`, not by this adapter. A challenge that omits spine is
+ * the B.5.3 approval; this UI does not send one.
  */
+
+/** What Review & authorize posts. Omitting `spine` is the B.5.3 `PortfolioMandateApproval`. */
+export const LIVE_DEMO_WALLET_SPINE = "V2" as const;
+
+/** The EIP-712 primary type a V2 challenge returns. V1 returns `PortfolioMandateApproval`. */
+export const LIVE_DEMO_WALLET_PRIMARY_TYPE = "PortfolioMandateV2";
+
+export function liveDemoWalletChallengeBody(address: string): { readonly address: string; readonly spine: typeof LIVE_DEMO_WALLET_SPINE } {
+  return { address, spine: LIVE_DEMO_WALLET_SPINE };
+}
+
+/**
+ * True only when the server issued a V2 challenge whose typed data is
+ * PortfolioMandateV2. A V1 approval, or a V2 label on the wrong type, is
+ * not signed — that is how a UI session was reserved under WALLET_EIP712
+ * and then blocked the V2 challenge.
+ */
+export function acceptsLiveDemoChallenge(body: { readonly spine?: unknown; readonly typedData?: unknown }): boolean {
+  if (body.spine !== LIVE_DEMO_WALLET_SPINE) return false;
+  const typed = body.typedData;
+  if (typeof typed !== "object" || typed === null || !("primaryType" in typed)) return false;
+  return typed.primaryType === LIVE_DEMO_WALLET_PRIMARY_TYPE;
+}
 
 /** The only wallet methods this app ever calls. */
 export const WALLET_METHODS = ["eth_requestAccounts", "eth_accounts", "eth_chainId", "wallet_switchEthereumChain", "wallet_addEthereumChain", "eth_signTypedData_v4"] as const;

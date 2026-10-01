@@ -4,7 +4,7 @@ import test from 'node:test';
 import type { JsonRecord, LiveEvent } from '../components/demo/live/live-client.ts';
 import { deriveFlow, eventsAfter, type FlowInput } from '../components/demo/live/live-flow.ts';
 import { derivePresentation } from '../components/demo/live/live-model.ts';
-import { APPROVAL_CHAIN, WALLET_METHODS, injectedWallet } from '../components/demo/live/wallet.ts';
+import { acceptsLiveDemoChallenge, APPROVAL_CHAIN, LIVE_DEMO_WALLET_PRIMARY_TYPE, LIVE_DEMO_WALLET_SPINE, WALLET_METHODS, injectedWallet, liveDemoWalletChallengeBody } from '../components/demo/live/wallet.ts';
 
 /*
  * B.5.3: the browser's wallet path and the settlement evidence it receives
@@ -41,6 +41,23 @@ function fakeProvider(answers: { readonly [method: string]: unknown } = {}) {
     },
   };
 }
+
+test('the Live demo challenge requests spine V2 and refuses a V1 approval', () => {
+  assert.equal(LIVE_DEMO_WALLET_SPINE, 'V2');
+  assert.equal(LIVE_DEMO_WALLET_PRIMARY_TYPE, 'PortfolioMandateV2');
+  assert.deepEqual(liveDemoWalletChallengeBody('0xabcdef0123456789abcdef0123456789abcdef01'), { address: '0xabcdef0123456789abcdef0123456789abcdef01', spine: 'V2' });
+  const v2 = { spine: 'V2', typedData: { primaryType: 'PortfolioMandateV2', domain: { name: 'Mandate', version: '2', chainId: 46630 } } };
+  assert.equal(acceptsLiveDemoChallenge(v2), true);
+  assert.equal(acceptsLiveDemoChallenge({ spine: 'V1', typedData: { primaryType: 'PortfolioMandateApproval' } }), false);
+  assert.equal(acceptsLiveDemoChallenge({ typedData: { primaryType: 'PortfolioMandateApproval' } }), false);
+  assert.equal(acceptsLiveDemoChallenge({ spine: 'V2', typedData: { primaryType: 'PortfolioMandateApproval' } }), false);
+  assert.equal(acceptsLiveDemoChallenge({ spine: 'V2' }), false);
+  assert.equal(acceptsLiveDemoChallenge({ spine: 'V2', typedData: null }), false);
+  assert.match(lab, /liveDemoWalletChallengeBody\(address\)/);
+  assert.match(lab, /WALLET_PRINCIPAL_V2/);
+  assert.match(read(`${LIVE}stage-configure.tsx`), /PortfolioMandateV2/);
+  assert.match(read(`${LIVE}stage-configure.tsx`), /WALLET_PRINCIPAL_V2/);
+});
 
 test('the wallet adapter can connect, read, switch chain and sign typed data — and nothing that sends or signs a transaction', async () => {
   assert.deepEqual([...WALLET_METHODS], ['eth_requestAccounts', 'eth_accounts', 'eth_chainId', 'wallet_switchEthereumChain', 'wallet_addEthereumChain', 'eth_signTypedData_v4']);

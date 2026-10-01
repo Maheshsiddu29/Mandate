@@ -252,8 +252,8 @@ export function ApproveStage(props: {
     <div className="mw-approve">
       <header className="mw-stage-head">
         <p className="mw-kicker">Mandate {version}</p>
-        <h2>Review your mandate</h2>
-        <p>Approve once. Agents then work inside these limits without asking again. The Room can never add to them.</p>
+        <h2>Review &amp; authorize</h2>
+        <p>One wallet signature binds this mandate. Agents then work inside these limits. The Room can never add to them.</p>
       </header>
       <dl className="mw-summary">
         <div><dt>Capital</dt><dd>{usd(props.access.text("portfolio.totalCapital"))}</dd></div>
@@ -270,7 +270,7 @@ export function ApproveStage(props: {
           </span>
           <span>
             <strong>Approve in wallet</strong>
-            <small>{!wallet.available ? "No browser wallet detected. Use the demo principal key below." : connected ? `${shortAddress(wallet.address ?? "")}${rightChain ? " · Robinhood Chain testnet" : " · switch to Robinhood Chain testnet to sign"}` : "Your wallet will sign this Mandate. This does not submit a blockchain transaction."}</small>
+            <small>{!wallet.available ? "No browser wallet detected. Use the demo principal key below." : connected ? `${shortAddress(wallet.address ?? "")}${rightChain ? " · Robinhood Chain testnet" : " · switch to Robinhood Chain testnet to sign"}` : "Your wallet will sign PortfolioMandateV2. This does not submit a blockchain transaction."}</small>
           </span>
           <Pill tone={connected && rightChain ? "good" : "neutral"}>{!wallet.available ? "Not detected" : !connected ? "Not connected" : rightChain ? "Connected" : "Wrong network"}</Pill>
         </button>
@@ -287,7 +287,7 @@ export function ApproveStage(props: {
             {connected && !rightChain ? <button type="button" className="mw-soft-button" disabled={props.authorizing} onClick={props.onSwitchChain}>Switch to Robinhood Chain testnet</button> : null}
             <details className="mw-disclosure mw-disclosure--inline">
               <summary>What this signature does</summary>
-              <p className="mw-fine">An offchain EIP-712 approval of this exact mandate, for this session, once. No gas, no transaction. It authorizes the portfolio mandate only: testnet settlement is signed by separate testnet custody, and your signature does not delegate onchain execution authority.</p>
+              <p className="mw-fine">EIP-712 PortfolioMandateV2 of this exact mandate, for this session, on Robinhood Chain testnet. No gas, no transaction. Your wallet becomes the protocol principal (WALLET_PRINCIPAL_V2). Each gate execution still needs a separate signature from this same wallet; this screen does not collect it.</p>
             </details>
           </div>
         ) : null}
@@ -304,7 +304,7 @@ export function ApproveStage(props: {
 
       <footer className="mw-stage-foot">
         {method === "wallet" ? (
-          <button type="button" className="mw-cta" disabled={!walletReady || props.authorizing} onClick={props.onSignWallet}>Sign Mandate</button>
+          <button type="button" className="mw-cta" disabled={!walletReady || props.authorizing} onClick={props.onSignWallet}>Authorize</button>
         ) : (
           <button type="button" className="mw-cta" disabled={!matches || props.authorizing} onClick={() => props.onAuthorize(confirmation)}>Sign &amp; start agents</button>
         )}

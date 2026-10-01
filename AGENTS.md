@@ -400,7 +400,11 @@ touches files (durable sessions and their portfolio ledger, through
 `.live/`). The principal may
 authorize a version with an EIP-712 wallet approval the server verifies
 ([wallet-settlement-boundaries.md](docs/demo/wallet-settlement-boundaries.md));
-that approval never delegates domain execution. Models answer closed schemas
+a B.5.3 approval (`spine` omitted) never delegates domain execution. The
+Live demo Review & authorize step requests `spine: "V2"` so the wallet
+signs `PortfolioMandateV2` (`WALLET_PRINCIPAL_V2`). That signature is the
+protocol signature; each gate execution still needs its own
+`MandateAuthorization`, which this UI does not collect. Models answer closed schemas
 (candidate ids, bounded amounts, case identifiers) and never supply an
 address, venue, amount outside supplied bounds, calldata or signature.
 `structure.test.ts` enforces all of it. `npm run agents:stub` runs offline;

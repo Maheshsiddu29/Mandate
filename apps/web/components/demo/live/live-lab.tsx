@@ -14,7 +14,7 @@ import { AgentsStage, AgentSummaryList } from "./stage-agents";
 import { DraftingStage, PromptStage } from "./stage-compose";
 import { ApproveStage, ConfigureStage, draftAccess, PermissionsBody, type WalletState } from "./stage-configure";
 import { AuthorizedStage, FailedStage, ReceiptStage, SettlingStage, VerifyStage } from "./stage-outcome";
-import { APPROVAL_CHAIN, injectedWallet, shortAddress } from "./wallet";
+import { acceptsLiveDemoChallenge, APPROVAL_CHAIN, injectedWallet, liveDemoWalletChallengeBody, shortAddress } from "./wallet";
 import { Sheet } from "./workspace-ui";
 import "./live-workspace.css";
 
@@ -313,7 +313,7 @@ export function LiveLab(): ReactNode {
     await readWallet();
   }
 
-  /** The wallet path: a server-issued challenge, signed in the wallet, verified by the server. Never a transaction. */
+  /** Review & authorize: a V2 challenge, PortfolioMandateV2 signed in the wallet, verified by the server. Never a transaction. */
   async function authorizeWithWallet(): Promise<void> {
     const w = injectedWallet();
     const address = wallet.address;
@@ -327,9 +327,14 @@ export function LiveLab(): ReactNode {
       await readWallet();
       return;
     }
-    const challenge = await call("POST", "/wallet/challenge", { address });
+    const challenge = await call("POST", "/wallet/challenge", liveDemoWalletChallengeBody(address));
     if (challenge === null) {
       setAuthorizing(false);
+      return;
+    }
+    if (!acceptsLiveDemoChallenge(challenge)) {
+      setAuthorizing(false);
+      setError("The server did not issue a PortfolioMandateV2 challenge. No mandate was activated.");
       return;
     }
     const signed = await w.signTypedData(address, challenge.typedData);
