@@ -6,10 +6,14 @@
  * https://www.reactbits.dev/micro/prompt-bar
  *
  * Mandate retains the official autosizing composer and send/working glyph
- * morph. Sources, attachments, models, effort and dictation are intentionally
- * removed because they have no authority-related purpose in this product.
+ * morph (with its squash, tilt and press feel), the controlled busy state,
+ * Enter to send and Shift+Enter for a new line, and reduced-motion support.
+ * Sources, slash commands, attachments, model and effort pickers, dictation
+ * and the spark canvas are intentionally removed: they have no
+ * authority-related purpose in this product. `tone="light"` is the Mandate
+ * composer: a light paper surface for human input on the dark workspace.
  */
-import { animate, useMotionValue, useMotionValueEvent } from "motion/react";
+import { animate, useMotionValue, useMotionValueEvent, useReducedMotion } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 
 import "./prompt-bar.css";
@@ -23,10 +27,20 @@ export interface PromptBarProps {
   readonly disabled?: boolean;
   readonly maxRows?: number;
   readonly label?: string;
+  /** Keep the label for assistive technology only. */
+  readonly labelHidden?: boolean;
+  readonly hint?: string;
+  readonly sendLabel?: string;
+  readonly busyLabel?: string;
+  readonly tone?: "dark" | "light";
+  readonly id?: string;
 }
 
 const ARROW = [12, 4.5, 18.5, 11, 14.25, 11, 14.25, 19.5, 9.75, 19.5, 9.75, 11, 5.5, 11];
 const SQUARE = [12, 6, 18, 6, 18, 12, 18, 18, 6, 18, 6, 12, 6, 6];
+const EASE_IN_OUT = [0.77, 0, 0.175, 1] as const;
+const SQUASH = 0.12;
+const TILT = 8;
 
 function mix(a: number, b: number, t: number): number {
   return a + (b - a) * t;
@@ -41,18 +55,28 @@ function pathAt(from: readonly number[], to: readonly number[], value: number): 
 }
 
 function SendGlyph({ busy }: { readonly busy: boolean }): ReactNode {
+  const reduce = useReducedMotion() === true;
+  const svgRef = useRef<SVGSVGElement>(null);
   const pathRef = useRef<SVGPathElement>(null);
+  const direction = useRef(1);
   const value = useMotionValue(busy ? 1 : 0);
 
   useEffect(() => {
-    const controls = animate(value, busy ? 1 : 0, { duration: 0.2, ease: [0.77, 0, 0.175, 1] });
+    direction.current = busy ? 1 : -1;
+    const controls = animate(value, busy ? 1 : 0, reduce ? { duration: 0 } : { duration: 0.2, ease: EASE_IN_OUT });
     return () => controls.stop();
-  }, [busy, value]);
+  }, [busy, reduce, value]);
 
-  useMotionValueEvent(value, "change", (next) => pathRef.current?.setAttribute("d", pathAt(ARROW, SQUARE, next)));
+  useMotionValueEvent(value, "change", (next) => {
+    pathRef.current?.setAttribute("d", pathAt(ARROW, SQUARE, next));
+    if (svgRef.current === null) return;
+    const goo = reduce ? 0 : Math.sin(next * Math.PI);
+    const sx = 1 - SQUASH * goo;
+    svgRef.current.style.transform = goo === 0 ? "" : `rotate(${direction.current * TILT * goo}deg) scale(${sx}, ${1 / sx})`;
+  });
 
   return (
-    <svg className="mandate-prompt__glyph" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinejoin="round">
+    <svg ref={svgRef} className="mandate-prompt__glyph" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinejoin="round">
       <path ref={pathRef} d={pathAt(ARROW, SQUARE, value.get())} />
     </svg>
   );
@@ -65,8 +89,14 @@ export function PromptBar({
   placeholder = "What should your agents be allowed to do?",
   busy = false,
   disabled = false,
-  maxRows = 5,
+  maxRows = 6,
   label = "Principal intent",
+  labelHidden = false,
+  hint = "Enter to send · Shift+Enter for a new line",
+  sendLabel = "Send",
+  busyLabel = "Working",
+  tone = "dark",
+  id = "principal-intent",
 }: PromptBarProps): ReactNode {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [pressed, setPressed] = useState(false);
@@ -89,29 +119,31 @@ export function PromptBar({
   };
 
   return (
-    <div className="mandate-prompt" data-busy={busy ? "" : undefined} style={{ "--pb-radius": "14px" } as CSSProperties}>
+    <div className="mandate-prompt" data-tone={tone} data-busy={busy ? "" : undefined} style={{ "--pb-radius": tone === "light" ? "22px" : "14px" } as CSSProperties}>
       <div className="mandate-prompt__field" onClick={() => inputRef.current?.focus()}>
-        <label className="mandate-prompt__label" htmlFor="principal-intent">{label}</label>
+        <label className={labelHidden ? "mandate-prompt__label mandate-prompt__label--hidden" : "mandate-prompt__label"} htmlFor={id}>{label}</label>
         <textarea
           ref={inputRef}
-          id="principal-intent"
+          id={id}
           className="mandate-prompt__input"
           rows={1}
           value={value}
           maxLength={2000}
           placeholder={placeholder}
           disabled={disabled}
+          aria-busy={busy}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={onKeyDown}
         />
         <div className="mandate-prompt__footer">
-          <span>{busy ? "Building explicit authority…" : "Enter to build · Shift+Enter for a new line"}</span>
+          <span>{hint}</span>
           <button
             type="button"
             className="mandate-prompt__send"
             disabled={!canSend}
-            aria-label={busy ? "Building mandate" : "Build mandate"}
+            aria-label={busy ? busyLabel : sendLabel}
             data-armed={canSend ? "" : undefined}
+            data-busy={busy ? "" : undefined}
             data-pressed={pressed ? "" : undefined}
             onPointerDown={() => setPressed(true)}
             onPointerUp={() => setPressed(false)}
