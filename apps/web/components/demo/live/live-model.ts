@@ -30,10 +30,10 @@ export const ACTIVITY: Record<RoleName, string> = {
 
 const REASON_LABELS: Readonly<Record<string, string>> = {
   VENUE_NOT_ALLOWED: "Venue not allowed",
-  RECIPIENT_NOT_ALLOWED: "Recipient not allowed",
-  ASSET_NOT_ALLOWED: "Asset not allowed",
-  REPRESENTATION_NOT_ALLOWED: "Representation not allowed",
-  ISSUER_NOT_ALLOWED: "Issuer not allowed",
+  RECIPIENT_NOT_ALLOWED: "Recipient not approved",
+  ASSET_NOT_ALLOWED: "Asset not approved",
+  REPRESENTATION_NOT_ALLOWED: "Representation not approved",
+  ISSUER_NOT_ALLOWED: "Issuer not approved",
   INSTRUMENT_UNKNOWN: "Unknown instrument",
   SYNTHETIC_NOT_ALLOWED: "Synthetic exposure not allowed",
   PORTFOLIO_LIMIT_EXCEEDED: "Portfolio limit exceeded",
@@ -670,4 +670,269 @@ export function blockedInsideRoom(events: readonly LiveEvent[]): boolean {
   const blocked = new Set(deriveAgents(events).filter((agent) => agent.hardBlock).map((agent) => agent.role));
   for (const role of participants(events)) if (blocked.has(role as RoleName)) return true;
   return false;
+}
+
+// --- Conversation and review (B.6.2) ------------------------------------------------------------
+
+/** One short line per domain. Product copy, not a capability claim. */
+export const ROLE_DESCRIPTORS: Record<RoleName, string> = {
+  stock: "Tokenized equities",
+  swap: "Spot token routes",
+  nft: "Collection listings",
+  yield: "Vault deposits",
+  perps: "Bounded perpetuals",
+};
+
+/** Display a decimal USDC text as dollars. Display only; never used for a decision. */
+export function usd(value: string | null | undefined): string {
+  if (value === null || value === undefined) return "—";
+  const clean = value.replace(/ USDC$/, "").trim();
+  if (!/^-?\d+(\.\d+)?$/.test(clean)) return "—";
+  const [whole = "0", frac = ""] = clean.replace(/^-/, "").split(".");
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const cents = frac.replace(/0+$/, "");
+  const shown = cents === "" ? grouped : `${grouped}.${cents.padEnd(2, "0").slice(0, Math.max(2, cents.length))}`;
+  return `${clean.startsWith("-") ? "-" : ""}$${shown}`;
+}
+
+export type ChatTone = "neutral" | "good" | "warn" | "bad";
+
+/**
+ * One Room message. Every message is a translation of one real event; the
+ * text uses only fields the event carries. `detail` is the agent's own
+ * declared rationale, shown verbatim, or a fixed explanation of a protocol
+ * effect. Nothing here is generated, paraphrased by a model, or delayed.
+ */
+export interface ChatMessage {
+  readonly id: number;
+  readonly kind: "agent" | "system";
+  readonly agent: RoleName | null;
+  readonly generation: number | null;
+  readonly action: string | null;
+  readonly title: string;
+  readonly detail: string;
+  readonly tone: ChatTone;
+  readonly ignored: "LATE" | "STALE" | null;
+  readonly note: string;
+  readonly working: boolean;
+}
+
+const ACTION_VERB: Readonly<Record<string, string>> = { KEEP: "Keep", REDUCE: "Reduce", RELEASE: "Release", ABSTAIN: "Abstain" };
+
+const STALE_NOTE: Readonly<Record<string, string>> = {
+  ANSWERED_AFTER_TIMEOUT: "Arrived after the round timed out.",
+  ROOM_FINALIZED: "Room already finalized.",
+  LATER_GENERATION_STARTED: "A later round had already started.",
+  GENERATION_CLOSED: "That round had already closed.",
+};
+
+function amountOf(v: Json | undefined): string | null {
+  const r = rec(v);
+  return typeof r.amount === "string" ? r.amount : null;
+}
+
+function asRole(agent: string | null): RoleName | null {
+  return agent !== null && (ROLES as readonly string[]).includes(agent) ? (agent as RoleName) : null;
+}
+
+function roleList(items: readonly string[]): string {
+  const names = items.map((item) => ROLE_TITLES[item as RoleName] ?? item);
+  if (names.length <= 1) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${names.at(-1) ?? ""}`;
+}
+
+/** What an agent said, from its structured action and amounts. */
+export function actionText(action: string, from: string | null, to: string | null): string {
+  const verb = ACTION_VERB[action] ?? action.charAt(0) + action.slice(1).toLowerCase();
+  if (action === "REDUCE" && from !== null && to !== null) return `${verb} ${usd(from)} → ${usd(to)}.`;
+  if ((action === "KEEP" || action === "RELEASE") && from !== null) return `${verb} ${usd(from)}.`;
+  return `${verb}.`;
+}
+
+export function deriveRoomChat(events: readonly LiveEvent[]): ChatMessage[] {
+  const out: ChatMessage[] = [];
+  const answered = new Set<string>();
+  const base = (event: LiveEvent) => ({ id: event.sequence, agent: asRole(event.agent), generation: event.generation, ignored: null, note: "", working: false, action: null });
+  for (const event of events) {
+    const data = event.data;
+    switch (event.kind) {
+      case "ROOM_OPENED": {
+        const names = arr(data.participants).map((item) => (typeof item === "string" ? item : str(rec(item).role))).filter((item) => item !== "—");
+        out.push({ ...base(event), kind: "system", title: "Mandate opened the Room", detail: names.length === 0 ? "Agents are resolving a shared authority conflict." : `${roleList(names)} are resolving a shared authority conflict.`, tone: "neutral" });
+        break;
+      }
+      case "ROOM_GENERATION_STARTED":
+        if ((event.generation ?? 1) > 1) out.push({ ...base(event), kind: "system", title: `Round ${event.generation}`, detail: "The conflict is not resolved yet. Agents answer again.", tone: "neutral" });
+        break;
+      case "ROOM_AGENT_RESPONSE": {
+        answered.add(`${event.generation ?? 0}:${event.agent ?? ""}`);
+        if (typeof data.action === "string") {
+          const rationale = typeof data.rationale === "string" ? data.rationale : "";
+          out.push({ ...base(event), kind: "agent", action: data.action, title: actionText(data.action, amountOf(data.from), amountOf(data.to)), detail: rationale, tone: data.action === "KEEP" ? "neutral" : "good" });
+        } else {
+          out.push({ ...base(event), kind: "agent", action: str(data.status), title: "Couldn't respond.", detail: "No allocation change.", tone: "bad" });
+        }
+        break;
+      }
+      case "ROOM_KEEP":
+      case "ROOM_REDUCTION":
+      case "ROOM_RELEASE":
+        // The protocol's record of a response already shown; only shown alone if its response event is missing.
+        if (!answered.has(`${event.generation ?? 0}:${event.agent ?? ""}`)) {
+          const action = event.kind === "ROOM_KEEP" ? "KEEP" : event.kind === "ROOM_REDUCTION" ? "REDUCE" : "RELEASE";
+          out.push({ ...base(event), kind: "agent", action, title: actionText(action, amountOf(data.from), amountOf(data.to)), detail: typeof data.rationale === "string" ? data.rationale : "", tone: action === "KEEP" ? "neutral" : "good" });
+        }
+        break;
+      case "ROOM_AGENT_TIMEOUT":
+        answered.add(`${event.generation ?? 0}:${event.agent ?? ""}`);
+        out.push({ ...base(event), kind: "agent", action: "TIMEOUT", title: "No reply in time.", detail: "No allocation change. A timeout is not consent and not a release.", tone: "warn" });
+        break;
+      case "ROOM_AGENT_STALE_RESPONSE": {
+        const late = data.reason === "ANSWERED_AFTER_TIMEOUT";
+        const action = str(data.action);
+        out.push({ ...base(event), kind: "agent", action, title: ACTION_VERB[action] === undefined ? `${action.charAt(0)}${action.slice(1).toLowerCase()}.` : `${ACTION_VERB[action]}.`, detail: STALE_NOTE[str(data.reason)] ?? "The Room had already moved on.", tone: "neutral", ignored: late ? "LATE" : "STALE", note: late ? "Late reply — ignored" : "Stale reply — ignored" });
+        break;
+      }
+      case "ROOM_PROPOSAL_CREATED": {
+        const moves = arr(data.requests).map(rec).filter((row) => amountOf(row.from) !== amountOf(row.to)).map((row) => `${ROLE_TITLES[str(row.role) as RoleName] ?? str(row.role)} ${usd(amountOf(row.from))} → ${usd(amountOf(row.to))}`);
+        out.push({ ...base(event), kind: "system", title: "Proposal ready", detail: `${moves.length === 0 ? "Requests unchanged." : moves.join(" · ")}. Not authorized yet.`, tone: "neutral" });
+        break;
+      }
+      case "ROOM_NO_FEASIBLE_PORTFOLIO":
+        out.push({ ...base(event), kind: "system", title: "No feasible portfolio", detail: "Agents couldn't resolve the conflict within your mandate. Nothing was authorized.", tone: "bad" });
+        break;
+      case "MANDATE_REVERIFY_STARTED":
+        out.push({ ...base(event), kind: "system", title: "Re-verifying the negotiated portfolio", detail: "Room consensus does not create authority.", tone: "neutral", working: true });
+        break;
+      case "PORTFOLIO_AUTHORIZED": {
+        const reserved = amountOf(data.reserved);
+        out.push({ ...base(event), kind: "system", title: "Authorized", detail: `${reserved === null ? "" : `${usd(reserved)} reserved. `}Reserved is not settled.`, tone: "good" });
+        break;
+      }
+      case "PORTFOLIO_REFUSED":
+        out.push({ ...base(event), kind: "system", title: "Refused", detail: "Mandate refused the negotiated portfolio. Nothing was authorized.", tone: "bad" });
+        break;
+      default:
+        break;
+    }
+  }
+  // Re-verification is only "working" until its verdict arrives.
+  const done = events.some((event) => event.kind === "PORTFOLIO_AUTHORIZED" || event.kind === "PORTFOLIO_REFUSED");
+  return done ? out.map((message) => (message.working ? { ...message, working: false } : message)) : out;
+}
+
+/** Room participants in the current round who have not answered yet: real open requests, not a typing effect. */
+export function awaitingReplies(events: readonly LiveEvent[]): RoleName[] {
+  let generation: number | null = null;
+  let participants: string[] = [];
+  let closed = false;
+  const answered = new Set<string>();
+  for (const event of events) {
+    if (event.kind === "ROOM_GENERATION_STARTED") {
+      generation = event.generation;
+      participants = arr(event.data.participants).filter((item): item is string => typeof item === "string");
+      answered.clear();
+      closed = false;
+    }
+    if ((event.kind === "ROOM_AGENT_RESPONSE" || event.kind === "ROOM_AGENT_TIMEOUT") && event.generation === generation && event.agent !== null) answered.add(event.agent);
+    if (event.kind === "ROOM_PROPOSAL_CREATED" || event.kind === "ROOM_NO_FEASIBLE_PORTFOLIO" || event.kind === "ROOM_FINALIZED") closed = true;
+  }
+  if (closed || generation === null) return [];
+  return participants.filter((role) => !answered.has(role)).map(asRole).filter((role): role is RoleName => role !== null);
+}
+
+export interface ReviewItem {
+  readonly role: RoleName;
+  readonly amount: string;
+  readonly from: string | null;
+  readonly reason: string;
+  readonly codes: readonly string[];
+}
+
+export interface TradeReview {
+  readonly evaluated: number;
+  readonly blocked: number;
+  readonly noProposal: number;
+  readonly conflictsResolved: number;
+  readonly authorizedCount: number;
+  readonly settlementsConfirmed: number;
+  readonly authorized: readonly ReviewItem[];
+  readonly blockedItems: readonly ReviewItem[];
+  readonly negotiated: readonly ReviewItem[];
+  readonly quiet: readonly ReviewItem[];
+  readonly reserved: string | null;
+}
+
+/** Counts and lists for the receipt, from the run's events only. Nothing is assumed or hardcoded. */
+export function deriveReview(events: readonly LiveEvent[]): TradeReview {
+  const agents = deriveAgents(events);
+  const settlement = deriveSettlement(events);
+  const authorizedEvent = [...events].reverse().find((event) => event.kind === "PORTFOLIO_AUTHORIZED");
+  const proposal = [...events].reverse().find((event) => event.kind === "ROOM_PROPOSAL_CREATED");
+  const started = new Set(events.filter((event) => event.kind === "AGENT_REQUEST_STARTED" && event.agent !== null).map((event) => event.agent));
+  const blockedRoles = new Set(events.filter((event) => event.kind === "PROPOSAL_BLOCKED" && event.agent !== null).map((event) => event.agent));
+  const negotiated = proposal === undefined
+    ? []
+    : arr(proposal.data.requests).map(rec).filter((row) => amountOf(row.from) !== amountOf(row.to)).flatMap((row) => {
+        const role = asRole(str(row.role));
+        return role === null ? [] : [{ role, amount: amountOf(row.to) ?? "—", from: amountOf(row.from), reason: "", codes: [] }];
+      });
+  const resolvedRooms = authorizedEvent === undefined ? 0 : events.filter((event) => event.kind === "ROOM_FINALIZED" && event.data.result === "PROPOSED").length;
+  return {
+    evaluated: started.size,
+    blocked: blockedRoles.size,
+    noProposal: agents.filter((agent) => ["ABSTAINED", "TIMED OUT", "FAILED", "INVALID RESPONSE"].includes(agent.phase)).length,
+    conflictsResolved: resolvedRooms,
+    authorizedCount: agents.filter((agent) => agent.finalOutcome === "RESERVED").length,
+    settlementsConfirmed: settlement.settled ? 1 : 0,
+    authorized: agents.filter((agent) => agent.finalOutcome === "RESERVED").map((agent) => ({ role: agent.role, amount: agent.finalAmount.replace(/ USDC$/, ""), from: null, reason: "", codes: [] })),
+    blockedItems: agents.filter((agent) => agent.phase === "BLOCKED").map((agent) => ({ role: agent.role, amount: agent.requested.replace(/ USDC$/, ""), from: null, reason: reasonLabel(agent.reasons[0] ?? "BLOCKED"), codes: agent.reasons })),
+    negotiated,
+    quiet: agents.filter((agent) => ["ABSTAINED", "TIMED OUT", "FAILED", "INVALID RESPONSE"].includes(agent.phase)).map((agent) => ({ role: agent.role, amount: "—", from: null, reason: agent.phase === "ABSTAINED" ? "No proposal" : agent.phase === "TIMED OUT" ? "Timed out" : "Couldn't respond", codes: [] })),
+    reserved: authorizedEvent === undefined ? null : amountOf(authorizedEvent.data.reserved),
+  };
+}
+
+/** The portfolio Mandate is re-verifying: each proposal's portfolio-notional request, as the event carries it. */
+export function proposedPortfolio(events: readonly LiveEvent[]): { readonly role: RoleName; readonly amount: string }[] {
+  const event = [...events].reverse().find((item) => item.kind === "MANDATE_REVERIFY_STARTED");
+  if (event === undefined) return [];
+  return arr(event.data.proposals).map(rec).flatMap((row) => {
+    const role = asRole(str(row.role));
+    const notional = arr(row.requested).map(rec).find((item) => item.resource === "portfolio-notional");
+    return role === null || notional === undefined || typeof notional.amount !== "string" ? [] : [{ role, amount: notional.amount }];
+  });
+}
+
+export interface AllocationSummary {
+  /** Sum of enabled agents' ceilings, or null while any enabled ceiling is unset. */
+  readonly ceilings: number | null;
+  readonly deployable: number | null;
+  /** Ceilings exceed deployable capital: Mandate holds the cap and the Room resolves overlap. */
+  readonly oversubscribed: boolean;
+  /** Deployable capital not assigned to any agent ceiling, when ceilings fit. */
+  readonly unassigned: number | null;
+  /** Share of deployable capital the ceilings cover, 0..1. */
+  readonly fill: number;
+}
+
+const decimalText = (text: string | null): number | null => (text !== null && /^\d+(\.\d+)?$/.test(text.trim()) ? Number(text.trim()) : null);
+
+/**
+ * Capital allocation for display: agent ceilings against deployable capital.
+ * Only the capital dimension; derivative, illiquid and other typed limits
+ * are separate and never folded into this figure.
+ */
+export function allocationSummary(input: { readonly capital: string | null; readonly maxDeployed: string | null; readonly ceilings: readonly (string | null)[] }): AllocationSummary {
+  const deployable = decimalText(input.maxDeployed) ?? decimalText(input.capital);
+  const values = input.ceilings.map(decimalText);
+  const ceilings = values.every((value) => value !== null) ? values.reduce<number>((total, value) => total + (value ?? 0), 0) : null;
+  const oversubscribed = deployable !== null && ceilings !== null && ceilings > deployable;
+  return {
+    ceilings,
+    deployable,
+    oversubscribed,
+    unassigned: deployable !== null && ceilings !== null && !oversubscribed ? deployable - ceilings : null,
+    fill: deployable === null || deployable === 0 || ceilings === null ? 0 : Math.min(1, ceilings / deployable),
+  };
 }
