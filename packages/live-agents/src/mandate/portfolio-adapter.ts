@@ -17,7 +17,7 @@
 
 import { authorityId, partyIdInputOf } from '@mandate/core';
 import { controlRules, type AuthorizationRecord } from '@mandate/control';
-import { AuthorityLedger, validateRevocation, type LedgerStore, type ReducerRules } from '@mandate/ledger';
+import { AuthorityLedger, attemptsOf, validateRevocation, type LedgerStore, type ReducerRules } from '@mandate/ledger';
 import {
   availabilityFrom,
   compilePortfolio,
@@ -158,4 +158,20 @@ export async function ledgerView(core: PortfolioCore): Promise<{ readonly versio
       .map((r) => ({ id: r.id, authority: r.authority, status: r.status, committedAt: r.committedAt.toString() }))
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
   };
+}
+
+export type LedgerReservationStatus = 'RESERVED' | 'ADMITTED' | 'CONSUMED' | 'RELEASED' | 'UNKNOWN';
+
+/**
+ * What the ledger says of one reservation — the only authority on it:
+ * ACTIVE with no attempt (RESERVED), ACTIVE with an admitted attempt
+ * (ADMITTED: an artifact may exist), CLOSED with consumption (CONSUMED) or
+ * without (RELEASED).
+ */
+export async function reservationLedgerStatus(core: PortfolioCore, reservation: string): Promise<LedgerReservationStatus> {
+  const state = (await core.engine.read(core.compiled.mandate.principal)).state;
+  const r = state.reservations.get(reservation as never);
+  if (r === undefined) return 'UNKNOWN';
+  if (r.status === 'CLOSED') return r.demands.some((d) => d.consumed > 0n) ? 'CONSUMED' : 'RELEASED';
+  return attemptsOf(state, r.id).length > 0 ? 'ADMITTED' : 'RESERVED';
 }

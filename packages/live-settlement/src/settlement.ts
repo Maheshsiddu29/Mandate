@@ -214,10 +214,11 @@ export class LiveSettlement {
     if (!sel.ok) return refuse('SELECT', sel.reason);
     const x = sel.execution;
     await this.#refresh(x.version);
-    const e = this.#eligibility(x);
-    if (!e.eligible) return refuse('ELIGIBILITY', e.reason, { condition: e.condition, proposal: x.proposal });
     const m = mapToFixture(x, this.#env.deployment);
     if (!m.ok) return refuse('FIXTURE', m.reason, { proposal: x.proposal });
+    // An attempt this settlement admitted (an earlier dry run, or a crash) is its own: eligibility accepts that one only.
+    const e = this.#eligibility(x, m.value.bindingDigest);
+    if (!e.eligible) return refuse('ELIGIBILITY', e.reason, { condition: e.condition, proposal: x.proposal });
     return { execution: x, settlement: m.value };
   }
 

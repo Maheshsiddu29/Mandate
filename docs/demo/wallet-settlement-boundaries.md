@@ -448,3 +448,45 @@ reservation identity or which key may sign.
 **Smoke check.** `npm run agents:rpc:smoke [-- --tx 0x…]` is read-only:
 `eth_chainId`, `eth_blockNumber`, the gate's code hash against the
 manifest, and optionally one historical receipt. No key is loaded.
+
+## 7. The browser evidence bridge
+
+**Status: implemented (`packages/live-settlement/src/session-settlement.ts`,
+`scripts/settle.ts`; the server's SSE stream from §4).**
+
+```text
+browser: POST /sessions → lab-<128 random bits>  (durable under .live/sessions/<id>/)
+         authorize (wallet or demo key) → run → the Stock child is reserved in the durable ledger
+operator: npm run agents:settle:testnet -- --session lab-<id>
+         restore that exact session (no new model run, no rebuilt proposal)
+         reconcile every journaled attempt
+         verify the version's principal authorization (a wallet approval is re-verified from its stored evidence)
+         dry run: SETTLEMENT_ATTEMPT_PREPARED, TESTNET_PREFLIGHT_*, DOMAIN_EXECUTION_READY, TESTNET_SIMULATION_*
+         TESTNET_READY_FOR_SEND { broadcast: "DISABLED_IN_B.5.3", principals, wouldSend }   — and stop
+server:  picks the appended events up from session.db (every 400 ms) and streams them
+browser: sees them in the same session; after a reload or a server restart, replays them from sequence 0
+```
+
+The command writes every event into the session's own log — one dense
+sequence shared with the server — so there is no second evidence world.
+`GET /sessions/:id` also reports each reserved execution's status as the
+ledger holds it now (`RESERVED`, `ADMITTED`, `CONSUMED`, `RELEASED`,
+`ORPHANED`).
+
+**Transport.** The existing Server-Sent Events endpoint
+`GET /api/live/sessions/:id/events?after=<sequence>`: `id:` is the sequence,
+the browser's `EventSource` resumes with `Last-Event-ID`, the server replays
+everything after it, and the browser drops any sequence it already holds. No
+WebSocket was added.
+
+**Safe payloads.** Settlement events carry public facts only: session id,
+reservation, proposal and binding digests, chain id, public addresses, the
+gate mandate digest and execution commitment, transaction hash, block,
+receipt status, gas, token deltas, evidence class, explorer URL, failure or
+reconciliation codes, and the RPC provenance label. Never a key, a seed, a
+signature, the raw transaction, calldata, an RPC URL, an API key or the
+environment (tested).
+
+**No send.** `agents:settle:testnet` has no send path at all; the reconciler
+holds a reader only (structure tests). `agents:live:testnet` (B.5.2) is kept
+as the regression path; its send now needs the journal too.

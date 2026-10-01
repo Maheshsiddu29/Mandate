@@ -43,7 +43,7 @@ import type { AgentModelProvider } from './runtime/provider.ts';
 import { realEntropy, type Entropy } from './runtime/entropy.ts';
 import { EventLog } from './telemetry/events.ts';
 import { usdcText, type Role } from './types.ts';
-import { APPROVAL_CHAIN_ID, APPROVAL_DOMAIN, APPROVAL_ENVIRONMENT, APPROVAL_PRIMARY_TYPE, approvalMessage, approvalTypedData, checkApproval } from './wallet/approval.ts';
+import { APPROVAL_CHAIN_ID, APPROVAL_DOMAIN, APPROVAL_ENVIRONMENT, APPROVAL_PRIMARY_TYPE, approvalMessage, approvalTypedData, checkApproval, sessionDigest } from './wallet/approval.ts';
 import { ChallengeBook, MAX_SIGNATURE_FAILURES, draftKey, type WalletChallenge } from './wallet/challenges.ts';
 import { keccakHex } from './wallet/eip712.ts';
 
@@ -404,6 +404,25 @@ export class LiveSession {
     const amending = this.versions.active !== null;
     if (amending) this.events.emit('MANDATE_AMENDMENT_STARTED', { data: { from: this.versions.active?.version ?? null, to: this.versions.nextVersion } });
     return this.#authorized(await this.versions.commit(c.prepared, authorization, this.protocolNow()), amending);
+  }
+
+  /**
+   * Re-verify a wallet-approved version from its durable evidence: the stored
+   * signature must still recover to the recorded principal over the stored
+   * message, and the message must bind this session and that version's
+   * digest. What a settlement command checks before it acts on the version.
+   */
+  verifyWalletApproval(version: number): { readonly ok: true; readonly principal: string } | { readonly ok: false; readonly reason: string } {
+    const record = this.versions.records.find((r) => r.version === version);
+    if (record === undefined) return { ok: false, reason: 'VERSION_UNKNOWN' };
+    if (record.authorization.method !== 'WALLET_EIP712') return { ok: false, reason: 'NOT_WALLET_APPROVED' };
+    const a = this.#approvals.get(version);
+    if (a === undefined) return { ok: false, reason: 'APPROVAL_EVIDENCE_MISSING' };
+    if (a.message.mandateDigest !== record.digest || a.message.mandateVersion !== BigInt(version) || a.message.principal !== record.authorization.principal || a.message.sessionDigest !== sessionDigest(this.id)) return { ok: false, reason: 'APPROVAL_NOT_FOR_THIS_VERSION' };
+    const check = checkApproval(a.message, a.signature);
+    if (!check.ok) return { ok: false, reason: check.code };
+    if (keccakHex(check.signature) !== record.authorization.wallet?.signatureDigest) return { ok: false, reason: 'SIGNATURE_DIGEST_MISMATCH' };
+    return { ok: true, principal: a.message.principal };
   }
 
   /** The wallet approval evidence (message and signature) for a version, if it was wallet-approved. Never sent to the browser. */

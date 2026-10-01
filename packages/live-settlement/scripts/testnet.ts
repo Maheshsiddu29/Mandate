@@ -20,8 +20,10 @@
  * `.robinhood-testnet/keys.json` (loaded by the 7E.3 operator library);
  * addresses and code hashes come from `docs/phase-7e/deployment-manifest.json`.
  * No key is printed. A send writes its public record, write-ahead, to
- * `.robinhood-testnet/runs/live-ai-<time>/settlement.json`; a later send
- * refuses while any earlier record is unresolved.
+ * `.robinhood-testnet/runs/live-ai-<time>/settlement.json` and the durable
+ * settlement journal (`settlement.db`, B.5.3) beside it; a later send
+ * refuses while any earlier record is unresolved. The session is in memory:
+ * for a durable, browser-linked settlement use `agents:settle:testnet`.
  *
  * Exit codes: 0 done (dry run READY, or LIVE_TESTNET confirmed); 1 usage;
  * 2 no OPENAI_API_KEY; 3 mandate draft refused; 4 no eligible Stock action
@@ -36,7 +38,8 @@ import { parseArgs } from 'node:util';
 import { LiveSession, OpenAIProvider, PRESETS, StubProvider, describeConfig, readConfig, renderEvent, summarizeRun, type AgentModelProvider, type LiveEvent, type Preset } from '@mandate/live-agents';
 import { loadKeys, MANIFEST_PATH, REPO } from '../../evm-robinhood/scripts/lib.ts';
 import { readAuthorizationLine } from './authorization-input.ts';
-import { LiveSettlement, RobinhoodTestnetRpc, SEND_AUTHORIZATION_PHRASE, SendGate, parseDeployment, type SettlementOutcome, type SettlementRecord } from '../src/index.ts';
+import { LiveSettlement, RobinhoodTestnetRpc, SEND_AUTHORIZATION_PHRASE, SendGate, SettlementJournal, parseDeployment, type SettlementOutcome, type SettlementRecord } from '../src/index.ts';
+import { readRpcConfig } from './rpc-config.ts';
 
 const { values } = parseArgs({
   options: {
@@ -126,7 +129,9 @@ const summary = summarizeRun(run);
 say(`\nLive AI run: ${summary.status} · reserved ${summary.reserved} USDC · Live AI transactions ${summary.transactions}`);
 
 // --- Settlement -----------------------------------------------------------------------------------------
-const rpc = new RobinhoodTestnetRpc(keys.deployer.privateKey, d.gate.address);
+const rpcConfig = readRpcConfig();
+if (!rpcConfig.ok) fail(1, rpcConfig.ok ? '' : rpcConfig.error);
+const rpc = new RobinhoodTestnetRpc(keys.deployer.privateKey, d.gate.address, rpcConfig.ok ? rpcConfig.endpoints : undefined);
 const settlement = new LiveSettlement({ session, deployment: d, rpc, keys: { principal: keys.principal.privateKey, agent: keys.agent.privateKey } });
 const prepared = await settlement.prepare();
 const finish = async (code: number, result: object): Promise<never> => {
@@ -140,10 +145,15 @@ if ('ineligible' in prepared) {
 const p = 'ineligible' in prepared ? (null as never) : prepared;
 
 const scratch = mkdtempSync(join(tmpdir(), 'mandate-live-settlement-dry-'));
+// One journal for the dry run and the send: the send continues the attempt the dry run prepared.
+const runDir = join(RUNS, `live-ai-${new Date().toISOString().replace(/[:.]/g, '-')}`);
+if (!dryRun) mkdirSync(runDir, { recursive: true, mode: 0o700 });
+const journal = SettlementJournal.open(join(dryRun ? scratch : runDir, 'settlement.db'));
 let dry: SettlementOutcome;
 try {
-  dry = await settlement.run(p, { mode: 'DRY_RUN', gate: new SendGate(), ledgerPath: join(scratch, 'ledger.db') });
+  dry = await settlement.run(p, { mode: 'DRY_RUN', gate: new SendGate(), ledgerPath: join(scratch, 'ledger.db'), journal });
 } finally {
+  if (dryRun) journal.close();
   rmSync(scratch, { recursive: true, force: true });
 }
 if (dry.status !== 'READY') {
@@ -167,14 +177,13 @@ if (input.kind !== 'LINE' || !gate.authorize(input.line)) {
   await finish(6, { status: 'NOT_AUTHORIZED', broadcasts: 0 });
 }
 
-const runDir = join(RUNS, `live-ai-${new Date().toISOString().replace(/[:.]/g, '-')}`);
-mkdirSync(runDir, { recursive: true, mode: 0o700 });
 const records: SettlementRecord[] = [];
 const recordPath = join(runDir, 'settlement.json');
 const writeRecord = (r: SettlementRecord) => {
   records.push(r);
   writeFileSync(recordPath, `${show({ label: 'Live AI testnet settlement record (public identifiers only; gitignored)', records })}\n`, { mode: 0o600 });
 };
-const sent = await settlement.run(p, { mode: 'SEND', gate, ledgerPath: join(runDir, 'ledger.db'), record: writeRecord });
+const sent = await settlement.run(p, { mode: 'SEND', gate, ledgerPath: join(runDir, 'ledger.db'), record: writeRecord, journal });
+journal.close();
 say(`\n=== SETTLEMENT ===\n${show(sent)}`);
 await finish(sent.status === 'CONFIRMED' && sent.evidence === 'LIVE_TESTNET' ? 0 : 7, { status: sent.status, evidence: 'evidence' in sent ? sent.evidence : null, txHash: 'txHash' in sent ? sent.txHash : null });

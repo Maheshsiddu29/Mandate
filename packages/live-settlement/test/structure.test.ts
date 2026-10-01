@@ -97,6 +97,24 @@ describe('live-settlement structural boundary', () => {
     assert.match(runner, /A stub decision is never settled/);
   });
 
+  it('B.5.3: the session-bound command and the reconciler cannot broadcast', () => {
+    const scripts = (JSON.parse(readFileSync(new URL('package.json', REPO), 'utf8')) as { scripts: { [k: string]: string } }).scripts;
+    assert.match(scripts['agents:settle:testnet'] ?? '', /live-settlement\/scripts\/settle\.ts$/);
+    assert.match(scripts['agents:rpc:smoke'] ?? '', /live-settlement\/scripts\/rpc-smoke\.ts$/);
+    const settle = SCRIPTS.find((s) => s.file === 'settle.ts')?.text ?? '';
+    const bound = SRC.find((s) => s.file === 'session-settlement.ts')?.text ?? '';
+    const smoke = SCRIPTS.find((s) => s.file === 'rpc-smoke.ts')?.text ?? '';
+    for (const [name, text] of [['settle.ts', settle], ['session-settlement.ts', bound], ['rpc-smoke.ts', smoke]] as const) {
+      assert.ok(text.length > 0, name);
+      assert.doesNotMatch(text, /'SEND'|\.authorize\(|readAuthorizationLine|broadcast\(|eth_sendRawTransaction/, name);
+    }
+    assert.doesNotMatch(smoke, /loadKeys|privateKey/);
+    // The reconciler is handed a reader: it has no broadcast, prepare or key.
+    const reconcile = SRC.find((s) => s.file === 'reconcile.ts')?.text ?? '';
+    assert.match(reconcile, /readonly reader: ChainReader;/);
+    assert.doesNotMatch(reconcile, /TestnetRpc|\.broadcast\(|prepareExecute|SendGate/);
+  });
+
   it('declares no any and parses no float', () => {
     for (const { file, text } of [...SRC, ...SCRIPTS]) assert.doesNotMatch(text, /(?<!\?):\s*any\b|<any>|\bas\s+any\b|\bparseFloat\b/, file);
   });

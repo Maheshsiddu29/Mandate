@@ -33,6 +33,7 @@ import { LatencyChaosProvider, parseChaosSpec } from '../runtime/latency-chaos.t
 import type { AgentModelProvider } from '../runtime/provider.ts';
 import { isObject, type JsonObject, type JsonValue } from '../runtime/strict-json.ts';
 import { StubProvider } from '../runtime/stub-provider.ts';
+import { reservationLedgerStatus } from '../mandate/portfolio-adapter.ts';
 import { sessionExists } from '../persistence/session-store.ts';
 import { LiveSession, type RunResult } from '../session.ts';
 import { LIVE_SCHEMA, safe, type LiveEvent } from '../telemetry/events.ts';
@@ -175,7 +176,7 @@ export class LiveLab {
     const action = parts.slice(2).join('/');
     if (r.method === 'GET' && action === '') {
       entry.session.events.sync();
-      return ok(this.#view(entry));
+      return ok({ ...this.#view(entry), reservations: await this.#reservations(entry) });
     }
     if (r.method !== 'POST') return refuse(405, 'METHOD_NOT_ALLOWED', 'Use POST.');
     const body = isObject(r.body) ? r.body : {};
@@ -263,6 +264,18 @@ export class LiveLab {
     const entry: Entry = { session, provider: provider.name, draft: null, task: null, lastRun: null, lastPolicyStress: null, lastError: null, touchedMs: this.#o.clock.nowMs() };
     this.#sessions.set(id, entry);
     return ok({ sessionId: id, ...this.#view(entry) }, 201);
+  }
+
+  /** Each reserved execution and what the durable ledger says of it now: the settlement path may have consumed or released it. */
+  async #reservations(entry: Entry): Promise<readonly { readonly reservation: string; readonly role: string; readonly version: number; readonly status: string }[]> {
+    const s = entry.session;
+    const out: { reservation: string; role: string; version: number; status: string }[] = [];
+    for (const x of s.reservedExecutions) {
+      const core = s.versions.coreOf(x.version)?.core;
+      out.push({ reservation: x.record.reservation, role: x.role, version: x.version, status: core === undefined ? 'UNKNOWN' : await reservationLedgerStatus(core, x.record.reservation) });
+    }
+    for (const o of s.orphans) out.push({ reservation: o, role: 'unknown', version: 0, status: 'ORPHANED' });
+    return out;
   }
 
   #validation(entry: Entry): DraftValidation | null {
