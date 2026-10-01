@@ -233,13 +233,13 @@ function hard(reasons: readonly string[]): boolean {
   return reasons.some((reason) => HARD_BLOCK.has(reason));
 }
 
-/** Display a millisecond reading on its own scale. Seconds and milliseconds are not one bar. */
+/** Preserve millisecond precision so distinct event times never collapse to one displayed time. */
 export function formatDuration(value: number | null): string {
   if (value === null) return "—";
   if (value >= 1000) {
     const whole = Math.floor(value / 1000);
     const frac = Math.floor(value % 1000);
-    return `${whole}.${String(frac).padStart(3, "0").slice(0, 2)}s`;
+    return `${whole}.${String(frac).padStart(3, "0")}s`;
   }
   return `${value} ms`;
 }

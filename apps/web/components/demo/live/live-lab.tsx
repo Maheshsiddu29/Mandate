@@ -439,7 +439,7 @@ export function LiveLab(): ReactNode {
           {eventGroups.map((group) => (
             <li key={`${group.elapsedMs}:${group.events[0]?.sequence}`}>
               <time dateTime={group.at}>{formatDuration(group.elapsedMs)}</time>
-              <ol>{group.events.map((event) => <li key={event.sequence}><span>Step {event.sequence + 1}</span>{eventSummary(event)}<details><summary>Raw event</summary><code>{event.kind}</code></details></li>)}</ol>
+              <ol>{group.events.map((event) => <li key={event.sequence}><span>Step {event.sequence + 1}</span>{eventSummary(event)}<details><summary>Raw event</summary><code>{event.kind}</code><pre>{JSON.stringify(event.data, null, 2)}</pre></details></li>)}</ol>
             </li>
           ))}
         </ol>

@@ -5,6 +5,7 @@ import type { JsonRecord, LiveEvent } from '../components/demo/live/live-client.
 import {
   blockedInsideRoom,
   derivePresentation,
+  formatDuration,
   groupEventsByElapsed,
   reasonLabel,
   resourceLines,
@@ -242,8 +243,11 @@ test('equal event timestamps are grouped without changing order or time', () => 
   assert.equal(groups[0]?.elapsedMs, 41660);
   assert.deepEqual(groups[0]?.events.map((item) => item.sequence), [0, 1, 2]);
   assert.equal(groups[1]?.elapsedMs, 41661);
+  assert.equal(formatDuration(41660), '41.660s');
+  assert.equal(formatDuration(41661), '41.661s');
   assert.match(ui, /Equal real timestamps stay equal and are grouped/);
   assert.match(ui, /Step \{event\.sequence \+ 1\}/);
+  assert.match(ui, /JSON\.stringify\(event\.data, null, 2\)/);
   assert.doesNotMatch(ui, /random.*time|synthetic.*time/i);
 });
 

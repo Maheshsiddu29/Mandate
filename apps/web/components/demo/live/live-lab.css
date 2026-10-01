@@ -345,6 +345,7 @@
 .live-event-groups ol span { display: inline-block; width: 62px; color: var(--live-muted); font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.7rem; }
 .live-event-groups details { display: inline-block; margin-left: 0.5rem; color: var(--live-muted); font-size: 0.72rem; }
 .live-event-groups details code { display: block; margin-top: 0.35rem; color: var(--live-primary-light); }
+.live-event-groups pre { max-width: 100%; margin: 0.45rem 0 0; padding: 0.65rem; overflow: auto; border: 1px solid var(--live-border); border-radius: 7px; background: #0a0a16; color: var(--live-text); font: 0.7rem/1.5 var(--font-mono, ui-monospace, monospace); white-space: pre-wrap; }
 .live-confirm { width: min(500px, calc(100vw - 2rem)); }
 .live-confirm .button { margin-top: 1rem; }
 
