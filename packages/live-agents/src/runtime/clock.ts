@@ -18,6 +18,8 @@ export interface Clock {
   nowMs(): number;
   /** Wall-clock ISO timestamp, for labelling only. */
   wallIso(): string;
+  /** Wall-clock milliseconds since the Unix epoch: only for expiries that must outlive a process (wallet challenges, restored protocol time). */
+  wallMs(): number;
   /** Resolves after `ms`, or rejects when `signal` aborts. */
   sleep(ms: number, signal?: AbortSignal): Promise<void>;
 }
@@ -50,6 +52,7 @@ function abortable(ms: number, signal: AbortSignal | undefined, schedule: (fn: (
 export const realClock: Clock = {
   nowMs: () => performance.now(),
   wallIso: () => new Date().toISOString(),
+  wallMs: () => Date.now(),
   sleep: (ms, signal) =>
     abortable(ms, signal, (fn, t) => {
       const h = setTimeout(fn, t);
@@ -70,7 +73,11 @@ export class ManualClock implements Clock {
   }
 
   wallIso(): string {
-    return new Date(Date.UTC(2026, 8, 30) + this.#now).toISOString();
+    return new Date(this.wallMs()).toISOString();
+  }
+
+  wallMs(): number {
+    return Date.UTC(2026, 8, 30) + this.#now;
   }
 
   sleep(ms: number, signal?: AbortSignal): Promise<void> {

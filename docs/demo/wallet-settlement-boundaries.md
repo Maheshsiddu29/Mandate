@@ -141,3 +141,86 @@ replay, which is the natural transport to extend once events are durable.
 | Portfolio replay prevention | The settlement admits an attempt on the **portfolio** reservation through the control engine's existing `ADMIT_ATTEMPT` before any domain key is used, so the portfolio ledger — not a process flag or a journal — refuses a second attempt. |
 | Settlement journal | Lifecycle and evidence only; zero authority. |
 | Consumption | After verified receipt evidence, the portfolio reservation is consumed and closed in the portfolio ledger, durably. |
+
+## 3. Wallet-signed mandate approval
+
+**Status: implemented (`packages/live-agents/src/wallet/`).**
+
+### 3.1 Trust boundary
+
+The principal's wallet signs an EIP-712 **portfolio mandate approval** of one
+exact mandate digest. The local server verifies it against state it holds and
+only then activates the version. This is a *runtime* authorization boundary:
+
+| | Wallet path | Demo principal key path |
+| --- | --- | --- |
+| Who authorizes | the wallet address recovered from the signature | the exact text `AUTHORIZE MANDATE V<n>` |
+| What the frozen Portfolio Verifier checks | the demonstration principal key's prehash signature, made only after the wallet approval verified | the same signature |
+| Record | `authorization.method = WALLET_EIP712`, `principal = 0x…wallet`, `protocolSigner = demo key` | `DEMO_PRINCIPAL_KEY`, `principal = protocolSigner = demo key` |
+| Domain execution | **not delegated** (`domainDelegation: NOT_DELEGATED`) | not delegated |
+
+The protocol signature stays the demonstration key's because the frozen
+verifier accepts only a raw prehash signature (§1.4); changing that is a
+Phase 7F change this milestone does not make. The UI may say *wallet-signed
+mandate*; it never says the wallet delegated execution authority onchain.
+
+### 3.2 Domain and type
+
+```text
+EIP712Domain(string name,string version,uint256 chainId)
+  name "Mandate", version "1", chainId 46630 (Robinhood Chain testnet)
+```
+
+There is no `verifyingContract`: no contract verifies this signature, and
+naming one (the gate, say) would claim it does. The chain id binds the
+approval to the testnet environment; a signature made for any other chain id
+recovers to a different address and is refused (`WALLET_SIGNER_MISMATCH`).
+
+```text
+PortfolioMandateApproval(string statement,string environment,bytes32 mandateDigest,uint64 mandateVersion,
+  address principal,address protocolSigner,uint64 validAfter,uint64 validUntil,bytes32 sessionDigest,bytes32 challenge)
+```
+
+| Field | Value, always rebuilt by the server |
+| --- | --- |
+| `statement` | a fixed-form summary of the mandate's limits, agents and expiry, ending "This signature is not a blockchain transaction, moves no funds and does not delegate onchain execution authority." |
+| `environment` | `robinhood-chain-testnet` |
+| `mandateDigest` | `portfolioMandateDigest(m)` — the canonical `PORTFOLIO_MANDATE.V1` digest; no second serialization of the mandate |
+| `mandateVersion` | V<n> in the session |
+| `principal` | the address the browser said it would sign with; it must be what recovers |
+| `protocolSigner` | the demonstration principal key's address |
+| `validAfter`, `validUntil` | wall-clock unix seconds; 300 s apart |
+| `sessionDigest` | `keccak256("mandate-live-session/v1:" ‖ sessionId)` |
+| `challenge` | 32 random bytes from the server |
+
+The encoder (`wallet/eip712.ts`) handles flat structs of atomic types and is
+tested to reproduce the kernel's `eip712SigningHash`, which the frozen gate
+corpus proves equal to the Solidity gate's.
+
+### 3.3 Challenge and replay protection
+
+```text
+POST /sessions/:id/wallet/challenge {address}
+  → server prepares the exact mandate the current draft compiles to (digest fixed), draws 32 random bytes,
+    stores {mandate, version, session, address, draft, validity} and returns the typed data
+wallet: eth_signTypedData_v4
+POST /sessions/:id/wallet/authorize {challenge, signature}
+  → challenge known in this session · not consumed · not locked · within validity
+  → still the next version · the session's draft unchanged since issue
+  → rebuild the message from server state · recover · recovered == stored address
+  → consume the challenge · commit exactly the prepared mandate · ACTIVE
+```
+
+The browser sends only the challenge id and the signature. Refusals:
+`WALLET_CHALLENGE_UNKNOWN` (also a challenge from another session),
+`WALLET_CHALLENGE_REUSED`, `WALLET_CHALLENGE_EXPIRED`,
+`WALLET_CHALLENGE_STALE` (a V1 challenge after V1 exists),
+`WALLET_CHALLENGE_LOCKED` (five bad signatures), `WALLET_DRAFT_CHANGED`,
+`WALLET_SIGNATURE_MALFORMED` (including high-`s`), `WALLET_SIGNER_MISMATCH`
+(any change to any field, another chain, another key, a claimed address that
+does not recover), and the version rules as before (`MANDATE_PAUSED`,
+`AMENDMENT_AFTER_RESERVATION`, `BUSY`).
+
+A challenge is consumed before the version is committed, so it authorizes at
+most once even if the commit fails. The signature is kept as evidence
+server-side; events and API views carry only its keccak digest.

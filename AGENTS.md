@@ -386,12 +386,18 @@ principal authors live, and the frozen portfolio path decides. It changes no
 protocol semantics, nothing depends on it, and it emits its own
 `MANDATE_LIVE_AI.V1` stream (never `MANDATE_JUDGE_DEMO.V1`). Its
 dependencies are fixed to `@mandate/portfolio`, `@mandate/control`,
-`@mandate/ledger`, `@mandate/core` and `@mandate/kernel`. Only
+`@mandate/ledger`, `@mandate/core`, `@mandate/kernel` and the kernel's
+pinned noble packages. Only
 `src/config.ts` reads the environment, only
 `src/runtime/openai-provider.ts` makes a network call (the OpenAI Responses
-API), only `src/runtime/clock.ts` reads a clock, only `src/server/http.ts`
-listens (on 127.0.0.1), and only `src/mandate/signer.ts` holds a
-demonstration key; no source reads a file. Models answer closed schemas
+API), only `src/runtime/clock.ts` reads a clock, only
+`src/runtime/entropy.ts` reads randomness, only `src/server/http.ts`
+listens (on 127.0.0.1), only `src/mandate/signer.ts` holds a
+demonstration key, and only `src/wallet/eip712.ts` recovers a wallet
+signer (it cannot sign); no source reads a file. The principal may
+authorize a version with an EIP-712 wallet approval the server verifies
+([wallet-settlement-boundaries.md](docs/demo/wallet-settlement-boundaries.md));
+that approval never delegates domain execution. Models answer closed schemas
 (candidate ids, bounded amounts, case identifiers) and never supply an
 address, venue, amount outside supplied bounds, calldata or signature.
 `structure.test.ts` enforces all of it. `npm run agents:stub` runs offline;

@@ -17,7 +17,7 @@
 
 import { authorityId, partyIdInputOf } from '@mandate/core';
 import { controlRules, type AuthorizationRecord } from '@mandate/control';
-import { AuthorityLedger, validateRevocation } from '@mandate/ledger';
+import { AuthorityLedger, validateRevocation, type LedgerStore, type ReducerRules } from '@mandate/ledger';
 import {
   availabilityFrom,
   compilePortfolio,
@@ -53,9 +53,9 @@ export function compile(m: PortfolioMandate, bindings: readonly DomainBinding[])
   return c.ok ? { ok: true, compiled: c.value } : { ok: false, reasons: c.error };
 }
 
-/** Register a first version in a fresh in-memory ledger. */
-export async function registerFirst(compiled: CompiledPortfolio, at: bigint): Promise<Registered> {
-  const core = createPortfolioCore(compiled);
+/** Register a first version in a fresh ledger: in memory, or the durable store `storeOf` builds. */
+export async function registerFirst(compiled: CompiledPortfolio, at: bigint, storeOf?: (rules: ReducerRules) => LedgerStore): Promise<Registered> {
+  const core = createPortfolioCore(compiled, storeOf === undefined ? {} : { storeOf });
   const r = await registerPortfolio(core, at);
   return r.ok ? { ok: true, core, ledgerVersion: r.value.version } : { ok: false, reasons: r.error };
 }

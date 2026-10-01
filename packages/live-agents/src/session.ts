@@ -2,7 +2,7 @@
  * A Live AI Lab session (docs/demo/live-ai-lab.md).
  *
  * ```text
- * draft ─(explicit AUTHORIZE MANDATE V1)─▶ ACTIVE
+ * draft ─(wallet EIP-712 approval, or the demo key's AUTHORIZE MANDATE V1)─▶ ACTIVE
  *   ─▶ concurrent discovery ─▶ screening ─▶ resource conflict? ─▶ autonomous live Room
  *   ─▶ freshly signed proposals at the agreed sizes ─▶ runPortfolio (real Room, verifier, ledger)
  *   ─▶ stale quotes: REFRESH_REQUIRED ─▶ one fresh decision ─▶ runPortfolio again
@@ -21,7 +21,7 @@ import { proposalDigest, verificationTranscript, type Reason, type SignedProposa
 import type { TrustedCandidate } from './agents/spec.ts';
 import { applyPreset, presetDraft, type MandateDraft, type Preset } from './authoring/draft-types.ts';
 import type { DraftValidation } from './authoring/draft-validator.ts';
-import { MandateVersions, type ActiveMandate, type AuthorizeResult } from './authoring/mandate-versioning.ts';
+import { MandateVersions, WALLET_AUTHORIZATION_LABEL, type ActiveMandate, type AuthorizeResult, type PrincipalAuthorization, type RefusalCode } from './authoring/mandate-versioning.ts';
 import { interpretPrompt } from './authoring/prompt-to-draft.ts';
 import { amountViews, enabledRoles } from './context.ts';
 import { discover, discoverAgent, type AgentOutcome, type DiscoveryDeps } from './discovery.ts';
@@ -36,8 +36,12 @@ import { DEFAULT_MAX_GENERATIONS, runLiveRoom, type RoomResult } from './room/co
 import { assess, conflictsOf, type Participant } from './room/negotiation.ts';
 import { protocolClock, realClock, type Clock } from './runtime/clock.ts';
 import type { AgentModelProvider } from './runtime/provider.ts';
+import { realEntropy, type Entropy } from './runtime/entropy.ts';
 import { EventLog } from './telemetry/events.ts';
 import { usdcText, type Role } from './types.ts';
+import { APPROVAL_CHAIN_ID, APPROVAL_DOMAIN, APPROVAL_ENVIRONMENT, APPROVAL_PRIMARY_TYPE, approvalMessage, approvalTypedData, checkApproval } from './wallet/approval.ts';
+import { ChallengeBook, MAX_SIGNATURE_FAILURES, draftKey, type WalletChallenge } from './wallet/challenges.ts';
+import { keccakHex } from './wallet/eip712.ts';
 
 export interface SessionOptions {
   readonly provider: AgentModelProvider;
@@ -55,7 +59,13 @@ export interface SessionOptions {
   readonly protocolNow?: () => bigint;
   /** A development chaos wrapper is in use: every event says so. */
   readonly chaos?: string | null;
+  /** Randomness for wallet challenges; tests substitute a deterministic source. */
+  readonly entropy?: Entropy;
 }
+
+export type WalletChallengeResult =
+  | { readonly ok: true; readonly challenge: string; readonly version: number; readonly digest: string; readonly principal: string; readonly validUntil: string; readonly typedData: { readonly [k: string]: unknown } }
+  | { readonly ok: false; readonly code: RefusalCode; readonly message: string };
 
 export type RunStatus = 'AUTHORIZED' | 'PARTIALLY_AUTHORIZED' | 'REFUSED' | 'NO_FEASIBLE_PORTFOLIO' | 'NOTHING_TO_AUTHORIZE' | 'NO_ACTIVE_MANDATE' | 'SUPERSEDED_TOO_OFTEN';
 
@@ -120,6 +130,10 @@ export class LiveSession {
   readonly #jev: JevAdvisor;
   readonly #drains: (() => Promise<void>)[] = [];
   readonly #reserved: ReservedExecution[] = [];
+  readonly #entropy: Entropy;
+  readonly challenges: ChallengeBook;
+  readonly #approvals = new Map<number, { readonly message: ReturnType<typeof approvalMessage>; readonly signature: string }>();
+  #onApproval: ((version: number, message: ReturnType<typeof approvalMessage>, signature: string) => void) | null = null;
   #epoch = new AbortController();
   #running = false;
   #rooms = 0;
@@ -129,6 +143,8 @@ export class LiveSession {
     this.clock = o.clock ?? realClock;
     this.id = o.sessionId ?? `live-${this.clock.wallIso().replace(/\D/g, '').slice(0, 17)}`;
     this.provider = o.provider;
+    this.#entropy = o.entropy ?? realEntropy;
+    this.challenges = new ChallengeBook();
     this.#jev = o.jev ?? new NoopJevAdvisor();
     const start = this.clock.nowMs();
     this.protocolNow = o.protocolNow ?? protocolClock(this.clock, start);
@@ -184,21 +200,113 @@ export class LiveSession {
   }
 
   /**
-   * Authorize V1, or an amendment. Only `confirmation` === "AUTHORIZE
-   * MANDATE V<n>" does anything. An amendment supersedes the running epoch.
+   * Authorize V1, or an amendment, with the demonstration principal key. Only
+   * `confirmation` === "AUTHORIZE MANDATE V<n>" does anything. An amendment
+   * supersedes the running epoch.
    */
   async authorize(draft: MandateDraft, confirmation: string): Promise<AuthorizeResult> {
     const amending = this.versions.active !== null;
     if (amending) this.events.emit('MANDATE_AMENDMENT_STARTED', { data: { from: this.versions.active?.version ?? null, to: this.versions.nextVersion } });
-    const r = await this.versions.authorize(draft, confirmation, this.protocolNow());
+    return this.#authorized(await this.versions.authorize(draft, confirmation, this.protocolNow()), amending);
+  }
+
+  /**
+   * Issue a one-time challenge for the principal's wallet to sign: the
+   * exact mandate `draft` compiles to now, bound to this session, the next
+   * version and `address`. Nothing is authorized until a signature over it
+   * verifies (`authorizeWithWallet`).
+   */
+  walletChallenge(draft: MandateDraft, address: string): WalletChallengeResult {
+    if (typeof address !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(address)) return { ok: false, code: 'WALLET_ADDRESS_INVALID', message: 'The wallet address must be a 0x-prefixed 20-byte hex address.' };
+    const p = this.versions.prepare(draft, this.protocolNow());
+    if (!p.ok) return { ok: false, code: p.code, message: p.message };
+    const id = this.#entropy.bytes32();
+    const message = approvalMessage({ mandate: p.prepared.mandate, version: p.prepared.version, principal: address.toLowerCase(), protocolSigner: this.versions.protocolSigner, validAfter: BigInt(Math.floor(this.clock.wallMs() / 1000)), sessionId: this.id, challenge: id });
+    this.challenges.issue({ id, sessionId: this.id, prepared: p.prepared, message, draftKey: draftKey(draft), failures: 0, consumed: false });
+    this.events.emit('MANDATE_WALLET_CHALLENGE_ISSUED', {
+      data: { version: p.prepared.version, digest: p.prepared.digest, principal: message.principal, method: 'WALLET_EIP712', chainId: APPROVAL_CHAIN_ID, validUntil: message.validUntil, authority: 'NONE until the wallet signature verifies', note: 'An offchain EIP-712 signature: not a blockchain transaction.' },
+    });
+    return { ok: true, challenge: id, version: p.prepared.version, digest: p.prepared.digest, principal: message.principal, validUntil: message.validUntil.toString(), typedData: approvalTypedData(message) };
+  }
+
+  /**
+   * Authorize the version a wallet challenge bound, if `signature` is the
+   * challenge's principal's EIP-712 signature over the approval the server
+   * rebuilds from its own state. The browser supplies only the challenge id
+   * and the signature.
+   */
+  async authorizeWithWallet(draft: MandateDraft, challengeId: string, signature: string): Promise<AuthorizeResult> {
+    const refuse = (code: RefusalCode, message: string): AuthorizeResult => {
+      this.events.emit('MANDATE_WALLET_APPROVAL_REFUSED', { data: { code, message } });
+      return { ok: false, code, message, issues: [] };
+    };
+    const c: WalletChallenge | null = typeof challengeId === 'string' ? this.challenges.get(challengeId) : null;
+    if (c === null || c.sessionId !== this.id) return refuse('WALLET_CHALLENGE_UNKNOWN', 'No such wallet challenge in this session. Request a new one.');
+    if (c.consumed) return refuse('WALLET_CHALLENGE_REUSED', 'This wallet challenge was already used. Request a new one.');
+    if (c.failures >= MAX_SIGNATURE_FAILURES) return refuse('WALLET_CHALLENGE_LOCKED', 'Too many invalid signatures for this challenge. Request a new one.');
+    const wallNow = BigInt(Math.floor(this.clock.wallMs() / 1000));
+    if (wallNow < c.message.validAfter || wallNow >= c.message.validUntil) return refuse('WALLET_CHALLENGE_EXPIRED', 'This wallet challenge has expired. Request a new one.');
+    if (c.prepared.version !== this.versions.nextVersion) return refuse('WALLET_CHALLENGE_STALE', `This challenge was for V${c.prepared.version}; the next version is V${this.versions.nextVersion}.`);
+    if (draftKey(draft) !== c.draftKey) return refuse('WALLET_DRAFT_CHANGED', 'The draft changed after the challenge was issued. Review it and sign again.');
+    // Rebuilt from server state: the mandate prepared at issue, this session, the stored address and challenge.
+    const rebuilt = approvalMessage({ mandate: c.prepared.mandate, version: c.prepared.version, principal: c.message.principal, protocolSigner: this.versions.protocolSigner, validAfter: c.message.validAfter, sessionId: this.id, challenge: c.id });
+    const check = typeof signature === 'string' ? checkApproval(rebuilt, signature) : ({ ok: false, code: 'WALLET_SIGNATURE_MALFORMED' } as const);
+    if (!check.ok) {
+      this.challenges.failed(c.id);
+      return refuse(check.code, check.code === 'WALLET_SIGNER_MISMATCH' ? 'The signature does not recover to the wallet this challenge was issued for, over exactly this mandate, session, chain and challenge.' : 'The signature is not a well-formed 65-byte ECDSA signature.');
+    }
+    // Consumed before anything is committed: a challenge authorizes at most once, even if the commit fails.
+    this.challenges.consume(c.id);
+    const authorization: PrincipalAuthorization = {
+      method: 'WALLET_EIP712',
+      principal: rebuilt.principal,
+      protocolSigner: this.versions.protocolSigner,
+      label: WALLET_AUTHORIZATION_LABEL,
+      wallet: {
+        chainId: APPROVAL_CHAIN_ID.toString(),
+        environment: APPROVAL_ENVIRONMENT,
+        domain: { name: APPROVAL_DOMAIN.name, version: APPROVAL_DOMAIN.version, chainId: APPROVAL_DOMAIN.chainId.toString() },
+        primaryType: APPROVAL_PRIMARY_TYPE,
+        sessionDigest: rebuilt.sessionDigest,
+        challengeDigest: keccakHex(c.id),
+        signatureDigest: keccakHex(check.signature),
+        validAfter: rebuilt.validAfter.toString(),
+        validUntil: rebuilt.validUntil.toString(),
+      },
+      domainDelegation: 'NOT_DELEGATED',
+    };
+    this.#approvals.set(c.prepared.version, { message: rebuilt, signature: check.signature });
+    this.#onApproval?.(c.prepared.version, rebuilt, check.signature);
+    const amending = this.versions.active !== null;
+    if (amending) this.events.emit('MANDATE_AMENDMENT_STARTED', { data: { from: this.versions.active?.version ?? null, to: this.versions.nextVersion } });
+    return this.#authorized(await this.versions.commit(c.prepared, authorization, this.protocolNow()), amending);
+  }
+
+  /** The wallet approval evidence (message and signature) for a version, if it was wallet-approved. Never sent to the browser. */
+  walletApproval(version: number): { readonly message: ReturnType<typeof approvalMessage>; readonly signature: string } | null {
+    return this.#approvals.get(version) ?? null;
+  }
+
+  #authorized(r: AuthorizeResult, amending: boolean): AuthorizeResult {
     if (!r.ok) {
       if (amending) this.events.emit('MANDATE_AMENDMENT_REFUSED', { data: { code: r.code, message: r.message, issues: r.issues.map((i) => i.code) } });
       else if (r.issues.length > 0) this.events.emit('MANDATE_DRAFT_CONFLICT', { data: { code: r.code, issues: r.issues.map((i) => ({ code: i.code, field: i.field, message: i.message, protocol: i.protocol })) } });
       return r;
     }
+    const a = r.record.authorization;
     this.events.emit('MANDATE_VERSION_AUTHORIZED', {
       mandateVersion: r.record.version,
-      data: { version: r.record.version, digest: r.record.digest, signatureLabel: r.record.signatureLabel, supersedes: r.record.supersedes, changes: r.record.changes, guardrails: r.record.guardrails, ledgerVersion: r.record.ledgerVersion, expiresAt: r.record.expiresAt },
+      data: {
+        version: r.record.version,
+        digest: r.record.digest,
+        signatureLabel: r.record.signatureLabel,
+        authorization: { method: a.method, principal: a.principal, protocolSigner: a.protocolSigner, label: a.label, domainDelegation: a.domainDelegation, chainId: a.wallet?.chainId ?? null, signatureDigest: a.wallet?.signatureDigest ?? null },
+        supersedes: r.record.supersedes,
+        changes: r.record.changes,
+        guardrails: r.record.guardrails,
+        ledgerVersion: r.record.ledgerVersion,
+        expiresAt: r.record.expiresAt,
+      },
     });
     if (r.superseded !== null) {
       this.events.emit('MANDATE_VERSION_SUPERSEDED', { mandateVersion: r.superseded.version, data: { version: r.superseded.version, supersededBy: r.record.version, revokedAtLedgerVersion: r.superseded.revokedAtLedgerVersion, effect: 'root revoked in the ledger: nothing further is authorized under it' } });

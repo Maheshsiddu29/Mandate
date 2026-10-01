@@ -5,8 +5,9 @@
  *   judge demo or the Jev client; the browser app does not import it.
  * - Each capability lives in one module: the environment in config.ts,
  *   the model provider's network call in openai-provider.ts, clocks in
- *   clock.ts, sockets in server/http.ts, demonstration keys in
- *   mandate/signer.ts. No source reads a file or starts a process.
+ *   clock.ts, randomness in entropy.ts, sockets in server/http.ts,
+ *   demonstration keys in mandate/signer.ts, signature *recovery* (never
+ *   signing) in wallet/eip712.ts. No source reads a file or starts a process.
  * - Every model answer schema is closed and has no field that could carry
  *   an address, a venue, a tool, calldata or a signature.
  */
@@ -43,9 +44,10 @@ const only = (pattern: RegExp, allowed: readonly string[], set = SRC) => {
 describe('live-agents structural boundary', () => {
   it('depends only on the frozen protocol packages it uses', () => {
     const manifest = JSON.parse(readFileSync(new URL('package.json', ROOT), 'utf8')) as { dependencies?: { [name: string]: string } };
-    assert.deepEqual(manifest.dependencies, { '@mandate/control': '0.1.0', '@mandate/core': '0.1.0', '@mandate/kernel': '0.1.0', '@mandate/ledger': '0.1.0', '@mandate/portfolio': '0.1.0' });
+    // B.5.3: the kernel's pinned noble packages, for EIP-712 hashing and signer recovery of the principal's wallet approval.
+    assert.deepEqual(manifest.dependencies, { '@mandate/control': '0.1.0', '@mandate/core': '0.1.0', '@mandate/kernel': '0.1.0', '@mandate/ledger': '0.1.0', '@mandate/portfolio': '0.1.0', '@noble/curves': '2.4.0', '@noble/hashes': '2.4.0' });
     for (const { file, text } of SRC) {
-      for (const m of text.matchAll(/from\s+'(@[^/']+\/[^/']+)/g)) assert.ok(['@mandate/control', '@mandate/core', '@mandate/kernel', '@mandate/ledger', '@mandate/portfolio'].includes(m[1] as string), `${file}: ${m[1]}`);
+      for (const m of text.matchAll(/from\s+'(@[^/']+\/[^/']+)/g)) assert.ok(['@mandate/control', '@mandate/core', '@mandate/kernel', '@mandate/ledger', '@mandate/portfolio', '@noble/curves', '@noble/hashes'].includes(m[1] as string), `${file}: ${m[1]}`);
       assert.doesNotMatch(text, /@mandate\/judge-demo|judge-demo\/|@mandate\/jev|anthropic|typesafe/i, file);
     }
   });
@@ -83,14 +85,19 @@ describe('live-agents structural boundary', () => {
     assert.doesNotMatch(http, /0\.0\.0\.0|'::'/);
   });
 
-  it('reads clocks in one module, schedules timers only there and in the server, and uses no randomness', () => {
+  it('reads clocks in one module, schedules timers only there and in the server, and reads randomness in one module', () => {
     only(/performance\.now|Date\.now|new Date\s*\(/, ['runtime/clock.ts']);
     only(/setTimeout|setInterval/, ['runtime/clock.ts', 'server/http.ts']);
-    only(/Math\.random|getRandomValues|randomUUID|randomBytes/, []);
+    only(/Math\.random|getRandomValues|randomUUID|randomBytes|node:crypto/, ['runtime/entropy.ts']);
+    const entropy = SRC.find((s) => s.file === 'runtime/entropy.ts')?.text ?? '';
+    assert.doesNotMatch(entropy, /Math\.random/);
   });
 
-  it('touches demonstration keys in one module, never serializes them, and exports none', () => {
-    only(/\bdemoKey\b|\bsignPrehash\b|secp256k1/, ['mandate/signer.ts']);
+  it('touches demonstration keys in one module, recovers wallet signers in one module that cannot sign, never serializes a key, and exports none', () => {
+    only(/\bdemoKey\b|\bsignPrehash\b/, ['mandate/signer.ts']);
+    only(/secp256k1|@noble\//, ['mandate/signer.ts', 'wallet/eip712.ts']);
+    const recovery = SRC.find((s) => s.file === 'wallet/eip712.ts')?.text ?? '';
+    assert.doesNotMatch(recovery, /\.sign\(|getPublicKey|privateKey|utils\.randomSecretKey|demoKey/);
     for (const name of Object.keys(pkg)) assert.doesNotMatch(name, /key|secret|private|signer/i, name);
     const serialized = JSON.stringify([...createAgentSigners().values(), new LocalPrincipalSigner()]);
     assert.equal(containsKey(serialized), false);

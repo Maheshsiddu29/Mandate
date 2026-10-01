@@ -6,8 +6,10 @@
  * key stays in the provider this module was given — no response, event or
  * error carries it, and a session reports only whether the live provider
  * is available. Every request body is parsed field by field: a draft is
- * edited only through the typed field table, and authorization still needs
- * the principal's exact confirmation text.
+ * edited only through the typed field table, and authorization needs either
+ * the principal's wallet signature over a server-issued challenge (verified
+ * here against server state; the browser sends only the signature) or, on the
+ * demonstration key path, the principal's exact confirmation text.
  *
  * Sessions are in memory, few, and expire when idle. Nothing here signs
  * outside a session, sends a transaction or writes a file.
@@ -22,6 +24,7 @@ import { PAUSE_CONFIRMATION } from '../authoring/mandate-versioning.ts';
 import { POLICY_CASES, POLICY_CASE_IDS } from '../policy-stress/cases.ts';
 import { MAX_POLICY_STRESS_ATTEMPTS, type PolicyStressResult } from '../policy-stress/runner.ts';
 import type { Clock } from '../runtime/clock.ts';
+import { realEntropy, type Entropy } from '../runtime/entropy.ts';
 import { LatencyChaosProvider, parseChaosSpec } from '../runtime/latency-chaos.ts';
 import type { AgentModelProvider } from '../runtime/provider.ts';
 import { isObject, type JsonObject, type JsonValue } from '../runtime/strict-json.ts';
@@ -30,6 +33,7 @@ import { LiveSession, type RunResult } from '../session.ts';
 import { LIVE_SCHEMA, safe, type LiveEvent } from '../telemetry/events.ts';
 import { summarizePolicyStress, summarizeRun } from '../telemetry/summary.ts';
 import { ROLES, ROLE_LABELS } from '../types.ts';
+import { APPROVAL_CHAIN_ID, APPROVAL_DOMAIN, APPROVAL_ENVIRONMENT } from '../wallet/approval.ts';
 
 export interface ApiRequest {
   readonly method: string;
@@ -55,6 +59,8 @@ export interface LabOptions {
   readonly allowChaos: boolean;
   readonly maxSessions?: number;
   readonly idleMs?: number;
+  /** Randomness for session ids and wallet challenges; tests substitute a deterministic source. */
+  readonly entropy?: Entropy;
 }
 
 interface Entry {
@@ -77,7 +83,6 @@ const refuse = (status: number, error: string, message: string): ApiResponse => 
 export class LiveLab {
   readonly #o: LabOptions;
   readonly #sessions = new Map<string, Entry>();
-  #counter = 0;
 
   constructor(o: LabOptions) {
     this.#o = o;
@@ -135,6 +140,10 @@ export class LiveLab {
         return this.#resolve(entry, body);
       case 'authorize':
         return this.#authorize(entry, body);
+      case 'wallet/challenge':
+        return this.#walletChallenge(entry, body);
+      case 'wallet/authorize':
+        return this.#walletAuthorize(entry, body);
       case 'pause':
         return this.#pause(entry, body);
       case 'run':
@@ -152,6 +161,10 @@ export class LiveLab {
       providers: { openai: { available: this.#o.live !== null, model: this.#o.live?.model ?? null }, stub: { available: true } },
       presets: PRESETS,
       pauseConfirmation: PAUSE_CONFIRMATION,
+      principalAuthorization: {
+        methods: ['WALLET_EIP712', 'DEMO_PRINCIPAL_KEY'],
+        wallet: { chainId: APPROVAL_CHAIN_ID, environment: APPROVAL_ENVIRONMENT, domain: { name: APPROVAL_DOMAIN.name, version: APPROVAL_DOMAIN.version }, delegatesDomainExecution: false },
+      },
       roles: ROLES.map((r) => ({ role: r, label: ROLE_LABELS[r], domain: AGENT_DOMAINS[r], objective: DOMAIN_AGENTS[r].objective, candidates: DOMAIN_AGENTS[r].candidates.map((c) => ({ id: c.id, title: c.title })) })),
       catalog: Object.fromEntries(CATALOG_SETS.map((s) => [s, CATALOG[s].map((e) => ({ id: e.id, label: e.label }))])),
       policyCases: POLICY_CASE_IDS.map((id) => ({ caseId: id, description: POLICY_CASES[id] })),
@@ -185,9 +198,10 @@ export class LiveLab {
       provider = new LatencyChaosProvider(provider, plan, this.#o.clock);
       chaos = body['chaos'];
     }
-    this.#counter += 1;
-    const id = `lab-${this.#counter}-${Math.round(this.#o.clock.nowMs())}`;
-    const session = new LiveSession({ provider, clock: this.#o.clock, sessionId: id, agentTimeoutMs: this.#o.agentTimeoutMs, roomRoundTimeoutMs: this.#o.roomRoundTimeoutMs, chaos });
+    const entropy = this.#o.entropy ?? realEntropy;
+    // 128 random bits: unique across restarts and processes, never a timestamp.
+    const id = `lab-${entropy.bytes32().slice(2, 34)}`;
+    const session = new LiveSession({ provider, clock: this.#o.clock, sessionId: id, agentTimeoutMs: this.#o.agentTimeoutMs, roomRoundTimeoutMs: this.#o.roomRoundTimeoutMs, chaos, entropy });
     const entry: Entry = { session, provider: provider.name, draft: null, task: null, lastRun: null, lastPolicyStress: null, lastError: null, touchedMs: this.#o.clock.nowMs() };
     this.#sessions.set(id, entry);
     return ok({ sessionId: id, ...this.#view(entry) }, 201);
@@ -273,6 +287,26 @@ export class LiveLab {
     const confirmation = body['confirmation'];
     if (typeof confirmation !== 'string' || confirmation.length > 64) return refuse(400, 'BAD_REQUEST', 'confirmation must be the exact text shown.');
     const r = await entry.session.authorize(entry.draft, confirmation);
+    if (!r.ok) return { status: 409, body: safe({ error: r.code, message: r.message, issues: r.issues, ...this.#view(entry) }) };
+    return ok({ record: r.record, superseded: r.superseded, ...this.#view(entry) });
+  }
+
+  #walletChallenge(entry: Entry, body: JsonObject): ApiResponse {
+    if (entry.draft === null) return refuse(409, 'NO_DRAFT', 'Create a draft first.');
+    const address = body['address'];
+    if (typeof address !== 'string' || address.length > 42) return refuse(400, 'BAD_REQUEST', 'address must be the connected wallet address.');
+    const r = entry.session.walletChallenge(entry.draft, address);
+    if (!r.ok) return { status: 409, body: safe({ error: r.code, message: r.message, ...this.#view(entry) }) };
+    return ok({ challenge: r.challenge, version: r.version, digest: r.digest, principal: r.principal, validUntil: r.validUntil, typedData: r.typedData, ...this.#view(entry) });
+  }
+
+  async #walletAuthorize(entry: Entry, body: JsonObject): Promise<ApiResponse> {
+    if (entry.draft === null) return refuse(409, 'NO_DRAFT', 'Create a draft first.');
+    const challenge = body['challenge'];
+    const signature = body['signature'];
+    if (typeof challenge !== 'string' || !/^0x[0-9a-f]{64}$/.test(challenge)) return refuse(400, 'BAD_REQUEST', 'challenge must be the id the server issued.');
+    if (typeof signature !== 'string' || signature.length > 140) return refuse(400, 'BAD_REQUEST', 'signature must be the wallet signature.');
+    const r = await entry.session.authorizeWithWallet(entry.draft, challenge, signature);
     if (!r.ok) return { status: 409, body: safe({ error: r.code, message: r.message, issues: r.issues, ...this.#view(entry) }) };
     return ok({ record: r.record, superseded: r.superseded, ...this.#view(entry) });
   }

@@ -15,6 +15,8 @@
     "@mandate/core": "0.1.0",
     "@mandate/kernel": "0.1.0",
     "@mandate/ledger": "0.1.0",
-    "@mandate/portfolio": "0.1.0"
+    "@mandate/portfolio": "0.1.0",
+    "@noble/curves": "2.4.0",
+    "@noble/hashes": "2.4.0"
   }
 }
