@@ -164,7 +164,8 @@
 
 .mw-menu--end .mw-menu__panel { right: 0; left: auto; }
 
-.mw-menu__panel button {
+.mw-menu__panel button,
+.mw-menu__item {
   display: grid;
   gap: 0.15rem;
   min-height: 44px;
@@ -180,7 +181,11 @@
   cursor: pointer;
 }
 
-.mw-menu__panel button small { color: var(--mw-text-3); font-size: 0.74rem; font-weight: 500; }
+.mw-menu__item { text-decoration: none; }
+.mw-menu__replay { display: none; }
+.mw-menu__item:hover { background: rgba(99, 102, 241, 0.14); }
+.mw-menu__panel button small,
+.mw-menu__item small { color: var(--mw-text-3); font-size: 0.74rem; font-weight: 500; }
 .mw-menu__panel button:hover:not(:disabled),
 .mw-menu__panel button[aria-pressed="true"] { background: rgba(99, 102, 241, 0.14); }
 .mw-menu__panel button:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -862,7 +867,7 @@
   display: grid;
   align-content: start;
   gap: 0.6rem;
-  max-height: min(56svh, 520px);
+  max-height: min(48svh, 460px);
   padding: 0.25rem 0.15rem 0.25rem 0;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1103,8 +1108,12 @@
 }
 
 @media (max-width: 520px) {
-  .mw-bar { margin-bottom: 1rem; }
-  .mw-bar__title { display: none; }
+  .mw-bar { flex-wrap: nowrap; margin-bottom: 1rem; }
+  .mw-bar__title,
+  .mw-bar__replay { display: none; }
+  .mw-bar__right { flex-wrap: nowrap; gap: 0.4rem; }
+  .mw-menu__replay { display: grid; }
+  .mw-env { max-width: 11rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mw-agent-config { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "glyph name switch" "glyph amount amount"; row-gap: 0.5rem; }
   .mw-agent-config .mw-glyph { grid-area: glyph; align-self: start; }
   .mw-agent-config__name { grid-area: name; }

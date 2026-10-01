@@ -45,6 +45,14 @@ const STAGE_KEY: Record<Phase, string> = {
 };
 type SheetName = "permissions" | "review" | "events" | "stress" | "pause" | "agents" | "room" | null;
 
+/** Close the disclosure menu an item lives in, returning focus to its toggle. */
+function closeMenu(target: Element): void {
+  const menu = target.closest("details");
+  if (menu === null) return;
+  menu.open = false;
+  menu.querySelector("summary")?.focus();
+}
+
 function message(body: JsonRecord): string {
   const text = str(body.message);
   return text === "—" ? str(body.error) : text;
@@ -72,6 +80,7 @@ export function LiveLab(): ReactNode {
   const [now, setNow] = useState(() => Date.now());
   const lastSequence = useRef(-1);
   const stageRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
   const shownStage = useRef<string | null>(null);
 
   useEffect(() => {
@@ -156,10 +165,12 @@ export function LiveLab(): ReactNode {
     const previous = shownStage.current;
     shownStage.current = stageKey;
     const element = stageRef.current;
-    if (previous === null || previous === stageKey || element === null) return;
+    const bar = barRef.current;
+    if (previous === null || previous === stageKey || element === null || bar === null) return;
     const top = element.getBoundingClientRect().top;
     if (top >= 72 && top <= window.innerHeight * 0.5) return;
-    window.scrollTo({ top: Math.max(0, window.scrollY + top - 132), behavior: reduced ? "auto" : "smooth" });
+    // Align the workspace bar just under the fixed site navigation, so status, trail and panel are all in view.
+    window.scrollTo({ top: Math.max(0, window.scrollY + bar.getBoundingClientRect().top - 92), behavior: reduced ? "auto" : "smooth" });
   }, [reduced, stageKey]);
 
   useEffect(() => {
@@ -363,13 +374,13 @@ export function LiveLab(): ReactNode {
         ) : null}
       </AnimatePresence>
 
-      <div className="mw-bar">
+      <div ref={barRef} className="mw-bar">
         <div className="mw-bar__left">
           <span className="mw-bar__title">Live demo</span>
           <span className="mw-bar__status" data-phase={phase} aria-live="polite">{flow.status}</span>
         </div>
         <div className="mw-bar__right">
-          <details className="mw-menu">
+          <details className="mw-menu" onKeyDown={(event) => { if (event.key === "Escape") closeMenu(event.currentTarget); }}>
             <summary className="mw-env" aria-label={`Environment: ${providerKind === "LIVE" ? "Live model" : "Demo fixture"}`}>
               <span className="mw-env__dot" data-kind={providerKind} />
               {providerKind === "LIVE" ? `Live model${str(provider.model) === "—" ? "" : ` · ${str(provider.model)}`}` : "Demo fixture"}
@@ -378,20 +389,21 @@ export function LiveLab(): ReactNode {
               <p className="mw-menu__label">Agent model</p>
               {sessionId === null ? (
                 <>
-                  <button type="button" aria-pressed={providerChoice === "stub"} onClick={() => setProviderChoice("stub")}>Demo fixture <small>Deterministic stub; no model call</small></button>
-                  <button type="button" aria-pressed={providerChoice === "openai"} disabled={!liveAvailable} onClick={() => setProviderChoice("openai")}>Live model <small>{liveAvailable ? str(rec(rec(status?.providers).openai).model) : "No model key is configured on the local server"}</small></button>
+                  <button type="button" aria-pressed={providerChoice === "stub"} onClick={(event) => { setProviderChoice("stub"); closeMenu(event.currentTarget); }}>Demo fixture <small>Deterministic stub; no model call</small></button>
+                  <button type="button" aria-pressed={providerChoice === "openai"} disabled={!liveAvailable} onClick={(event) => { setProviderChoice("openai"); closeMenu(event.currentTarget); }}>Live model <small>{liveAvailable ? str(rec(rec(status?.providers).openai).model) : "No model key is configured on the local server"}</small></button>
                 </>
               ) : (
                 <p className="mw-fine">This session uses {providerKind === "LIVE" ? "the live model" : "the deterministic demo fixture"}. Reload to start a new session.</p>
               )}
             </div>
           </details>
-          <Link className="mw-bar__link" href="/demo">Protocol Replay</Link>
-          <details className="mw-menu mw-menu--end">
+          <Link className="mw-bar__link mw-bar__replay" href="/demo">Protocol Replay</Link>
+          <details className="mw-menu mw-menu--end" onKeyDown={(event) => { if (event.key === "Escape") closeMenu(event.currentTarget); }}>
             <summary className="mw-bar__link">Developer</summary>
             <div className="mw-menu__panel">
-              <button type="button" disabled={sessionId === null} onClick={() => setSheet("events")}>Event log <small>{events.length} events</small></button>
-              <button type="button" disabled={activeVersion === null || view.paused === true} onClick={() => setSheet("pause")}>Pause mandate <small>Revoke the active mandate</small></button>
+              <Link className="mw-menu__item mw-menu__replay" href="/demo">Protocol Replay <small>The recorded judge transcript</small></Link>
+              <button type="button" disabled={sessionId === null} onClick={(event) => { closeMenu(event.currentTarget); setSheet("events"); }}>Event log <small>{events.length} events</small></button>
+              <button type="button" disabled={activeVersion === null || view.paused === true} onClick={(event) => { closeMenu(event.currentTarget); setSheet("pause"); }}>Pause mandate <small>Revoke the active mandate</small></button>
             </div>
           </details>
         </div>

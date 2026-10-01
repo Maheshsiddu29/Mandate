@@ -51,12 +51,12 @@
 
 .mandate-hero__shade {
   position: absolute;
-  top: 52%;
+  top: 53%;
   left: 50%;
   z-index: 0;
-  width: min(1080px, 110vw);
-  height: min(44rem, 92svh);
-  background: radial-gradient(closest-side, rgba(18, 15, 23, 0.94), rgba(18, 15, 23, 0.82) 48%, rgba(18, 15, 23, 0.4) 78%, rgba(18, 15, 23, 0) 100%);
+  width: min(1180px, 120vw);
+  height: min(48rem, 96svh);
+  background: radial-gradient(closest-side, rgba(18, 15, 23, 0.96), rgba(18, 15, 23, 0.9) 52%, rgba(18, 15, 23, 0.55) 80%, rgba(18, 15, 23, 0) 100%);
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
@@ -66,7 +66,7 @@
   z-index: 1;
   display: grid;
   justify-items: center;
-  width: min(100%, 880px);
+  width: min(100%, 1080px);
 }
 
 .mandate-hero__content > div {
@@ -91,7 +91,7 @@
 }
 
 .mandate-hero h1 {
-  max-width: 19ch;
+  max-width: 24ch;
   margin: 1.4rem 0 1.25rem;
   color: var(--mandate-text);
   font-size: clamp(3.375rem, 6vw, 4.5rem);
