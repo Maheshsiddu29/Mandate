@@ -66,22 +66,25 @@ composer tone and the upstream glyph squash and tilt.
 
 ### Principal signing: what exists and what does not
 
-**B.5.3 wired the wallet** ([wallet-settlement-boundaries.md](wallet-settlement-boundaries.md)).
-The review step's *Approve in wallet* is real; the demo key stays as a
-labelled fallback.
+**The Live demo wallet path is Mandate authority spine V2**
+([authority-spine-v2.md](authority-spine-v2.md)). Review & authorize posts
+`{ address, spine: "V2" }` and the wallet signs EIP-712 `PortfolioMandateV2`.
+The demo key stays as a labelled fallback. A caller that omits `spine`
+(curl, not this UI) stays on the B.5.3 `PortfolioMandateApproval`
+([wallet-settlement-boundaries.md](wallet-settlement-boundaries.md)).
 
-| | Wallet path | Demo principal key (fallback) |
+| | Wallet path (Live demo) | Demo principal key (fallback) |
 | --- | --- | --- |
-| What authorizes a version | the principal's wallet signs an EIP-712 `PortfolioMandateApproval` of the exact mandate digest, for this session, chain 46630, a 300 s server challenge, once; the server rebuilds and verifies it (`POST …/wallet/challenge`, `POST …/wallet/authorize`) | `POST …/authorize` with the exact text `AUTHORIZE MANDATE V<n>` |
-| Principal identity | the recovered wallet address | the demonstration key's address |
-| Signature the frozen Portfolio Verifier checks | the demonstration key's prehash signature, made only after the wallet approval verified (a wallet cannot sign that raw prehash) | the same |
+| What authorizes a version | `POST …/wallet/challenge` with `spine: "V2"`; the wallet signs EIP-712 `PortfolioMandateV2` (chain 46630, no verifying contract); `POST …/wallet/authorize` stores it as `WALLET_PRINCIPAL_V2`. The demonstration key is not called. | `POST …/authorize` with the exact text `AUTHORIZE MANDATE V<n>` |
+| Principal identity | the recovered wallet address, which is `mandate.principal` and `protocolSigner` | the demonstration key's address |
+| Signature the Portfolio Verifier checks | the wallet's EIP-712 signature, when the room is told `{ scheme: 'V2_EIP712', chainId, sessionDigest }` | the demonstration key's prehash signature |
 | Browser wallet calls | `eth_requestAccounts`, `eth_accounts`, `eth_chainId`, `wallet_switchEthereumChain`, `wallet_addEthereumChain`, `eth_signTypedData_v4` — never a transaction | none |
-| Domain execution | **not delegated**: testnet settlement is signed by separate 7E.3 custody; a wallet-approved version never sends | not delegated |
+| Domain execution | this portfolio signature is not the gate signature. Each execution still needs `MandateAuthorization` by the same wallet, collected by `npm run agents:settle:v2` (stdin), not by this screen. | not delegated |
 
-The UI says *wallet-signed mandate*, never that the wallet delegated
-execution authority onchain. Copy before signing: "Your wallet will sign
-this Mandate. This does not submit a blockchain transaction." No gas is
-shown for signing.
+Copy before signing: "Your wallet will sign PortfolioMandateV2. This does
+not submit a blockchain transaction." No gas is shown for this signature.
+A challenge whose `spine` is not `V2`, or whose typed data is not
+`PortfolioMandateV2`, is not signed.
 
 Sessions are durable (`.live/`, §4 of the boundaries document): a reload
 or a server restart returns to the same session (`?session=lab-…`) and
@@ -90,12 +93,14 @@ belong to: the operator runs `npm run agents:settle:testnet -- --session
 <id>`, whose events land in that session's log. In B.5.3 that command is a
 dry run ending at *Ready for testnet send · nothing was sent*.
 
-V2 ([authority-spine-v2.md](authority-spine-v2.md)) is opt-in on
-`POST …/wallet/challenge` with `{ "spine": "V2" }`. The wallet is then the
-protocol principal, and `npm run agents:settle:v2 -- --session <id>`
-re-verifies that signature and dry-runs; `--send` broadcasts once after the
-existing operator phrase, and only when the wallet is the manifest
-principal. The UI does not offer V2. B.5.2 and B.5.3 are unchanged.
+The Live demo Review & authorize step requests V2. Omitting `spine` remains
+the B.5.3 approval (`WALLET_EIP712`), which the demonstration key still
+countersigns, and which `agents:settle:v2` refuses. B.5.2 and B.5.3 commands
+are unchanged. `npm run agents:settle:v2 -- --session <id>` re-verifies the
+wallet EIP-712 signature and dry-runs; `--send` broadcasts once after the
+existing operator phrase. When the wallet is not the manifest principal,
+that command asks on stdin for a separate gate `MandateAuthorization`. The
+UI does not collect that signature.
 
 ## 1. The trust model in one table
 
@@ -415,8 +420,8 @@ The server (`packages/live-agents/src/server/`):
 | `GET /api/live/sessions/:id` | draft, validation, guardrails, versions (with how each was authorized), last run and policy-stress summaries, each reservation's ledger status, `durable`, `restored` |
 | `POST …/draft` | `{ preset }`, `{ prompt }` or `{ from: "active" }` (to amend) |
 | `POST …/draft/fill`, `…/draft/field`, `…/draft/resolve` | fill unset fields from a preset; set one field; resolve one interpretation issue |
-| `POST …/wallet/challenge` | `{ address }` → a one-time EIP-712 approval of the exact mandate the draft compiles to (B.5.3) |
-| `POST …/wallet/authorize` | `{ challenge, signature }` — the server rebuilds the message and verifies the recovered signer (B.5.3) |
+| `POST …/wallet/challenge` | `{ address, spine: "V2" }` → EIP-712 `PortfolioMandateV2` (`WALLET_PRINCIPAL_V2`). `{ address }` with `spine` omitted stays the B.5.3 `PortfolioMandateApproval`. The Live demo sends `V2`. |
+| `POST …/wallet/authorize` | `{ challenge, signature }` — the server verifies the signature for the challenge it issued (V2 or the omitted-spine B.5.3 approval) |
 | `POST …/authorize`, `…/pause` | need the exact confirmation text (the demo key path; pause) |
 | `POST …/run`, `…/policy-stress` | start in the background; progress is the event stream |
 | `GET …/events?after=N` | Server-Sent Events, replayed from `N` (or `Last-Event-ID` on a reconnect) then live, including events a settlement command appended |

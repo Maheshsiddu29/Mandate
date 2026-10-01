@@ -554,11 +554,14 @@ session.
 
 V2 ([authority-spine-v2.md](authority-spine-v2.md)) is additive. A caller
 that names `spine: "V2"` makes the wallet the protocol principal
-(`WALLET_PRINCIPAL_V2`). That portfolio signature is still not a gate
-signature. `npm run agents:settle:v2` then requires a separate
-`MandateAuthorization` by the same wallet whenever the wallet is not the
-manifest principal, and debits that wallet. A B.5.3 approval still does not
-send. The B.5.3 command does not accept the per-execution gate signature.
+(`WALLET_PRINCIPAL_V2`). The Live demo Review & authorize step sends that
+field. A request that omits `spine` is still the B.5.3 approval described
+above. That portfolio signature is still not a gate signature. `npm run
+agents:settle:v2` then requires a separate `MandateAuthorization` by the
+same wallet whenever the wallet is not the manifest principal, and debits
+that wallet. A B.5.3 approval still does not send. The B.5.3 command does
+not accept the per-execution gate signature. The UI does not collect the
+gate signature.
 
 ### 9.3 Before five-domain testnet
 

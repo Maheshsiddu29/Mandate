@@ -132,30 +132,34 @@ test('Trade is the one dominant action on the agent team', () => {
   assert.doesNotMatch(stage, /AUTHORIZE MANDATE/);
 });
 
-test('the review step signs with a real wallet, or with the labelled demo key — never a faked approval', () => {
+test('the review step signs PortfolioMandateV2, or with the labelled demo key — never a faked approval', () => {
   assert.equal(deriveFlow({ ...idle, draftPresent: true, reviewing: true }).phase, 'APPROVE');
-  assert.match(configure, /Review your mandate/);
+  assert.match(configure, /Review &amp; authorize/);
   assert.match(configure, /Approve in wallet/);
-  assert.match(configure, /Your wallet will sign this Mandate\. This does not submit a blockchain transaction\./);
-  assert.match(configure, />Sign Mandate</);
+  assert.match(configure, /Your wallet will sign PortfolioMandateV2\. This does not submit a blockchain transaction\./);
+  assert.match(configure, />Authorize</);
   assert.match(configure, /No browser wallet detected/);
-  assert.match(configure, /your signature does not delegate onchain execution authority/);
-  // The demo key stays, labelled as what it is.
+  assert.match(configure, /WALLET_PRINCIPAL_V2/);
+  assert.match(configure, /Each gate execution still needs a separate signature from this same wallet/);
+  // The demo key stays, labelled as what it is. It does not request spine V2.
   assert.match(configure, /Demo principal key/);
   assert.match(configure, /it secures nothing and is not a wallet signature/);
   assert.match(configure, /const matches = confirmation === props\.expected/);
   assert.match(configure, /disabled=\{!matches \|\| props\.authorizing\}/);
+  assert.match(lab, /const body = await call\("POST", "\/authorize", \{ confirmation \}\)/);
   // The wallet's CTA needs a connected wallet on the approval chain; nothing pretends to be connected.
   assert.match(configure, /const walletReady = method === "wallet" && connected && rightChain;/);
   assert.match(configure, /disabled=\{!walletReady \|\| props\.authorizing\}/);
   assert.doesNotMatch(browserSources, /Wallet approved|setConfirmation\(props\.expected\)|confirmation: expected/i);
   // Signing a mandate is not a transaction: the review step shows no gas estimate or limit.
   assert.doesNotMatch(configure, /gas estimate|gasEstimate|estimateGas|gasLimit/i);
-  // The wallet path: a server challenge, the wallet's EIP-712 signature, server verification; the browser sends only id and signature.
-  assert.match(lab, /call\("POST", "\/wallet\/challenge", \{ address \}\)/);
+  // The wallet path asks for spine V2 and signs only PortfolioMandateV2. The browser still sends only the challenge id and the signature.
+  assert.match(lab, /call\("POST", "\/wallet\/challenge", liveDemoWalletChallengeBody\(address\)\)/);
+  assert.match(lab, /acceptsLiveDemoChallenge\(challenge\)/);
   assert.match(lab, /w\.signTypedData\(address, challenge\.typedData\)/);
   assert.match(lab, /call\("POST", "\/wallet\/authorize", \{ challenge: str\(challenge\.challenge\), signature: signed\.value \}\)/);
   assert.doesNotMatch(lab, /console\.|localStorage\.setItem\([^)]*signature/);
+  assert.doesNotMatch(lab, /\/wallet\/challenge", \{ address \}/);
 });
 
 test('cancelling the review returns to the agent team and activates nothing', () => {

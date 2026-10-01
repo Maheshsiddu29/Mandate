@@ -12,8 +12,9 @@ the gate; the gate debits the signer.
 V1 is unchanged. A caller that does not name `V2_EIP712` still uses
 `mandateSignedByPrincipal` (the raw `PORTFOLIO_MANDATE_SIGNATURE.V1` prehash).
 B.5.2 (`npm run agents:live:testnet`), B.5.3 (`npm run agents:settle:testnet`)
-and the B.6.2 playback client stay on that path. The browser does not offer
-V2; an operator asks for it on the API.
+and a wallet challenge that omits `spine` stay on that path. The Live demo
+Review & authorize step requests `spine: "V2"`. The demo principal key on
+that same screen still uses `POST …/authorize` and is not V2.
 
 **Status.** Implemented locally. The happy path below is what the command
 does. This repository run did not broadcast a transaction and did not create
@@ -187,8 +188,9 @@ transaction was submitted but is not a confirmed live-testnet settlement;
 - Exact resubmission is still absent: the raw transaction is not stored.
 - The domain ledger is still per attempt and is not fully reconciled.
 - The B.6.2 client still describes `TESTNET_READY_FOR_SEND` as broadcast
-  disabled. V2 avoids that event. The client does not offer `spine: "V2"`;
-  the API does. The playback client labels `SAME_PRINCIPAL` and
+  disabled. V2 avoids that event. The Live demo wallet path requests
+  `spine: "V2"` and signs `PortfolioMandateV2`. Callers that omit `spine`
+  stay on the B.5.3 approval. The playback client labels `SAME_PRINCIPAL` and
   `WALLET_GATE_EIP712` when a settlement event carries them. It does not
   collect the gate signature.
 - Session, portfolio, and settlement state are local SQLite.
