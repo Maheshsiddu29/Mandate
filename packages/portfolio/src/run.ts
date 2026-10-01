@@ -24,6 +24,7 @@ import { candidateIdentity, receiptDigest, type ExecutionResult, type PortfolioR
 import { availabilityFrom, reserveChild, type PortfolioCore } from './reservation.ts';
 import { proposalDigest } from './proposal.ts';
 import { releaseDigest } from './release.ts';
+import type { PortfolioAuthority } from './mandate-v2.ts';
 import { runMandateRoom, type AgentStrategy, type RoomOutcome } from './room.ts';
 import { finalStatus } from './status.ts';
 import { assetKey } from './scope.ts';
@@ -35,6 +36,8 @@ export type ChildExecutor = (child: VerifiedChild, record: AuthorizationRecord, 
 export interface PortfolioRunInput {
   readonly core: PortfolioCore;
   readonly signature: string;
+  /** Omitted means the V1 prehash check. A V2 run names `V2_EIP712` and nothing else is accepted. */
+  readonly authority?: PortfolioAuthority;
   readonly now: bigint;
   readonly agents: readonly AgentStrategy[];
   /** `null`: stop after reservation. */
@@ -62,8 +65,9 @@ export async function runPortfolio(input: PortfolioRunInput): Promise<PortfolioR
   const m = c.mandate;
   const before = availabilityFrom(c, await core.engine.read(m.principal), input.now);
 
-  const room = runMandateRoom({ mandate: m, signature: input.signature, bindings: c.bindings, availability: before, now: input.now, agents: input.agents, ...(input.maxRounds === undefined ? {} : { maxRounds: input.maxRounds }) });
-  const verifierInput = { mandate: m, signature: input.signature, bindings: c.bindings, availability: before, now: input.now, candidate: room.candidate, proposals: room.proposals, releases: room.signedReleases };
+  const authority = input.authority === undefined ? {} : { authority: input.authority };
+  const room = runMandateRoom({ mandate: m, signature: input.signature, ...authority, bindings: c.bindings, availability: before, now: input.now, agents: input.agents, ...(input.maxRounds === undefined ? {} : { maxRounds: input.maxRounds }) });
+  const verifierInput = { mandate: m, signature: input.signature, ...authority, bindings: c.bindings, availability: before, now: input.now, candidate: room.candidate, proposals: room.proposals, releases: room.signedReleases };
   const verification = verifyPortfolio(verifierInput);
   const transcript = verificationTranscript(verifierInput);
 

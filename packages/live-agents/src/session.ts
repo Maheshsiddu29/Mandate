@@ -17,11 +17,11 @@
  */
 
 import type { AuthorizationRecord } from '@mandate/control';
-import { encodePortfolioMandate, proposalDigest, verificationTranscript, type Reason, type SignedProposal, type VerificationTranscript, type VerifiedChild } from '@mandate/portfolio';
+import { encodePortfolioMandate, portfolioMandateV2Hash, proposalDigest, verificationTranscript, type PortfolioAuthorityV2, type Reason, type SignedProposal, type VerificationTranscript, type VerifiedChild } from '@mandate/portfolio';
 import type { TrustedCandidate } from './agents/spec.ts';
 import { applyPreset, presetDraft, type MandateDraft, type Preset } from './authoring/draft-types.ts';
 import type { DraftValidation } from './authoring/draft-validator.ts';
-import { MandateVersions, WALLET_AUTHORIZATION_LABEL, type ActiveMandate, type AuthorizeResult, type PrincipalAuthorization, type RefusalCode } from './authoring/mandate-versioning.ts';
+import { MandateVersions, SPINE_AUTHORIZATION_LABEL, WALLET_AUTHORIZATION_LABEL, type ActiveMandate, type AuthorizeResult, type PrincipalAuthorization, type RefusalCode } from './authoring/mandate-versioning.ts';
 import { interpretPrompt } from './authoring/prompt-to-draft.ts';
 import { amountViews, enabledRoles } from './context.ts';
 import { discover, discoverAgent, type AgentOutcome, type DiscoveryDeps } from './discovery.ts';
@@ -43,9 +43,10 @@ import type { AgentModelProvider } from './runtime/provider.ts';
 import { realEntropy, type Entropy } from './runtime/entropy.ts';
 import { EventLog } from './telemetry/events.ts';
 import { usdcText, type Role } from './types.ts';
-import { APPROVAL_CHAIN_ID, APPROVAL_DOMAIN, APPROVAL_ENVIRONMENT, APPROVAL_PRIMARY_TYPE, approvalMessage, approvalTypedData, checkApproval, sessionDigest } from './wallet/approval.ts';
+import { APPROVAL_CHAIN_ID, APPROVAL_DOMAIN, APPROVAL_ENVIRONMENT, APPROVAL_PRIMARY_TYPE, CHALLENGE_LIFETIME_SECONDS, approvalMessage, approvalTypedData, checkApproval, sessionDigest } from './wallet/approval.ts';
 import { ChallengeBook, MAX_SIGNATURE_FAILURES, draftKey, type WalletChallenge } from './wallet/challenges.ts';
-import { keccakHex } from './wallet/eip712.ts';
+import { keccakHex, recoverAddress } from './wallet/eip712.ts';
+import { spineAuthority, spineTypedData } from './wallet/spine.ts';
 
 export interface SessionOptions {
   readonly provider: AgentModelProvider;
@@ -215,7 +216,7 @@ export class LiveSession {
       ...(restoring === undefined ? {} : { restored: { versions: restoring.state.versions, paused: restoring.state.paused, reserved: restoring.state.reserved } }),
     });
     // Challenges are kept as evidence; a restored session authorizes nothing, so none is restored as usable.
-    this.challenges = new ChallengeBook(store === null ? {} : { persist: { onChallenge: (c) => store.putChallenge(c.id, encodeRecord({ id: c.id, version: c.prepared.version, digest: c.prepared.digest, principal: c.message.principal, validUntil: c.message.validUntil, failures: c.failures, consumed: c.consumed })) } });
+    this.challenges = new ChallengeBook(store === null ? {} : { persist: { onChallenge: (c) => store.putChallenge(c.id, encodeRecord({ id: c.id, version: c.prepared.version, digest: c.prepared.digest, principal: c.message?.principal ?? c.prepared.mandate.principal.value, validUntil: c.message?.validUntil ?? c.deadline, failures: c.failures, consumed: c.consumed })) } });
     if (store !== null) this.#onApproval = (version, message, signature) => store.putApproval(version, encodeRecord(message), signature);
     this.signers = createAgentSigners();
     this.events = new EventLog({ sessionId: this.id, clock: this.clock, startMs: this.clock.nowMs(), elapsedMs, protocolNow: this.protocolNow, version: () => this.versions.active?.version ?? null, ...(store === null ? {} : { sink: store }) });
@@ -345,11 +346,42 @@ export class LiveSession {
     if (!p.ok) return { ok: false, code: p.code, message: p.message };
     const id = this.#entropy.bytes32();
     const message = approvalMessage({ mandate: p.prepared.mandate, version: p.prepared.version, principal: address.toLowerCase(), protocolSigner: this.versions.protocolSigner, validAfter: BigInt(Math.floor(this.clock.wallMs() / 1000)), sessionId: this.id, challenge: id });
-    this.challenges.issue({ id, sessionId: this.id, prepared: p.prepared, message, draftKey: draftKey(draft), failures: 0, consumed: false });
+    this.challenges.issue({ id, sessionId: this.id, prepared: p.prepared, spine: 'V1', message, issuedAt: message.validAfter, deadline: message.validUntil, draftKey: draftKey(draft), failures: 0, consumed: false });
     this.events.emit('MANDATE_WALLET_CHALLENGE_ISSUED', {
       data: { version: p.prepared.version, digest: p.prepared.digest, principal: message.principal, method: 'WALLET_EIP712', chainId: APPROVAL_CHAIN_ID, validUntil: message.validUntil, authority: 'NONE until the wallet signature verifies', note: 'An offchain EIP-712 signature: not a blockchain transaction.' },
     });
     return { ok: true, challenge: id, version: p.prepared.version, digest: p.prepared.digest, principal: message.principal, validUntil: message.validUntil.toString(), typedData: approvalTypedData(message) };
+  }
+
+  /**
+   * V2 challenge: the compiled mandate's principal is `address`, and the
+   * typed data is the protocol signature itself. Nothing is authorized until
+   * `authorizeWithWallet` recovers that address.
+   */
+  spineChallenge(draft: MandateDraft, address: string): WalletChallengeResult {
+    if (this.restored) return { ok: false, code: 'SESSION_RESTORED', message: 'A restored session authorizes nothing new. Start a new session.' };
+    if (typeof address !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(address)) return { ok: false, code: 'WALLET_ADDRESS_INVALID', message: 'The wallet address must be a 0x-prefixed 20-byte hex address.' };
+    const principal = address.toLowerCase();
+    const p = this.versions.prepare(draft, this.protocolNow(), { kind: 'eip155-address', value: principal });
+    if (!p.ok) return { ok: false, code: p.code, message: p.message };
+    if (p.prepared.mandate.principal.value !== principal) return { ok: false, code: 'WALLET_ADDRESS_INVALID', message: 'The mandate principal is not the wallet address.' };
+    const id = this.#entropy.bytes32();
+    const issuedAt = BigInt(Math.floor(this.clock.wallMs() / 1000));
+    const deadline = issuedAt + CHALLENGE_LIFETIME_SECONDS;
+    this.challenges.issue({ id, sessionId: this.id, prepared: p.prepared, spine: 'V2', message: null, issuedAt, deadline, draftKey: draftKey(draft), failures: 0, consumed: false });
+    this.events.emit('MANDATE_WALLET_CHALLENGE_ISSUED', {
+      data: {
+        version: p.prepared.version,
+        digest: p.prepared.digest,
+        principal,
+        method: 'WALLET_PRINCIPAL_V2',
+        chainId: APPROVAL_CHAIN_ID,
+        validUntil: deadline,
+        authority: 'NONE until the wallet signature verifies',
+        note: 'EIP-712 PortfolioMandateV2. The wallet is the protocol principal. Not a blockchain transaction. Each gate execution still needs a separate signature by this same address.',
+      },
+    });
+    return { ok: true, challenge: id, version: p.prepared.version, digest: p.prepared.digest, principal, validUntil: deadline.toString(), typedData: spineTypedData(p.prepared.mandate, this.id) };
   }
 
   /**
@@ -369,9 +401,11 @@ export class LiveSession {
     if (c.consumed) return refuse('WALLET_CHALLENGE_REUSED', 'This wallet challenge was already used. Request a new one.');
     if (c.failures >= MAX_SIGNATURE_FAILURES) return refuse('WALLET_CHALLENGE_LOCKED', 'Too many invalid signatures for this challenge. Request a new one.');
     const wallNow = BigInt(Math.floor(this.clock.wallMs() / 1000));
-    if (wallNow < c.message.validAfter || wallNow >= c.message.validUntil) return refuse('WALLET_CHALLENGE_EXPIRED', 'This wallet challenge has expired. Request a new one.');
+    if (wallNow < c.issuedAt || wallNow >= c.deadline) return refuse('WALLET_CHALLENGE_EXPIRED', 'This wallet challenge has expired. Request a new one.');
     if (c.prepared.version !== this.versions.nextVersion) return refuse('WALLET_CHALLENGE_STALE', `This challenge was for V${c.prepared.version}; the next version is V${this.versions.nextVersion}.`);
     if (draftKey(draft) !== c.draftKey) return refuse('WALLET_DRAFT_CHANGED', 'The draft changed after the challenge was issued. Review it and sign again.');
+    if (c.spine === 'V2') return this.#authorizeSpine(c, signature, refuse);
+    if (c.message === null) return refuse('WALLET_CHALLENGE_UNKNOWN', 'This challenge has no V1 approval to rebuild.');
     // Rebuilt from server state: the mandate prepared at issue, this session, the stored address and challenge.
     const rebuilt = approvalMessage({ mandate: c.prepared.mandate, version: c.prepared.version, principal: c.message.principal, protocolSigner: this.versions.protocolSigner, validAfter: c.message.validAfter, sessionId: this.id, challenge: c.id });
     const check = typeof signature === 'string' ? checkApproval(rebuilt, signature) : ({ ok: false, code: 'WALLET_SIGNATURE_MALFORMED' } as const);
@@ -404,6 +438,56 @@ export class LiveSession {
     const amending = this.versions.active !== null;
     if (amending) this.events.emit('MANDATE_AMENDMENT_STARTED', { data: { from: this.versions.active?.version ?? null, to: this.versions.nextVersion } });
     return this.#authorized(await this.versions.commit(c.prepared, authorization, this.protocolNow()), amending);
+  }
+
+  /** V2: the wallet signature is checked again, the challenge is consumed, and the demonstration key does not sign. */
+  async #authorizeSpine(c: WalletChallenge, signature: string, refuse: (code: RefusalCode, message: string) => AuthorizeResult): Promise<AuthorizeResult> {
+    const principal = c.prepared.mandate.principal.value;
+    const bound = spineAuthority(this.id);
+    let hash: Uint8Array;
+    try {
+      hash = portfolioMandateV2Hash(c.prepared.mandate, bound);
+    } catch {
+      return refuse('SPINE_SIGNATURE_INVALID', 'This mandate cannot be signed as a V2 principal authorization.');
+    }
+    const recovered = typeof signature === 'string' ? recoverAddress(hash, signature) : ({ ok: false, reason: 'SIGNATURE_MALFORMED' } as const);
+    if (!recovered.ok) {
+      this.challenges.failed(c.id);
+      return refuse('WALLET_SIGNATURE_MALFORMED', 'The signature is not a well-formed 65-byte ECDSA signature.');
+    }
+    if (recovered.address !== principal) {
+      this.challenges.failed(c.id);
+      return refuse('WALLET_SIGNER_MISMATCH', 'The signature does not recover to the wallet this mandate names as protocol principal.');
+    }
+    this.challenges.consume(c.id);
+    const authorization: PrincipalAuthorization = {
+      method: 'WALLET_PRINCIPAL_V2',
+      principal,
+      protocolSigner: principal,
+      label: SPINE_AUTHORIZATION_LABEL,
+      wallet: {
+        chainId: APPROVAL_CHAIN_ID.toString(),
+        environment: APPROVAL_ENVIRONMENT,
+        domain: { name: 'Mandate', version: '2', chainId: APPROVAL_CHAIN_ID.toString() },
+        primaryType: 'PortfolioMandateV2',
+        sessionDigest: bound.sessionDigest,
+        challengeDigest: keccakHex(c.id),
+        signatureDigest: keccakHex(recovered.normalized),
+        validAfter: c.issuedAt.toString(),
+        validUntil: c.deadline.toString(),
+      },
+      domainDelegation: 'SAME_PRINCIPAL',
+    };
+    const amending = this.versions.active !== null;
+    if (amending) this.events.emit('MANDATE_AMENDMENT_STARTED', { data: { from: this.versions.active?.version ?? null, to: this.versions.nextVersion } });
+    return this.#authorized(await this.versions.commit(c.prepared, authorization, this.protocolNow(), recovered.normalized), amending);
+  }
+
+  /** The authority the room must use for this version. Omitted means the V1 prehash check. */
+  #authority(version: number): PortfolioAuthorityV2 | undefined {
+    const record = this.versions.records.find((r) => r.version === version);
+    if (record?.authorization.method !== 'WALLET_PRINCIPAL_V2') return undefined;
+    return spineAuthority(this.id);
   }
 
   /**
@@ -566,12 +650,13 @@ export class LiveSession {
     let reservedAny = false;
     try {
       const now = this.protocolNow();
-      this.events.emit('MANDATE_REVERIFY_STARTED', { data: { phase, proposals: items.map((i) => ({ role: i.role, proposal: proposalDigest(i.signed.proposal), requested: amountViews(i.signed.proposal.requested) })), path: 'Mandate Room → Portfolio Verifier → ledger reservation → domain executor' } });
-      const run = await runProtocol(active.core, active.signature, now, items.map((i) => i.signed));
+      const authority = this.#authority(active.version);
+      this.events.emit('MANDATE_REVERIFY_STARTED', { data: { phase, proposals: items.map((i) => ({ role: i.role, proposal: proposalDigest(i.signed.proposal), requested: amountViews(i.signed.proposal.requested) })), path: 'Mandate Room → Portfolio Verifier → ledger reservation → domain executor', authority: authority === undefined ? 'V1_PREHASH' : 'V2_EIP712' } });
+      const run = await runProtocol(active.core, active.signature, now, items.map((i) => i.signed), authority);
       const r = run.run;
       const children = r.verification.status === 'VERIFIED' ? r.verification.children : [];
       // The transcript runPortfolio verified, re-formed from what it returned (a pure projection of its inputs).
-      const transcript = verificationTranscript({ mandate: active.mandate, signature: active.signature, bindings: active.compiled.bindings, availability: r.before, now, candidate: r.room.candidate, proposals: r.room.proposals, releases: r.room.signedReleases });
+      const transcript = verificationTranscript({ mandate: active.mandate, signature: active.signature, ...(authority === undefined ? {} : { authority }), bindings: active.compiled.bindings, availability: r.before, now, candidate: r.room.candidate, proposals: r.room.proposals, releases: r.room.signedReleases });
       let reserved = 0n;
       const proposals: FinalProposal[] = items.map((i) => {
         const d = proposalDigest(i.signed.proposal);
@@ -701,7 +786,7 @@ export class LiveSession {
     }
     let reserved = false;
     try {
-      const run = (await runProtocol(active.core, active.signature, this.protocolNow(), [signed])).run;
+      const run = (await runProtocol(active.core, active.signature, this.protocolNow(), [signed], this.#authority(active.version))).run;
       const d = proposalDigest(signed.proposal);
       const decision = run.room.decisions.filter((x) => x.proposal === d).at(-1);
       const child = run.verification.status === 'VERIFIED' ? run.verification.children.find((c) => c.proposal === d) : undefined;

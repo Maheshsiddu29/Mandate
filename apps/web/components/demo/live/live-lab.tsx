@@ -223,7 +223,7 @@ export function LiveLab(): ReactNode {
   const activeRecord = versions.find((item) => item.version === activeVersion) ?? null;
   const roomSeen = runEvents.some((event) => event.kind === "ROOM_OPENED");
   const authorization = rec(activeRecord?.authorization);
-  const authorizedBy = typeof authorization.method !== "string" ? null : authorization.method === "WALLET_EIP712" ? `authorized by ${shortAddress(str(authorization.principal))}` : "demo principal key";
+  const authorizedBy = typeof authorization.method !== "string" ? null : authorization.method === "WALLET_PRINCIPAL_V2" ? `wallet principal ${shortAddress(str(authorization.principal))}` : authorization.method === "WALLET_EIP712" ? `authorized by ${shortAddress(str(authorization.principal))}` : "demo principal key";
   const provider = rec(view.provider);
   const providerKind = sessionId === null ? (providerChoice === "openai" ? "LIVE" : "STUB") : str(provider.kind);
   const liveAvailable = rec(rec(status?.providers).openai).available === true;

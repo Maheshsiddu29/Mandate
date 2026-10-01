@@ -73,6 +73,16 @@ test('a rejected or unknown-chain request fails closed, and adding the chain off
   assert.equal((await bad?.signTypedData('0xabcdef0123456789abcdef0123456789abcdef01', {}))?.ok, false);
 });
 
+test('a V2 principal is labelled as the wallet, and same-address settlement is not described as separate custody', () => {
+  assert.match(lab, /WALLET_PRINCIPAL_V2/);
+  assert.match(lab, /wallet principal/);
+  assert.match(outcome, /WALLET_PRINCIPAL_V2/);
+  assert.match(outcome, /Same address as the wallet/);
+  assert.match(outcome, /Separate testnet custody/);
+  assert.match(outcome, /Wallet gate signature, per execution/);
+  assert.match(read(`${LIVE}sheets.tsx`), /Wallet gate signature, per execution/);
+});
+
 test('a session-bound dry run ends READY · NOT SENT: complete, never settled, both principals shown', () => {
   const events = after(['TESTNET_PREFLIGHT_STARTED', { network: 'Robinhood Chain Testnet' }], ['TESTNET_SIMULATION_PASSED', { gasEstimate: '321000', principals }], ['TESTNET_READY_FOR_SEND', { broadcast: 'DISABLED_IN_B.5.3', principals, rpcProvider: 'public' }]);
   const s = derivePresentation(events).settlement;

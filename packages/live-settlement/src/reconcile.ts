@@ -162,7 +162,10 @@ async function reconcileOne(deps: ReconcileDeps, first: AttemptRecord, emit: Emi
   const x = selectStockExecution(session.reservedExecutions.filter((r) => r.record.reservation === a.reservation));
   const core = session.versions.coreOf(a.version)?.core;
   if (!x.ok || core === undefined) return { reservation: a.reservation, from, to: a.state, outcome: 'EVIDENCE_MISSING', detail: 'the reserved execution or its version is not in the restored session; nothing is changed' };
-  const m = mapToFixture(x.execution, d);
+  const authorization = session.versions.records.find((r) => r.version === a.version)?.authorization;
+  // A V2 wallet that is not the manifest principal is the fixture recipient. Every other path still debits the deployment principal.
+  const walletRecipient = authorization?.method === 'WALLET_PRINCIPAL_V2' && authorization.principal.toLowerCase() !== d.principal.toLowerCase() ? authorization.principal.toLowerCase() : undefined;
+  const m = walletRecipient === undefined ? mapToFixture(x.execution, d) : mapToFixture(x.execution, d, walletRecipient);
   if (!m.ok || m.value.bindingDigest !== a.binding) return { reservation: a.reservation, from, to: a.state, outcome: 'EVIDENCE_MISSING', detail: 'the journal binding is not this execution’s; nothing is changed' };
   const s = m.value;
   const artifacts = journal.artifacts(a.reservation);

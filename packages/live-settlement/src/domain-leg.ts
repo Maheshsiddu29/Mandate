@@ -18,9 +18,12 @@
  *   so the gate mandate id — derived from this action's execution
  *   authorization — commits to the Live AI authorization it came from.
  *
- * The principal and agent keys are the 7E.3 disposable testnet keys. They
- * are handed to `LocalGateCustody` and `LocalAgentSigner` here and nowhere
- * else, and neither exposes them.
+ * The agent key is the 7E.3 disposable testnet key. It is handed to
+ * `LocalAgentSigner` here and nowhere else, and the signer does not expose
+ * it. The principal key is handed to `LocalGateCustody` only when the
+ * fixture recipient is that manifest principal. A different recipient — the
+ * V2 wallet — never receives that key: `PresentedGateCustody` holds no key
+ * and attaches only a signature the wallet presented for this mandate.
  */
 
 import {
@@ -55,6 +58,7 @@ import type { AdapterRef } from '@mandate/core';
 import type { TestnetDeployment } from './deployment.ts';
 import type { Eligibility } from './eligibility.ts';
 import { guardCustody, type GuardedCustody } from './custody-guard.ts';
+import { PresentedGateCustody } from './gate-authority.ts';
 import type { FixtureSettlement } from './fixture-mapping.ts';
 import type { SettlementGateChain } from './settlement-chain.ts';
 
@@ -82,6 +86,12 @@ export interface DomainLeg {
   readonly payload: Uint8Array;
   readonly custody: GuardedCustody;
   readonly signer: GateSigner;
+  /**
+   * Set when the fixture recipient is not the manifest principal. The caller
+   * presents the wallet's gate signature here, after describing the mandate
+   * and before issue. Null on the manifest-key path.
+   */
+  readonly presentGateSignature: ((signature: string) => void) | null;
   /** Fresh gate-market state and context for issue-time revalidation. */
   readonly issueContext: (states: readonly SuppliedState[], at: bigint) => { readonly payload: Uint8Array; readonly states: readonly SuppliedState[]; readonly context: EvaluationContextInput };
   close(): void;
@@ -109,6 +119,11 @@ export interface DomainLegInput {
   readonly chain: SettlementGateChain;
   /** The Live AI side's eligibility, re-derived when custody is asked to sign. */
   readonly eligibleNow: () => Eligibility;
+  /**
+   * When set, custody signs only if its address is this principal. V2 passes
+   * the wallet. Omitted on the B.5.2 demonstration path.
+   */
+  readonly boundPrincipal?: string;
 }
 
 /**
@@ -142,36 +157,40 @@ export async function openDomainLeg(i: DomainLegInput): Promise<DomainLegResult>
     return { ok: false, stage, reason };
   };
 
-  const P: PartyIdInput = { kind: 'eip155-address', value: d.principal };
+  // The gate debits the fixture recipient. That address is the domain principal.
+  // Only the manifest recipient is signed by the gitignored principal key.
+  const principalAddress = s.recipient;
+  const presented = principalAddress !== d.principal;
+  const P: PartyIdInput = { kind: 'eip155-address', value: principalAddress };
   const A: PartyIdInput = { kind: 'eip155-address', value: d.agent };
   const principalId = validatePrincipalId(P, 'principal');
   if (!principalId.ok) return fail('DOMAIN_SETUP', 'PRINCIPAL_INVALID');
 
   // Custody reads chain time as of the latest issue context.
   let custodyNow = i.at;
-  // Keys must be the manifest's parties: a key for any other address never reaches the gate.
-  const inner = new LocalGateCustody(
-    i.keys.principal,
-    {
-      ledger: () => store.readCommitted(principalId.value).state,
-      issued: (attempt) => journal.get(attempt) !== null,
-      lifecycle: (kind, name, version) => {
-        const row = lifecycle.table.read(kind, name, version);
-        if (row === null) return null;
-        const r = JSON.parse(row.ref) as { moduleDigest?: string; adapterDigest?: string };
-        return { status: row.status, digest: r.moduleDigest ?? r.adapterDigest ?? '' };
-      },
-      now: () => custodyNow,
+  const view = {
+    ledger: () => store.readCommitted(principalId.value).state,
+    issued: (attempt: Parameters<IssuanceJournal['get']>[0]) => journal.get(attempt) !== null,
+    lifecycle: (kind: 'MODULE' | 'ADAPTER', name: string, version: number) => {
+      const row = lifecycle.table.read(kind, name, version);
+      if (row === null) return null;
+      const r = JSON.parse(row.ref) as { moduleDigest?: string; adapterDigest?: string };
+      return { status: row.status, digest: r.moduleDigest ?? r.adapterDigest ?? '' };
     },
-    { module: policy.ref, adapter },
-  );
+    now: () => custodyNow,
+  };
+  const binding = { module: policy.ref, adapter };
+  // A wallet recipient never sees the manifest principal key. There is nothing to hand it.
+  const presentedCustody = presented ? new PresentedGateCustody(principalAddress, view, binding) : null;
+  const inner = presentedCustody ?? new LocalGateCustody(i.keys.principal, view, binding);
   const agent = new LocalAgentSigner(i.keys.agent);
-  if (inner.principal() !== d.principal) return fail('DOMAIN_SETUP', 'PRINCIPAL_KEY_NOT_MANIFEST_PRINCIPAL');
+  if (!presented && inner.principal() !== d.principal) return fail('DOMAIN_SETUP', 'PRINCIPAL_KEY_NOT_MANIFEST_PRINCIPAL');
+  if (presented && inner.principal() !== principalAddress) return fail('DOMAIN_SETUP', 'PRESENTED_CUSTODY_PRINCIPAL');
   if (agent.address() !== d.agent) return fail('DOMAIN_SETUP', 'AGENT_KEY_NOT_MANIFEST_AGENT');
 
   const ref = policy.ref;
   const moduleInput = { domainId: ref.domainId, moduleId: ref.moduleId, moduleVersion: ref.moduleVersion, moduleDigest: ref.moduleDigest };
-  const account = accountResource(d.chainId, d.principal);
+  const account = accountResource(d.chainId, principalAddress);
   const market = marketResource(d.chainId, s.tokenOut);
   const pol = validatePrincipalPolicy({ principal: P, sequence: 1n, terms: [], nonce: 0n });
   if (!pol.ok) return fail('DOMAIN_SETUP', 'POLICY_INVALID');
@@ -209,7 +228,7 @@ export async function openDomainLeg(i: DomainLegInput): Promise<DomainLegResult>
   const record = out.authorization;
   i.chain.bind({ executionId: record.executionId, reservation: record.reservation, generation: record.generation, adapter });
 
-  const custody = guardCustody(inner, s, i.eligibleNow);
+  const custody = guardCustody(inner, s, i.eligibleNow, i.boundPrincipal);
   const signer = new GateSigner({
     engine,
     store,
@@ -217,8 +236,9 @@ export async function openDomainLeg(i: DomainLegInput): Promise<DomainLegResult>
     custody,
     agent,
     chain: i.chain,
-    config: { gate: d.reviewed, gateCodehash: d.gate.runtimeCodeHash, domainSeparator: d.gate.domainSeparator, principal: principalId.value, principalAddress: d.principal, agentAddress: d.agent, adapter, policy: ref, deadlineSeconds: ATTEMPT_DEADLINE_SECONDS, retry: { maxAttempts: 4 } },
+    config: { gate: d.reviewed, gateCodehash: d.gate.runtimeCodeHash, domainSeparator: d.gate.domainSeparator, principal: principalId.value, principalAddress, agentAddress: d.agent, adapter, policy: ref, deadlineSeconds: ATTEMPT_DEADLINE_SECONDS, retry: { maxAttempts: 4 } },
   });
+  const held = presentedCustody;
   return {
     ok: true,
     leg: {
@@ -232,6 +252,7 @@ export async function openDomainLeg(i: DomainLegInput): Promise<DomainLegResult>
       payload,
       custody,
       signer,
+      presentGateSignature: held === null ? null : (signature: string) => held.present(signature),
       issueContext: (states, at) => {
         custodyNow = at;
         return { payload, states, context: context(at) };

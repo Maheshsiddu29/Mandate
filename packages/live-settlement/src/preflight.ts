@@ -42,7 +42,9 @@ export interface PreflightReport {
 
 const text = (r: { readonly ok: true; readonly value: bigint } | { readonly ok: false; readonly error: string }) => (r.ok ? r.value.toString() : null);
 
-export async function preflight(rpc: TestnetRpc, d: TestnetDeployment, need: { readonly debit: bigint; readonly quantity: bigint } | null): Promise<PreflightReport> {
+export async function preflight(rpc: TestnetRpc, d: TestnetDeployment, need: { readonly debit: bigint; readonly quantity: bigint } | null, fundingPrincipal?: string): Promise<PreflightReport> {
+  // V1 debits the manifest principal. A V2 wallet settlement debits the wallet.
+  const who = fundingPrincipal ?? d.principal;
   const failures: string[] = [];
   const id = await rpc.chainId();
   if (!id.ok) failures.push(`RPC_UNREACHABLE.${id.error}`);
@@ -74,10 +76,10 @@ export async function preflight(rpc: TestnetRpc, d: TestnetDeployment, need: { r
     if (rpc.submitter !== d.submitter) failures.push('SUBMITTER_NOT_MANIFEST_DEPLOYER');
     const [sw, pw, u, e, a, v] = await Promise.all([
       rpc.nativeBalance(rpc.submitter),
-      rpc.nativeBalance(d.principal),
-      rpc.tokenBalance(d.mdusd.address, d.principal),
-      rpc.tokenBalance(d.mdemo.address, d.principal),
-      rpc.allowance(d.mdusd.address, d.principal, d.gate.address),
+      rpc.nativeBalance(who),
+      rpc.tokenBalance(d.mdusd.address, who),
+      rpc.tokenBalance(d.mdemo.address, who),
+      rpc.allowance(d.mdusd.address, who, d.gate.address),
       rpc.tokenBalance(d.mdemo.address, d.venue.address),
     ]);
     submitterWei = sw.ok ? sw.value : null;
@@ -105,7 +107,7 @@ export async function preflight(rpc: TestnetRpc, d: TestnetDeployment, need: { r
     block: block !== null && block.ok ? block.value.number.toString() : null,
     blockTimestamp: block !== null && block.ok ? block.value.timestamp.toString() : null,
     submitter: { address: rpc.submitter, nativeWei: submitterWei === null ? null : submitterWei.toString() },
-    principal: { address: d.principal, nativeWei: principalWei, mdusdAtoms: mdusd, mdemoAtoms: mdemo, mdusdAllowanceToGate: allowance },
+    principal: { address: who, nativeWei: principalWei, mdusdAtoms: mdusd, mdemoAtoms: mdemo, mdusdAllowanceToGate: allowance },
     agent: { address: d.agent },
     venueMdemoAtoms: venue,
     contracts,

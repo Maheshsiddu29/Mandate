@@ -100,7 +100,12 @@ describe('live-settlement structural boundary', () => {
   it('B.5.3: the session-bound command and the reconciler cannot broadcast', () => {
     const scripts = (JSON.parse(readFileSync(new URL('package.json', REPO), 'utf8')) as { scripts: { [k: string]: string } }).scripts;
     assert.match(scripts['agents:settle:testnet'] ?? '', /live-settlement\/scripts\/settle\.ts$/);
+    assert.match(scripts['agents:settle:v2'] ?? '', /live-settlement\/scripts\/spine\.ts$/);
     assert.match(scripts['agents:rpc:smoke'] ?? '', /live-settlement\/scripts\/rpc-smoke\.ts$/);
+    const spine = SCRIPTS.find((s) => s.file === 'spine.ts')?.text ?? '';
+    assert.ok(spine.length > 0, 'spine.ts');
+    assert.match(spine, /gate\.authorize\(input\.line\)/);
+    assert.match(spine, /SEND_AUTHORIZATION_PHRASE/);
     const settle = SCRIPTS.find((s) => s.file === 'settle.ts')?.text ?? '';
     const bound = SRC.find((s) => s.file === 'session-settlement.ts')?.text ?? '';
     const smoke = SCRIPTS.find((s) => s.file === 'rpc-smoke.ts')?.text ?? '';

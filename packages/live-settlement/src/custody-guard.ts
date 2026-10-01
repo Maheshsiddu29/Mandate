@@ -35,7 +35,7 @@ export interface GuardedCustody extends GateKeyCustody {
   readonly refusals: () => readonly string[];
 }
 
-export function guardCustody(inner: GateKeyCustody, s: FixtureSettlement, eligibleNow: () => Eligibility): GuardedCustody {
+export function guardCustody(inner: GateKeyCustody, s: FixtureSettlement, eligibleNow: () => Eligibility, boundPrincipal?: string): GuardedCustody {
   let signatures = 0;
   const refusals: string[] = [];
   const refuse = (error: string): CustodyResult<string> => {
@@ -45,6 +45,8 @@ export function guardCustody(inner: GateKeyCustody, s: FixtureSettlement, eligib
   return {
     principal: () => inner.principal(),
     signMandate(artifact: GateArtifact, terms: ArtifactTerms, claim: GateClaim): CustodyResult<string> {
+      // V2 names the wallet that may sign. A different custody address is refused before the key is used.
+      if (boundPrincipal !== undefined && inner.principal().toLowerCase() !== boundPrincipal.toLowerCase()) return refuse('SETTLEMENT.CUSTODY_PRINCIPAL_MISMATCH');
       const e = eligibleNow();
       if (!e.eligible) return refuse(`LIVE_AI.INELIGIBLE.${e.condition}.${e.reason}`);
       const bad = checkArtifact(artifact, terms, s);

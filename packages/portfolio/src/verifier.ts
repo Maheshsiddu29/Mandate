@@ -33,12 +33,15 @@ import { proposalDigest, type ProposalDigest, type SignedProposal } from './prop
 import { canonicalReasons, reason, type Reason } from './reasons.ts';
 import { releaseDigest, releaseSignedByAgent, type SignedRelease } from './release.ts';
 import { addVectors, amountOf, vectorsEqual, type ResourceVector } from './resources.ts';
+import type { PortfolioAuthority } from './mandate-v2.ts';
 import { mandateReasons, type PortfolioCandidate } from './room.ts';
 import { screenProposal } from './screen.ts';
 
 export interface VerifierInput {
   readonly mandate: PortfolioMandate;
   readonly signature: string;
+  /** Omitted means the V1 prehash check. See `RoomInput.authority`. */
+  readonly authority?: PortfolioAuthority;
   readonly bindings: readonly DomainBinding[];
   readonly availability: ResourceAvailability;
   readonly now: bigint;
@@ -56,6 +59,8 @@ export interface VerifierInput {
  */
 export interface VerificationTranscript {
   readonly signature: string;
+  /** Omitted on every V1 transcript. Present only when the signature is EIP-712 V2. */
+  readonly authority?: PortfolioAuthority;
   readonly availability: ResourceAvailability;
   readonly verifiedAt: bigint;
   readonly candidate: PortfolioCandidate;
@@ -66,6 +71,7 @@ export interface VerificationTranscript {
 export function verificationTranscript(input: VerifierInput): VerificationTranscript {
   return {
     signature: input.signature,
+    ...(input.authority === undefined ? {} : { authority: input.authority }),
     availability: input.availability,
     verifiedAt: input.now,
     candidate: input.candidate,
@@ -78,6 +84,7 @@ export function verifyTranscript(mandate: PortfolioMandate, bindings: readonly D
   return verifyPortfolio({
     mandate,
     signature: transcript.signature,
+    ...(transcript.authority === undefined ? {} : { authority: transcript.authority }),
     bindings,
     availability: transcript.availability,
     now: transcript.verifiedAt,
@@ -107,7 +114,7 @@ export function verifyPortfolio(input: VerifierInput): VerifierResult {
   const m = input.mandate;
   const refuse = (reasons: readonly Reason[]): VerifierResult => ({ status: 'REFUSED', reasons: canonicalReasons(reasons) });
 
-  const mandate = mandateReasons(m, input.signature, input.now);
+  const mandate = mandateReasons(m, input.signature, input.now, input.authority);
   if (mandate.length > 0) return refuse(mandate);
   const c = input.candidate;
   if (c.portfolioMandate !== portfolioMandateDigest(m)) return refuse([reason('PORTFOLIO_MANDATE_DIGEST_MISMATCH', 'candidate')]);

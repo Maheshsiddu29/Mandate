@@ -313,9 +313,12 @@ export function mandateSigningHash(digest: PortfolioMandateDigest): Uint8Array {
 }
 
 /**
- * Whether `signature` (65-byte `r ‖ s ‖ v`, the kernel's acceptance rule)
- * recovers to the mandate's own principal. Only `eip155-address` principals
- * can sign in v1; any other scheme is refused.
+ * V1: whether `signature` (65-byte `r ‖ s ‖ v`, the kernel's acceptance rule)
+ * recovers to the mandate's own principal over `mandateSigningHash`. Only
+ * `eip155-address` principals can sign in v1; any other scheme is refused.
+ * An EIP-712 wallet signature is a different object and is refused here;
+ * `mandateSignedByPrincipalV2` (mandate-v2.ts) checks that one, and only
+ * when the caller names the V2 authority.
  */
 export function mandateSignedByPrincipal(m: PortfolioMandate, signature: string): boolean {
   if (m.principal.kind !== 'eip155-address') return false;

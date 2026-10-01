@@ -24,6 +24,8 @@ export { StubProvider } from './runtime/stub-provider.ts';
 export { LatencyChaosProvider, parseChaosSpec, CHAOS_DELAYS_MS } from './runtime/latency-chaos.ts';
 export { ProviderError } from './runtime/errors.ts';
 export { realClock, type Clock } from './runtime/clock.ts';
+export { APPROVAL_CHAIN_ID, sessionDigest } from './wallet/approval.ts';
+export { spineAuthority } from './wallet/spine.ts';
 export type { AgentModelProvider, ProviderKind } from './runtime/provider.ts';
 export { LIVE_SCHEMA, LIVE_EVENT_KINDS, type LiveEvent, type LiveEventKind } from './telemetry/events.ts';
 export { renderEvent } from './telemetry/render.ts';

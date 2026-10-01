@@ -31,3 +31,5 @@ export { SettlementJournal, JournalRefusal, ATTEMPT_STATES, QUARANTINES, JOURNAL
 export { reservationStatus, SETTLEMENT_ARTIFACT_KIND, type ReservationStatus } from './portfolio-ledger.ts';
 export { reconcileAttempts, judge, gatherEvidence, RECONCILE_OUTCOMES, type ReconcileOutcome, type ReconcileReport, type ChainEvidence } from './reconcile.ts';
 export type { DomainKeys } from './domain-leg.ts';
+export { reverifySpine, SPINE_CHAIN_ID, type SpineCheck, type SpineFacts } from './spine.ts';
+export { settleSpine, type SpineSettlementInput, type SpineSettlementResult } from './spine-settlement.ts';
