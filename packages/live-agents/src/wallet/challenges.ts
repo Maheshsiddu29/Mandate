@@ -21,7 +21,16 @@ export interface WalletChallenge {
   readonly id: string;
   readonly sessionId: string;
   readonly prepared: PreparedVersion;
-  readonly message: ApprovalMessage;
+  /**
+   * `V1`: the B.5.3 approval (`message` is set). `V2`: the wallet is the
+   * protocol principal and `message` is null — the signed bytes are rebuilt
+   * from the prepared mandate.
+   */
+  readonly spine: 'V1' | 'V2';
+  readonly message: ApprovalMessage | null;
+  /** Wall-clock unix seconds. The challenge may be submitted in `[issuedAt, deadline)`. */
+  readonly issuedAt: bigint;
+  readonly deadline: bigint;
   /** The draft it was issued for, canonically serialized. */
   readonly draftKey: string;
   readonly failures: number;

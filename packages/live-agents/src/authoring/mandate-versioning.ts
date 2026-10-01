@@ -31,9 +31,10 @@
  */
 
 import type { LedgerStore, ReducerRules } from '@mandate/ledger';
-import { portfolioMandateDigest, validatePortfolioMandate, type CompiledPortfolio, type DomainBinding, type PortfolioCore, type PortfolioMandate } from '@mandate/portfolio';
+import { mandateSignedByPrincipalV2, portfolioMandateDigest, validatePortfolioMandate, type CompiledPortfolio, type DomainBinding, type PortfolioCore, type PortfolioMandate } from '@mandate/portfolio';
 import { compile, registerFirst, registerSuccessor, revokeRoot } from '../mandate/portfolio-adapter.ts';
 import { PRINCIPAL_SIGNATURE_LABEL, type LocalPrincipalSigner } from '../mandate/signer.ts';
+import { APPROVAL_CHAIN_ID } from '../wallet/approval.ts';
 import type { Clock } from '../runtime/clock.ts';
 import { draftPaths } from './draft-fields.ts';
 import { fieldAt, type MandateDraft } from './draft-types.ts';
@@ -48,7 +49,7 @@ export interface FieldChange {
   readonly to: string;
 }
 
-export const AUTHORIZATION_METHODS = ['WALLET_EIP712', 'DEMO_PRINCIPAL_KEY'] as const;
+export const AUTHORIZATION_METHODS = ['WALLET_EIP712', 'DEMO_PRINCIPAL_KEY', 'WALLET_PRINCIPAL_V2'] as const;
 export type AuthorizationMethod = (typeof AUTHORIZATION_METHODS)[number];
 
 /** What the wallet approval bound, public facts only: the signature itself is evidence kept server-side. */
@@ -65,11 +66,14 @@ export interface WalletApprovalFacts {
 }
 
 /**
- * Who authorized a version, and how. `principal` is the recovered wallet
- * address on the wallet path and the demonstration key's address otherwise.
- * `protocolSigner` is always the demonstration principal key: it is the
- * signature the frozen Portfolio Verifier checks. Domain execution is never
- * delegated by either path.
+ * Who authorized a version, and how.
+ *
+ * `WALLET_EIP712` and `DEMO_PRINCIPAL_KEY` are the V1 paths: `protocolSigner`
+ * is the demonstration principal key, and `domainDelegation` is
+ * `NOT_DELEGATED`. `WALLET_PRINCIPAL_V2` names the wallet as both `principal`
+ * and `protocolSigner`; the stored signature is that wallet's EIP-712 V2
+ * signature, and domain execution is allowed only for that same address
+ * (`SAME_PRINCIPAL`). It does not delegate to any other key.
  */
 export interface PrincipalAuthorization {
   readonly method: AuthorizationMethod;
@@ -77,11 +81,13 @@ export interface PrincipalAuthorization {
   readonly protocolSigner: string;
   readonly label: string;
   readonly wallet: WalletApprovalFacts | null;
-  readonly domainDelegation: 'NOT_DELEGATED';
+  readonly domainDelegation: 'NOT_DELEGATED' | 'SAME_PRINCIPAL';
 }
 
 export const DEMO_AUTHORIZATION_LABEL = 'Demo principal key: the exact confirmation text, then the publicly derived demonstration key signs. Not a wallet signature.';
 export const WALLET_AUTHORIZATION_LABEL = 'Wallet-signed mandate: EIP-712 approval of the exact mandate digest, verified by this server. The demonstration principal key then countersigns for the frozen Portfolio Verifier. Domain execution authority is not delegated.';
+export const SPINE_AUTHORIZATION_LABEL = 'Wallet is the protocol principal: EIP-712 PortfolioMandateV2 over the canonical mandate digest. Domain execution is permitted only for this same address.';
+export const SPINE_SIGNATURE_LABEL = 'EIP-712 PortfolioMandateV2 by the wallet principal (Robinhood Chain testnet, chain 46630). Not the demonstration key.';
 
 /** The public record of a version. No key, no core. */
 export interface VersionRecord {
@@ -144,6 +150,7 @@ export const REFUSAL_CODES = [
   'WALLET_DRAFT_CHANGED',
   'WALLET_SIGNATURE_MALFORMED',
   'WALLET_SIGNER_MISMATCH',
+  'SPINE_SIGNATURE_INVALID',
 ] as const;
 export type RefusalCode = (typeof REFUSAL_CODES)[number];
 
@@ -306,20 +313,53 @@ export class MandateVersions {
     return this.commit(p.prepared, { method: 'DEMO_PRINCIPAL_KEY', principal: by, protocolSigner: by, label: DEMO_AUTHORIZATION_LABEL, wallet: null, domainDelegation: 'NOT_DELEGATED' }, protocolNow);
   }
 
-  /** The demonstration principal's address: the protocol signer of every version. */
+  /**
+   * V1 paths: the demonstration key signs the raw prehash, and a supplied
+   * signature is ignored by never being consulted — callers must not pass one.
+   * V2: the wallet signature is the protocol signature. The demonstration key
+   * is not used. A signature that does not recover to the mandate principal
+   * for this chain and session is refused, and nothing is registered under it
+   * beyond the ledger write that already happened; the caller consumes the
+   * challenge first, so a refusal cannot be retried with another signature.
+   */
+  #protocolSignature(prepared: PreparedVersion, authorization: PrincipalAuthorization, protocolSignature: string | undefined): { readonly ok: true; readonly signature: string; readonly label: string } | { readonly ok: false; readonly code: RefusalCode; readonly message: string } {
+    if (authorization.method !== 'WALLET_PRINCIPAL_V2') {
+      if (protocolSignature !== undefined) return { ok: false, code: 'SPINE_SIGNATURE_INVALID', message: 'A V1 authorization is signed by the demonstration principal key. An external signature is not accepted on that path.' };
+      return { ok: true, signature: this.#signer.signMandate(prepared.mandate), label: PRINCIPAL_SIGNATURE_LABEL };
+    }
+    const wallet = authorization.wallet;
+    if (wallet === null || protocolSignature === undefined) return { ok: false, code: 'SPINE_SIGNATURE_INVALID', message: 'A V2 mandate needs the wallet’s EIP-712 signature.' };
+    if (authorization.domainDelegation !== 'SAME_PRINCIPAL' || authorization.protocolSigner !== authorization.principal) {
+      return { ok: false, code: 'SPINE_SIGNATURE_INVALID', message: 'V2 names one principal. The protocol signer and the domain principal are that address, or the mandate is refused.' };
+    }
+    if (prepared.mandate.principal.kind !== 'eip155-address' || prepared.mandate.principal.value !== authorization.principal) {
+      return { ok: false, code: 'SPINE_SIGNATURE_INVALID', message: 'The compiled mandate’s principal is not the wallet that signed it.' };
+    }
+    if (wallet.chainId !== APPROVAL_CHAIN_ID.toString()) return { ok: false, code: 'SPINE_SIGNATURE_INVALID', message: 'V2 signatures are bound to Robinhood Chain testnet.' };
+    if (!mandateSignedByPrincipalV2(prepared.mandate, protocolSignature, { chainId: APPROVAL_CHAIN_ID, sessionDigest: wallet.sessionDigest })) {
+      return { ok: false, code: 'SPINE_SIGNATURE_INVALID', message: 'The signature is not this wallet’s EIP-712 signature of this mandate for this session.' };
+    }
+    return { ok: true, signature: protocolSignature, label: SPINE_SIGNATURE_LABEL };
+  }
+
+  /** The demonstration principal's address: the V1 protocol signer. V2 versions name the wallet instead. */
   get protocolSigner(): string {
     return this.#signer.party.value;
   }
 
-  /** Validate and compile `draft` as the next version: one exact mandate, its digest fixed. Writes nothing. */
-  prepare(draft: MandateDraft, protocolNow: bigint): { readonly ok: true; readonly prepared: PreparedVersion } | Extract<AuthorizeResult, { ok: false }> {
+  /**
+   * Validate and compile `draft` as the next version: one exact mandate, its
+   * digest fixed. Writes nothing. `principal`, when set, is the wallet the
+   * V2 spine compiles into the mandate; omitted, the demonstration principal.
+   */
+  prepare(draft: MandateDraft, protocolNow: bigint, principal?: { readonly kind: 'eip155-address'; readonly value: string }): { readonly ok: true; readonly prepared: PreparedVersion } | Extract<AuthorizeResult, { ok: false }> {
     const refuse = (code: RefusalCode, message: string, issues: readonly ValidationIssue[] = []) => ({ ok: false as const, code, message, issues });
     const held = this.#held();
     if (held !== null) return refuse(held.code, held.message);
     const closed = this.#closed();
     if (closed !== null) return refuse(closed.code, closed.message);
     const version = this.nextVersion;
-    const validation = this.validate(draft, protocolNow);
+    const validation = validateDraft(draft, { version, protocolNow, bindings: this.#bindings, ...(principal === undefined ? {} : { principal }) });
     if (!validation.ok || validation.mandate === null) return refuse('DRAFT_INVALID', 'The draft has blocking issues.', validation.issues);
     const m = validatePortfolioMandate(validation.mandate);
     if (!m.ok) return refuse('DRAFT_INVALID', `Mandate refuses the draft: ${m.error.code}.`);
@@ -334,7 +374,7 @@ export class MandateVersions {
    * version and unexpired, and nothing may have been reserved or paused
    * since.
    */
-  async commit(prepared: PreparedVersion, authorization: PrincipalAuthorization, protocolNow: bigint): Promise<AuthorizeResult> {
+  async commit(prepared: PreparedVersion, authorization: PrincipalAuthorization, protocolNow: bigint, protocolSignature?: string): Promise<AuthorizeResult> {
     const refuse = (code: RefusalCode, message: string, issues: readonly ValidationIssue[] = []): AuthorizeResult => ({ ok: false, code, message, issues });
     const held = this.#held();
     if (held !== null) return refuse(held.code, held.message);
@@ -342,6 +382,8 @@ export class MandateVersions {
     if (closed !== null) return refuse(closed.code, closed.message);
     if (prepared.version !== this.nextVersion) return refuse('VERSION_STALE', `This approval was for V${prepared.version}; the next version is V${this.nextVersion}.`);
     if (protocolNow >= prepared.mandate.expiresAt) return refuse('MANDATE_EXPIRED', 'The prepared mandate has already expired; prepare it again.');
+    const signed = this.#protocolSignature(prepared, authorization, protocolSignature);
+    if (!signed.ok) return refuse(signed.code, signed.message);
     const previous = this.#entries[this.#entries.length - 1];
     this.#busy = true;
     try {
@@ -363,7 +405,7 @@ export class MandateVersions {
         }
         return refuse('LEDGER_REFUSED', `The ledger refused to register V${version}: ${registered.reasons.map((r) => r.code).join(', ')}.`);
       }
-      const signature = this.#signer.signMandate(prepared.mandate);
+      const signature = signed.signature;
       const at = this.#clock.wallIso();
       const record: VersionRecord = {
         version,
@@ -371,7 +413,7 @@ export class MandateVersions {
         digest: prepared.digest,
         policyVersion: prepared.mandate.policyVersion.toString(),
         signature,
-        signatureLabel: PRINCIPAL_SIGNATURE_LABEL,
+        signatureLabel: signed.label,
         authorizedAt: at,
         protocolTime: protocolNow.toString(),
         expiresAt: prepared.mandate.expiresAt.toString(),

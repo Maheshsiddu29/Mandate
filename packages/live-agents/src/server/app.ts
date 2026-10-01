@@ -221,8 +221,9 @@ export class LiveLab {
       presets: PRESETS,
       pauseConfirmation: PAUSE_CONFIRMATION,
       principalAuthorization: {
-        methods: ['WALLET_EIP712', 'DEMO_PRINCIPAL_KEY'],
+        methods: ['WALLET_EIP712', 'DEMO_PRINCIPAL_KEY', 'WALLET_PRINCIPAL_V2'],
         wallet: { chainId: APPROVAL_CHAIN_ID, environment: APPROVAL_ENVIRONMENT, domain: { name: APPROVAL_DOMAIN.name, version: APPROVAL_DOMAIN.version }, delegatesDomainExecution: false },
+        spine: { method: 'WALLET_PRINCIPAL_V2', request: { spine: 'V2' }, domain: { name: 'Mandate', version: '2', chainId: APPROVAL_CHAIN_ID }, principalIsWallet: true, domainExecution: 'SAME_PRINCIPAL_ONLY' },
       },
       roles: ROLES.map((r) => ({ role: r, label: ROLE_LABELS[r], domain: AGENT_DOMAINS[r], objective: DOMAIN_AGENTS[r].objective, candidates: DOMAIN_AGENTS[r].candidates.map((c) => ({ id: c.id, title: c.title })) })),
       catalog: Object.fromEntries(CATALOG_SETS.map((s) => [s, CATALOG[s].map((e) => ({ id: e.id, label: e.label }))])),
@@ -369,9 +370,11 @@ export class LiveLab {
     if (entry.draft === null) return refuse(409, 'NO_DRAFT', 'Create a draft first.');
     const address = body['address'];
     if (typeof address !== 'string' || address.length > 42) return refuse(400, 'BAD_REQUEST', 'address must be the connected wallet address.');
-    const r = entry.session.walletChallenge(entry.draft, address);
+    const spine = body['spine'];
+    if (spine !== undefined && spine !== 'V2') return refuse(400, 'BAD_REQUEST', 'spine must be "V2" or omitted. Omitted is the B.5.3 wallet approval.');
+    const r = spine === 'V2' ? entry.session.spineChallenge(entry.draft, address) : entry.session.walletChallenge(entry.draft, address);
     if (!r.ok) return { status: 409, body: safe({ error: r.code, message: r.message, ...this.#view(entry) }) };
-    return ok({ challenge: r.challenge, version: r.version, digest: r.digest, principal: r.principal, validUntil: r.validUntil, typedData: r.typedData, ...this.#view(entry) });
+    return ok({ challenge: r.challenge, version: r.version, digest: r.digest, principal: r.principal, validUntil: r.validUntil, typedData: r.typedData, spine: spine === 'V2' ? 'V2' : 'V1', ...this.#view(entry) });
   }
 
   async #walletAuthorize(entry: Entry, body: JsonObject): Promise<ApiResponse> {

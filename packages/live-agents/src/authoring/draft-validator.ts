@@ -57,6 +57,12 @@ export interface ValidationContext {
   /** Protocol time at which the mandate would start counting its validity. */
   readonly protocolNow: bigint;
   readonly bindings: readonly DomainBinding[];
+  /**
+   * Who the compiled mandate names as principal. Omitted: the demonstration
+   * principal (V1 and the B.5.3 wallet approval). The V2 spine passes the
+   * wallet address, which then is the protocol principal.
+   */
+  readonly principal?: { readonly kind: 'eip155-address'; readonly value: string };
 }
 
 const USDC = (atoms: bigint) => `${usdcText(atoms)} USDC`;
@@ -251,7 +257,7 @@ export function validateDraft(d: MandateDraft, ctx: ValidationContext): DraftVal
     return { agent: demoParty(r), label: r, scope: agentScopes.get(r) as AuthorityScopeInput, notBefore: DEMO_T0, expiresAt, hardMaxima: hard, preferred: [] };
   });
   const mandate: PortfolioMandateInput = {
-    principal: PRINCIPAL,
+    principal: ctx.principal ?? PRINCIPAL,
     policyVersion: BigInt(ctx.version),
     nonce: BigInt(ctx.version),
     notBefore: DEMO_T0,

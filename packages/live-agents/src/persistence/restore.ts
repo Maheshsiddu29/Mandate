@@ -22,12 +22,12 @@
  */
 
 import { authorityId } from '@mandate/core';
-import { createPortfolioCore, decodePortfolioMandate, mandateSignedByPrincipal, portfolioMandateDigest, type DomainBinding, type PortfolioCore } from '@mandate/portfolio';
+import { createPortfolioCore, decodePortfolioMandate, mandateSignedByPrincipal, mandateSignedByPrincipalV2, portfolioMandateDigest, type DomainBinding, type PortfolioCore, type PortfolioMandate } from '@mandate/portfolio';
 import type { MandateDraft } from '../authoring/draft-types.ts';
 import type { RestoredVersion, VersionRecord } from '../authoring/mandate-versioning.ts';
 import { compile } from '../mandate/portfolio-adapter.ts';
 import type { ReservedExecution } from '../session.ts';
-import type { ApprovalMessage } from '../wallet/approval.ts';
+import { APPROVAL_CHAIN_ID, sessionDigest, type ApprovalMessage } from '../wallet/approval.ts';
 import { decodeRecord } from './codec.ts';
 import { SessionStoreCorruption, type SessionStore } from './session-store.ts';
 
@@ -60,6 +60,17 @@ function decoded<T>(text: string, what: string): T {
   }
 }
 
+/** V1: the raw prehash. V2: the wallet EIP-712 signature, and only that, for this session. */
+function protocolSignatureHolds(sessionId: string, mandate: PortfolioMandate, record: VersionRecord, signature: string): boolean {
+  if (record.authorization.method !== 'WALLET_PRINCIPAL_V2') return mandateSignedByPrincipal(mandate, signature);
+  const a = record.authorization;
+  const bound = sessionDigest(sessionId);
+  if (a.domainDelegation !== 'SAME_PRINCIPAL' || a.protocolSigner !== a.principal) return false;
+  if (mandate.principal.kind !== 'eip155-address' || mandate.principal.value !== a.principal) return false;
+  if (a.wallet?.chainId !== APPROVAL_CHAIN_ID.toString() || a.wallet.sessionDigest !== bound) return false;
+  return mandateSignedByPrincipalV2(mandate, signature, { chainId: APPROVAL_CHAIN_ID, sessionDigest: bound });
+}
+
 export async function restoreState(store: SessionStore, bindings: readonly DomainBinding[]): Promise<RestoredState> {
   const versions: RestoredVersion[] = [];
   let first: PortfolioCore | null = null;
@@ -69,7 +80,7 @@ export async function restoreState(store: SessionStore, bindings: readonly Domai
     if (!m.ok) throw new SessionStoreCorruption(`V${row.version}: mandate does not decode (${m.error.code})`);
     let record = decoded<VersionRecord>(row.record, `V${row.version} record`);
     if (record.version !== row.version || portfolioMandateDigest(m.value) !== record.digest) throw new SessionStoreCorruption(`V${row.version}: digest mismatch`);
-    if (!mandateSignedByPrincipal(m.value, row.signature) || row.signature !== record.signature) throw new SessionStoreCorruption(`V${row.version}: protocol signature invalid`);
+    if (row.signature !== record.signature || !protocolSignatureHolds(store.meta.sessionId, m.value, record, row.signature)) throw new SessionStoreCorruption(`V${row.version}: protocol signature invalid`);
     const c = compile(m.value, bindings);
     if (!c.ok) throw new SessionStoreCorruption(`V${row.version}: does not compile`);
     const base: PortfolioCore | null = first;

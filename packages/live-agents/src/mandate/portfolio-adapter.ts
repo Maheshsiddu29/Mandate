@@ -30,6 +30,7 @@ import {
   type ChildExecutor,
   type CompiledPortfolio,
   type DomainBinding,
+  type PortfolioAuthority,
   type PortfolioCore,
   type PortfolioMandate,
   type PortfolioRun,
@@ -132,12 +133,12 @@ export interface ProtocolRun {
  * ledger reservation → domain executor. Each proposal enters as its own
  * strategy in round 1; callers pass at most one proposal per agent.
  */
-export async function runProtocol(core: PortfolioCore, signature: string, now: bigint, proposals: readonly SignedProposal[]): Promise<ProtocolRun> {
+export async function runProtocol(core: PortfolioCore, signature: string, now: bigint, proposals: readonly SignedProposal[], authority?: PortfolioAuthority): Promise<ProtocolRun> {
   const executor = countingExecutor(core);
   // The lab's protocol clock follows real time and the executor runs now, so execution is stamped now. The default
   // (now + 5 s) would put a ledger event in the future and refuse the session's next reservation within five
   // seconds as EVALUATION_TIME_REGRESSED — a refresh or a policy-stress case after the final pass.
-  const run = await runPortfolio({ core, signature, now, agents: proposals.map((s) => new FixedProposalStrategy(s)), execute: executor.execute, executeAfter: LIVE_EXECUTE_AFTER_SECONDS });
+  const run = await runPortfolio({ core, signature, ...(authority === undefined ? {} : { authority }), now, agents: proposals.map((s) => new FixedProposalStrategy(s)), execute: executor.execute, executeAfter: LIVE_EXECUTE_AFTER_SECONDS });
   return { run, executorCalls: executor.calls(), transactions: run.receipt.transactions };
 }
 
