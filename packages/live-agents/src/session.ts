@@ -378,7 +378,7 @@ export class LiveSession {
         chainId: APPROVAL_CHAIN_ID,
         validUntil: deadline,
         authority: 'NONE until the wallet signature verifies',
-        note: 'EIP-712 PortfolioMandateV2. The wallet is the protocol principal. Not a blockchain transaction. Execution is allowed only for this same address.',
+        note: 'EIP-712 PortfolioMandateV2. The wallet is the protocol principal. Not a blockchain transaction. Each gate execution still needs a separate signature by this same address.',
       },
     });
     return { ok: true, challenge: id, version: p.prepared.version, digest: p.prepared.digest, principal, validUntil: deadline.toString(), typedData: spineTypedData(p.prepared.mandate, this.id) };
