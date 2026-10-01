@@ -14,7 +14,7 @@
  * | 3 | the Stock agent's identity signed it | agent = the Stock party; the signature recovers under the portfolio's own rule |
  * | 4 | screening accepts the exact candidate | `screenProposal` now derives the same child, byte for byte |
  * | 5 | the Portfolio Verifier accepts it | `verifyTranscript` re-derives the run and lists this child for this proposal |
- * | 6 | a valid current reservation | the ledger's reservation is ACTIVE, is this action's, generation 1, no attempt yet |
+ * | 6 | a valid current reservation | the ledger's reservation is ACTIVE, is this action's, generation 1, and has no attempt — or only this settlement's own (B.5.3: the portfolio `ADMIT_ATTEMPT` naming the settlement binding, admitted before any domain key) |
  * | 7 | the version is active, not superseded, revoked or paused | the session's active version is this one; no node of the reservation's lineage is revoked |
  * | 8 | exactly the reserved proposal | proposal, candidate and action digests all equal the reserved ones |
  * | 9 | freshness | the proposal and the Core authorization are unexpired now; screening (4) re-checks quote age |
@@ -38,6 +38,7 @@ import {
 import { demoParty } from '@mandate/portfolio/demo';
 import { DOMAIN_AGENTS, type ActiveMandate } from '@mandate/live-agents';
 import type { AuthorizedExecution } from './authorized-execution.ts';
+import { admittedFor } from './portfolio-ledger.ts';
 
 /** What eligibility reads: the session's version in force, its committed ledger, protocol time. */
 export interface LiveAuthorityView {
@@ -45,6 +46,8 @@ export interface LiveAuthorityView {
   readonly paused: boolean;
   readonly ledger: LedgerState;
   readonly now: bigint;
+  /** This settlement's binding digest: the one portfolio attempt that may already exist for the reservation. */
+  readonly continuing?: string;
 }
 
 export type Eligibility = { readonly eligible: true } | { readonly eligible: false; readonly condition: number; readonly reason: string };
@@ -101,7 +104,10 @@ export function checkEligibility(view: LiveAuthorityView, x: AuthorizedExecution
   const res = view.ledger.reservations.get(x.reservation);
   if (res === undefined || res.status !== 'ACTIVE') return no(6, 'RESERVATION_NOT_ACTIVE');
   if (res.action !== x.action || res.generation !== x.generation || x.generation !== PORTFOLIO_GENERATION) return no(6, 'RESERVATION_NOT_THIS_ACTION');
-  if (reservationPhase(view.ledger, x.reservation) !== 'RESERVED') return no(6, 'RESERVATION_ALREADY_ADMITTED');
+  const phase = reservationPhase(view.ledger, x.reservation);
+  if (phase === 'ADMITTED') {
+    if (view.continuing === undefined || admittedFor(view.ledger, x.reservation) !== view.continuing) return no(6, 'RESERVATION_ALREADY_ADMITTED');
+  } else if (phase !== 'RESERVED') return no(6, 'RESERVATION_ALREADY_ADMITTED');
 
   // 7 (cont.): no authority on the reservation's lineage — agent delegation up to the root — is revoked.
   if (!res.lineage.includes(authorityId(active.compiled.root))) return no(7, 'RESERVATION_NOT_UNDER_ACTIVE_ROOT');

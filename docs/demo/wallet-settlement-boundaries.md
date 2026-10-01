@@ -280,6 +280,91 @@ dedupe key is appended at most once. The server picks up events other
 processes appended every 400 ms and streams them over the existing SSE
 endpoint, which replays from `?after=` or `Last-Event-ID`.
 
+## 5. The durable settlement lifecycle
+
+**Status: implemented (`packages/live-settlement/src/journal.ts`,
+`portfolio-ledger.ts`, `settlement.ts`).**
+
+### 5.1 Who decides what
+
+| Store | Authority | Writes |
+| --- | --- | --- |
+| Portfolio ledger (`portfolio-ledger.db`) | **the Live AI reservation**: whether it may be attempted, and whether it is consumed or released | `ADMIT_ATTEMPT` (artifact = the settlement binding digest), then `CONSUME` + `CLOSE`, or `CLOSE` |
+| Gate (onchain) | **whether a gate mandate executed**: `_executions[mandateDigest]` | the transaction |
+| Robinhood domain ledger (per attempt) | the one-settlement grant and the domain `ADMIT_ATTEMPT` (7E.3, unchanged) | as in B.5.2 |
+| Settlement journal (`settlement.db`) | **none** — lifecycle and evidence only | every state below, write-ahead |
+| Session events (`session.db`) | none — what the browser is told | lifecycle events, each at most once |
+
+The portfolio `ADMIT_ATTEMPT` is new in B.5.3 and is what makes "one
+reservation → at most one economic attempt" a ledger fact: the control
+engine admits one attempt per reservation and returns the existing one
+forever after; eligibility accepts an admitted reservation only if its
+attempt names this settlement's binding; and a send whose journal has no
+record of an attempt the ledger holds is refused
+(`PORTFOLIO_ATTEMPT_WITHOUT_JOURNAL_RECORD`) — whoever made it may have
+signed.
+
+### 5.2 States
+
+```text
+PREPARED ─▶ SUBMISSION_STARTED ─▶ SUBMITTED ─▶ CONFIRMED_SUCCESS ─▶ SETTLED ─▶ CONSUMED
+   │               │                  │      └▶ CONFIRMED_REVERT ──────────────▶ RELEASED
+   │               └──────────────────┴──▶ RECONCILIATION_REQUIRED ─▶ (evidence) …
+   ├─▶ PREPARATION_FAILED
+   └─▶ RELEASED (send leg opened, died before its hash was journaled; every artifact dead)
+CONFIRMED_SUCCESS ─▶ RECONCILIATION_REQUIRED (POSTCONDITION_ANOMALY) — quarantined, terminal
+```
+
+`RECONCILIATION_REQUIRED` carries a reason: `AMBIGUOUS_BROADCAST`,
+`BROADCAST_REJECTED` and `AWAITING_DEADLINE` resolve on evidence;
+`POSTCONDITION_ANOMALY` and `EXECUTED_OUTSIDE_ATTEMPT` are terminal
+quarantine. Terminal states accept no transition.
+
+### 5.3 Write-ahead order
+
+```text
+journal PREPARED                                   (binding: session, reservation, proposal, candidate, child,
+                                                    action, agent, version, principal, method, chain, gate, binding)
+portfolio ADMIT_ATTEMPT                            (before any domain key is used)
+journal send leg opened  (send)                    (chain time, and the time after which any artifact is dead)
+domain ledger: grant, RESERVE, ADMIT_ATTEMPT, custody signs, agent signs   (7E.3)
+journal artifact         (mandate digest, commitment, deadline)            ← before eth_call carries it out
+eth_call, estimateGas                              DRY RUN stops here
+journal SUBMISSION_STARTED (hash, from, to, nonce, calldata digest, value, gas limit, fees, balances before)
+eth_sendRawTransaction   (once, primary endpoint only)
+journal SUBMITTED  |  RECONCILIATION_REQUIRED (ambiguous or rejected)
+receipt → journal CONFIRMED_SUCCESS | CONFIRMED_REVERT
+postconditions → journal SETTLED | RECONCILIATION_REQUIRED (POSTCONDITION_ANOMALY)
+portfolio CONSUME + CLOSE  (observation = the receipt evidence digest)
+journal CONSUMED
+session events (each with a dedupe key)
+```
+
+Every journal write is one `BEGIN IMMEDIATE` transaction with
+`synchronous = FULL`: when it returns, it is on disk. The databases cannot
+commit together and do not pretend to: each step is idempotent and a
+restart resumes from the last durable one (§5.4).
+
+**The signed transaction is never persisted.** Its hash and full envelope
+are, before the broadcast; that is enough to find it, and nothing is ever
+resent, so the raw bytes — a bearer broadcast artifact until mined — are
+never written. Re-signing is not relied on either.
+
+**Gate artifacts leave the process before any send.** An `eth_call`
+carries the principal's and agent's signatures to the RPC node, which could
+broadcast them. So every artifact — dry runs included — is journaled first
+with its gate deadline, and nothing about a reservation is released until
+every one of its artifacts is past that deadline with no commitment on
+chain.
+
+**Wallet-approved versions never send** (`WALLET_PRINCIPAL_NOT_DELEGATED_TO_DOMAIN`):
+the domain settlement would be signed by the 7E.3 testnet custody, not the
+wallet. Their dry runs run, and every settlement event names both:
+`principals.portfolio` (method and address) and
+`principals.domainSettlement` (`TESTNET_FIXTURE_CUSTODY`, address), with
+`delegation: NOT_DELEGATED`. A send also requires a durable journal
+(`DURABLE_JOURNAL_REQUIRED_FOR_SEND`).
+
 ## 6. RPC: QuickNode as infrastructure
 
 **Status: implemented (`packages/live-settlement/src/rpc.ts`,

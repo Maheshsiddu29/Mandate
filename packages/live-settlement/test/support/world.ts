@@ -18,7 +18,20 @@ import { TestTime } from '../../../live-agents/test/support/world.ts';
 import { parseDeployment, type TestnetDeployment } from '../../src/deployment.ts';
 import type { Transport } from '../../src/evidence.ts';
 import type { BroadcastResult, PreparedTx, RpcProvenance, TestnetRpc, TxLookup } from '../../src/rpc.ts';
-import { LiveSettlement } from '../../src/settlement.ts';
+import { SettlementJournal } from '../../src/journal.ts';
+import { LiveSettlement, type Prepared, type RunOptions, type SettlementEnv, type SettlementOutcome } from '../../src/settlement.ts';
+
+/** The settlement with a durable journal in the world's directory unless a run names its own. */
+export class JournaledSettlement extends LiveSettlement {
+  readonly journal: SettlementJournal;
+  constructor(env: SettlementEnv, journal: SettlementJournal) {
+    super(env);
+    this.journal = journal;
+  }
+  override run(p: Prepared, o: RunOptions): Promise<SettlementOutcome> {
+    return super.run(p, { journal: this.journal, ...o });
+  }
+}
 
 export { AGENT, AGENT_KEY, GATE, MDEMO, MDUSD, PRINCIPAL, PRINCIPAL_KEY, SUBMITTER_KEY };
 export const SUBMITTER = keyAddress(SUBMITTER_KEY);
@@ -209,7 +222,8 @@ export interface SettlementWorld {
   readonly time: TestTime;
   readonly rpc: ModelRpc;
   readonly deployment: TestnetDeployment;
-  readonly settlement: LiveSettlement;
+  readonly settlement: JournaledSettlement;
+  readonly journal: SettlementJournal;
   readonly ledgerPath: () => string;
   readonly kinds: () => readonly LiveEventKind[];
   readonly of: (kind: LiveEventKind) => readonly LiveEvent[];
@@ -231,16 +245,21 @@ export async function settlementWorld(o: { stock?: string; others?: { readonly [
   const rpc = new ModelRpc();
   const deployment = testDeployment();
   const dir = mkdtempSync(join(tmpdir(), 'mandate-live-settlement-'));
+  const journal = SettlementJournal.open(join(dir, 'settlement.db'));
   let n = 0;
   return {
     session,
     time,
     rpc,
     deployment,
-    settlement: new LiveSettlement({ session, deployment, rpc, keys: KEYS }),
+    journal,
+    settlement: new JournaledSettlement({ session, deployment, rpc, keys: KEYS }, journal),
     ledgerPath: () => join(dir, `ledger-${(n += 1)}.db`),
     kinds: () => session.events.events.map((e) => e.kind),
     of: (kind) => session.events.events.filter((e) => e.kind === kind),
-    close: () => rmSync(dir, { recursive: true, force: true }),
+    close: () => {
+      journal.close();
+      rmSync(dir, { recursive: true, force: true });
+    },
   };
 }

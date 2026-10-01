@@ -3,7 +3,8 @@
  *
  * - Only this package has RPC or signing capability in the Live AI Lab, and
  *   inside it: the RPC client and the gas payer's key live in rpc.ts; the
- *   7E.3 principal and agent keys are handed to custody in domain-leg.ts.
+ *   7E.3 principal and agent keys are handed to custody in domain-leg.ts;
+ *   the settlement journal's file is opened in journal.ts.
  * - Nothing depends on it: not the Live AI package (so no model provider,
  *   Room, policy-stress agent or local API can reach a signer or an RPC),
  *   not the browser app, not the frozen protocol, not the judge demo.
@@ -52,7 +53,9 @@ describe('live-settlement structural boundary', () => {
   });
 
   it('reads no environment, file, clock or randomness in its source; scripts read files, the environment only for RPC configuration, and start no process', () => {
-    only(/process\.env|node:fs|node:child_process|Date\.now|new Date\s*\(|performance\.now|setTimeout|setInterval|Math\.random|randomBytes/, []);
+    only(/process\.env|node:child_process|Date\.now|new Date\s*\(|performance\.now|setTimeout|setInterval|Math\.random|randomBytes/, []);
+    // B.5.3: the settlement journal is the one module that opens a file of its own (SQLite, 0600).
+    only(/node:fs|node:sqlite/, ['journal.ts']);
     only(/process\.env/, ['rpc-config.ts'], SCRIPTS);
     only(/\bspawn(Sync)?\s*\(|\bexec(File)?(Sync)?\s*\(/, [], SCRIPTS);
   });

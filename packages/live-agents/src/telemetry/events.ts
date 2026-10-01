@@ -81,6 +81,14 @@ export const LIVE_EVENT_KINDS = [
   'TESTNET_TX_FAILED',
   'DOMAIN_EXECUTION_SETTLED',
   'DOMAIN_EXECUTION_FAILED',
+  // B.5.3: the durable settlement lifecycle (@mandate/live-settlement): the portfolio attempt, the dry run's end
+  // (a send is disabled in B.5.3), reconciliation after a restart, and the reservation's consumption or release.
+  'SETTLEMENT_ATTEMPT_PREPARED',
+  'TESTNET_READY_FOR_SEND',
+  'SETTLEMENT_RECONCILIATION_STARTED',
+  'SETTLEMENT_RECONCILED',
+  'RESERVATION_CONSUMED',
+  'RESERVATION_RELEASED',
   'SESSION_COMPLETED',
 ] as const;
 export type LiveEventKind = (typeof LIVE_EVENT_KINDS)[number];
@@ -149,6 +157,8 @@ export class EventLog {
   readonly #events: LiveEvent[] = [];
   readonly #listeners = new Set<Listener>();
   readonly #sink: EventSink | null;
+  /** In memory: the sequence each dedupe key was first appended at (a durable sink keeps its own). */
+  readonly #deduped = new Map<string, number>();
 
   constructor(o: { readonly sessionId: string; readonly clock: Clock; readonly startMs: number; readonly protocolNow: () => bigint; readonly version: () => number | null; readonly sink?: EventSink; readonly elapsedMs?: () => number }) {
     this.sessionId = o.sessionId;
@@ -179,7 +189,10 @@ export class EventLog {
       this.sync();
       return this.#events[sequence] as LiveEvent;
     }
+    const seen = f.dedupe === undefined ? undefined : this.#deduped.get(f.dedupe);
+    if (seen !== undefined) return this.#events[seen] as LiveEvent;
     const e: LiveEvent = { ...base, sequence: this.#events.length };
+    if (f.dedupe !== undefined) this.#deduped.set(f.dedupe, e.sequence);
     this.#events.push(e);
     for (const l of this.#listeners) l(e);
     return e;

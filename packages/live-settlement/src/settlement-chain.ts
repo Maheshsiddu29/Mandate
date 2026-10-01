@@ -24,6 +24,7 @@
 import { EXECUTE_SELECTOR, executeCalldata, gateMandateId, reviewedMarketDigest, type BlockRef, type GateCall, type GateChain, type Read, type Receipt, type Simulation, type Submission } from '@mandate/evm-robinhood';
 import type { AdapterRef, ExecutionAuthorizationId, ReservationGeneration, ReservationId } from '@mandate/core';
 import { keccak256 } from '@mandate/kernel';
+import { hexBytes } from './hex.ts';
 import { encodeGateCandidate, encodeGateMandate, executionCommitment } from '@mandate/execution-gate';
 import { ROBINHOOD_TESTNET, type TestnetDeployment } from './deployment.ts';
 import { fixtureRepresentationId, type FixtureSettlement } from './fixture-mapping.ts';
@@ -48,9 +49,15 @@ export interface SimulationRecord {
 
 export interface SubmissionHooks {
   onSimulationStarted(): void;
+  /**
+   * The gate artifact is about to leave the process: an `eth_call` carries
+   * its signatures to the RPC node. Called before that call, so a journal can
+   * record it write-ahead; it is executable by anyone until `deadline`.
+   */
+  onArtifact(a: { readonly mandateDigest: string; readonly commitment: string; readonly deadline: bigint }): void;
   onSimulated(r: SimulationRecord): void;
   /** Called with the signed transaction's hash before it is sent. */
-  onSubmissionStarted(tx: { readonly hash: string; readonly nonce: bigint; readonly gasLimit: bigint; readonly maxFeePerGas: bigint; readonly from: string; readonly to: string }): void;
+  onSubmissionStarted(tx: { readonly hash: string; readonly nonce: bigint; readonly gasLimit: bigint; readonly maxFeePerGas: bigint; readonly from: string; readonly to: string; readonly calldataDigest: string }): void;
   onBroadcast(r: { readonly hash: string; readonly outcome: 'ACCEPTED' | 'AMBIGUOUS_KNOWN' | 'AMBIGUOUS_UNKNOWN' | 'REJECTED'; readonly detail: string }): void;
   /** Balances immediately before the broadcast, for the postconditions. */
   onBefore(b: { readonly block: bigint; readonly tokenIn: bigint; readonly tokenOut: bigint; readonly agentTokenOut: bigint }): void;
@@ -159,6 +166,7 @@ export class SettlementGateChain implements GateChain {
     if (bad !== null) return fail(`CALL_NOT_BOUND.${bad}`);
     const id = await this.#rpc.chainId();
     if (!id.ok || id.value !== ROBINHOOD_TESTNET) return fail(id.ok ? `WRONG_CHAIN.${id.value}` : `CHAIN_ID_UNREADABLE.${id.error}`);
+    this.#hooks.onArtifact({ mandateDigest, commitment, deadline: a.terms.deadline });
     const sim = await this.#rpc.simulateExecute(this.#s.gate, call);
     if (!sim.ok) return fail(`ETH_CALL_REVERTED.${sim.revert}`);
     const gas = await this.#rpc.estimateExecute(this.#s.gate, call);
@@ -186,7 +194,7 @@ export class SettlementGateChain implements GateChain {
     if (prepared.value.to !== s.gate) return { kind: 'UNKNOWN', error: 'PREPARED_TARGET_NOT_GATE' };
     this.#prepared = prepared.value;
     const p = prepared.value;
-    this.#hooks.onSubmissionStarted({ hash: p.hash, nonce: p.nonce, gasLimit: p.gasLimit, maxFeePerGas: p.maxFeePerGas, from: p.from, to: p.to });
+    this.#hooks.onSubmissionStarted({ hash: p.hash, nonce: p.nonce, gasLimit: p.gasLimit, maxFeePerGas: p.maxFeePerGas, from: p.from, to: p.to, calldataDigest: keccak256(hexBytes(p.call.calldata)) });
     this.#broadcasts += 1;
     const sent = await this.#rpc.broadcast(p);
     if (sent.kind === 'ACCEPTED' && sent.hash === p.hash) {

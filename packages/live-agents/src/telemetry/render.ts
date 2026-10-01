@@ -141,6 +141,23 @@ function detail(e: LiveEvent): string {
       return `${str(d['evidence'])} · ${str(d['assets'])} · ${str(d['explorerUrl'])}`;
     case 'DOMAIN_EXECUTION_FAILED':
       return `${str(d['stage'])}: ${str(d['reason'])}`;
+    case 'SETTLEMENT_ATTEMPT_PREPARED':
+      return `portfolio attempt ${str(d['portfolioAttempt'])} · journal ${str(d['journal'])}`;
+    case 'TESTNET_READY_FOR_SEND':
+      return `READY_FOR_TESTNET_SEND · broadcast ${str(d['broadcast'])} · transactions 0`;
+    case 'SETTLEMENT_RECONCILIATION_STARTED':
+      return `${str(d['attempts'])} open attempt(s) · no model, no Room`;
+    case 'SETTLEMENT_RECONCILED':
+      return `${str(d['reservation'])} ${str(d['from'])} → ${str(d['state'])} · ${str(d['outcome'])} · ${str(d['detail'])}`;
+    case 'RESERVATION_CONSUMED':
+    case 'RESERVATION_RELEASED':
+      return `${str(d['reservation'])} · ledger version ${str(d['ledgerVersion'])}`;
+    case 'SESSION_RESTORED':
+      return `by ${str(d['by'])} · reserved executions ${str(d['reservedExecutions'])} · orphans ${list(d['orphanedReservations'])}`;
+    case 'MANDATE_WALLET_CHALLENGE_ISSUED':
+      return `V${str(d['version'])} for ${str(d['principal'])} · chain ${str(d['chainId'])} · not a transaction`;
+    case 'MANDATE_WALLET_APPROVAL_REFUSED':
+      return `${str(d['code'])}`;
     default:
       return '';
   }

@@ -9,6 +9,9 @@
  *   (the 7E.3 gas payer), to Robinhood Chain testnet only.
  * - `domain-leg` is the only place the 7E.3 principal and agent keys are
  *   handed to the existing custody and agent signer.
+ * - `journal` is the durable settlement lifecycle (no authority);
+ *   `portfolio-ledger` is the settlement's admit / consume / release in the
+ *   portfolio ledger (B.5.3).
  *
  * Nothing in `@mandate/live-agents`, the web app or the frozen protocol
  * depends on this package.
@@ -22,5 +25,7 @@ export { SendGate, SEND_AUTHORIZATION_PHRASE, isSendAuthorization, type SendGate
 export { settlementEvidence, ASSET_QUALIFICATION, SETTLEMENT_EVIDENCE, type SettlementEvidence } from './evidence.ts';
 export { RobinhoodTestnetRpc, RobinhoodTestnetReader, PUBLIC_TESTNET_RPC, PUBLIC_ONLY, isTransportFailure, type TestnetRpc, type ChainReader, type TransactionBroadcaster, type RpcEndpoints, type RpcProvenance, type Endpoint, type TxLookup } from './rpc.ts';
 export { preflight, MIN_SUBMITTER_WEI, type PreflightReport } from './preflight.ts';
-export { LiveSettlement, safeReason, type SettlementOutcome, type SettlementRecord, type WouldSend, type Prepared, type RunOptions } from './settlement.ts';
+export { LiveSettlement, safeReason, checkPostconditions, principalBinding, lifecycleDedupe, FAULT_POINTS, type SettlementOutcome, type SettlementRecord, type WouldSend, type Prepared, type RunOptions, type FaultPoint, type PrincipalBinding } from './settlement.ts';
+export { SettlementJournal, JournalRefusal, ATTEMPT_STATES, QUARANTINES, JOURNAL_SCHEMA, isTerminal, type AttemptRecord, type AttemptState, type AttemptBinding, type ArtifactRecord, type Quarantine } from './journal.ts';
+export { reservationStatus, SETTLEMENT_ARTIFACT_KIND, type ReservationStatus } from './portfolio-ledger.ts';
 export type { DomainKeys } from './domain-leg.ts';
