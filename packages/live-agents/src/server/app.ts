@@ -11,8 +11,12 @@
  * here against server state; the browser sends only the signature) or, on the
  * demonstration key path, the principal's exact confirmation text.
  *
- * Sessions are in memory, few, and expire when idle. Nothing here signs
- * outside a session, sends a transaction or writes a file.
+ * Sessions are few and leave memory when idle. With a state directory they
+ * are durable (persistence/session-store.ts): an unknown session id is
+ * restored from disk on first use, as evidence — a restored session runs no
+ * agents and authorizes nothing new — and events another process appended
+ * (a settlement command) are picked up by `syncEvents`. Nothing here signs
+ * outside a session or sends a transaction.
  */
 
 import { DOMAIN_AGENTS } from '../agents/index.ts';
@@ -29,6 +33,7 @@ import { LatencyChaosProvider, parseChaosSpec } from '../runtime/latency-chaos.t
 import type { AgentModelProvider } from '../runtime/provider.ts';
 import { isObject, type JsonObject, type JsonValue } from '../runtime/strict-json.ts';
 import { StubProvider } from '../runtime/stub-provider.ts';
+import { sessionExists } from '../persistence/session-store.ts';
 import { LiveSession, type RunResult } from '../session.ts';
 import { LIVE_SCHEMA, safe, type LiveEvent } from '../telemetry/events.ts';
 import { summarizePolicyStress, summarizeRun } from '../telemetry/summary.ts';
@@ -61,6 +66,8 @@ export interface LabOptions {
   readonly idleMs?: number;
   /** Randomness for session ids and wallet challenges; tests substitute a deterministic source. */
   readonly entropy?: Entropy;
+  /** Durable sessions live here; absent: in memory only. */
+  readonly stateDir?: string;
 }
 
 interface Entry {
@@ -101,6 +108,40 @@ export class LiveLab {
     }
   }
 
+  /**
+   * The session, from memory or — when durable and not in memory, after a
+   * restart or an idle sweep — restored from disk. `null` when it does not
+   * exist or its records are corrupt (fail closed).
+   */
+  async ensure(id: string): Promise<boolean> {
+    if (this.#sessions.has(id)) return true;
+    const dir = this.#o.stateDir;
+    if (dir === undefined || !sessionExists(dir, id)) return false;
+    let session: LiveSession;
+    try {
+      session = await LiveSession.restore(dir, id, { clock: this.#o.clock, agentTimeoutMs: this.#o.agentTimeoutMs, roomRoundTimeoutMs: this.#o.roomRoundTimeoutMs, by: 'local-server', ...(this.#o.entropy === undefined ? {} : { entropy: this.#o.entropy }) });
+    } catch {
+      return false;
+    }
+    if (this.#sessions.has(id)) {
+      session.close();
+      return true;
+    }
+    this.#sessions.set(id, { session, provider: session.provider.name, draft: session.recordedDraft, task: null, lastRun: null, lastPolicyStress: null, lastError: null, touchedMs: this.#o.clock.nowMs() });
+    return true;
+  }
+
+  /** Pick up events other processes appended to durable sessions; listeners hear them in order. */
+  syncEvents(): void {
+    for (const e of this.#sessions.values()) {
+      try {
+        e.session.events.sync();
+      } catch {
+        e.lastError = 'SessionStoreCorruption';
+      }
+    }
+  }
+
   /** Events of a session from `after` on, then every new one; `null` for an unknown session. */
   subscribe(id: string, after: number, listener: (e: LiveEvent) => void): (() => void) | null {
     const entry = this.#sessions.get(id);
@@ -113,7 +154,12 @@ export class LiveLab {
   /** Drop sessions idle longer than the bound. */
   sweep(): void {
     const now = this.#o.clock.nowMs();
-    for (const [id, e] of this.#sessions) if (e.task === null && now - e.touchedMs > (this.#o.idleMs ?? 30 * 60_000)) this.#sessions.delete(id);
+    for (const [id, e] of this.#sessions) {
+      if (e.task === null && now - e.touchedMs > (this.#o.idleMs ?? 30 * 60_000)) {
+        this.#sessions.delete(id);
+        e.session.close();
+      }
+    }
   }
 
   async #route(r: ApiRequest): Promise<ApiResponse> {
@@ -122,13 +168,25 @@ export class LiveLab {
     if (r.method === 'GET' && parts.length === 1 && parts[0] === 'status') return this.#status();
     if (r.method === 'POST' && parts.length === 1 && parts[0] === 'sessions') return this.#create(r.body);
     if (parts[0] !== 'sessions' || parts[1] === undefined) return refuse(404, 'NOT_FOUND', 'No such endpoint.');
+    await this.ensure(parts[1]);
     const entry = this.#sessions.get(parts[1]);
     if (entry === undefined) return refuse(404, 'SESSION_NOT_FOUND', 'No such session; it may have expired.');
     entry.touchedMs = this.#o.clock.nowMs();
     const action = parts.slice(2).join('/');
-    if (r.method === 'GET' && action === '') return ok(this.#view(entry));
+    if (r.method === 'GET' && action === '') {
+      entry.session.events.sync();
+      return ok(this.#view(entry));
+    }
     if (r.method !== 'POST') return refuse(405, 'METHOD_NOT_ALLOWED', 'Use POST.');
     const body = isObject(r.body) ? r.body : {};
+    if (entry.session.restored && action !== 'pause') return refuse(409, 'SESSION_RESTORED', 'This session was restored from disk after a restart: it is evidence only. It runs no agents and authorizes nothing new; pause is still available. Start a new session to trade.');
+    const before = entry.draft;
+    const res = await this.#act(entry, action, body);
+    if (entry.draft !== before) entry.session.rememberDraft(entry.draft);
+    return res;
+  }
+
+  async #act(entry: Entry, action: string, body: JsonObject): Promise<ApiResponse> {
     switch (action) {
       case 'draft':
         return this.#draft(entry, body);
@@ -200,8 +258,8 @@ export class LiveLab {
     }
     const entropy = this.#o.entropy ?? realEntropy;
     // 128 random bits: unique across restarts and processes, never a timestamp.
-    const id = `lab-${entropy.bytes32().slice(2, 34)}`;
-    const session = new LiveSession({ provider, clock: this.#o.clock, sessionId: id, agentTimeoutMs: this.#o.agentTimeoutMs, roomRoundTimeoutMs: this.#o.roomRoundTimeoutMs, chaos, entropy });
+    const id = `lab-${entropy.bytes32().slice(-32)}`;
+    const session = new LiveSession({ provider, clock: this.#o.clock, sessionId: id, agentTimeoutMs: this.#o.agentTimeoutMs, roomRoundTimeoutMs: this.#o.roomRoundTimeoutMs, chaos, entropy, ...(this.#o.stateDir === undefined ? {} : { stateDir: this.#o.stateDir }) });
     const entry: Entry = { session, provider: provider.name, draft: null, task: null, lastRun: null, lastPolicyStress: null, lastError: null, touchedMs: this.#o.clock.nowMs() };
     this.#sessions.set(id, entry);
     return ok({ sessionId: id, ...this.#view(entry) }, 201);
@@ -229,6 +287,9 @@ export class LiveLab {
       lastPolicyStress: entry.lastPolicyStress === null ? null : summarizePolicyStress(entry.lastPolicyStress),
       lastError: entry.lastError,
       events: s.events.events.length,
+      durable: s.store !== null,
+      restored: s.restored,
+      orphanedReservations: s.orphans,
     };
   }
 

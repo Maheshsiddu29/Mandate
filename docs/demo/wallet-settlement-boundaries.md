@@ -224,3 +224,58 @@ does not recover), and the version rules as before (`MANDATE_PAUSED`,
 A challenge is consumed before the version is committed, so it authorizes at
 most once even if the commit fails. The signature is kept as evidence
 server-side; events and API views carry only its keccak digest.
+
+## 4. Durable sessions
+
+**Status: implemented (`packages/live-agents/src/persistence/`).**
+
+`npm run agents:serve` keeps every session under `LIVE_STATE_DIR`
+(default `.live/`, gitignored):
+
+```text
+.live/sessions/<sessionId>/          0700
+  session.db                         0600  SQLite, WAL, synchronous = FULL, schema mandate-live-session/v1
+  portfolio-ledger.db                0600  the session's portfolio ledger (@mandate/ledger-sqlite reference store)
+```
+
+`session.db` holds the session meta (start time, protocol anchor, provider),
+the event log, each version (canonical mandate encoding, protocol signature,
+draft, record), wallet approvals (message and signature — evidence, never
+sent to the browser), challenge summaries, reserved executions, the paused
+and reserved flags and the server's current draft. No key, no OpenAI key, no
+RPC URL is stored.
+
+**Session id.** `lab-` + 128 random bits (`runtime/entropy.ts`), never a
+timestamp; unique across restarts and processes.
+
+**The ledger is the authority.** `persistence/restore.ts` rebuilds each
+version from its canonical encoding and checks that it re-encodes to the
+recorded digest, carries a valid protocol signature, and that its root is in
+the ledger. Where records and ledger disagree, the ledger wins and nothing is
+re-activated:
+
+| Crash between | Restored as |
+| --- | --- |
+| ledger `REVOKE` and the version record | the version `REVOKED`, the session paused |
+| ledger registration and the version record | an unused root in the ledger; no version references it, nothing can reserve under it |
+| ledger `RESERVE` and the reserved-execution record | an **orphaned reservation**: reported, quarantined, never settled (there is nothing to verify it against) |
+| any ledger reservation and the `reserved` flag | `reserved` (amendment stays refused) |
+
+An unknown schema, an undecodable record (the tagged-JSON codec refuses any
+tag it does not know), a gap in the event sequence or a version whose root
+is missing fails closed (`SessionStoreCorruption`); nothing is silently
+discarded.
+
+**Restored sessions are evidence.** A session restored after a restart runs
+no agents and authorizes nothing new (`SESSION_RESTORED`); pause still works,
+through the ledger. Its protocol clock continues from the recorded anchor by
+wall-clock time — downtime ages proposals and authorizations as much as it
+lasted — and never runs below the latest protocol time in the ledger or the
+event log. Restoring restores evidence, never authority.
+
+**One event sequence across processes.** Events take their sequence inside
+one `BEGIN IMMEDIATE` transaction, so the local server and a settlement
+command append to one dense, strictly increasing sequence. An event with a
+dedupe key is appended at most once. The server picks up events other
+processes appended every 400 ms and streams them over the existing SSE
+endpoint, which replays from `?after=` or `Last-Event-ID`.

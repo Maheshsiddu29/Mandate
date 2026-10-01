@@ -7,7 +7,9 @@
  *   the model provider's network call in openai-provider.ts, clocks in
  *   clock.ts, randomness in entropy.ts, sockets in server/http.ts,
  *   demonstration keys in mandate/signer.ts, signature *recovery* (never
- *   signing) in wallet/eip712.ts. No source reads a file or starts a process.
+ *   signing) in wallet/eip712.ts, files and SQLite in
+ *   persistence/session-store.ts (the durable session and its portfolio
+ *   ledger). No source starts a process.
  * - Every model answer schema is closed and has no field that could carry
  *   an address, a venue, a tool, calldata or a signature.
  */
@@ -45,16 +47,18 @@ describe('live-agents structural boundary', () => {
   it('depends only on the frozen protocol packages it uses', () => {
     const manifest = JSON.parse(readFileSync(new URL('package.json', ROOT), 'utf8')) as { dependencies?: { [name: string]: string } };
     // B.5.3: the kernel's pinned noble packages, for EIP-712 hashing and signer recovery of the principal's wallet approval.
-    assert.deepEqual(manifest.dependencies, { '@mandate/control': '0.1.0', '@mandate/core': '0.1.0', '@mandate/kernel': '0.1.0', '@mandate/ledger': '0.1.0', '@mandate/portfolio': '0.1.0', '@noble/curves': '2.4.0', '@noble/hashes': '2.4.0' });
+    // B.5.3: the reference SQLite store, so the session's portfolio ledger survives a restart.
+    assert.deepEqual(manifest.dependencies, { '@mandate/control': '0.1.0', '@mandate/core': '0.1.0', '@mandate/kernel': '0.1.0', '@mandate/ledger': '0.1.0', '@mandate/ledger-sqlite': '0.1.0', '@mandate/portfolio': '0.1.0', '@noble/curves': '2.4.0', '@noble/hashes': '2.4.0' });
     for (const { file, text } of SRC) {
-      for (const m of text.matchAll(/from\s+'(@[^/']+\/[^/']+)/g)) assert.ok(['@mandate/control', '@mandate/core', '@mandate/kernel', '@mandate/ledger', '@mandate/portfolio', '@noble/curves', '@noble/hashes'].includes(m[1] as string), `${file}: ${m[1]}`);
+      for (const m of text.matchAll(/from\s+'(@[^/']+\/[^/']+)/g)) assert.ok(['@mandate/control', '@mandate/core', '@mandate/kernel', '@mandate/ledger', '@mandate/ledger-sqlite', '@mandate/portfolio', '@noble/curves', '@noble/hashes'].includes(m[1] as string), `${file}: ${m[1]}`);
       assert.doesNotMatch(text, /@mandate\/judge-demo|judge-demo\/|@mandate\/jev|anthropic|typesafe/i, file);
     }
   });
 
   it('has no path to a chain: no settlement package, RPC client or transaction signer, and it never emits a settlement event', () => {
     // B.5.2: Robinhood Chain testnet settlement lives in @mandate/live-settlement, which depends on this package — never the reverse.
-    for (const { file, text } of [...SRC, ...SCRIPTS]) assert.doesNotMatch(text, /@mandate\/(live-settlement|evm-robinhood|ledger-sqlite|execution-gate)|ChainClient|JsonRpcClient|TxSender|eth_sendRawTransaction/, file);
+    for (const { file, text } of [...SRC, ...SCRIPTS]) assert.doesNotMatch(text, /@mandate\/(live-settlement|evm-robinhood|execution-gate)|ChainClient|JsonRpcClient|TxSender|eth_sendRawTransaction|IssuanceJournal|LocalGateCustody/, file);
+    only(/@mandate\/ledger-sqlite/, ['persistence/session-store.ts']);
     only(/'(TESTNET_[A-Z_]+|DOMAIN_EXECUTION_[A-Z_]+)'/, ['telemetry/events.ts', 'telemetry/render.ts']);
   });
 
@@ -70,10 +74,11 @@ describe('live-agents structural boundary', () => {
     }
   });
 
-  it('reads the environment in one module, and no file, process or shell anywhere', () => {
+  it('reads the environment in one module, files in one module, and no process or shell anywhere', () => {
     only(/process\.env/, ['config.ts']);
     only(/process\.env/, [], SCRIPTS);
-    only(/node:fs|node:child_process|node:worker_threads|node:vm|\beval\s*\(|new Function\s*\(/, []);
+    only(/node:fs|node:sqlite|SqliteLedgerStore/, ['persistence/session-store.ts']);
+    only(/node:child_process|node:worker_threads|node:vm|\beval\s*\(|new Function\s*\(/, []);
     only(/node:child_process|\bexec(Sync)?\s*\(|spawn(Sync)?\s*\(/, [], SCRIPTS);
   });
 

@@ -17,6 +17,8 @@ export const LIVE_SCHEMA = 'MANDATE_LIVE_AI.V1';
 
 export const LIVE_EVENT_KINDS = [
   'SESSION_STARTED',
+  // B.5.3: a durable session reloaded from disk (by the local server or a settlement command).
+  'SESSION_RESTORED',
   'MANDATE_DRAFT_REQUESTED',
   'MANDATE_DRAFT_CREATED',
   'MANDATE_DRAFT_CONFLICT',
@@ -108,6 +110,18 @@ export interface EmitFields {
   readonly generation?: number | null;
   readonly mandateVersion?: number | null;
   readonly data?: { readonly [k: string]: unknown };
+  /** A durable session appends an event with a dedupe key at most once, across processes and restarts. */
+  readonly dedupe?: string;
+}
+
+/**
+ * Where a durable session's events live (persistence/session-store.ts). The
+ * sink assigns the sequence, so several processes appending to one session
+ * share one dense, strictly increasing order.
+ */
+export interface EventSink {
+  appendEvent(e: Omit<LiveEvent, 'sequence'>, dedupe: string | null): { readonly sequence: number; readonly inserted: boolean };
+  eventsAfter(after: number): readonly LiveEvent[];
 }
 
 /** JSON-safe: bigints become decimal text, undefined is dropped, anything else unrepresentable becomes null. */
@@ -129,28 +143,30 @@ export type Listener = (e: LiveEvent) => void;
 export class EventLog {
   readonly sessionId: string;
   readonly #clock: Clock;
-  readonly #startMs: number;
+  readonly #elapsedMs: () => number;
   readonly #protocolNow: () => bigint;
   readonly #version: () => number | null;
   readonly #events: LiveEvent[] = [];
   readonly #listeners = new Set<Listener>();
+  readonly #sink: EventSink | null;
 
-  constructor(o: { readonly sessionId: string; readonly clock: Clock; readonly startMs: number; readonly protocolNow: () => bigint; readonly version: () => number | null }) {
+  constructor(o: { readonly sessionId: string; readonly clock: Clock; readonly startMs: number; readonly protocolNow: () => bigint; readonly version: () => number | null; readonly sink?: EventSink; readonly elapsedMs?: () => number }) {
     this.sessionId = o.sessionId;
     this.#clock = o.clock;
-    this.#startMs = o.startMs;
+    this.#elapsedMs = o.elapsedMs ?? (() => o.clock.nowMs() - o.startMs);
     this.#protocolNow = o.protocolNow;
     this.#version = o.version;
+    this.#sink = o.sink ?? null;
+    if (this.#sink !== null) this.sync();
   }
 
   emit(kind: LiveEventKind, f: EmitFields = {}): LiveEvent {
-    const e: LiveEvent = {
+    const base: Omit<LiveEvent, 'sequence'> = {
       schema: LIVE_SCHEMA,
       sessionId: this.sessionId,
-      sequence: this.#events.length,
       kind,
       at: this.#clock.wallIso(),
-      elapsedMs: Math.round(this.#clock.nowMs() - this.#startMs),
+      elapsedMs: Math.round(this.#elapsedMs()),
       protocolTime: this.#protocolNow().toString(),
       mandateVersion: f.mandateVersion === undefined ? this.#version() : f.mandateVersion,
       agent: f.agent ?? null,
@@ -158,9 +174,26 @@ export class EventLog {
       generation: f.generation ?? null,
       data: safe(f.data ?? {}) as JsonObject,
     };
+    if (this.#sink !== null) {
+      const { sequence } = this.#sink.appendEvent(base, f.dedupe ?? null);
+      this.sync();
+      return this.#events[sequence] as LiveEvent;
+    }
+    const e: LiveEvent = { ...base, sequence: this.#events.length };
     this.#events.push(e);
     for (const l of this.#listeners) l(e);
     return e;
+  }
+
+  /** Read what other processes appended to a durable session since, in order, and tell every listener. */
+  sync(): number {
+    if (this.#sink === null) return 0;
+    const fresh = this.#sink.eventsAfter(this.#events.length - 1);
+    for (const e of fresh) {
+      this.#events.push(e);
+      for (const l of this.#listeners) l(e);
+    }
+    return fresh.length;
   }
 
   get events(): readonly LiveEvent[] {

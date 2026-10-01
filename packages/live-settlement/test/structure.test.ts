@@ -66,8 +66,10 @@ describe('live-settlement structural boundary', () => {
 
   it('the Live AI package — model providers, Room, policy-stress agent, local API — cannot reach a signer, an RPC or this package', () => {
     const live = sources(fileURLToPath(new URL('packages/live-agents/', REPO))).filter((s) => s.file.startsWith('src/') || s.file.startsWith('scripts/'));
-    for (const { file, text } of live) assert.doesNotMatch(text, /@mandate\/(live-settlement|evm-robinhood|ledger-sqlite|execution-gate)|live-settlement\/|ChainClient|JsonRpcClient|TxSender|eth_sendRawTransaction/, `live-agents/${file}`);
-    assert.doesNotMatch(readFileSync(new URL('packages/live-agents/package.json', REPO), 'utf8'), /live-settlement|evm-robinhood|ledger-sqlite/);
+    for (const { file, text } of live) assert.doesNotMatch(text, /@mandate\/(live-settlement|evm-robinhood|execution-gate)|live-settlement\/|ChainClient|JsonRpcClient|TxSender|eth_sendRawTransaction|IssuanceJournal|LocalGateCustody/, `live-agents/${file}`);
+    // B.5.3: live-agents keeps its durable session and portfolio ledger in the reference SQLite store — one module, no chain.
+    for (const { file, text } of live) if (file !== 'src/persistence/session-store.ts') assert.doesNotMatch(text, /@mandate\/ledger-sqlite/, `live-agents/${file}`);
+    assert.doesNotMatch(readFileSync(new URL('packages/live-agents/package.json', REPO), 'utf8'), /live-settlement|evm-robinhood/);
     for (const f of ['src/runtime/openai-provider.ts', 'src/room/coordinator.ts', 'src/policy-stress/runner.ts', 'src/server/app.ts']) assert.ok(live.some((s) => s.file === f), f);
   });
 

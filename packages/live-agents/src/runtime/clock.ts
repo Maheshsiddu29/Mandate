@@ -110,3 +110,19 @@ export class ManualClock implements Clock {
 export function protocolClock(clock: Clock, startMs: number, anchor: bigint = DEMO_NOW): () => bigint {
   return () => anchor + BigInt(Math.floor((clock.nowMs() - startMs) / 1000));
 }
+
+/**
+ * Protocol time for a session restored from disk: the anchor plus whole
+ * wall-clock seconds since the session first started — downtime ages quotes
+ * and authorizations as much as it really lasted — and never below `floor`,
+ * the latest protocol time the session's durable records carry, so a
+ * restored session can never regress the ledger's clock.
+ */
+export function restoredProtocolClock(clock: Clock, anchor: bigint, startWallMs: number, floor: bigint): () => bigint {
+  let last = floor;
+  return () => {
+    const t = anchor + BigInt(Math.floor((clock.wallMs() - startWallMs) / 1000));
+    if (t > last) last = t;
+    return last;
+  };
+}

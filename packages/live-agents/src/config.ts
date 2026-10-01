@@ -15,6 +15,8 @@ export interface LiveConfig {
   readonly roomRoundTimeoutMs: number;
   readonly port: number;
   readonly allowedOrigins: readonly string[];
+  /** Where durable Live AI sessions are kept (gitignored); `LIVE_STATE_DIR`, default `.live`. */
+  readonly stateDir: string;
 }
 
 export const DEFAULTS = { agentTimeoutMs: 30_000, roomRoundTimeoutMs: 30_000, port: 8787 } as const;
@@ -35,6 +37,7 @@ export function readConfig(env: { readonly [k: string]: string | undefined } = p
     roomRoundTimeoutMs: positiveInt(env['ROOM_ROUND_TIMEOUT_MS'], DEFAULTS.roomRoundTimeoutMs, 600_000),
     port: positiveInt(env['LIVE_AGENTS_PORT'], DEFAULTS.port, 65_535),
     allowedOrigins: (env['LIVE_ALLOWED_ORIGINS'] ?? 'http://localhost:3000,http://127.0.0.1:3000').split(',').map((s) => s.trim()).filter((s) => s !== ''),
+    stateDir: env['LIVE_STATE_DIR'] === undefined || env['LIVE_STATE_DIR'].trim() === '' ? '.live' : env['LIVE_STATE_DIR'].trim(),
   };
 }
 

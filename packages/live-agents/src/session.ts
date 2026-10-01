@@ -17,7 +17,7 @@
  */
 
 import type { AuthorizationRecord } from '@mandate/control';
-import { proposalDigest, verificationTranscript, type Reason, type SignedProposal, type VerificationTranscript, type VerifiedChild } from '@mandate/portfolio';
+import { encodePortfolioMandate, proposalDigest, verificationTranscript, type Reason, type SignedProposal, type VerificationTranscript, type VerifiedChild } from '@mandate/portfolio';
 import type { TrustedCandidate } from './agents/spec.ts';
 import { applyPreset, presetDraft, type MandateDraft, type Preset } from './authoring/draft-types.ts';
 import type { DraftValidation } from './authoring/draft-validator.ts';
@@ -34,7 +34,11 @@ import { LocalPrincipalSigner, createAgentSigners, type LocalAgentSigner } from 
 import { reasonCodes, screen } from './mandate/verifier-adapter.ts';
 import { DEFAULT_MAX_GENERATIONS, runLiveRoom, type RoomResult } from './room/coordinator.ts';
 import { assess, conflictsOf, type Participant } from './room/negotiation.ts';
-import { protocolClock, realClock, type Clock } from './runtime/clock.ts';
+import { encodeRecord } from './persistence/codec.ts';
+import { restoreState, type RestoredState } from './persistence/restore.ts';
+import { SessionStore } from './persistence/session-store.ts';
+import { protocolClock, realClock, restoredProtocolClock, type Clock } from './runtime/clock.ts';
+import { RecordedProvider } from './runtime/recorded-provider.ts';
 import type { AgentModelProvider } from './runtime/provider.ts';
 import { realEntropy, type Entropy } from './runtime/entropy.ts';
 import { EventLog } from './telemetry/events.ts';
@@ -61,6 +65,21 @@ export interface SessionOptions {
   readonly chaos?: string | null;
   /** Randomness for wallet challenges; tests substitute a deterministic source. */
   readonly entropy?: Entropy;
+  /** Make the session durable under this state directory (persistence/session-store.ts). */
+  readonly stateDir?: string;
+  /** Internal: `LiveSession.restore` builds a restored session through this. */
+  readonly restoredFrom?: { readonly store: SessionStore; readonly state: RestoredState; readonly by: string };
+}
+
+export interface RestoreOptions {
+  /** Defaults to a provider that reports the recorded one and calls no model. */
+  readonly provider?: AgentModelProvider;
+  readonly clock?: Clock;
+  readonly entropy?: Entropy;
+  readonly agentTimeoutMs: number;
+  readonly roomRoundTimeoutMs: number;
+  /** Who restored it, for the SESSION_RESTORED event: the local server, a settlement command. */
+  readonly by: string;
 }
 
 export type WalletChallengeResult =
@@ -117,8 +136,17 @@ export interface RunResult {
 
 const MAX_EPOCHS = 3;
 
+/** Bytes as 0x-prefixed lowercase hex. */
+const hexOf = (b: Uint8Array): string => `0x${Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')}`;
+
 export class LiveSession {
   readonly id: string;
+  /** The durable store, when the session is durable. */
+  readonly store: SessionStore | null;
+  /** Restored from disk: evidence only — no agent runs, no new authorization. */
+  readonly restored: boolean;
+  /** Ledger reservations a restored session found no recorded execution for: never settled. */
+  readonly orphans: readonly string[];
   readonly clock: Clock;
   readonly events: EventLog;
   readonly versions: MandateVersions;
@@ -141,16 +169,69 @@ export class LiveSession {
   constructor(o: SessionOptions) {
     this.#o = o;
     this.clock = o.clock ?? realClock;
-    this.id = o.sessionId ?? `live-${this.clock.wallIso().replace(/\D/g, '').slice(0, 17)}`;
     this.provider = o.provider;
     this.#entropy = o.entropy ?? realEntropy;
-    this.challenges = new ChallengeBook();
     this.#jev = o.jev ?? new NoopJevAdvisor();
-    const start = this.clock.nowMs();
-    this.protocolNow = o.protocolNow ?? protocolClock(this.clock, start);
-    this.versions = new MandateVersions({ bindings: sessionBindings(), signer: new LocalPrincipalSigner(), clock: this.clock });
+    const bindings = sessionBindings();
+    const restoring = o.restoredFrom;
+    let elapsedMs: (() => number) | undefined;
+    if (restoring !== undefined) {
+      const meta = restoring.store.meta;
+      this.id = meta.sessionId;
+      this.store = restoring.store;
+      this.restored = true;
+      this.orphans = restoring.state.orphans;
+      this.protocolNow = restoredProtocolClock(this.clock, meta.protocolAnchor, meta.startWallMs, restoring.state.protocolFloor);
+      elapsedMs = () => this.clock.wallMs() - meta.startWallMs;
+      this.#reserved.push(...restoring.state.reservedExecutions);
+      for (const [v, a] of restoring.state.approvals) this.#approvals.set(v, a);
+    } else {
+      this.id = o.sessionId ?? `live-${this.clock.wallIso().replace(/\D/g, '').slice(0, 17)}`;
+      this.restored = false;
+      this.orphans = [];
+      const start = this.clock.nowMs();
+      this.protocolNow = o.protocolNow ?? protocolClock(this.clock, start);
+      this.store =
+        o.stateDir === undefined
+          ? null
+          : SessionStore.create(o.stateDir, { sessionId: this.id, createdAt: this.clock.wallIso(), startWallMs: this.clock.wallMs(), protocolAnchor: this.protocolNow(), provider: { name: o.provider.name, kind: o.provider.kind, model: o.provider.model }, chaos: o.chaos ?? null });
+      elapsedMs = () => this.clock.nowMs() - start;
+    }
+    const store = this.store;
+    this.versions = new MandateVersions({
+      bindings,
+      signer: new LocalPrincipalSigner(),
+      clock: this.clock,
+      ...(store === null
+        ? {}
+        : {
+            persist: {
+              storeOf: store.ledgerStoreOf,
+              onVersion: (record, active) => store.putVersion({ version: record.version, mandateHex: hexOf(encodePortfolioMandate(active.mandate)), signature: active.signature, draft: JSON.stringify(active.draft), record: encodeRecord(record) }),
+              onRecord: (record) => store.putRecord(record.version, encodeRecord(record)),
+              onFlags: (flags) => store.putFlags(flags),
+            },
+          }),
+      ...(restoring === undefined ? {} : { restored: { versions: restoring.state.versions, paused: restoring.state.paused, reserved: restoring.state.reserved } }),
+    });
+    // Challenges are kept as evidence; a restored session authorizes nothing, so none is restored as usable.
+    this.challenges = new ChallengeBook(store === null ? {} : { persist: { onChallenge: (c) => store.putChallenge(c.id, encodeRecord({ id: c.id, version: c.prepared.version, digest: c.prepared.digest, principal: c.message.principal, validUntil: c.message.validUntil, failures: c.failures, consumed: c.consumed })) } });
+    if (store !== null) this.#onApproval = (version, message, signature) => store.putApproval(version, encodeRecord(message), signature);
     this.signers = createAgentSigners();
-    this.events = new EventLog({ sessionId: this.id, clock: this.clock, startMs: start, protocolNow: this.protocolNow, version: () => this.versions.active?.version ?? null });
+    this.events = new EventLog({ sessionId: this.id, clock: this.clock, startMs: this.clock.nowMs(), elapsedMs, protocolNow: this.protocolNow, version: () => this.versions.active?.version ?? null, ...(store === null ? {} : { sink: store }) });
+    if (restoring !== undefined) {
+      this.events.emit('SESSION_RESTORED', {
+        data: {
+          by: restoring.by,
+          versions: this.versions.records.map((r) => ({ version: r.version, status: r.status, digest: r.digest, method: r.authorization.method })),
+          reservedExecutions: this.#reserved.length,
+          orphanedReservations: this.orphans,
+          paused: this.versions.paused,
+          note: 'Restored from durable records. Restoring restores evidence, never authority: this session runs no agents and authorizes nothing new; the ledger decides what is still reserved.',
+        },
+      });
+      return;
+    }
     this.events.emit('SESSION_STARTED', {
       data: {
         provider: o.provider.name,
@@ -162,9 +243,49 @@ export class LiveSession {
         maxGenerations: o.maxGenerations ?? DEFAULT_MAX_GENERATIONS,
         chaos: o.chaos ?? null,
         protocolTimeAnchor: this.protocolNow(),
+        durable: store !== null,
         evidence: 'Fixture markets (Phase 7F demonstration); real Mandate code; no transaction; demonstration keys only.',
       },
     });
+  }
+
+  /** Restore a durable session from `stateDir`. Corrupt or unknown records fail closed (SessionStoreCorruption). */
+  static async restore(stateDir: string, sessionId: string, o: RestoreOptions): Promise<LiveSession> {
+    const store = SessionStore.open(stateDir, sessionId);
+    try {
+      const state = await restoreState(store, sessionBindings());
+      return new LiveSession({
+        provider: o.provider ?? new RecordedProvider(store.meta.provider),
+        ...(o.clock === undefined ? {} : { clock: o.clock }),
+        ...(o.entropy === undefined ? {} : { entropy: o.entropy }),
+        agentTimeoutMs: o.agentTimeoutMs,
+        roomRoundTimeoutMs: o.roomRoundTimeoutMs,
+        chaos: store.meta.chaos,
+        restoredFrom: { store, state, by: o.by },
+      });
+    } catch (e) {
+      store.close();
+      throw e;
+    }
+  }
+
+  /** The draft the server last held for this session, if durable. */
+  get recordedDraft(): MandateDraft | null {
+    if (this.store === null) return null;
+    try {
+      return JSON.parse(this.store.draft()) as MandateDraft | null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Remember the server's current draft durably (the wallet path compares against it). */
+  rememberDraft(d: MandateDraft | null): void {
+    this.store?.putDraft(JSON.stringify(d));
+  }
+
+  close(): void {
+    this.store?.close();
   }
 
   // --- Authoring --------------------------------------------------------------------------
@@ -205,6 +326,7 @@ export class LiveSession {
    * supersedes the running epoch.
    */
   async authorize(draft: MandateDraft, confirmation: string): Promise<AuthorizeResult> {
+    if (this.restored) return { ok: false, code: 'SESSION_RESTORED', message: 'A restored session authorizes nothing new. Start a new session.', issues: [] };
     const amending = this.versions.active !== null;
     if (amending) this.events.emit('MANDATE_AMENDMENT_STARTED', { data: { from: this.versions.active?.version ?? null, to: this.versions.nextVersion } });
     return this.#authorized(await this.versions.authorize(draft, confirmation, this.protocolNow()), amending);
@@ -217,6 +339,7 @@ export class LiveSession {
    * verifies (`authorizeWithWallet`).
    */
   walletChallenge(draft: MandateDraft, address: string): WalletChallengeResult {
+    if (this.restored) return { ok: false, code: 'SESSION_RESTORED', message: 'A restored session authorizes nothing new. Start a new session.' };
     if (typeof address !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(address)) return { ok: false, code: 'WALLET_ADDRESS_INVALID', message: 'The wallet address must be a 0x-prefixed 20-byte hex address.' };
     const p = this.versions.prepare(draft, this.protocolNow());
     if (!p.ok) return { ok: false, code: p.code, message: p.message };
@@ -240,6 +363,7 @@ export class LiveSession {
       this.events.emit('MANDATE_WALLET_APPROVAL_REFUSED', { data: { code, message } });
       return { ok: false, code, message, issues: [] };
     };
+    if (this.restored) return refuse('SESSION_RESTORED', 'A restored session authorizes nothing new. Start a new session.');
     const c: WalletChallenge | null = typeof challengeId === 'string' ? this.challenges.get(challengeId) : null;
     if (c === null || c.sessionId !== this.id) return refuse('WALLET_CHALLENGE_UNKNOWN', 'No such wallet challenge in this session. Request a new one.');
     if (c.consumed) return refuse('WALLET_CHALLENGE_REUSED', 'This wallet challenge was already used. Request a new one.');
@@ -348,6 +472,7 @@ export class LiveSession {
 
   async run(): Promise<RunResult> {
     if (this.#running) throw new Error('this session is already running');
+    if (this.restored) throw new Error('a restored session runs no agents');
     this.#running = true;
     try {
       for (let epoch = 1; epoch <= MAX_EPOCHS; epoch += 1) {
@@ -439,7 +564,9 @@ export class LiveSession {
         const record = child === undefined ? undefined : r.records.get(child.digest);
         if (reservation?.status === 'RESERVED' && child !== undefined && record !== undefined) {
           reserved += requested;
-          this.#reserved.push({ role: i.role, version: active.version, phase, candidateId: i.candidateId, signed: i.signed, verified: child, record, transcript, receiptDigest: r.digest, reservedAt: now });
+          const x: ReservedExecution = { role: i.role, version: active.version, phase, candidateId: i.candidateId, signed: i.signed, verified: child, record, transcript, receiptDigest: r.digest, reservedAt: now };
+          this.#reserved.push(x);
+          this.store?.putReserved(record.reservation, encodeRecord(x));
           return { role: i.role, proposal: d, requested, outcome: 'RESERVED', reasons: [] };
         }
         const stale = reasons.some((x) => x.code === 'QUOTE_STALE');
@@ -523,6 +650,7 @@ export class LiveSession {
    */
   async runPolicyStress(o: { readonly maxAttempts?: number } = {}): Promise<PolicyStressResult> {
     if (this.#running) throw new Error('this session is already running');
+    if (this.restored) throw new Error('a restored session runs no agents');
     this.#running = true;
     try {
       const signer = this.signers.get('swap') as LocalAgentSigner;

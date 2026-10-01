@@ -77,9 +77,14 @@ export function loopbackHost(host: string | undefined, port: number): boolean {
   return host === `127.0.0.1:${port}` || host === `localhost:${port}`;
 }
 
+/** How often events other processes appended to a durable session are picked up. */
+export const SYNC_MS = 400;
+
 export function createLabServer(lab: LiveLab, o: HttpOptions): Server {
   const sweeper = setInterval(() => lab.sweep(), 60_000);
   sweeper.unref();
+  const syncer = setInterval(() => lab.syncEvents(), SYNC_MS);
+  syncer.unref();
   const server = createServer((req, res) => {
     void (async () => {
       const origin = req.headers.origin;
@@ -97,7 +102,8 @@ export function createLabServer(lab: LiveLab, o: HttpOptions): Server {
 
       const stream = EVENTS.exec(url.pathname);
       if (req.method === 'GET' && stream !== null) {
-        const after = Number(url.searchParams.get('after') ?? '-1');
+        const after = Number(url.searchParams.get('after') ?? req.headers['last-event-id'] ?? '-1');
+        await lab.ensure(stream[1] as string);
         res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store', connection: 'keep-alive', 'x-content-type-options': 'nosniff', ...cors });
         const write = (e: LiveEvent) => res.write(`id: ${e.sequence}\nevent: live\ndata: ${JSON.stringify(e)}\n\n`);
         const stop = lab.subscribe(stream[1] as string, Number.isSafeInteger(after) ? after : -1, write);
@@ -123,7 +129,10 @@ export function createLabServer(lab: LiveLab, o: HttpOptions): Server {
       return send(res, await lab.handle({ method: req.method ?? 'GET', path: url.pathname, query: url.searchParams, body }), cors);
     })();
   });
-  server.on('close', () => clearInterval(sweeper));
+  server.on('close', () => {
+    clearInterval(sweeper);
+    clearInterval(syncer);
+  });
   return server;
 }
 

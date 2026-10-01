@@ -393,8 +393,11 @@ pinned noble packages. Only
 API), only `src/runtime/clock.ts` reads a clock, only
 `src/runtime/entropy.ts` reads randomness, only `src/server/http.ts`
 listens (on 127.0.0.1), only `src/mandate/signer.ts` holds a
-demonstration key, and only `src/wallet/eip712.ts` recovers a wallet
-signer (it cannot sign); no source reads a file. The principal may
+demonstration key, only `src/wallet/eip712.ts` recovers a wallet
+signer (it cannot sign), and only `src/persistence/session-store.ts`
+touches files (durable sessions and their portfolio ledger, through
+`@mandate/ledger-sqlite`, under the gitignored `LIVE_STATE_DIR`, default
+`.live/`). The principal may
 authorize a version with an EIP-712 wallet approval the server verifies
 ([wallet-settlement-boundaries.md](docs/demo/wallet-settlement-boundaries.md));
 that approval never delegates domain execution. Models answer closed schemas
