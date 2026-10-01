@@ -1,8 +1,8 @@
 # Mandate — Live AI Lab
 
-> **Status: buildathon Milestone B.5 runtime and B.6.1 presentation client,
+> **Status: buildathon Milestone B.5 runtime and B.6.2 product workspace,
 > implemented locally, awaiting review.**
-> Milestone B.6.1 is the `/demo/live` product client only. It reads the
+> Milestone B.6.2 is the `/demo/live` product client only. It reads the
 > existing session API and `MANDATE_LIVE_AI.V1` events. It does not
 > authorize, does not send transactions, and does not import
 > `packages/live-settlement`.
@@ -26,37 +26,70 @@ Different reasoning.  Different negotiation.  Same authority boundary.
 VALID AGENT != VALID ACTION
 ```
 
-## 0. B.6.1 product presentation
+## 0. B.6.2 product workspace
 
-The browser presents one guided workspace with five progressively disclosed
-stages: author a Mandate, inspect independent agent decisions, watch the
-zero-authority Room negotiate typed-resource conflicts, see Mandate's final
-re-verification, and inspect settlement evidence. It does not add a runtime
-state or reinterpret an event. Completed stages collapse and remain
-reopenable so the product story stays visible without hiding technical
-evidence.
+`/demo/live` is one adaptive workspace, not a stepper. One main panel
+changes shape as the transaction progresses:
 
-The main surface separates the model decision from the Mandate result,
-translates raw rejection codes into human copy while keeping the exact code
-inside keyboard-accessible details, and labels fixture, offchain, and
-confirmed testnet evidence distinctly. `RESERVED`, `SUBMITTED`, and
-`LIVE_TESTNET` remain separate states. The Room displays each typed resource
-independently and explicitly declares `ROOM AUTHORITY: NONE`.
+```text
+prompt ─▶ building the mandate ─▶ agent team ─▶ review and sign
+  ─▶ agents working ─▶ Mandate review ─▶ Mandate Room ─▶ re-verifying
+  ─▶ authorized ─▶ executing (when a settlement path reports) ─▶ receipt
+```
 
-The event dialog preserves authoritative sequence and time. Consecutive
-events with the same real `elapsedMs` are grouped at that one time; the UI
-does not invent spacing between them. The loading treatment is driven by
-existing request, response, verification, and settlement states, with no
-artificial delay.
+The phase is presentation state (`components/demo/live/live-flow.ts`).
+Before a mandate is active it follows the principal's own interaction; after,
+it follows only the run's `MANDATE_LIVE_AI.V1` events and the server's task
+status. It never decides authority, never advances on a timer, and never
+shows an outcome before the event that carries it. Completed steps collapse
+into a small trail; details open in side sheets: advanced permissions (every
+draft control, grouped Capital, Risk, Markets, Execution and Agent limits,
+with provenance), the trade review (Summary, Decisions, Evidence, every count
+derived from the run), the Room conversation, the security demo (policy
+stress, after the trade), the event log and pause.
 
-The Prompt Bar and Lattice Loader are adapted from the official React Bits
-TypeScript defaults at source commit
-`e1bbb696fc53f7f91e694c529e4d68c899773b6e`:
-[Prompt Bar](https://www.reactbits.dev/micro/prompt-bar) and
-[Lattice Loader](https://www.reactbits.dev/micro/lattice-loader). The
-adaptation removes controls that do not exist in Mandate, keeps the official
-prompt resize and submit morph, and makes the loader consume caller-provided
-authoritative telemetry rather than an internal stopwatch.
+The Room is a chat built from real Room events only: each
+`ROOM_AGENT_RESPONSE` is one message (`Keep $800.`, `Reduce $600 → $400.`,
+`Release $500.`, `Abstain.`) with the agent's declared rationale verbatim;
+timeouts say no allocation changed; late and stale replies are shown struck
+through and marked ignored; open requests show as pending replies until they
+answer or time out. Nothing is generated client-side and no hidden reasoning
+is read. The Room header states `AUTHORITY NONE`, and a Room proposal is
+labelled not authorized until `PORTFOLIO_AUTHORIZED`.
+
+The equal-timestamp grouping of B.6.1 is unchanged. The landing hero uses
+React Bits Pattern Waves (Silk preset, `#6366F1` on `#120F17`), loaded on the
+client only, paused offscreen and static under reduced motion. The Prompt Bar
+and Lattice Loader remain the React Bits adaptations at source commit
+`e1bbb696fc53f7f91e694c529e4d68c899773b6e`; the Prompt Bar gains a light
+composer tone and the upstream glyph squash and tilt.
+
+### Principal signing: what exists and what does not
+
+The product target is *configure agents → Trade → approve once in a wallet →
+agents operate inside that bounded authority*. The repository supports the
+last step, not the wallet:
+
+| | Today |
+| --- | --- |
+| What authorizes a version | `POST /sessions/:id/authorize` with the exact text `AUTHORIZE MANDATE V<n>`; the server's `LocalPrincipalSigner` then signs the mandate digest |
+| Principal key | a Phase 7F demonstration key, publicly derived, held by the local server; "not a wallet signature; secures nothing" |
+| Signature scheme | `signPrehash(mandateSigningHash(portfolioMandateDigest(m)))` over a demonstration party, not EIP-712 or `personal_sign` from a wallet address |
+| Wallet code in the browser | none: no connector, no provider, no signing call |
+| Repeated principal prompts | none: one authorization covers the run; the Room and every agent action proceed without the principal |
+
+So B.6.2 shows the wallet option as **not connected** and keeps the
+demonstration key path with the exact phrase, inside the review step. No
+wallet approval is displayed, simulated or implied. Replacing the phrase with
+a real one-time wallet approval needs, outside this UI milestone: a principal
+party bound to a wallet address; a typed (EIP-712) encoding of the exact
+mandate digest; a verifier path that accepts that signature for the principal;
+and a session API that receives the signature instead of signing server-side.
+Session or smart-account delegation for domain signers is a separate step after
+that. Settlement events reach the browser only if a settlement path reports
+into the session; today the Robinhood Chain testnet path runs from the
+operator CLI ([live-testnet-settlement.md](live-testnet-settlement.md)), so a
+browser session shows "Not settled in this session".
 
 ## 1. The trust model in one table
 
