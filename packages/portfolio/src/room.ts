@@ -35,6 +35,7 @@ import { checkPortfolioMandate } from './authority.ts';
 import { headroom, type ResourceAvailability } from './availability.ts';
 import type { DomainBinding, RepresentationDecisionRecord } from './binding.ts';
 import { agentPolicyOf, mandateSignedByPrincipal, portfolioMandateDigest, type PortfolioMandate, type PortfolioMandateDigest } from './mandate.ts';
+import { mandateSignedByPrincipalV2, type PortfolioAuthority } from './mandate-v2.ts';
 import { proposalDigest, type ProposalDigest, type SignedProposal } from './proposal.ts';
 import { canonicalReasons, reason, type Reason } from './reasons.ts';
 import { releaseDigest, releaseSignedByAgent, type ReleaseDigest, type SignedRelease } from './release.ts';
@@ -86,6 +87,12 @@ export interface RoomInput {
   readonly mandate: PortfolioMandate;
   /** The principal's signature over the mandate digest. */
   readonly signature: string;
+  /**
+   * Which signature this is. Omitted, or `V1_PREHASH`: the V1 raw prehash
+   * (`mandateSignedByPrincipal`). `V2_EIP712`: the wallet EIP-712 check, and
+   * only that check — a V1 signature is refused.
+   */
+  readonly authority?: PortfolioAuthority;
   readonly bindings: readonly DomainBinding[];
   readonly availability: ResourceAvailability;
   readonly now: bigint;
@@ -116,10 +123,15 @@ export interface RoomOutcome {
   readonly candidate: PortfolioCandidate;
 }
 
+function principalSigned(m: PortfolioMandate, signature: string, authority: PortfolioAuthority | undefined): boolean {
+  if (authority === undefined || authority.scheme === 'V1_PREHASH') return mandateSignedByPrincipal(m, signature);
+  return mandateSignedByPrincipalV2(m, signature, authority);
+}
+
 /** A mandate the room may coordinate under at `now`: principal-signed, valid, current. Every reason otherwise. */
-export function mandateReasons(m: PortfolioMandate, signature: string, now: bigint): readonly Reason[] {
+export function mandateReasons(m: PortfolioMandate, signature: string, now: bigint, authority?: PortfolioAuthority): readonly Reason[] {
   const found: Reason[] = [];
-  if (!mandateSignedByPrincipal(m, signature)) found.push(reason('PORTFOLIO_MANDATE_SIGNATURE_INVALID'));
+  if (!principalSigned(m, signature, authority)) found.push(reason('PORTFOLIO_MANDATE_SIGNATURE_INVALID'));
   if (now < m.notBefore) found.push(reason('PORTFOLIO_MANDATE_NOT_YET_VALID'));
   if (now >= m.expiresAt) found.push(reason('PORTFOLIO_MANDATE_EXPIRED'));
   found.push(...checkPortfolioMandate(m));
@@ -144,7 +156,7 @@ export function runMandateRoom(input: RoomInput): RoomOutcome {
   const m = input.mandate;
   const digest = portfolioMandateDigest(m);
   const empty: RoomOutcome = { status: 'REFUSED', reasons: [], rounds: 0, decisions: [], releases: [], proposals: [], signedReleases: [], book: initialBook(m), candidate: { portfolioMandate: digest, accepted: [], allocationLog: [] } };
-  const refusal = mandateReasons(m, input.signature, input.now);
+  const refusal = mandateReasons(m, input.signature, input.now, input.authority);
   if (refusal.length > 0) return { ...empty, reasons: refusal };
 
   let book = initialBook(m);
