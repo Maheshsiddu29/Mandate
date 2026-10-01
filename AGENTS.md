@@ -423,7 +423,17 @@ only `execute` on the manifest gate), only `src/domain-leg.ts` hands the
 agents:live:testnet:dry-run` stops at `eth_call` + `estimateGas`; `npm run
 agents:live:testnet` broadcasts at most one transaction, only after the
 operator types `AUTHORIZE ROBINHOOD TESTNET SEND`, only for a live-model
-decision. Never run the send without that explicit authorization.
+decision. Never run the send without that explicit authorization. B.5.3
+([wallet-settlement-boundaries.md](docs/demo/wallet-settlement-boundaries.md))
+adds the durable settlement journal (`src/journal.ts`, the only module that
+opens a file of its own), restart reconciliation (`src/reconcile.ts`, which
+holds a reader and cannot send), the portfolio-ledger attempt and
+consumption (`src/portfolio-ledger.ts`), and `npm run agents:settle:testnet
+-- --session <id>`, which restores a durable browser session and stops at
+`READY_FOR_TESTNET_SEND` — it has no send path. Only
+`scripts/rpc-config.ts` reads the environment
+(`ROBINHOOD_TESTNET_RPC_URL`, an optional QuickNode endpoint whose URL is
+never printed); `npm run agents:rpc:smoke` is read-only.
 `structure.test.ts` enforces the boundary.
 
 `jev:characterize` is the only command that contacts TypeSafe. It refuses to

@@ -1,10 +1,13 @@
 # Wallet and settlement trust boundaries (B.5.3)
 
 Milestone B.5.3 makes the Live AI Lab's principal authorization and its
-testnet settlement durable. This note starts as the Phase 0 inspection of the
-repository **as of `8b71ad5`**, answering ten questions from code, not from
-intent. Sections after §1 describe the B.5.3 design and are updated by the
-commits that implement it.
+testnet settlement durable. §1 is the Phase 0 inspection of the repository
+**as of `8b71ad5`**, answering ten questions from code, not from intent;
+§2–§8 describe what B.5.3 built; §9 is what it does not do.
+
+**B.5.3 sent no transaction — testnet or mainnet.** Everything about sends
+is exercised over the Phase 6 reference model; the network was touched
+read-only (§9.1).
 
 ## 1. Inspection at `8b71ad5`
 
@@ -515,3 +518,61 @@ journal agreeing, a fresh send refused for anything past `PREPARED`, and the
 browser-facing outcome event exactly once. The suite was run four times in a
 row without a failure. The chain is the Phase 6 reference model, not a
 network: **no testnet transaction was sent in B.5.3.**
+
+## 9. Evidence and limitations
+
+### 9.1 Network evidence (read-only)
+
+| Check, 2026-10-01 | Result |
+| --- | --- |
+| QuickNode endpoint | **not configured in this shell** (`ROBINHOOD_TESTNET_RPC_URL` absent, no `.env`): the QuickNode path is implemented and tested against mock nodes only |
+| `npm run agents:rpc:smoke -- --tx 0x87a5…c0fa` over the public RPC | `eth_chainId` 46630; gate code hash matches the manifest; the B.5.2 transaction's receipt: `SUCCESS`, block 126,872,635, gas 272,190 |
+| Broadcasts | **none** |
+
+The B.5.2 send (`0x87a5aa1bd4414ba7548fae408ee52fbe5a1f221b09da8f0f1a4fbf87ee67c0fa`)
+predates B.5.3; it ran before durable sessions existed, so its in-memory
+session and reservation are gone and it is not linked to any browser
+session.
+
+### 9.2 What one wallet signature still cannot do
+
+- **It is not the protocol principal signature.** The frozen Portfolio
+  Verifier accepts only a raw prehash signature by `mandate.principal`; the
+  wallet's EIP-712 approval is verified by the local server, which then lets
+  the demonstration key countersign. Making the wallet the protocol
+  principal needs the verifier to accept an EIP-712 scheme (a Phase 7F
+  change) and the mandate's principal to be the wallet.
+- **It does not delegate domain execution.** Each gate execution needs a
+  fresh principal signature over a gate mandate under the gate's own domain,
+  consumed once onchain. Turning one approval into many executions needs a
+  smart-account (ERC-4337) or session-key principal that the gate can verify
+  (ERC-1271), scoped onchain by the portfolio mandate — new contracts and a
+  gate change (Phase 6 is frozen).
+- **It is not the settlement principal.** Testnet settlement debits the
+  7E.3 fixture principal, whose key is in local custody. Wallet-approved
+  versions therefore never send.
+
+### 9.3 Before five-domain testnet
+
+- Only the Stock child has a settlement path (the MDEMO fixture on the 7E.3
+  gate); swap, NFT, yield and perps have none on any network.
+- Exact same-attempt resubmission is not implemented (the raw transaction
+  is never stored): a `NEVER_SUBMITTED` attempt is released, not retried.
+- Dry runs leak a signed gate artifact to the RPC node through `eth_call`,
+  executable by anyone until its 90-second deadline; it is journaled and
+  bounded, not prevented.
+- The domain ledger is per attempt; its reservation is never reconciled
+  (7E.3's journal stays `OUTCOME_UNKNOWN` until an operator looks).
+- One reservation is never retried after release: a new trade needs a new
+  session. Restored sessions are evidence only (no runs, no amendments).
+- The settlement journal, session store and both ledgers are local SQLite
+  files (the reference store): single machine, no replication.
+
+### 9.4 Before mainnet
+
+Everything in §9.2 and §9.3, plus: real assets instead of the fixture; a
+principal whose key is not in local custody; reviewed mainnet connectors
+(the RPC client refuses every mainnet chain id, and `ROBINHOOD_MAINNET_RPC_URL`
+is ignored); exact resubmission or a reviewed replacement policy; and an
+independent review of the reconciliation's release rule against the real
+gate's deadline semantics.

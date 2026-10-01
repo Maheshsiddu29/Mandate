@@ -205,12 +205,22 @@ Not used; no policy was relaxed.
 | `packages/live-agents` tests | 129 pass (incl. default runs: 0 transactions, no settlement event) |
 | testnet dry run, stub decision, 2026-09-30 | preflight PASS (chain 46630, all five code hashes = manifest, domain separator = manifest); 400 USDC → 3.2 MDEMO for 32 MDUSD; `eth_call` passed; `estimateGas` 337,458; **nothing broadcast** |
 
+**Recorded send (B.5.2).** One live-model decision was sent:
+`0x87a5aa1bd4414ba7548fae408ee52fbe5a1f221b09da8f0f1a4fbf87ee67c0fa`,
+`SUCCESS` in block 126,872,635, gas 272,190, postconditions verified,
+`LIVE_TESTNET` (the gitignored run record; the receipt re-read read-only on
+2026-10-01). Its session was in memory and is gone.
+
 ## 11. Limits
 
 - Fixture settlement, not an NVDA trade; MDEMO/MDUSD are valueless.
-- The Live AI reservation is not consumed after settlement (no
-  reconciliation; 7F), and its ledger records no attempt for the fixture:
-  one settlement per session is enforced by the settlement path itself.
+- **Superseded in B.5.3** ([wallet-settlement-boundaries.md](wallet-settlement-boundaries.md)):
+  the settlement now admits a portfolio `ADMIT_ATTEMPT` before any domain
+  key, consumes the reservation after a verified receipt, journals every
+  step durably (a send requires the journal) and reconciles after a
+  restart. `agents:live:testnet` keeps an in-memory session, so its
+  consumption does not outlive the process; the durable, browser-linked
+  path is `agents:settle:testnet -- --session <id>` (dry run only in B.5.3).
 - The 7E.3 principal is an EOA whose key custody holds in-process
   (reference separation, as in 7E.3).
 - Custody's eligibility check reads the Live AI ledger as of the last
