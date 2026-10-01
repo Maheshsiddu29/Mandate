@@ -9,7 +9,8 @@
  * - POST bodies must be `application/json` (which a cross-site form cannot
  *   send without a preflight) and at most 32 KiB.
  * - `GET …/events` is a Server-Sent Events stream of MANDATE_LIVE_AI.V1
- *   events, replayed from `?after=` and then live.
+ *   events, replayed from `Last-Event-ID` (a reconnect) or `?after=`, then
+ *   live — including events another process appended to a durable session.
  *
  * Responses and events come from `LiveLab`, which holds no key; this module
  * adds only headers.
@@ -102,7 +103,9 @@ export function createLabServer(lab: LiveLab, o: HttpOptions): Server {
 
       const stream = EVENTS.exec(url.pathname);
       if (req.method === 'GET' && stream !== null) {
-        const after = Number(url.searchParams.get('after') ?? req.headers['last-event-id'] ?? '-1');
+        // A reconnecting EventSource sends Last-Event-ID: resume after it, so nothing is replayed twice.
+        const lastId = req.headers['last-event-id'];
+        const after = Number(typeof lastId === 'string' && lastId !== '' ? lastId : (url.searchParams.get('after') ?? '-1'));
         await lab.ensure(stream[1] as string);
         res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store', connection: 'keep-alive', 'x-content-type-options': 'nosniff', ...cors });
         const write = (e: LiveEvent) => res.write(`id: ${e.sequence}\nevent: live\ndata: ${JSON.stringify(e)}\n\n`);

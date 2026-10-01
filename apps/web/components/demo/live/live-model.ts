@@ -143,9 +143,22 @@ export interface StressAttempt {
   readonly sameSigner: boolean;
 }
 
+/** Who authorized what, as settlement events state it: the portfolio principal is never the domain signer by implication. */
+export interface PrincipalBinding {
+  readonly portfolioMethod: string;
+  readonly portfolioAddress: string;
+  readonly domainKind: string;
+  readonly domainAddress: string;
+}
+
 export interface SettlementView {
   readonly present: boolean;
-  readonly stage: "NONE" | "PREFLIGHT" | "PREFLIGHT_FAILED" | "READY" | "SIMULATION" | "SIMULATION_FAILED" | "SEND_REQUIRED" | "SUBMITTED" | "FAILED" | "SETTLED";
+  /**
+   * B.5.3 adds: READY_FOR_SEND (the session-bound dry run passed; B.5.3 never broadcasts), RECONCILING (an
+   * execution's outcome is still being established: "checking settlement status"), NEEDS_REVIEW (quarantined
+   * after reconciliation: no retry was sent) and RELEASED (definitively not executed; the reservation released).
+   */
+  readonly stage: "NONE" | "PREFLIGHT" | "PREFLIGHT_FAILED" | "READY" | "SIMULATION" | "SIMULATION_FAILED" | "SEND_REQUIRED" | "READY_FOR_SEND" | "SUBMITTED" | "RECONCILING" | "FAILED" | "NEEDS_REVIEW" | "RELEASED" | "SETTLED";
   readonly settled: boolean;
   readonly evidence: string | null;
   readonly network: string;
@@ -161,6 +174,11 @@ export interface SettlementView {
   readonly fixtureOut: string | null;
   readonly qualification: string;
   readonly detail: string;
+  /** The portfolio reservation was consumed in the durable ledger (RESERVATION_CONSUMED). */
+  readonly consumed: boolean;
+  readonly principals: PrincipalBinding | null;
+  /** Which RPC endpoint answered: a provider label from the event, never a URL. */
+  readonly rpcProvider: string | null;
 }
 
 export interface LivePresentation {
@@ -581,6 +599,9 @@ export function deriveSettlement(events: readonly LiveEvent[]): SettlementView {
     fixtureOut: null,
     qualification: FIXTURE_QUALIFICATION,
     detail: "",
+    consumed: false,
+    principals: null,
+    rpcProvider: null,
   };
   let view = base;
   for (const event of events) {
@@ -588,6 +609,20 @@ export function deriveSettlement(events: readonly LiveEvent[]): SettlementView {
     const touch = (patch: Partial<SettlementView>): void => {
       view = { ...view, present: true, ...patch };
     };
+    const p = rec(data.principals);
+    if (typeof p.delegation === "string") {
+      view = { ...view, principals: { portfolioMethod: str(rec(p.portfolio).method), portfolioAddress: str(rec(p.portfolio).address), domainKind: str(rec(p.domainSettlement).kind), domainAddress: str(rec(p.domainSettlement).address) } };
+    }
+    if (typeof data.rpcProvider === "string" && event.kind !== "SESSION_RESTORED") view = { ...view, rpcProvider: data.rpcProvider };
+    if (event.kind === "TESTNET_READY_FOR_SEND") touch({ stage: "READY_FOR_SEND", settled: false, evidence: "DRY_RUN", detail: "Ready for testnet send. Broadcast is disabled in this milestone: nothing was sent." });
+    if (event.kind === "SETTLEMENT_RECONCILED") {
+      const state = str(data.state);
+      const quarantine = typeof data.quarantine === "string" ? data.quarantine : null;
+      if (quarantine === "POSTCONDITION_ANOMALY" || quarantine === "EXECUTED_OUTSIDE_ATTEMPT") touch({ stage: "NEEDS_REVIEW", settled: false, detail: "Settlement needs review. No retry was sent." });
+      else if (state === "SUBMITTED" || state === "SUBMISSION_STARTED" || state === "RECONCILIATION_REQUIRED") touch({ stage: "RECONCILING", settled: false, txHash: textField(data, "txHash") ?? view.txHash, detail: "Checking settlement status…" });
+    }
+    if (event.kind === "RESERVATION_RELEASED") touch({ stage: "RELEASED", settled: false, detail: "Not executed: every gate artifact passed its deadline with nothing recorded onchain. The reservation was released." });
+    if (event.kind === "RESERVATION_CONSUMED") view = { ...view, present: true, consumed: true };
     if (event.kind === "TESTNET_PREFLIGHT_STARTED" || event.kind === "DOMAIN_EXECUTION_READY" || event.kind === "TESTNET_PREFLIGHT_PASSED") {
       touch({
         stage: event.kind === "TESTNET_PREFLIGHT_PASSED" ? "PREFLIGHT" : view.stage === "NONE" ? "PREFLIGHT" : view.stage,
@@ -603,7 +638,9 @@ export function deriveSettlement(events: readonly LiveEvent[]): SettlementView {
     if (event.kind === "TESTNET_SIMULATION_FAILED") touch({ stage: "SIMULATION_FAILED", settled: false, detail: str(data.reason) });
     if (event.kind === "TESTNET_SEND_AUTHORIZATION_REQUIRED") touch({ stage: "SEND_REQUIRED", settled: false });
     if (event.kind === "TESTNET_TX_SUBMITTED") touch({ stage: "SUBMITTED", settled: false, txHash: textField(data, "txHash"), evidence: "SUBMITTED_UNCONFIRMED" });
-    if (event.kind === "TESTNET_TX_FAILED" || event.kind === "DOMAIN_EXECUTION_FAILED") {
+    if (event.kind === "DOMAIN_EXECUTION_FAILED" && data.reservationStatus === "QUARANTINED") {
+      touch({ stage: "NEEDS_REVIEW", settled: false, txHash: textField(data, "txHash") ?? view.txHash, detail: "Settlement needs review. No retry was sent." });
+    } else if (event.kind === "TESTNET_TX_FAILED" || event.kind === "DOMAIN_EXECUTION_FAILED") {
       touch({
         stage: "FAILED",
         settled: false,
@@ -639,6 +676,13 @@ export function deriveSettlement(events: readonly LiveEvent[]): SettlementView {
   }
   if (view.evidence !== "LIVE_TESTNET") view = { ...view, settled: false, stage: view.stage === "SETTLED" ? "SUBMITTED" : view.stage };
   return view;
+}
+
+/** Stages after which nothing further happens without a new action: the flow may show the receipt. */
+export const SETTLEMENT_TERMINAL = ["SETTLED", "FAILED", "PREFLIGHT_FAILED", "SIMULATION_FAILED", "READY_FOR_SEND", "NEEDS_REVIEW", "RELEASED"] as const;
+
+export function settlementTerminal(s: SettlementView): boolean {
+  return (SETTLEMENT_TERMINAL as readonly string[]).includes(s.stage);
 }
 
 function refusal(events: readonly LiveEvent[]): string | null {

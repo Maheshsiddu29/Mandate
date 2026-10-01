@@ -4,6 +4,7 @@ import { LatticeLoader } from "@/components/react-bits/lattice-loader";
 import { useState, type ReactNode } from "react";
 import { arr, rec, str, type Json, type JsonRecord } from "./live-client";
 import { allocationSummary, ROLE_DESCRIPTORS, ROLE_TITLES, ROLES, usd, type RoleName } from "./live-model";
+import { APPROVAL_CHAIN, shortAddress } from "./wallet";
 import { AgentGlyph, Pill } from "./workspace-ui";
 
 export interface DraftAccess {
@@ -218,19 +219,35 @@ export function ConfigureStage(props: {
   );
 }
 
+/** The browser wallet as the review step sees it; null address: not connected. */
+export interface WalletState {
+  readonly available: boolean;
+  readonly address: string | null;
+  readonly chainId: number | null;
+}
+
 export function ApproveStage(props: {
   readonly access: DraftAccess;
   readonly expected: string;
   readonly authorizing: boolean;
   readonly error: string;
+  readonly wallet: WalletState;
+  readonly onConnect: () => void;
+  readonly onSwitchChain: () => void;
+  readonly onSignWallet: () => void;
   readonly onAuthorize: (confirmation: string) => void;
   readonly onCancel: () => void;
 }): ReactNode {
   const [confirmation, setConfirmation] = useState("");
+  const [method, setMethod] = useState<"wallet" | "demo">(props.wallet.available ? "wallet" : "demo");
   const version = props.expected.replace("AUTHORIZE MANDATE ", "");
   const enabled = ROLES.filter((role) => props.access.enabled(role) === true);
   const venues = props.access.ids("market.venues");
   const matches = confirmation === props.expected && props.expected !== "—";
+  const wallet = props.wallet;
+  const connected = wallet.address !== null;
+  const rightChain = wallet.chainId === APPROVAL_CHAIN.chainId;
+  const walletReady = method === "wallet" && connected && rightChain;
   return (
     <div className="mw-approve">
       <header className="mw-stage-head">
@@ -246,32 +263,51 @@ export function ApproveStage(props: {
         <div><dt>Valid for</dt><dd>{props.access.text("portfolio.validityMinutes") === "" ? "Not set" : `${props.access.text("portfolio.validityMinutes")} minutes`}</dd></div>
       </dl>
 
-      <section className="mw-signer" aria-label="How this mandate is signed">
-        <div className="mw-signer__option" data-disabled="">
+      <section className="mw-signer" aria-label="How this mandate is signed" role="radiogroup">
+        <button type="button" role="radio" aria-checked={method === "wallet"} className="mw-signer__option" data-selected={method === "wallet" ? "" : undefined} data-disabled={wallet.available ? undefined : ""} disabled={!wallet.available || props.authorizing} onClick={() => setMethod("wallet")}>
           <span className="mw-signer__icon" aria-hidden="true">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="6" width="18" height="13" rx="3" /><path d="M16 12.5h2M3 9h15a3 3 0 0 0-3-3" /></svg>
           </span>
-          <span><strong>Approve in wallet</strong><small>Not available yet. Needs principal wallet-signature integration.</small></span>
-          <Pill>Not connected</Pill>
-        </div>
-        <div className="mw-signer__option" data-selected="">
+          <span>
+            <strong>Approve in wallet</strong>
+            <small>{!wallet.available ? "No browser wallet detected. Use the demo principal key below." : connected ? `${shortAddress(wallet.address ?? "")}${rightChain ? " · Robinhood Chain testnet" : " · switch to Robinhood Chain testnet to sign"}` : "Your wallet will sign this Mandate. This does not submit a blockchain transaction."}</small>
+          </span>
+          <Pill tone={connected && rightChain ? "good" : "neutral"}>{!wallet.available ? "Not detected" : !connected ? "Not connected" : rightChain ? "Connected" : "Wrong network"}</Pill>
+        </button>
+        <button type="button" role="radio" aria-checked={method === "demo"} className="mw-signer__option" data-selected={method === "demo" ? "" : undefined} disabled={props.authorizing} onClick={() => setMethod("demo")}>
           <span className="mw-signer__icon" aria-hidden="true">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><circle cx="8" cy="15" r="4" /><path d="m11 12 8-8M16 7l2 2M14 9l2 2" /></svg>
           </span>
           <span><strong>Demo principal key</strong><small>Held by the local server. Publicly derived: it secures nothing and is not a wallet signature.</small></span>
-          <Pill tone="accent">This demo</Pill>
-        </div>
-        <label className="mw-confirm">
-          <span>Type <code>{props.expected}</code> to sign</span>
-          <input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" spellCheck={false} disabled={props.authorizing} aria-label="Authorization confirmation" />
-        </label>
+          <Pill tone={method === "demo" ? "accent" : "neutral"}>Fallback</Pill>
+        </button>
+        {method === "wallet" && wallet.available ? (
+          <div className="mw-signer__actions">
+            {!connected ? <button type="button" className="mw-soft-button" disabled={props.authorizing} onClick={props.onConnect}>Connect wallet</button> : null}
+            {connected && !rightChain ? <button type="button" className="mw-soft-button" disabled={props.authorizing} onClick={props.onSwitchChain}>Switch to Robinhood Chain testnet</button> : null}
+            <details className="mw-disclosure mw-disclosure--inline">
+              <summary>What this signature does</summary>
+              <p className="mw-fine">An offchain EIP-712 approval of this exact mandate, for this session, once. No gas, no transaction. It authorizes the portfolio mandate only: testnet settlement is signed by separate testnet custody, and your signature does not delegate onchain execution authority.</p>
+            </details>
+          </div>
+        ) : null}
+        {method === "demo" ? (
+          <label className="mw-confirm">
+            <span>Type <code>{props.expected}</code> to sign</span>
+            <input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" spellCheck={false} disabled={props.authorizing} aria-label="Authorization confirmation" />
+          </label>
+        ) : null}
       </section>
 
-      {props.authorizing ? <div className="mw-inline-status" aria-live="polite"><LatticeLoader label={`Signing mandate ${version}`} status="working" pattern="orbit" showTimer={false} /></div> : null}
+      {props.authorizing ? <div className="mw-inline-status" aria-live="polite"><LatticeLoader label={method === "wallet" ? "Waiting for your wallet" : `Signing mandate ${version}`} status="working" pattern="orbit" showTimer={false} /></div> : null}
       {props.error === "" ? null : <p className="mw-notice mw-notice--bad" role="alert">{props.error}</p>}
 
       <footer className="mw-stage-foot">
-        <button type="button" className="mw-cta" disabled={!matches || props.authorizing} onClick={() => props.onAuthorize(confirmation)}>Sign &amp; start agents</button>
+        {method === "wallet" ? (
+          <button type="button" className="mw-cta" disabled={!walletReady || props.authorizing} onClick={props.onSignWallet}>Sign Mandate</button>
+        ) : (
+          <button type="button" className="mw-cta" disabled={!matches || props.authorizing} onClick={() => props.onAuthorize(confirmation)}>Sign &amp; start agents</button>
+        )}
         <button type="button" className="mw-text-button" disabled={props.authorizing} onClick={props.onCancel}>Cancel</button>
       </footer>
     </div>

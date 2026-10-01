@@ -1144,3 +1144,10 @@
   .mw-cta:active:not(:disabled),
   .mw-chip:active:not(:disabled) { transform: none; }
 }
+
+/* B.5.3: the review step's wallet path and settlement authority lines — wiring only, on the B.6.2 materials. */
+button.mw-signer__option { width: 100%; color: inherit; font: inherit; text-align: left; background: transparent; cursor: pointer; }
+button.mw-signer__option:disabled { cursor: not-allowed; }
+button.mw-signer__option:focus-visible { outline: 2px solid rgba(169, 166, 255, 0.6); outline-offset: 2px; }
+.mw-signer__actions { display: grid; gap: 0.5rem; justify-items: start; margin-top: 0.2rem; }
+.mw-evidence--compact { gap: 0.4rem; margin-top: 0.6rem; font-size: 0.8rem; }

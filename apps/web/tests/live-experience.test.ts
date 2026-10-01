@@ -132,19 +132,30 @@ test('Trade is the one dominant action on the agent team', () => {
   assert.doesNotMatch(stage, /AUTHORIZE MANDATE/);
 });
 
-test('the review step is honest about signing: no wallet integration, no faked approval', () => {
+test('the review step signs with a real wallet, or with the labelled demo key — never a faked approval', () => {
   assert.equal(deriveFlow({ ...idle, draftPresent: true, reviewing: true }).phase, 'APPROVE');
   assert.match(configure, /Review your mandate/);
   assert.match(configure, /Approve in wallet/);
-  assert.match(configure, /Needs principal wallet-signature integration/);
-  assert.match(configure, /data-disabled=""/);
+  assert.match(configure, /Your wallet will sign this Mandate\. This does not submit a blockchain transaction\./);
+  assert.match(configure, />Sign Mandate</);
+  assert.match(configure, /No browser wallet detected/);
+  assert.match(configure, /your signature does not delegate onchain execution authority/);
+  // The demo key stays, labelled as what it is.
   assert.match(configure, /Demo principal key/);
   assert.match(configure, /it secures nothing and is not a wallet signature/);
-  // The exact server phrase is still required; nothing types it for the principal.
   assert.match(configure, /const matches = confirmation === props\.expected/);
   assert.match(configure, /disabled=\{!matches \|\| props\.authorizing\}/);
-  assert.doesNotMatch(browserSources, /Wallet approved|wallet connected|setConfirmation\(props\.expected\)|confirmation: expected/i);
-  assert.doesNotMatch(browserSources, /window\.ethereum|eth_requestAccounts|signTypedData|personal_sign/);
+  // The wallet's CTA needs a connected wallet on the approval chain; nothing pretends to be connected.
+  assert.match(configure, /const walletReady = method === "wallet" && connected && rightChain;/);
+  assert.match(configure, /disabled=\{!walletReady \|\| props\.authorizing\}/);
+  assert.doesNotMatch(browserSources, /Wallet approved|setConfirmation\(props\.expected\)|confirmation: expected/i);
+  // Signing a mandate is not a transaction: the review step shows no gas estimate or limit.
+  assert.doesNotMatch(configure, /gas estimate|gasEstimate|estimateGas|gasLimit/i);
+  // The wallet path: a server challenge, the wallet's EIP-712 signature, server verification; the browser sends only id and signature.
+  assert.match(lab, /call\("POST", "\/wallet\/challenge", \{ address \}\)/);
+  assert.match(lab, /w\.signTypedData\(address, challenge\.typedData\)/);
+  assert.match(lab, /call\("POST", "\/wallet\/authorize", \{ challenge: str\(challenge\.challenge\), signature: signed\.value \}\)/);
+  assert.doesNotMatch(lab, /console\.|localStorage\.setItem\([^)]*signature/);
 });
 
 test('cancelling the review returns to the agent team and activates nothing', () => {
@@ -155,8 +166,9 @@ test('cancelling the review returns to the agent team and activates nothing', ()
 
 test('signing starts the run; Trade never broadcasts anything', () => {
   assert.match(lab, /const body = await call\("POST", "\/authorize", \{ confirmation \}\);[\s\S]*await startRun\(body\);/);
+  assert.match(lab, /const body = await call\("POST", "\/wallet\/authorize"[\s\S]*await startRun\(body\);/);
   assert.match(lab, /setRunFrom\(known\);\s*await call\("POST", "\/run", \{\}\);/);
-  assert.doesNotMatch(browserSources, /sendTransaction|signTransaction|eth_sendRawTransaction|eth_sign/i);
+  assert.doesNotMatch(browserSources, /sendTransaction|signTransaction|eth_sendRawTransaction|eth_sign(?!TypedData_v4)|personal_sign/i);
 });
 
 test('agent rows start from AGENT_REQUEST_STARTED and update independently', () => {
@@ -352,7 +364,7 @@ test('the event log keeps exact sequence and time, behind Developer details', ()
 });
 
 test('the browser holds no key, no signer and no settlement capability', () => {
-  assert.doesNotMatch(browserSources + prompt + lattice, /@mandate\/live-settlement|packages\/live-settlement|privateKey|mnemonic|OPENAI_API_KEY|NEXT_PUBLIC_OPENAI|sk-[A-Za-z0-9]{8}|QUICKNODE/i);
+  assert.doesNotMatch(browserSources + prompt + lattice, /@mandate\/live-settlement|packages\/live-settlement|privateKey|mnemonic|OPENAI_API_KEY|NEXT_PUBLIC_OPENAI|sk-[A-Za-z0-9]{8}|QUICKNODE|quiknode\.pro/i);
   assert.match(flowSource, /It never decides authority/);
 });
 

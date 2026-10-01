@@ -2,7 +2,7 @@
 
 import { LatticeLoader } from "@/components/react-bits/lattice-loader";
 import { useState, type ReactNode } from "react";
-import { code, str, type JsonRecord, type LiveEvent } from "./live-client";
+import { code, rec, str, type JsonRecord, type LiveEvent } from "./live-client";
 import { formatDuration, groupEventsByElapsed, reasonLabel, ROLE_TITLES, usd, type AgentCard, type RoleName, type SettlementView, type StressAttempt, type TradeReview } from "./live-model";
 import { mandateVerdict } from "./stage-agents";
 import { AgentGlyph, Pill } from "./workspace-ui";
@@ -76,7 +76,9 @@ export function ReviewBody(props: {
               <div><dt>Mandate digest</dt><dd><code>{str(props.mandate.digest)}</code></dd></div>
               <div><dt>Signed with</dt><dd>{str(props.mandate.signatureLabel)}</dd></div>
             </>}
-            <div><dt>Settlement evidence</dt><dd>{props.settlement.settled ? "LIVE_TESTNET" : props.settlement.evidence ?? "None in this session"}</dd></div>
+            {props.mandate === null ? null : <div><dt>Portfolio authorization</dt><dd>{str(rec(props.mandate.authorization).method) === "WALLET_EIP712" ? `Wallet-signed mandate · ${str(rec(props.mandate.authorization).principal)}` : "Demo principal key (not a wallet signature)"}</dd></div>}
+            <div><dt>Domain settlement authority</dt><dd>{props.settlement.principals === null ? "Separate testnet custody (not delegated by the mandate signature)" : `Separate testnet custody · ${props.settlement.principals.domainAddress}`}</dd></div>
+            <div><dt>Settlement evidence</dt><dd>{props.settlement.settled ? "LIVE_TESTNET" : props.settlement.evidence ?? "None in this session"}{props.settlement.consumed ? " · reservation consumed" : ""}{props.settlement.rpcProvider === null ? "" : ` · RPC ${props.settlement.rpcProvider}`}</dd></div>
             <div><dt>Events</dt><dd>{props.eventCount} · <button type="button" className="mw-text-button" onClick={props.onEvents}>Open event log</button></dd></div>
           </dl>
         ) : null}

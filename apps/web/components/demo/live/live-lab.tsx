@@ -12,8 +12,9 @@ import { RoomChat } from "./room-chat";
 import { EventLogBody, PauseBody, ReviewBody, StressBody } from "./sheets";
 import { AgentsStage, AgentSummaryList } from "./stage-agents";
 import { DraftingStage, PromptStage } from "./stage-compose";
-import { ApproveStage, ConfigureStage, draftAccess, PermissionsBody } from "./stage-configure";
+import { ApproveStage, ConfigureStage, draftAccess, PermissionsBody, type WalletState } from "./stage-configure";
 import { AuthorizedStage, FailedStage, ReceiptStage, SettlingStage, VerifyStage } from "./stage-outcome";
+import { APPROVAL_CHAIN, injectedWallet, shortAddress } from "./wallet";
 import { Sheet } from "./workspace-ui";
 import "./live-workspace.css";
 
@@ -44,6 +45,31 @@ const STAGE_KEY: Record<Phase, string> = {
   FAILED: "failed",
 };
 type SheetName = "permissions" | "review" | "events" | "stress" | "pause" | "agents" | "room" | null;
+
+/** Where the durable session id is remembered, so a reload (or a server restart) returns to the same session. */
+const SESSION_KEY = "mandate.live.session";
+const SESSION_ID = /^[A-Za-z0-9-]{1,64}$/;
+
+function rememberedSession(): string | null {
+  const fromUrl = new URLSearchParams(window.location.search).get("session");
+  if (fromUrl !== null && SESSION_ID.test(fromUrl)) return fromUrl;
+  try {
+    const stored = window.localStorage.getItem(SESSION_KEY);
+    return stored !== null && SESSION_ID.test(stored) ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+function rememberSession(id: string | null): void {
+  try {
+    if (id === null) window.localStorage.removeItem(SESSION_KEY);
+    else window.localStorage.setItem(SESSION_KEY, id);
+  } catch {
+    // Storage is a convenience: the session id is still in the URL.
+  }
+  window.history.replaceState(null, "", id === null ? window.location.pathname : `${window.location.pathname}?session=${encodeURIComponent(id)}`);
+}
 
 /** Close the disclosure menu an item lives in, returning focus to its toggle. */
 function closeMenu(target: Element): void {
@@ -78,6 +104,8 @@ export function LiveLab(): ReactNode {
   const [notice, setNotice] = useState("");
   const [sheet, setSheet] = useState<SheetName>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [wallet, setWallet] = useState<WalletState>({ available: false, address: null, chainId: null });
+  const [resumed, setResumed] = useState(false);
   const lastSequence = useRef(-1);
   const stageRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
@@ -90,7 +118,43 @@ export function LiveLab(): ReactNode {
       if (!result.ok) return;
       setStatus(result.body);
       if (rec(rec(result.body.providers).openai).available === true) setProviderChoice("openai");
+      // A reload (or a server restart) returns to the same durable session; its events replay from the start.
+      const id = rememberedSession();
+      if (id === null) return;
+      void api(SERVER, "GET", `/sessions/${encodeURIComponent(id)}`).then((session) => {
+        if (!session.ok) {
+          rememberSession(null);
+          return;
+        }
+        setSessionId(id);
+        setView(session.body);
+        setComposing(false);
+        setResumed(true);
+        if (session.body.restored === true) setNotice("This session was restored after a server restart. It is evidence only: it runs no agents and authorizes nothing new.");
+      });
     });
+  }, []);
+
+  const readWallet = useCallback(async () => {
+    const w = injectedWallet();
+    if (w === null) {
+      setWallet({ available: false, address: null, chainId: null });
+      return;
+    }
+    const [accounts, chain] = await Promise.all([w.getAccounts(), w.getChainId()]);
+    setWallet({ available: true, address: accounts.ok ? (accounts.value[0] ?? null) : null, chainId: chain.ok ? chain.value : null });
+  }, []);
+
+  useEffect(() => {
+    const w = injectedWallet();
+    if (w === null) return undefined;
+    let live = true;
+    void Promise.all([w.getAccounts(), w.getChainId()]).then(([accounts, chain]) => {
+      if (live) setWallet({ available: true, address: accounts.ok ? (accounts.value[0] ?? null) : null, chainId: chain.ok ? chain.value : null });
+    });
+    return () => {
+      live = false;
+    };
   }, []);
 
   const refresh = useCallback(async () => {
@@ -131,7 +195,10 @@ export function LiveLab(): ReactNode {
   const draftPresent = view.draft !== null && view.draft !== undefined && !composing;
   const ready = validation.ok === true && draftIssues.length === 0;
   const lastRun = rec(view.lastRun);
-  const runEvents = useMemo(() => eventsAfter(events, runFrom), [events, runFrom]);
+  // A resumed session's run is everything after its latest version's authorization, as the server recorded it.
+  const resumedFrom = useMemo(() => (resumed ? ([...events].reverse().find((event) => event.kind === "MANDATE_VERSION_AUTHORIZED")?.sequence ?? null) : null), [events, resumed]);
+  const runStart = runFrom ?? resumedFrom;
+  const runEvents = useMemo(() => eventsAfter(events, runStart), [events, runStart]);
   const presentation = useMemo(() => derivePresentation(runEvents, arr(lastRun.timing).map(rec)), [runEvents, lastRun.timing]);
   const stress = useMemo(() => derivePresentation(events).stress, [events]);
   const review = useMemo(() => deriveReview(runEvents), [runEvents]);
@@ -143,7 +210,7 @@ export function LiveLab(): ReactNode {
     reviewing,
     activeVersion,
     amending,
-    runStarted: runFrom !== null,
+    runStarted: runStart !== null,
     task,
     lastRunStatus: typeof lastRun.status === "string" ? lastRun.status : null,
     lastError: typeof view.lastError === "string" ? view.lastError : null,
@@ -155,6 +222,8 @@ export function LiveLab(): ReactNode {
   const versions = arr(view.versions).map(rec);
   const activeRecord = versions.find((item) => item.version === activeVersion) ?? null;
   const roomSeen = runEvents.some((event) => event.kind === "ROOM_OPENED");
+  const authorization = rec(activeRecord?.authorization);
+  const authorizedBy = typeof authorization.method !== "string" ? null : authorization.method === "WALLET_EIP712" ? `authorized by ${shortAddress(str(authorization.principal))}` : "demo principal key";
   const provider = rec(view.provider);
   const providerKind = sessionId === null ? (providerChoice === "openai" ? "LIVE" : "STUB") : str(provider.kind);
   const liveAvailable = rec(rec(status?.providers).openai).available === true;
@@ -212,6 +281,7 @@ export function LiveLab(): ReactNode {
         return;
       }
       id = str(created.body.sessionId);
+      rememberSession(id);
       setEvents([]);
       lastSequence.current = -1;
       setSessionId(id);
@@ -223,6 +293,58 @@ export function LiveLab(): ReactNode {
       setComposing(false);
     } else setError(message(result.body));
     setDrafting(false);
+  }
+
+  async function connectWallet(): Promise<void> {
+    const w = injectedWallet();
+    if (w === null) return;
+    const r = await w.connect();
+    if (!r.ok) setError(r.error.message);
+    else setError("");
+    await readWallet();
+  }
+
+  async function switchChain(): Promise<void> {
+    const w = injectedWallet();
+    if (w === null) return;
+    const r = await w.switchChain();
+    if (!r.ok) setError(r.error.message);
+    else setError("");
+    await readWallet();
+  }
+
+  /** The wallet path: a server-issued challenge, signed in the wallet, verified by the server. Never a transaction. */
+  async function authorizeWithWallet(): Promise<void> {
+    const w = injectedWallet();
+    const address = wallet.address;
+    if (w === null || address === null) return;
+    setAuthorizing(true);
+    setError("");
+    const chain = await w.getChainId();
+    if (!chain.ok || chain.value !== APPROVAL_CHAIN.chainId) {
+      setAuthorizing(false);
+      setError("Switch your wallet to Robinhood Chain testnet to sign. No mandate was activated.");
+      await readWallet();
+      return;
+    }
+    const challenge = await call("POST", "/wallet/challenge", { address });
+    if (challenge === null) {
+      setAuthorizing(false);
+      return;
+    }
+    const signed = await w.signTypedData(address, challenge.typedData);
+    if (!signed.ok) {
+      setAuthorizing(false);
+      setError(`${signed.error.message} No mandate was activated.`);
+      return;
+    }
+    const body = await call("POST", "/wallet/authorize", { challenge: str(challenge.challenge), signature: signed.value });
+    setAuthorizing(false);
+    if (body === null) return;
+    setReviewing(false);
+    setAmending(false);
+    setNotice("");
+    await startRun(body);
   }
 
   async function authorize(confirmation: string): Promise<void> {
@@ -266,7 +388,7 @@ export function LiveLab(): ReactNode {
   }
 
   const transition = reduced ? { duration: 0 } : { duration: 0.3, ease: [0.23, 1, 0.32, 1] as const };
-  const showTrail = activeVersion !== null && !amending && runFrom !== null && phase !== "AGENTS_WORKING" && phase !== "MANDATE_REVIEW";
+  const showTrail = activeVersion !== null && !amending && runStart !== null && phase !== "AGENTS_WORKING" && phase !== "MANDATE_REVIEW";
   const blockedCount = presentation.agents.filter((agent) => agent.phase === "BLOCKED").length;
   const allowedCount = presentation.agents.filter((agent) => agent.phase === "ADMISSIBLE" || agent.finalOutcome === "RESERVED").length;
   const stock = presentation.agents.find((agent) => agent.role === "stock");
@@ -315,6 +437,10 @@ export function LiveLab(): ReactNode {
           expected={str(view.expectedConfirmation)}
           authorizing={authorizing}
           error={error}
+          wallet={wallet}
+          onConnect={() => void connectWallet()}
+          onSwitchChain={() => void switchChain()}
+          onSignWallet={() => void authorizeWithWallet()}
           onAuthorize={(confirmation) => void authorize(confirmation)}
           onCancel={() => {
             setReviewing(false);
@@ -393,7 +519,7 @@ export function LiveLab(): ReactNode {
                   <button type="button" aria-pressed={providerChoice === "openai"} disabled={!liveAvailable} onClick={(event) => { setProviderChoice("openai"); closeMenu(event.currentTarget); }}>Live model <small>{liveAvailable ? str(rec(rec(status?.providers).openai).model) : "No model key is configured on the local server"}</small></button>
                 </>
               ) : (
-                <p className="mw-fine">This session uses {providerKind === "LIVE" ? "the live model" : "the deterministic demo fixture"}. Reload to start a new session.</p>
+                <p className="mw-fine">This session uses {providerKind === "LIVE" ? "the live model" : "the deterministic demo fixture"}. Start a new session from the Developer menu.</p>
               )}
             </div>
           </details>
@@ -404,6 +530,7 @@ export function LiveLab(): ReactNode {
               <Link className="mw-menu__item mw-menu__replay" href="/demo">Protocol Replay <small>The recorded judge transcript</small></Link>
               <button type="button" disabled={sessionId === null} onClick={(event) => { closeMenu(event.currentTarget); setSheet("events"); }}>Event log <small>{events.length} events</small></button>
               <button type="button" disabled={activeVersion === null || view.paused === true} onClick={(event) => { closeMenu(event.currentTarget); setSheet("pause"); }}>Pause mandate <small>Revoke the active mandate</small></button>
+              <button type="button" disabled={sessionId === null} onClick={() => { rememberSession(null); window.location.assign(window.location.pathname); }}>New session <small>{sessionId === null ? "No session yet" : `Leave ${sessionId.slice(0, 12)}…`}</small></button>
             </div>
           </details>
         </div>
@@ -411,7 +538,7 @@ export function LiveLab(): ReactNode {
 
       {showTrail ? (
         <nav className="mw-trail" aria-label="Completed steps">
-          <button type="button" onClick={() => setSheet("permissions")}><span className="mw-trail__k">Mandate V{activeVersion}</span>{usd(access.text("portfolio.totalCapital"))} · {ROLES.filter((role) => access.enabled(role) === true).length} agents</button>
+          <button type="button" onClick={() => setSheet("permissions")}><span className="mw-trail__k">Mandate V{activeVersion}</span>{usd(access.text("portfolio.totalCapital"))} · {ROLES.filter((role) => access.enabled(role) === true).length} agents{authorizedBy === null ? "" : ` · ${authorizedBy}`}</button>
           <button type="button" onClick={() => setSheet("agents")}><span className="mw-trail__k">Agents</span>{blockedCount} blocked · {allowedCount} allowed</button>
           {roomSeen && phase !== "ROOM" ? <button type="button" onClick={() => setSheet("room")}><span className="mw-trail__k">Room</span>{presentation.room.noFeasible ? "unresolved" : presentation.room.proposal ? "resolved" : "negotiating"}</button> : null}
         </nav>

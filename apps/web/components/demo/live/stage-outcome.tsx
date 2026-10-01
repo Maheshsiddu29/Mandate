@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { code } from "./live-client";
 import type { Failure } from "./live-flow";
 import { ROLE_TITLES, usd, type AgentCard, type RoleName, type SettlementView, type TradeReview } from "./live-model";
+import { shortAddress } from "./wallet";
 import { AgentGlyph, Pill } from "./workspace-ui";
 
 export const FIXTURE_QUALIFICATION = "Valueless demo assets. Not an NVDA trade. Not a Robinhood Stock Token.";
@@ -60,11 +61,40 @@ export function AuthorizedStage({ review }: { readonly review: TradeReview }): R
 const STEPS = [
   { label: "Preparing transaction", from: ["PREFLIGHT", "READY"], failed: "PREFLIGHT_FAILED" },
   { label: "Simulating", from: ["SIMULATION"], failed: "SIMULATION_FAILED" },
-  { label: "Awaiting operator send authorization", from: ["SEND_REQUIRED"], failed: null },
-  { label: "Submitted", from: ["SUBMITTED"], failed: "FAILED" },
+  { label: "Awaiting operator send authorization", from: ["SEND_REQUIRED", "READY_FOR_SEND"], failed: null },
+  { label: "Submitted", from: ["SUBMITTED", "RECONCILING"], failed: "FAILED" },
   { label: "Confirmed", from: ["SETTLED"], failed: null },
 ] as const;
-const ORDER: Readonly<Record<string, number>> = { NONE: -1, PREFLIGHT: 0, READY: 0, PREFLIGHT_FAILED: 0, SIMULATION: 1, SIMULATION_FAILED: 1, SEND_REQUIRED: 2, SUBMITTED: 3, FAILED: 3, SETTLED: 4 };
+const ORDER: Readonly<Record<string, number>> = { NONE: -1, PREFLIGHT: 0, READY: 0, PREFLIGHT_FAILED: 0, SIMULATION: 1, SIMULATION_FAILED: 1, SEND_REQUIRED: 2, READY_FOR_SEND: 2, SUBMITTED: 3, RECONCILING: 3, FAILED: 3, NEEDS_REVIEW: 3, RELEASED: 3, SETTLED: 4 };
+
+/** The proof's one-word state: never CONFIRMED without LIVE_TESTNET, never FAILED for an outcome still being checked. */
+function proofLabel(s: SettlementView): string {
+  if (s.settled) return "CONFIRMED";
+  switch (s.stage) {
+    case "READY_FOR_SEND":
+      return "READY · NOT SENT";
+    case "RECONCILING":
+      return "CHECKING";
+    case "NEEDS_REVIEW":
+      return "NEEDS REVIEW";
+    case "RELEASED":
+      return "NOT EXECUTED";
+    default:
+      return s.stage.replaceAll("_", " ");
+  }
+}
+
+/** Portfolio authorization and domain settlement authority, when they differ in kind: shown, never implied. */
+export function AuthorityLines({ settlement }: { readonly settlement: SettlementView }): ReactNode {
+  const p = settlement.principals;
+  if (p === null) return null;
+  return (
+    <dl className="mw-evidence mw-evidence--compact">
+      <div><dt>Portfolio authorization</dt><dd>{p.portfolioMethod === "WALLET_EIP712" ? `Wallet signature · ${shortAddress(p.portfolioAddress)}` : "Demo principal key"}</dd></div>
+      <div><dt>Domain settlement authority</dt><dd>Separate testnet custody · {shortAddress(p.domainAddress)}</dd></div>
+    </dl>
+  );
+}
 
 /** Execution progress, one step per real settlement event. No percentages and no timers. */
 export function SettlementSteps({ settlement }: { readonly settlement: SettlementView }): ReactNode {
@@ -95,6 +125,7 @@ export function SettlingStage({ settlement }: { readonly settlement: SettlementV
       </header>
       <SettlementSteps settlement={settlement} />
       {settlement.stage === "SUBMITTED" ? <p className="mw-notice">A transaction hash is not settlement. Waiting for a confirmed receipt and verified postconditions.</p> : null}
+      {settlement.stage === "RECONCILING" ? <p className="mw-notice" aria-live="polite">Checking settlement status… The reservation stays held and nothing is resent.</p> : null}
       <p className="mw-fine">{FIXTURE_QUALIFICATION}</p>
     </div>
   );
@@ -116,17 +147,23 @@ function SettlementProof({ settlement, stock }: { readonly settlement: Settlemen
         <p className="mw-kicker">Settlement proof</p>
         {settlement.present ? (
           <>
-            <p className="mw-proof__main">{settlement.network || "Robinhood Chain Testnet"} <Pill tone={settlement.settled ? "good" : settlement.stage === "FAILED" ? "bad" : "warn"}>{settlement.settled ? "CONFIRMED" : settlement.stage === "FAILED" ? "FAILED" : settlement.stage === "SUBMITTED" ? "SUBMITTED" : settlement.stage.replaceAll("_", " ")}</Pill></p>
+            <p className="mw-proof__main">{settlement.network || "Robinhood Chain Testnet"} <Pill tone={settlement.settled ? "good" : settlement.stage === "FAILED" || settlement.stage === "NEEDS_REVIEW" || settlement.stage === "RELEASED" ? "bad" : "warn"}>{proofLabel(settlement)}</Pill></p>
             <p className="mw-fine">Fixture execution{settlement.fixtureIn === null ? "" : ` · ${settlement.fixtureIn} → ${settlement.fixtureOut ?? "—"}`}</p>
             {settlement.txHash === null ? null : <p className="mw-hash"><code title={settlement.txHash}>{shortHash(settlement.txHash)}</code>{settlement.block === null ? null : <span>Block {settlement.block}</span>}</p>}
             {settlement.explorerUrl === null ? null : <a className="mw-soft-button" href={settlement.explorerUrl} target="_blank" rel="noreferrer noopener">View transaction ↗</a>}
             {settlement.stage === "SUBMITTED" ? <p className="mw-fine">A transaction hash is not settlement. LIVE_TESTNET requires a confirmed receipt.</p> : null}
             {settlement.stage === "FAILED" ? <p className="mw-fine">Failed receipt. Never presented as LIVE_TESTNET.</p> : null}
+            {settlement.stage === "READY_FOR_SEND" ? <p className="mw-fine">Dry run passed for this session&rsquo;s reservation. Broadcast is disabled in this milestone: nothing was sent.</p> : null}
+            {settlement.stage === "RECONCILING" ? <p className="mw-fine">Checking settlement status… Nothing is resent.</p> : null}
+            {settlement.stage === "NEEDS_REVIEW" ? <p className="mw-fine">Settlement needs review. No retry was sent.</p> : null}
+            {settlement.stage === "RELEASED" ? <p className="mw-fine">Transaction failed or never executed. The reservation was released only after the gate deadline passed with nothing recorded onchain.</p> : null}
+            {settlement.consumed ? <p className="mw-fine">Reservation consumed in the durable ledger: it can never authorize another execution.</p> : null}
+            <AuthorityLines settlement={settlement} />
           </>
         ) : (
           <>
             <p className="mw-proof__main">Not settled in this session</p>
-            <p className="mw-fine">The browser never sends transactions. The Robinhood Chain testnet path runs from the operator CLI.</p>
+            <p className="mw-fine">The browser never sends transactions. The operator runs the session-bound testnet settlement for this session; its events appear here.</p>
           </>
         )}
         <p className="mw-proof__qualify">{FIXTURE_QUALIFICATION}</p>
@@ -147,11 +184,11 @@ export function ReceiptStage(props: {
   readonly busy: boolean;
 }): ReactNode {
   const { review, settlement } = props;
-  const title = settlement.settled ? "Trade complete" : settlement.stage === "FAILED" || settlement.stage === "SIMULATION_FAILED" || settlement.stage === "PREFLIGHT_FAILED" ? "Settlement failed" : "Portfolio authorized";
+  const title = settlement.settled ? "Trade complete" : settlement.stage === "FAILED" || settlement.stage === "SIMULATION_FAILED" || settlement.stage === "PREFLIGHT_FAILED" || settlement.stage === "RELEASED" ? "Settlement failed" : settlement.stage === "NEEDS_REVIEW" ? "Settlement needs review" : "Portfolio authorized";
   return (
     <div className="mw-receipt">
       <header className="mw-stage-head">
-        <Pill tone={title === "Settlement failed" ? "bad" : "good"}>{title === "Settlement failed" ? "✕ Not settled" : settlement.settled ? "✓ Settled" : "✓ Authorized"}</Pill>
+        <Pill tone={title === "Settlement failed" || title === "Settlement needs review" ? "bad" : "good"}>{title === "Settlement failed" ? "✕ Not settled" : title === "Settlement needs review" ? "! Needs review" : settlement.settled ? "✓ Settled" : "✓ Authorized"}</Pill>
         <h2>{title}</h2>
         <p>{review.authorizedCount} of {review.evaluated} agents authorized{review.reserved === null ? "" : ` · ${usd(review.reserved)} reserved`}.{settlement.settled ? "" : " Reserved is not settled."}</p>
       </header>

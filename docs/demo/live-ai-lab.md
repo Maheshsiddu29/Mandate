@@ -66,30 +66,29 @@ composer tone and the upstream glyph squash and tilt.
 
 ### Principal signing: what exists and what does not
 
-The product target is *configure agents → Trade → approve once in a wallet →
-agents operate inside that bounded authority*. The repository supports the
-last step, not the wallet:
+**B.5.3 wired the wallet** ([wallet-settlement-boundaries.md](wallet-settlement-boundaries.md)).
+The review step's *Approve in wallet* is real; the demo key stays as a
+labelled fallback.
 
-| | Today |
-| --- | --- |
-| What authorizes a version | `POST /sessions/:id/authorize` with the exact text `AUTHORIZE MANDATE V<n>`; the server's `LocalPrincipalSigner` then signs the mandate digest |
-| Principal key | a Phase 7F demonstration key, publicly derived, held by the local server; "not a wallet signature; secures nothing" |
-| Signature scheme | `signPrehash(mandateSigningHash(portfolioMandateDigest(m)))` over a demonstration party, not EIP-712 or `personal_sign` from a wallet address |
-| Wallet code in the browser | none: no connector, no provider, no signing call |
-| Repeated principal prompts | none: one authorization covers the run; the Room and every agent action proceed without the principal |
+| | Wallet path | Demo principal key (fallback) |
+| --- | --- | --- |
+| What authorizes a version | the principal's wallet signs an EIP-712 `PortfolioMandateApproval` of the exact mandate digest, for this session, chain 46630, a 300 s server challenge, once; the server rebuilds and verifies it (`POST …/wallet/challenge`, `POST …/wallet/authorize`) | `POST …/authorize` with the exact text `AUTHORIZE MANDATE V<n>` |
+| Principal identity | the recovered wallet address | the demonstration key's address |
+| Signature the frozen Portfolio Verifier checks | the demonstration key's prehash signature, made only after the wallet approval verified (a wallet cannot sign that raw prehash) | the same |
+| Browser wallet calls | `eth_requestAccounts`, `eth_accounts`, `eth_chainId`, `wallet_switchEthereumChain`, `wallet_addEthereumChain`, `eth_signTypedData_v4` — never a transaction | none |
+| Domain execution | **not delegated**: testnet settlement is signed by separate 7E.3 custody; a wallet-approved version never sends | not delegated |
 
-So B.6.2 shows the wallet option as **not connected** and keeps the
-demonstration key path with the exact phrase, inside the review step. No
-wallet approval is displayed, simulated or implied. Replacing the phrase with
-a real one-time wallet approval needs, outside this UI milestone: a principal
-party bound to a wallet address; a typed (EIP-712) encoding of the exact
-mandate digest; a verifier path that accepts that signature for the principal;
-and a session API that receives the signature instead of signing server-side.
-Session or smart-account delegation for domain signers is a separate step after
-that. Settlement events reach the browser only if a settlement path reports
-into the session; today the Robinhood Chain testnet path runs from the
-operator CLI ([live-testnet-settlement.md](live-testnet-settlement.md)), so a
-browser session shows "Not settled in this session".
+The UI says *wallet-signed mandate*, never that the wallet delegated
+execution authority onchain. Copy before signing: "Your wallet will sign
+this Mandate. This does not submit a blockchain transaction." No gas is
+shown for signing.
+
+Sessions are durable (`.live/`, §4 of the boundaries document): a reload
+or a server restart returns to the same session (`?session=lab-…`) and
+replays its events. Settlement events now reach the browser session they
+belong to: the operator runs `npm run agents:settle:testnet -- --session
+<id>`, whose events land in that session's log. In B.5.3 that command is a
+dry run ending at *Ready for testnet send · nothing was sent*.
 
 ## 1. The trust model in one table
 
@@ -395,7 +394,9 @@ The server (`packages/live-agents/src/server/`):
 - accepts `application/json` POST bodies of at most 32 KiB, parsed field by
   field; a draft changes only through the typed field table (set fields
   take only ids of their reviewed catalog set);
-- keeps at most four in-memory sessions, which expire when idle;
+- keeps at most four sessions in memory, which leave memory when idle; with
+  `LIVE_STATE_DIR` (default `.live/`) every session is durable and is
+  restored from disk on first use after a restart — as evidence only (B.5.3);
 - reports only whether the OpenAI provider is available, never the key;
   an unexpected failure is a 500 without detail;
 - allows development latency chaos only when started with `--dev-chaos`.
@@ -404,12 +405,14 @@ The server (`packages/live-agents/src/server/`):
 | --- | --- |
 | `GET /api/live/status` | providers available, presets, roles, catalog, policy cases |
 | `POST /api/live/sessions` | `{ provider: "openai" \| "stub", seed?, chaos? }` |
-| `GET /api/live/sessions/:id` | draft, validation, guardrails, versions, last run and policy-stress summaries |
+| `GET /api/live/sessions/:id` | draft, validation, guardrails, versions (with how each was authorized), last run and policy-stress summaries, each reservation's ledger status, `durable`, `restored` |
 | `POST …/draft` | `{ preset }`, `{ prompt }` or `{ from: "active" }` (to amend) |
 | `POST …/draft/fill`, `…/draft/field`, `…/draft/resolve` | fill unset fields from a preset; set one field; resolve one interpretation issue |
-| `POST …/authorize`, `…/pause` | need the exact confirmation text |
+| `POST …/wallet/challenge` | `{ address }` → a one-time EIP-712 approval of the exact mandate the draft compiles to (B.5.3) |
+| `POST …/wallet/authorize` | `{ challenge, signature }` — the server rebuilds the message and verifies the recovered signer (B.5.3) |
+| `POST …/authorize`, `…/pause` | need the exact confirmation text (the demo key path; pause) |
 | `POST …/run`, `…/policy-stress` | start in the background; progress is the event stream |
-| `GET …/events?after=N` | Server-Sent Events, replayed from `N` then live |
+| `GET …/events?after=N` | Server-Sent Events, replayed from `N` (or `Last-Event-ID` on a reconnect) then live, including events a settlement command appended |
 
 ## 11. Commands
 
