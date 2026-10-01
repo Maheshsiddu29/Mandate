@@ -8,7 +8,7 @@
  * Mandate keeps the official pattern/status model and removes the internal
  * stopwatch. Callers provide authoritative elapsed telemetry instead.
  */
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { type CSSProperties, type ReactNode } from "react";
 
 import "./lattice-loader.css";
 
@@ -60,15 +60,10 @@ export function LatticeLoader({
   const resolved = PATTERNS[pattern];
   const step = 90 * resolved.scale;
   const cycle = Math.round(resolved.loop * step);
-  const lastMark = useRef<"done" | "error">("done");
-  if (status !== "working") lastMark.current = status;
-  const mark = status === "working" ? lastMark.current : status;
-  const [announcement, setAnnouncement] = useState(`${label}, in progress`);
-
-  useEffect(() => {
-    if (status === "working") setAnnouncement(`${label}, in progress`);
-    else setAnnouncement(`${status === "done" ? "Done" : "Failed"}${elapsedMs === null ? "" : ` after ${formatElapsed(elapsedMs)}`}`);
-  }, [elapsedMs, label, status]);
+  const mark = status === "error" ? "error" : "done";
+  const announcement = status === "working"
+    ? `${label}, in progress`
+    : `${status === "done" ? "Done" : "Failed"}${elapsedMs === null ? "" : ` after ${formatElapsed(elapsedMs)}`}`;
 
   return (
     <span

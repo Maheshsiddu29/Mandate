@@ -1,7 +1,8 @@
 # Mandate — Live AI Lab
 
-> **Status: buildathon Milestone B.5, implemented locally, awaiting review.**
-> Milestone B.6 is the `/demo/live` product client only. It reads the
+> **Status: buildathon Milestone B.5 runtime and B.6.1 presentation client,
+> implemented locally, awaiting review.**
+> Milestone B.6.1 is the `/demo/live` product client only. It reads the
 > existing session API and `MANDATE_LIVE_AI.V1` events. It does not
 > authorize, does not send transactions, and does not import
 > `packages/live-settlement`.
@@ -24,6 +25,38 @@ Different reasoning.  Different negotiation.  Same authority boundary.
 
 VALID AGENT != VALID ACTION
 ```
+
+## 0. B.6.1 product presentation
+
+The browser presents one guided workspace with five progressively disclosed
+stages: author a Mandate, inspect independent agent decisions, watch the
+zero-authority Room negotiate typed-resource conflicts, see Mandate's final
+re-verification, and inspect settlement evidence. It does not add a runtime
+state or reinterpret an event. Completed stages collapse and remain
+reopenable so the product story stays visible without hiding technical
+evidence.
+
+The main surface separates the model decision from the Mandate result,
+translates raw rejection codes into human copy while keeping the exact code
+inside keyboard-accessible details, and labels fixture, offchain, and
+confirmed testnet evidence distinctly. `RESERVED`, `SUBMITTED`, and
+`LIVE_TESTNET` remain separate states. The Room displays each typed resource
+independently and explicitly declares `ROOM AUTHORITY: NONE`.
+
+The event dialog preserves authoritative sequence and time. Consecutive
+events with the same real `elapsedMs` are grouped at that one time; the UI
+does not invent spacing between them. The loading treatment is driven by
+existing request, response, verification, and settlement states, with no
+artificial delay.
+
+The Prompt Bar and Lattice Loader are adapted from the official React Bits
+TypeScript defaults at source commit
+`e1bbb696fc53f7f91e694c529e4d68c899773b6e`:
+[Prompt Bar](https://www.reactbits.dev/micro/prompt-bar) and
+[Lattice Loader](https://www.reactbits.dev/micro/lattice-loader). The
+adaptation removes controls that do not exist in Mandate, keeps the official
+prompt resize and submit morph, and makes the loader consume caller-provided
+authoritative telemetry rather than an internal stopwatch.
 
 ## 1. The trust model in one table
 

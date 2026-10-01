@@ -75,3 +75,25 @@ The Cloudflare Pages build needs no variable or secret for this route; without
 a local server the page says the server is unreachable. The page does not send
 transactions and does not import the settlement package. Nothing is deployed
 for the Live AI Lab in this milestone.
+
+### B.6.1 presentation
+
+The Live AI Lab is a progressive five-stage workspace: Mandate, Agents,
+Room, Verify, and Settle. Completed stages collapse but remain reopenable.
+The default surface shows the product story; exact reason codes, the complete
+authority, and the event stream remain available as evidence on demand.
+Equal authoritative event timestamps are grouped and retain their exact
+sequence rather than being spread across invented display times.
+
+The prompt and loading primitives are adapted from the official React Bits
+TypeScript defaults at source commit
+`e1bbb696fc53f7f91e694c529e4d68c899773b6e`:
+
+- [Prompt Bar](https://www.reactbits.dev/micro/prompt-bar)
+- [Lattice Loader](https://www.reactbits.dev/micro/lattice-loader)
+
+The Prompt Bar is controlled by the existing Mandate draft flow. The Lattice
+Loader receives real application status and authoritative elapsed telemetry;
+it has no synthetic timer or fake completion delay. React Bits' required
+`motion` dependency was already present, so this redesign adds no runtime
+dependency.
