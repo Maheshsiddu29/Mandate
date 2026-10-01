@@ -39,9 +39,9 @@ test('the browser talks only to a loopback server', () => {
 
 test('the policy stress panel uses neutral wording and shows the real result', () => {
   const ui = read('../components/demo/live/live-lab.tsx');
-  assert.match(ui, /POLICY STRESS TEST/);
-  assert.match(ui, /VALID AGENT ≠ VALID ACTION/);
-  for (const row of ['Agent identity', 'Membership', 'Delegation', 'Selected test case', 'Signature', 'Mandate result']) assert.match(ui, new RegExp(row));
+  assert.match(ui, /Run policy stress/);
+  assert.match(ui, /Valid agent ≠ valid action/i);
+  for (const row of ['Identity', 'Membership', 'Delegation', 'Signature', 'DIFFERENT AUTHORIZATION RESULT']) assert.match(ui, new RegExp(row));
   assert.doesNotMatch(ui, /hacker|escaped|jailbreak|rogue/i);
 });
 
@@ -56,6 +56,7 @@ test('the Room log shows typed-resource conflicts per resource, and their resolu
   assert.equal(conflicts(two), 'derivative-notional 600 USDC > 400 USDC (reduce 200 USDC); portfolio-notional 2500 USDC > 2000 USDC (reduce 500 USDC)');
   assert.equal(conflicts(undefined), '');
   const lab = read('../components/demo/live/live-lab.tsx');
-  assert.match(lab, /conflicts\(e\.data\.conflicts\)/);
-  assert.doesNotMatch(lab, /data\.requiredReduction/);
+  assert.match(lab, /room\.lines\.map/);
+  assert.match(lab, /Incomparable reductions are not added together/);
+  assert.doesNotMatch(lab, /requiredReductionTotal|totalReduction/);
 });
