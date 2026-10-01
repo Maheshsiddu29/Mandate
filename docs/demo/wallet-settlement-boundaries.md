@@ -490,3 +490,28 @@ environment (tested).
 **No send.** `agents:settle:testnet` has no send path at all; the reconciler
 holds a reader only (structure tests). `agents:live:testnet` (B.5.2) is kept
 as the regression path; its send now needs the journal too.
+
+## 8. Crash tests
+
+| Crash point | REAL PROCESS CRASH (SIGKILL, `test/crash.test.ts`) | UNIT SIMULATION (`test/reconcile.test.ts`) | After restart |
+| --- | --- | --- | --- |
+| 1. after reservation, before preparation | ✓ | — | reservation `RESERVED`, no attempt; one later send settles it once |
+| 2. after `PREPARED` | ✓ | ✓ | `PREPARED`, nothing signed for broadcast; a fresh process may send once → `CONSUMED` |
+| — after the portfolio attempt | — | ✓ | `PREPARED` + ledger `ADMITTED`; resumable once |
+| — after the send leg opened / after an artifact was journaled | — | ✓ | send refused; released once every artifact is dead |
+| 3. after the hash was persisted, before the broadcast | ✓ | ✓ | `RECONCILIATION_REQUIRED (AWAITING_DEADLINE)`, ledger `ADMITTED` — held; then `RELEASED`, 0 executions |
+| 4. after the node accepted it, before `SUBMITTED` | ✓ | ✓ | receipt found by hash → `CONSUMED`, 1 execution |
+| 5. after `SUBMITTED` | ✓ | ✓ | `CONSUMED`, 1 execution |
+| 6. after the receipt was observed, before it was recorded (and just after) | ✓ (both) | ✓ (both) | `CONSUMED`, 1 execution |
+| 7. after `SETTLED`, before `CONSUMED` | ✓ | ✓ | `CONSUMED` (the ledger write is idempotent) |
+| 8. after `CONSUMED`, before the browser was told | ✓ | ✓ | events re-emitted once (dedupe keys) |
+
+Every real case runs three processes — the killed one, a reconciliation
+before any deadline, a fresh send attempt, a reconciliation past every
+deadline, and one more — over a durable session, journal, domain ledger and
+a reference-model chain that persists what it accepted (fsync, then
+rename). Each asserts at most one transaction ever mined, the ledger and the
+journal agreeing, a fresh send refused for anything past `PREPARED`, and the
+browser-facing outcome event exactly once. The suite was run four times in a
+row without a failure. The chain is the Phase 6 reference model, not a
+network: **no testnet transaction was sent in B.5.3.**
