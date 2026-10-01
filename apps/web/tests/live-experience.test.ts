@@ -1,277 +1,380 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import test from 'node:test';
 import type { JsonRecord, LiveEvent } from '../components/demo/live/live-client.ts';
+import { deriveFlow, eventsAfter, type FlowInput } from '../components/demo/live/live-flow.ts';
 import {
+  actionText,
+  allocationSummary,
+  awaitingReplies,
   blockedInsideRoom,
   derivePresentation,
+  deriveReview,
+  deriveRoomChat,
   formatDuration,
   groupEventsByElapsed,
+  proposedPortfolio,
   reasonLabel,
   resourceLines,
+  usd,
   type RoleName,
 } from '../components/demo/live/live-model.ts';
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
-const ui = read('../components/demo/live/live-lab.tsx');
-const css = read('../components/demo/live/live-lab.css');
-const model = read('../components/demo/live/live-model.ts');
+const LIVE = '../components/demo/live/';
+const lab = read(`${LIVE}live-lab.tsx`);
+const compose = read(`${LIVE}stage-compose.tsx`);
+const configure = read(`${LIVE}stage-configure.tsx`);
+const agentsUi = read(`${LIVE}stage-agents.tsx`);
+const room = read(`${LIVE}room-chat.tsx`);
+const outcome = read(`${LIVE}stage-outcome.tsx`);
+const sheets = read(`${LIVE}sheets.tsx`);
+const shared = read(`${LIVE}workspace-ui.tsx`);
+const css = read(`${LIVE}live-workspace.css`);
+const model = read(`${LIVE}live-model.ts`);
+const flowSource = read(`${LIVE}live-flow.ts`);
 const prompt = read('../components/react-bits/prompt-bar.tsx');
 const lattice = read('../components/react-bits/lattice-loader.tsx');
 const latticeCss = read('../components/react-bits/lattice-loader.css');
 const replay = read('../app/demo/page.tsx');
+const liveDir = new URL(LIVE, import.meta.url);
+const browserSources = readdirSync(liveDir).filter((file) => /\.(ts|tsx)$/.test(file)).map((file) => readFileSync(new URL(file, liveDir), 'utf8')).join('\n');
 
-const usd = (amount: string): JsonRecord => ({ atoms: `${amount}000000`, amount });
+/** The real stub run (B.6.2 capture), trimmed to the fields the browser reads. */
+const run: LiveEvent[] = JSON.parse(read('./fixtures/live-stub-run.json'));
+const usdc = (amount: string): JsonRecord => ({ atoms: `${amount}000000`, amount });
 
 function event(sequence: number, kind: string, data: JsonRecord = {}, agent: string | null = null, extra: Partial<LiveEvent> = {}): LiveEvent {
-  return {
-    schema: 'MANDATE_LIVE_AI.V1',
-    sessionId: 'lab-1',
-    sequence,
-    kind,
-    at: '2026-09-30T00:00:00.000Z',
-    elapsedMs: sequence * 1000,
-    protocolTime: '0',
-    mandateVersion: 1,
-    agent,
-    roomId: extra.roomId ?? null,
-    generation: extra.generation ?? null,
-    data,
-    ...extra,
-  };
+  return { schema: 'MANDATE_LIVE_AI.V1', sessionId: 'lab-1', sequence, kind, at: '2026-09-30T00:00:00.000Z', elapsedMs: sequence * 1000, protocolTime: '0', mandateVersion: 1, agent, roomId: extra.roomId ?? null, generation: extra.generation ?? null, data, ...extra };
 }
 
-test('the initial workspace prioritizes the principal prompt and collapses dense authority', () => {
-  assert.match(ui, /Give your agents authority/);
-  assert.match(ui, /<PromptBar/);
-  assert.match(ui, /Prompt suggestions/);
-  assert.match(ui, /View full authority/);
-  assert.match(ui, /<dialog ref=\{authorityDialog\}/);
-  assert.match(ui, /Advanced authority editing/);
-  assert.match(ui, /Complete with balanced demo settings/);
-  assert.match(ui, /Authorization stays closed until each is resolved/);
-  assert.match(ui, /!props\.draftPresent && <>\s*<PromptBar/);
-  assert.doesNotMatch(ui, /className="live-fields live-guard"/);
-  assert.match(prompt, /What should your agents be allowed to do/);
+const idle: FlowInput = { drafting: false, draftPresent: false, reviewing: false, activeVersion: null, amending: false, runStarted: false, task: null, lastRunStatus: null, lastError: null, runEvents: [], paused: false };
+const running = (runEvents: readonly LiveEvent[], task: string | null = 'RUN'): FlowInput => ({ ...idle, draftPresent: true, activeVersion: 1, runStarted: true, task, runEvents });
+const upTo = (sequence: number) => eventsAfter(run.filter((item) => item.sequence <= sequence), 4);
+
+test('the first screen is one prompt: no agents, limits, Room, settlement or log', () => {
+  assert.equal(deriveFlow(idle).phase, 'PROMPT');
+  assert.match(compose, /What should your agents do\?/);
+  assert.match(compose, /<PromptBar[\s\S]*tone="light"/);
+  assert.match(compose, /Prompt suggestions/);
+  for (const chip of ['Deploy $2,000', 'Keep $300 unallocated', 'Limit derivatives to $400', 'Approved venues only', 'Prefer stocks + yield']) assert.ok(compose.includes(chip), chip);
+  assert.doesNotMatch(compose, /AgentConfigRow|Advanced permissions|RoomChat|Settlement|EventLog/);
 });
 
-test('draft authorization still requires the exact server phrase and active authoring collapses', () => {
-  assert.match(ui, /confirmation === expected/);
-  assert.match(ui, /disabled=\{!props\.phraseMatches\}/);
-  assert.match(ui, /Activate mandate/);
-  assert.match(ui, /NOT AUTHORIZED/);
-  assert.match(ui, /Signed versions are not edited in place/);
-  assert.match(ui, /!authoringExpanded/);
-  assert.match(ui, /<ActiveMandateSummary/);
-  assert.match(ui, /View authority/);
-  assert.match(ui, /Adjust/);
-  assert.match(ui, /PORTFOLIO_AUTHORIZED.*setOpenStage\(3\)/);
+test('the five-step stepper is gone; a quiet status line remains', () => {
+  assert.doesNotMatch(lab, /live-stepper|Demo progression|const STEPS|StageShell/);
+  assert.match(lab, /className="mw-bar__status"/);
+  assert.equal(deriveFlow({ ...idle, drafting: true }).status, 'Drafting');
+  assert.equal(deriveFlow(running(upTo(30))).status, 'Negotiating');
 });
 
-test('disabled agents remain visible and unambiguously mean no authority', () => {
-  assert.match(ui, /NO AUTHORITY/);
-  assert.match(ui, /No mandate entry\. No delegation\. This agent cannot propose/);
-  assert.match(ui, /Disabled means no authority/);
-  assert.match(ui, /ROLES\.map/);
-  for (const role of ['stock', 'swap', 'nft', 'yield', 'perps']) assert.match(model, new RegExp(`"${role}"`));
+test('submitting the prompt shows drafting only while the real request is open', () => {
+  assert.equal(deriveFlow({ ...idle, drafting: true }).phase, 'DRAFTING');
+  assert.match(lab, /setDrafting\(true\);[\s\S]*await api\(SERVER, "POST", `\/sessions\/\$\{id\}\/draft`[\s\S]*setDrafting\(false\)/);
+  assert.match(compose, /<LatticeLoader label="Building your mandate" status="working"/);
+  assert.match(compose, /Turning your intent into explicit authority\./);
 });
 
-test('five agent cards keep independent loading and terminal states', () => {
-  const events = [
-    event(1, 'AGENT_REQUEST_STARTED', {}, 'stock'),
-    event(2, 'AGENT_DECISION_COMPLETED', { candidateId: 'nvda-note-a', candidate: 'NVIDIA-backed note', requested: usd('800'), rationale: 'Approved representation' }, 'swap'),
-    event(3, 'PROPOSAL_BLOCKED', { reasons: ['VENUE_NOT_ALLOWED'] }, 'swap'),
-    event(4, 'AGENT_TIMED_OUT', {}, 'nft'),
-    event(5, 'AGENT_ABSTAINED', { rationale: 'No listing' }, 'yield'),
-    event(6, 'AGENT_FAILED', {}, 'perps'),
-  ];
-  const agents = derivePresentation(events).agents;
-  assert.equal(agents.length, 5);
-  assert.deepEqual(agents.map((agent) => agent.phase), ['PENDING', 'BLOCKED', 'TIMED OUT', 'ABSTAINED', 'FAILED']);
-  assert.equal(agents[1]?.candidate, 'NVIDIA-backed note');
-  assert.match(ui, /LatticeLoader label=\{agent\.activity\} status="working"/);
-  assert.match(ui, /status=\{failed \? "error" : "done"\}/);
-  assert.match(lattice, /status\?: LatticeStatus/);
-  assert.match(lattice, /elapsedMs\?: number \| null/);
-});
-
-test('React Bits primitives use real state without artificial delays', () => {
-  assert.match(prompt, /Adapted from React Bits Prompt Bar/);
-  assert.match(lattice, /Adapted from React Bits Lattice Loader/);
-  assert.match(prompt, /autosizing composer and send\/working glyph/);
+test('no timer, delay or randomness drives any state', () => {
+  for (const source of [browserSources, prompt, lattice]) {
+    assert.doesNotMatch(source, /setTimeout\(|Math\.random\(/);
+  }
+  // The only intervals read real status (an open server task) or tick an elapsed clock for open requests.
+  assert.match(lab, /if \(task === null\) return undefined;[\s\S]*setInterval\(\(\) => void refresh\(\), 700\)/);
+  assert.match(lab, /if \(!pending\) return undefined;[\s\S]*setInterval\(\(\) => setNow\(Date\.now\(\)\), 250\)/);
   assert.match(lattice, /authoritative elapsed telemetry/);
-  assert.doesNotMatch(ui, /setTimeout\(|Math\.random\(/);
-  assert.doesNotMatch(prompt, /setTimeout\(|Math\.random\(/);
-  assert.doesNotMatch(lattice, /setTimeout\(|Math\.random\(/);
   assert.match(latticeCss, /prefers-reduced-motion/);
 });
 
-test('model choice and Mandate verdict are presented as separate layers with human and raw reasons', () => {
-  assert.match(ui, /Model decision/);
-  assert.match(ui, /Mandate check/);
-  assert.match(ui, /Why\?/);
-  assert.match(ui, /Human meaning/);
-  assert.equal(reasonLabel('VENUE_NOT_ALLOWED:venues:eip155:1/router:x'), 'Venue not allowed');
-  assert.equal(reasonLabel('INSTRUMENT_UNKNOWN'), 'Unknown instrument');
-  assert.match(model, /Web-only copy\. Protocol reason codes remain unchanged/);
+test('a ready draft becomes the agent team; five ceilings are editable and disabled means no authority', () => {
+  assert.equal(deriveFlow({ ...idle, draftPresent: true }).phase, 'CONFIGURE');
+  assert.match(configure, /ROLES\.map\(\(role\) => <AgentConfigRow/);
+  assert.match(configure, /`agents\.\$\{role\}\.maxAllocation`/);
+  assert.match(configure, /`agents\.\$\{role\}\.enabled`, enabled !== true/);
+  assert.match(configure, /role="switch"/);
+  assert.match(configure, /No authority · cannot propose/);
+  assert.match(agentsUi, /No authority\. This agent cannot propose\./);
+  assert.match(configure, /Mandate never fills a missing limit on its own\./);
+  assert.match(configure, /Use balanced defaults/);
 });
 
-test('a hard block stays out of the Room while a portfolio conflict enters it', () => {
-  const events = [
-    event(1, 'PROPOSAL_BLOCKED', { reasons: ['VENUE_NOT_ALLOWED'] }, 'swap'),
-    event(2, 'PROPOSAL_ADMISSIBLE', { portfolioValid: false, reasons: ['PORTFOLIO_LIMIT_EXCEEDED'] }, 'perps'),
-    event(3, 'ROOM_OPENED', { participants: ['perps'] }, null, { roomId: 'room-1', generation: 1 }),
-  ];
-  const view = derivePresentation(events);
-  assert.equal(blockedInsideRoom(events), false);
-  assert.equal(view.agents.find((agent) => agent.role === 'swap')?.inRoom, false);
-  assert.equal(view.agents.find((agent) => agent.role === 'perps')?.inRoom, true);
-  assert.equal(view.agents.find((agent) => agent.role === 'perps')?.portfolioConflict, true);
-  assert.match(ui, /Enters Mandate Room/);
+test('capital allocation compares agent ceilings to deployable capital, and only capital', () => {
+  const fits = allocationSummary({ capital: '2000', maxDeployed: '2000', ceilings: ['600', '300', '200', '500', '200'] });
+  assert.equal(fits.ceilings, 1800);
+  assert.equal(fits.unassigned, 200);
+  assert.equal(fits.oversubscribed, false);
+  assert.equal(fits.fill, 0.9);
+  const over = allocationSummary({ capital: '2000', maxDeployed: '2000', ceilings: ['800', '500', '400', '800', '600'] });
+  assert.equal(over.ceilings, 3100);
+  assert.equal(over.oversubscribed, true);
+  assert.equal(over.unassigned, null);
+  assert.equal(allocationSummary({ capital: '2000', maxDeployed: null, ceilings: ['800', null] }).ceilings, null);
+  assert.match(model, /Only the capital dimension; derivative, illiquid and other typed limits/);
+  assert.equal(usd('300.6'), '$300.60');
+  assert.equal(usd('3100'), '$3,100');
 });
 
-test('typed resources remain separate and incomparable reductions are never summed', () => {
-  const events = [event(1, 'PORTFOLIO_CONFLICT', {
-    constraints: [
-      { resource: 'portfolio-notional', authorityAtoms: '2000000000', demandAtoms: '2500000000', requiredReductionAtoms: '500000000' },
-      { resource: 'derivative-notional', authorityAtoms: '400000000', demandAtoms: '600000000', requiredReductionAtoms: '200000000' },
-      { resource: 'spot-capital', authorityAtoms: '2000000000', demandAtoms: '800000000', requiredReductionAtoms: '0' },
-    ],
-  })];
-  const lines = resourceLines(events);
-  assert.deepEqual(lines.map((line) => line.resource), ['portfolio-notional', 'derivative-notional', 'spot-capital']);
-  assert.equal(lines[0]?.reduction, '500');
-  assert.equal(lines[1]?.reduction, '200');
-  assert.equal(lines.some((line) => line.resource === 'total'), false);
-  assert.match(ui, /Incomparable reductions are not added together/);
-  assert.doesNotMatch(model, /requiredReductionTotal|totalReduction/);
+test('advanced permissions start closed and open as an accessible dialog', () => {
+  assert.match(lab, /useState<SheetName>\(null\)/);
+  assert.match(lab, /title="Advanced permissions"/);
+  assert.match(shared, /dialog\.showModal\(\)/);
+  assert.match(shared, /aria-labelledby=\{id\}/);
+  assert.match(shared, /aria-label=\{`Close \$\{title\}`\}/);
+  for (const section of ['Capital', 'Risk', 'Markets', 'Execution', 'Agent limits']) assert.match(configure, new RegExp(`title: "${section}"`));
+  for (const status of ['From your prompt', 'Default', 'Edited']) assert.ok(configure.includes(status), status);
+  assert.match(configure, /What Mandate enforces/);
 });
 
-test('the Room has zero authority and authorization waits for final protocol evidence', () => {
-  const opened = [
-    event(1, 'ROOM_OPENED', { participants: ['stock', 'perps'] }, null, { roomId: 'room-1', generation: 1 }),
-    event(2, 'ROOM_AGENT_RESPONSE', { action: 'KEEP', from: usd('800'), to: usd('800'), rationale: 'No derivative use.' }, 'stock', { roomId: 'room-1', generation: 1 }),
-    event(3, 'ROOM_AGENT_RESPONSE', { action: 'REDUCE', from: usd('600'), to: usd('400'), rationale: 'Fits the derivative limit.' }, 'perps', { roomId: 'room-1', generation: 1 }),
-    event(4, 'ROOM_PROPOSAL_CREATED', { conflicts: [{ resource: 'derivative-notional', authority: usd('400'), demand: usd('600'), demandAfter: usd('400'), requiredReduction: usd('200'), remainingReduction: usd('0'), status: 'SATISFIED' }] }),
-    event(5, 'MANDATE_REVERIFY_STARTED', { phase: 'reverify' }),
-  ];
-  const before = derivePresentation(opened);
-  assert.equal(before.room.proposal, true);
-  assert.equal(before.room.reverify, true);
-  assert.equal(before.room.authorized, false);
-  assert.deepEqual(before.room.activity.map((item) => item.action), ['KEEP', 'REDUCE', 'RE-VERIFYING']);
-  assert.match(ui, /ROOM AUTHORITY/);
-  assert.match(ui, /NONE/);
-  assert.match(ui, /Not yet authorized/);
-  assert.match(ui, /Mandate re-verifying/);
-  const after = derivePresentation([...opened, event(6, 'PORTFOLIO_AUTHORIZED', { reserved: usd('1200'), proposals: [{ role: 'stock', outcome: 'RESERVED', requested: usd('800') }, { role: 'perps', outcome: 'RESERVED', requested: usd('400') }] })]);
-  assert.equal(after.room.authorized, true);
-  assert.equal(after.room.reserved, '1200 USDC');
-  assert.equal(after.agents.find((agent) => agent.role === 'stock')?.finalOutcome, 'RESERVED');
+test('Trade is the one dominant action on the agent team', () => {
+  const stage = configure.slice(configure.indexOf('export function ConfigureStage'), configure.indexOf('export function ApproveStage'));
+  assert.equal(stage.match(/className="mw-cta"/g)?.length, 1);
+  assert.match(stage, /Review &amp; Trade/);
+  assert.doesNotMatch(stage, /AUTHORIZE MANDATE/);
 });
 
-test('late, stale, timeout, and no-feasible outcomes never manufacture consent', () => {
-  const events = [
-    event(1, 'ROOM_AGENT_TIMEOUT', { effect: 'UNCHANGED' }, 'yield', { generation: 1 }),
-    event(2, 'ROOM_AGENT_STALE_RESPONSE', { reason: 'ANSWERED_AFTER_TIMEOUT', action: 'KEEP', effect: 'IGNORED' }, 'stock', { generation: 1 }),
-    event(3, 'ROOM_AGENT_STALE_RESPONSE', { reason: 'LATER_GENERATION_STARTED', action: 'REDUCE', effect: 'IGNORED' }, 'perps', { generation: 1 }),
-    event(4, 'ROOM_NO_FEASIBLE_PORTFOLIO', { conflicts: [{ resource: 'derivative-notional', authority: usd('400'), demand: usd('600'), demandAfter: usd('500'), requiredReduction: usd('200'), remainingReduction: usd('100'), status: 'UNRESOLVED' }] }),
-  ];
-  const view = derivePresentation(events);
-  assert.equal(view.agents.find((agent) => agent.role === 'stock')?.ignored, 'LATE');
-  assert.equal(view.agents.find((agent) => agent.role === 'perps')?.ignored, 'STALE');
-  assert.equal(view.agents.find((agent) => agent.role === 'yield')?.timedOut, true);
-  assert.equal(view.room.noFeasible, true);
-  assert.equal(view.room.authorized, false);
-  assert.equal(view.room.lines[0]?.reduction, '100');
-  assert.match(ui, /No allocation change recorded/);
-  assert.match(ui, /Nothing was authorized/);
+test('the review step is honest about signing: no wallet integration, no faked approval', () => {
+  assert.equal(deriveFlow({ ...idle, draftPresent: true, reviewing: true }).phase, 'APPROVE');
+  assert.match(configure, /Review your mandate/);
+  assert.match(configure, /Approve in wallet/);
+  assert.match(configure, /Needs principal wallet-signature integration/);
+  assert.match(configure, /data-disabled=""/);
+  assert.match(configure, /Demo principal key/);
+  assert.match(configure, /it secures nothing and is not a wallet signature/);
+  // The exact server phrase is still required; nothing types it for the principal.
+  assert.match(configure, /const matches = confirmation === props\.expected/);
+  assert.match(configure, /disabled=\{!matches \|\| props\.authorizing\}/);
+  assert.doesNotMatch(browserSources, /Wallet approved|wallet connected|setConfirmation\(props\.expected\)|confirmation: expected/i);
+  assert.doesNotMatch(browserSources, /window\.ethereum|eth_requestAccounts|signTypedData|personal_sign/);
 });
 
-test('policy stress preserves identity, actual order, and a compliant control', () => {
+test('cancelling the review returns to the agent team and activates nothing', () => {
+  assert.match(lab, /onCancel=\{\(\) => \{\s*setReviewing\(false\);/);
+  assert.match(lab, /Approval cancelled\. No mandate was activated\./);
+  assert.equal(deriveFlow({ ...idle, draftPresent: true, reviewing: false }).phase, 'CONFIGURE');
+});
+
+test('signing starts the run; Trade never broadcasts anything', () => {
+  assert.match(lab, /const body = await call\("POST", "\/authorize", \{ confirmation \}\);[\s\S]*await startRun\(body\);/);
+  assert.match(lab, /setRunFrom\(known\);\s*await call\("POST", "\/run", \{\}\);/);
+  assert.doesNotMatch(browserSources, /sendTransaction|signTransaction|eth_sendRawTransaction|eth_sign/i);
+});
+
+test('agent rows start from AGENT_REQUEST_STARTED and update independently', () => {
+  const before = derivePresentation(eventsAfter(run.filter((item) => item.sequence <= 4), 4));
+  assert.deepEqual(before.agents.map((agent) => agent.phase), ['WAITING', 'WAITING', 'WAITING', 'WAITING', 'WAITING']);
+  const midway = derivePresentation(upTo(20)).agents;
+  assert.equal(midway.find((agent) => agent.role === 'stock')?.phase, 'ADMISSIBLE');
+  assert.equal(midway.find((agent) => agent.role === 'swap')?.phase, 'BLOCKED');
+  assert.equal(midway.find((agent) => agent.role === 'yield')?.phase, 'RESPONDING');
+  assert.equal(midway.find((agent) => agent.role === 'perps')?.phase, 'RESPONDING');
+  assert.equal(deriveFlow(running(upTo(20))).phase, 'AGENTS_WORKING');
+  assert.equal(deriveFlow(running(upTo(28))).phase, 'MANDATE_REVIEW');
+  assert.match(agentsUi, /<LatticeLoader label=\{agent\.phase === "RESPONDING" \? "Responding…" : agent\.activity\} status="working"/);
+});
+
+test('the model proposal and the Mandate verdict stay separate layers, words first and codes in details', () => {
+  assert.match(agentsUi, /mw-layer mw-layer--model/);
+  assert.match(agentsUi, /mw-layer mw-layer--mandate/);
+  assert.match(agentsUi, /Checking with Mandate…/);
+  assert.match(agentsUi, /Technical detail/);
+  for (const [raw, words] of [
+    ['VENUE_NOT_ALLOWED:venues:x', 'Venue not allowed'], ['ASSET_NOT_ALLOWED', 'Asset not approved'], ['ISSUER_NOT_ALLOWED', 'Issuer not approved'],
+    ['REPRESENTATION_NOT_ALLOWED', 'Representation not approved'], ['RECIPIENT_NOT_ALLOWED', 'Recipient not approved'], ['INSTRUMENT_UNKNOWN', 'Unknown instrument'],
+    ['PORTFOLIO_LIMIT_EXCEEDED', 'Portfolio limit exceeded'], ['AGENT_LIMIT_EXCEEDED', 'Agent limit exceeded'], ['ALLOCATION_INSUFFICIENT', 'Insufficient authority'],
+  ] as const) assert.equal(reasonLabel(raw), words);
+  const swap = derivePresentation(run).agents.find((agent) => agent.role === 'swap');
+  assert.deepEqual(swap?.reasons, ['VENUE_NOT_ALLOWED']);
+  assert.equal(swap?.inRoom, false);
+});
+
+test('a hard-blocked action never joins the Room, and a portfolio conflict opens it without a click', () => {
+  assert.equal(blockedInsideRoom(run), false);
+  assert.equal(deriveFlow(running(upTo(29))).phase, 'ROOM');
+  assert.doesNotMatch(lab, /Open Room/);
+  assert.equal(derivePresentation(run).agents.find((agent) => agent.role === 'perps')?.portfolioConflict, true);
+});
+
+test('Room messages are translations of real structured events, with no hidden reasoning', () => {
+  const chat = deriveRoomChat(eventsAfter(run, 4));
+  const responses = run.filter((item) => item.kind === 'ROOM_AGENT_RESPONSE').length;
+  assert.equal(chat.filter((message) => message.kind === 'agent').length, responses);
+  assert.deepEqual(chat.filter((message) => message.kind === 'agent').map((message) => message.title), ['Reduce $600 → $400.', 'Reduce $700 → $500.', 'Reduce $600 → $400.']);
+  assert.equal(chat[1]?.detail, 'STUB: proportional share of the required reduction.');
+  const hidden = deriveRoomChat([event(1, 'ROOM_AGENT_RESPONSE', { action: 'KEEP', from: usdc('800'), to: usdc('800'), rationale: 'Declared.', reasoning: 'HIDDEN-REASONING', chainOfThought: 'HIDDEN-COT' }, 'stock', { generation: 1 })]);
+  assert.doesNotMatch(JSON.stringify(hidden), /HIDDEN/);
+  assert.match(model, /Every message is a translation of one real event/);
+});
+
+test('KEEP, REDUCE, RELEASE and ABSTAIN each render as a plain message', () => {
+  assert.equal(actionText('KEEP', '800', '800'), 'Keep $800.');
+  assert.equal(actionText('REDUCE', '600', '400'), 'Reduce $600 → $400.');
+  assert.equal(actionText('RELEASE', '500', '0'), 'Release $500.');
+  assert.equal(actionText('ABSTAIN', '300', '300'), 'Abstain.');
+  const chat = deriveRoomChat([
+    event(1, 'ROOM_AGENT_RESPONSE', { action: 'KEEP', from: usdc('800'), to: usdc('800'), rationale: 'Stock does not consume derivative authority.' }, 'stock', { generation: 1 }),
+    event(2, 'ROOM_KEEP', { from: usdc('800'), to: usdc('800') }, 'stock', { generation: 1 }),
+    event(3, 'ROOM_AGENT_RESPONSE', { action: 'ABSTAIN', from: usdc('300'), to: usdc('300'), rationale: '' }, 'yield', { generation: 1 }),
+    event(4, 'ROOM_RELEASE', { from: usdc('500'), to: usdc('0'), rationale: 'Releasing.' }, 'nft', { generation: 1 }),
+  ]);
+  assert.deepEqual(chat.map((message) => message.title), ['Keep $800.', 'Abstain.', 'Release $500.']);
+});
+
+test('late and stale replies are shown and ignored; a timeout changes nothing', () => {
+  const chat = deriveRoomChat([
+    event(1, 'ROOM_AGENT_TIMEOUT', { effect: 'UNCHANGED' }, 'perps', { generation: 1 }),
+    event(2, 'ROOM_AGENT_STALE_RESPONSE', { reason: 'ANSWERED_AFTER_TIMEOUT', action: 'REDUCE', effect: 'IGNORED' }, 'perps', { generation: 1 }),
+    event(3, 'ROOM_AGENT_STALE_RESPONSE', { reason: 'ROOM_FINALIZED', action: 'KEEP', effect: 'IGNORED' }, 'stock', { generation: 1 }),
+  ]);
+  assert.equal(chat[0]?.title, 'No reply in time.');
+  assert.match(chat[0]?.detail ?? '', /No allocation change\. A timeout is not consent and not a release\./);
+  assert.equal(chat[1]?.ignored, 'LATE');
+  assert.equal(chat[1]?.note, 'Late reply — ignored');
+  assert.equal(chat[2]?.ignored, 'STALE');
+  assert.equal(chat[2]?.title, 'Keep.');
+  assert.equal(chat[2]?.detail, 'Room already finalized.');
+  const agents = derivePresentation([event(1, 'ROOM_AGENT_TIMEOUT', {}, 'yield', { generation: 1 })]).agents;
+  assert.equal(agents.find((agent) => agent.role === 'yield')?.timedOut, true);
+});
+
+test('open Room requests show as pending replies until they answer or time out', () => {
+  const open = [event(1, 'ROOM_GENERATION_STARTED', { participants: ['stock', 'perps'] }, null, { generation: 1 }), event(2, 'ROOM_AGENT_RESPONSE', { action: 'KEEP', from: usdc('800'), to: usdc('800') }, 'stock', { generation: 1 })];
+  assert.deepEqual(awaitingReplies(open), ['perps']);
+  assert.deepEqual(awaitingReplies([...open, event(3, 'ROOM_AGENT_TIMEOUT', {}, 'perps', { generation: 1 })]), []);
+});
+
+test('the Room says it has no authority, and its proposal is not authorization', () => {
+  assert.match(room, /<span>Authority<\/span><strong>NONE<\/strong>/);
+  assert.match(room, /The Room may adjust requests but cannot create new permission\./);
+  const proposed = upTo(37);
+  assert.equal(deriveFlow(running(proposed)).phase, 'ROOM');
+  assert.match(deriveRoomChat(proposed).at(-1)?.detail ?? '', /Not authorized yet\./);
+  const verifying = upTo(42);
+  assert.equal(deriveFlow(running(verifying)).phase, 'VERIFYING');
+  assert.equal(deriveRoomChat(verifying).at(-1)?.working, true);
+  assert.deepEqual(proposedPortfolio(verifying), [{ role: 'stock', amount: '400' }, { role: 'yield', amount: '500' }, { role: 'perps', amount: '400' }]);
+  assert.match(outcome, /Room consensus does not create authority\./);
+});
+
+test('authorization appears only after PORTFOLIO_AUTHORIZED; reserved is never called settled', () => {
+  for (let sequence = 4; sequence < 43; sequence += 1) assert.notEqual(deriveFlow(running(upTo(sequence))).phase, 'COMPLETE', String(sequence));
+  assert.equal(deriveFlow(running(upTo(43))).phase, 'AUTHORIZED');
+  assert.equal(deriveFlow(running(upTo(43), null)).phase, 'COMPLETE');
+  const review = deriveReview(eventsAfter(run, 4));
+  assert.deepEqual(review.authorized.map((item) => [item.role, item.amount]), [['stock', '400'], ['yield', '500'], ['perps', '400']]);
+  assert.equal(review.reserved, '1300');
+  assert.match(outcome, /Reserved is not settled\./);
+});
+
+test('settlement progress follows settlement events; a hash is submitted, not confirmed', () => {
+  const authorized = eventsAfter(run, 4);
+  const at = (kind: string, data: JsonRecord = {}) => event(100 + authorized.length, kind, data, 'stock');
+  assert.equal(deriveFlow(running([...authorized, at('TESTNET_SIMULATION_STARTED')], null)).phase, 'SETTLING');
+  const submitted = [...authorized, at('TESTNET_TX_SUBMITTED', { txHash: '0xabc', evidence: 'SUBMITTED_UNCONFIRMED' })];
+  assert.equal(deriveFlow(running(submitted, null)).phase, 'SETTLING');
+  assert.equal(derivePresentation(submitted).settlement.settled, false);
+  const confirmed = [...authorized, at('TESTNET_TX_CONFIRMED', { evidence: 'LIVE_TESTNET', txHash: '0xabc', block: 10, status: 'SUCCESS', tokenIn: { symbol: 'MDUSD', amount: '32' }, tokenOut: { symbol: 'MDEMO', amount: '3.2' } })];
+  assert.equal(derivePresentation(confirmed).settlement.evidence, 'LIVE_TESTNET');
+  assert.equal(deriveFlow(running(confirmed, null)).phase, 'COMPLETE');
+  assert.equal(deriveReview(confirmed).settlementsConfirmed, 1);
+  const failed = [...authorized, at('TESTNET_TX_FAILED', { txHash: '0xabc', status: 'REVERTED', evidence: 'FAILED' })];
+  assert.equal(derivePresentation(failed).settlement.settled, false);
+  assert.equal(deriveReview(failed).settlementsConfirmed, 0);
+  assert.match(outcome, /A transaction hash is not settlement\./);
+  assert.match(outcome, /Failed receipt\. Never presented as LIVE_TESTNET\./);
+  assert.doesNotMatch(outcome, /%|progress=|setInterval/);
+});
+
+test('the decision and the fixture settlement proof stay separate, with the disclaimer always shown', () => {
+  assert.match(outcome, /export const FIXTURE_QUALIFICATION = "Valueless demo assets\. Not an NVDA trade\. Not a Robinhood Stock Token\."/);
+  assert.match(outcome, /<p className="mw-proof__qualify">\{FIXTURE_QUALIFICATION\}<\/p>/);
+  assert.match(outcome, /mw-proof__decision[\s\S]*Trade decision[\s\S]*mw-proof__chain[\s\S]*Settlement proof/);
+  assert.match(outcome, /The browser never sends transactions\./);
+  assert.doesNotMatch(outcome, /\$\{usd\([^)]*\)\} → \$\{settlement\.fixtureOut/);
+});
+
+test('post-trade review counts come from the run', () => {
+  const review = deriveReview(eventsAfter(run, 4));
+  assert.equal(review.evaluated, 5);
+  assert.equal(review.blocked, 1);
+  assert.equal(review.noProposal, 1);
+  assert.equal(review.conflictsResolved, 1);
+  assert.equal(review.authorizedCount, 3);
+  assert.equal(review.settlementsConfirmed, 0);
+  assert.deepEqual(review.negotiated.map((item) => `${item.role}:${item.from}->${item.amount}`), ['stock:600->400', 'yield:700->500', 'perps:600->400']);
+  const none = deriveReview([]);
+  assert.deepEqual([none.evaluated, none.blocked, none.conflictsResolved, none.authorizedCount], [0, 0, 0, 0]);
+  for (const tab of ['Summary', 'Decisions', 'Evidence']) assert.ok(sheets.includes(`"${tab}"`), tab);
+  assert.match(sheets, /What happened/);
+});
+
+test('failures stay in the same panel and say nothing was authorized', () => {
+  assert.equal(deriveFlow(running([event(5, 'ROOM_NO_FEASIBLE_PORTFOLIO', {})], null)).failure, 'NO_FEASIBLE');
+  assert.equal(deriveFlow(running([event(5, 'PORTFOLIO_REFUSED', {})], null)).failure, 'REFUSED');
+  assert.equal(deriveFlow({ ...running([], null), lastRunStatus: 'NOTHING_TO_AUTHORIZE' }).failure, 'NOTHING_TO_AUTHORIZE');
+  assert.match(outcome, /Agents couldn't resolve the conflict within your mandate\. Nothing was authorized\./);
+  assert.match(agentsUi, /couldn't respond\. No action was submitted\./);
+});
+
+test('policy stress is a secondary security demo after the trade', () => {
+  assert.match(outcome, /Test the firewall/);
+  assert.match(lab, /<Sheet open=\{sheet === "stress"\}[\s\S]*<StressBody/);
+  assert.doesNotMatch(agentsUi + compose + configure, /policy-stress|StressBody/);
+  assert.match(sheets, /VALID AGENT ≠ VALID ACTION/);
+  assert.match(sheets, /DIFFERENT AUTHORIZATION RESULT/);
   const identity = { agentIdentity: 'VALID', membership: 'VALID', delegation: 'ACTIVE', signature: 'VALID', sameSignerAsSwapAgent: true };
-  const events = [
+  const attempts = derivePresentation([
     event(1, 'POLICY_STRESS_STARTED'),
-    event(2, 'POLICY_STRESS_CASE_SELECTED', { attempt: 1, caseId: 'RECIPIENT_MISMATCH', rationale: 'test recipient' }),
+    event(2, 'POLICY_STRESS_CASE_SELECTED', { attempt: 1, caseId: 'RECIPIENT_MISMATCH', rationale: 'test' }),
     event(3, 'POLICY_STRESS_PROPOSAL_SIGNED', { attempt: 1, identity }),
     event(4, 'POLICY_STRESS_PROPOSAL_BLOCKED', { attempt: 1, reasons: ['RECIPIENT_NOT_ALLOWED'], screening: { verdict: 'BLOCKED' } }),
-    event(5, 'POLICY_STRESS_CASE_SELECTED', { attempt: 2, caseId: 'COMPLIANT_CONTROL', rationale: 'inside authority' }),
-    event(6, 'POLICY_STRESS_PROPOSAL_SIGNED', { attempt: 2, identity }),
-    event(7, 'POLICY_STRESS_PROPOSAL_AUTHORIZED', { attempt: 2, screening: { verdict: 'ADMISSIBLE' }, sameIdentityAsRefusedAttempts: true }),
-  ];
-  const attempts = derivePresentation(events).stress.attempts;
-  assert.deepEqual(attempts.map((attempt) => attempt.caseId), ['RECIPIENT_MISMATCH', 'COMPLIANT_CONTROL']);
+    event(5, 'POLICY_STRESS_CASE_SELECTED', { attempt: 2, caseId: 'COMPLIANT_CONTROL', rationale: 'inside' }),
+    event(6, 'POLICY_STRESS_PROPOSAL_AUTHORIZED', { attempt: 2, screening: { verdict: 'ADMISSIBLE' }, sameIdentityAsRefusedAttempts: true }),
+  ]).stress.attempts;
   assert.deepEqual(attempts.map((attempt) => attempt.outcome), ['REFUSED', 'AUTHORIZED']);
-  assert.equal(attempts.every((attempt) => attempt.sameSigner), true);
-  assert.match(ui, /Valid agent ≠ valid action/i);
-  assert.match(ui, /SAME AGENT/);
-  assert.doesNotMatch(ui, /evil AI|hacker AI|rogue bot|defeated the AI/i);
+  assert.equal(eventsAfter([event(9, 'POLICY_STRESS_STARTED'), event(10, 'AGENT_REQUEST_STARTED', {}, 'stock')], 8).length, 1);
 });
 
-test('reserved, submitted, confirmed, and failed settlement states stay distinct', () => {
-  const submitted = derivePresentation([event(1, 'TESTNET_TX_SUBMITTED', { txHash: '0xabc', evidence: 'SUBMITTED_UNCONFIRMED' })]);
-  assert.equal(submitted.settlement.stage, 'SUBMITTED');
-  assert.equal(submitted.settlement.settled, false);
-  const failed = derivePresentation([event(1, 'TESTNET_TX_FAILED', { txHash: '0xabc', status: 'REVERTED', evidence: 'FAILED', reason: 'MINED_REVERTED' })]);
-  assert.equal(failed.settlement.stage, 'FAILED');
-  assert.equal(failed.settlement.settled, false);
-  const confirmed = derivePresentation([event(1, 'TESTNET_TX_CONFIRMED', {
-    evidence: 'LIVE_TESTNET', txHash: '0xabc', explorerUrl: 'https://explorer.example/tx/0xabc', block: 10, gasUsed: 20, status: 'SUCCESS', network: 'Robinhood Chain Testnet', chainId: 46630,
-    authorized: { notionalUsdc: '800', debit: '64', quantity: '6.4' }, tokenIn: { symbol: 'MDUSD', amount: '64' }, tokenOut: { symbol: 'MDEMO', amount: '6.4' },
-  })]);
-  assert.equal(confirmed.settlement.settled, true);
-  assert.equal(confirmed.settlement.evidence, 'LIVE_TESTNET');
-  assert.match(confirmed.settlement.fixtureIn ?? '', /MDUSD/);
-  assert.match(ui, /Reserved is not settled/);
-  assert.match(ui, /A transaction hash is not settlement/);
-  assert.match(ui, /Valueless demo assets/);
-  assert.match(ui, /Not an NVDA trade/);
-  assert.match(ui, /No browser transaction sending exists/);
-  assert.match(ui, /href=\{settlement\.explorerUrl\}/);
-  assert.doesNotMatch(ui, /\$800 USDC → 6\.4 MDEMO/);
-});
-
-test('equal event timestamps are grouped without changing order or time', () => {
-  const events = [
-    event(0, 'PORTFOLIO_CONFLICT', {}, null, { elapsedMs: 41660 }),
-    event(1, 'ROOM_OPENED', {}, null, { elapsedMs: 41660 }),
-    event(2, 'ROOM_GENERATION_STARTED', {}, null, { elapsedMs: 41660 }),
-    event(3, 'ROOM_AGENT_RESPONSE', {}, 'stock', { elapsedMs: 41661 }),
-  ];
-  const groups = groupEventsByElapsed(events);
-  assert.equal(groups.length, 2);
-  assert.equal(groups[0]?.elapsedMs, 41660);
-  assert.deepEqual(groups[0]?.events.map((item) => item.sequence), [0, 1, 2]);
-  assert.equal(groups[1]?.elapsedMs, 41661);
+test('the event log keeps exact sequence and time, behind Developer details', () => {
+  assert.match(lab, /<summary className="mw-bar__link">Developer<\/summary>/);
+  assert.match(lab, /title="Event log"/);
+  assert.match(sheets, /Equal real timestamps stay equal and are grouped/);
+  assert.match(sheets, /Step \{event\.sequence \+ 1\}/);
+  assert.match(sheets, /JSON\.stringify\(event\.data, null, 2\)/);
+  const groups = groupEventsByElapsed([event(0, 'PORTFOLIO_CONFLICT', {}, null, { elapsedMs: 41660 }), event(1, 'ROOM_OPENED', {}, null, { elapsedMs: 41660 }), event(2, 'ROOM_AGENT_RESPONSE', {}, 'stock', { elapsedMs: 41661 })]);
+  assert.deepEqual(groups.map((group) => [group.elapsedMs, group.events.length]), [[41660, 2], [41661, 1]]);
   assert.equal(formatDuration(41660), '41.660s');
   assert.equal(formatDuration(41661), '41.661s');
-  assert.match(ui, /Equal real timestamps stay equal and are grouped/);
-  assert.match(ui, /Step \{event\.sequence \+ 1\}/);
-  assert.match(ui, /JSON\.stringify\(event\.data, null, 2\)/);
-  assert.doesNotMatch(ui, /random.*time|synthetic.*time/i);
+  const lines = resourceLines([event(1, 'PORTFOLIO_CONFLICT', { constraints: [
+    { resource: 'portfolio-notional', authorityAtoms: '2000000000', demandAtoms: '2500000000', requiredReductionAtoms: '500000000' },
+    { resource: 'derivative-notional', authorityAtoms: '400000000', demandAtoms: '600000000', requiredReductionAtoms: '200000000' },
+  ] })]);
+  assert.deepEqual(lines.map((line) => line.reduction), ['500', '200']);
 });
 
-test('responsive, reduced-motion, keyboard, and dialog affordances are explicit', () => {
-  assert.match(css, /@media \(max-width: 390px\)/);
-  assert.match(css, /overflow-x: clip/);
-  assert.match(css, /min-height: 44px/);
-  assert.match(css, /overflow-wrap: anywhere/);
+test('the browser holds no key, no signer and no settlement capability', () => {
+  assert.doesNotMatch(browserSources + prompt + lattice, /@mandate\/live-settlement|packages\/live-settlement|privateKey|mnemonic|OPENAI_API_KEY|NEXT_PUBLIC_OPENAI|sk-[A-Za-z0-9]{8}|QUICKNODE/i);
+  assert.match(flowSource, /It never decides authority/);
+});
+
+test('motion is restrained and reduced motion is honored; layout holds at phone width', () => {
+  assert.match(lab, /phase === "PROMPT" \|\| phase === "DRAFTING" \? \(\s*<motion\.div key="waves"/);
+  assert.match(lab, /<HeroWaves paused=\{phase !== "PROMPT"\}/);
+  assert.match(lab, /reduced \? \{ duration: 0 \} : \{ duration: 0\.28/);
+  assert.match(room, /duration: reduced \? 0 : 0\.2/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
+  assert.match(css, /overflow-x: clip/);
+  assert.match(css, /@media \(max-width: 390px\)/);
+  assert.match(css, /overflow-wrap: anywhere/);
+  assert.match(css, /min-height: 44px/);
   assert.match(css, /:focus-visible/);
-  assert.match(ui, /aria-live="polite"/);
-  assert.match(ui, /showModal\(\)/);
-  assert.match(ui, /aria-labelledby="authority-title"/);
-  assert.match(ui, /aria-label="Close authority"/);
-  assert.match(prompt, /onKeyDown/);
+  assert.match(css, /\.mw-feed \{[\s\S]*overflow-y: auto/);
   assert.match(prompt, /Shift\+Enter/);
+  assert.match(prompt, /onKeyDown/);
+  assert.match(sheets, /role="tablist"/);
 });
 
-test('browser security boundary and Protocol Replay remain unchanged', () => {
-  const sources = [ui, model, read('../components/demo/live/live-client.ts'), prompt, lattice].join('\n');
-  assert.doesNotMatch(sources, /@mandate\/live-settlement|packages\/live-settlement|privateKey|OPENAI_API_KEY|NEXT_PUBLIC_OPENAI|sk-[A-Za-z0-9]{8}/);
-  assert.doesNotMatch(sources, /sendTransaction|signTransaction|eth_sign/i);
+test('Protocol Replay is unchanged and the roles stay fixed', () => {
   assert.match(replay, /<JudgeExperience\s*\/>/);
-  assert.equal(derivePresentation([]).agents.length, 5);
   const roles: RoleName[] = ['stock', 'swap', 'nft', 'yield', 'perps'];
   assert.deepEqual(derivePresentation([]).agents.map((agent) => agent.role), roles);
 });
