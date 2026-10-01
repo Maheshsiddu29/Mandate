@@ -20,7 +20,7 @@ export { parseDeployment, explorerTxUrl, ROBINHOOD_TESTNET, type TestnetDeployme
 export { mapToFixture, TESTNET_SETTLEMENT_FIXTURE, FIXTURE_MAX_DEBIT_ATOMS, type FixtureSettlement } from './fixture-mapping.ts';
 export { SendGate, SEND_AUTHORIZATION_PHRASE, isSendAuthorization, type SendGateState } from './send-gate.ts';
 export { settlementEvidence, ASSET_QUALIFICATION, SETTLEMENT_EVIDENCE, type SettlementEvidence } from './evidence.ts';
-export { RobinhoodTestnetRpc, PUBLIC_TESTNET_RPC, type TestnetRpc } from './rpc.ts';
+export { RobinhoodTestnetRpc, RobinhoodTestnetReader, PUBLIC_TESTNET_RPC, PUBLIC_ONLY, isTransportFailure, type TestnetRpc, type ChainReader, type TransactionBroadcaster, type RpcEndpoints, type RpcProvenance, type Endpoint, type TxLookup } from './rpc.ts';
 export { preflight, MIN_SUBMITTER_WEI, type PreflightReport } from './preflight.ts';
 export { LiveSettlement, safeReason, type SettlementOutcome, type SettlementRecord, type WouldSend, type Prepared, type RunOptions } from './settlement.ts';
 export type { DomainKeys } from './domain-leg.ts';

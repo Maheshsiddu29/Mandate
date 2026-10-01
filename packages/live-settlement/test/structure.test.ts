@@ -51,9 +51,10 @@ describe('live-settlement structural boundary', () => {
     only(/\bfetch\s*\(|WebSocket|node:https?|node:net/, [], SCRIPTS);
   });
 
-  it('reads no environment, file, clock or randomness in its source; scripts read files but no environment and start no process', () => {
+  it('reads no environment, file, clock or randomness in its source; scripts read files, the environment only for RPC configuration, and start no process', () => {
     only(/process\.env|node:fs|node:child_process|Date\.now|new Date\s*\(|performance\.now|setTimeout|setInterval|Math\.random|randomBytes/, []);
-    only(/process\.env|\bspawn(Sync)?\s*\(|\bexec(File)?(Sync)?\s*\(/, [], SCRIPTS);
+    only(/process\.env/, ['rpc-config.ts'], SCRIPTS);
+    only(/\bspawn(Sync)?\s*\(|\bexec(File)?(Sync)?\s*\(/, [], SCRIPTS);
   });
 
   it('exports no key and no generic signing or sending function', () => {

@@ -3,7 +3,9 @@
  * this package that performs network I/O.
  *
  * It refuses every host but Robinhood Chain's documented public testnet RPC
- * (and, when explicitly enabled, a loopback node for a local dry run), and it
+ * (and, when explicitly enabled, a loopback node for a local dry run, or an
+ * operator-configured QuickNode endpoint — infrastructure, never authority),
+ * and it
  * refuses to act on any chain but the one it was configured for — never
  * Ethereum, Arbitrum One, Arbitrum Nova or Robinhood Chain mainnet, whatever
  * the endpoint answers.
@@ -32,10 +34,27 @@ const fail = (error: string): Read<never> => ({ ok: false, error });
 export interface RpcOptions {
   /** Permit `http://127.0.0.1:<port>` / `http://localhost:<port>` — a local dry-run node only. */
   readonly allowLoopback?: boolean;
+  /**
+   * Permit an operator-configured QuickNode endpoint: `https://<name>.quiknode.pro/<token>/`. The
+   * token travels in the path, so the URL is a credential: it is kept private here and never
+   * reported. It changes only which node answers — `ChainClient` still verifies the chain id on
+   * first use and refuses every mainnet, whatever the endpoint says.
+   */
+  readonly operatorEndpoint?: 'QUICKNODE';
+}
+
+/** Which kind of endpoint a client talks to: safe to report, unlike the URL. */
+export type RpcEndpointKind = 'ROBINHOOD_PUBLIC_TESTNET' | 'QUICKNODE' | 'LOOPBACK';
+
+/** A QuickNode endpoint host: `*.quiknode.pro`, never the bare domain. */
+export function isQuickNodeHost(hostname: string): boolean {
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)*\.quiknode\.pro$/.test(hostname);
 }
 
 export class JsonRpcClient {
-  readonly url: string;
+  /** Kept private: an operator endpoint's URL carries its credential. */
+  readonly #url: string;
+  readonly endpoint: RpcEndpointKind;
   #id = 0;
 
   constructor(url: string, o: RpcOptions = {}) {
@@ -47,15 +66,18 @@ export class JsonRpcClient {
     }
     const loopback = u.protocol === 'http:' && (u.hostname === '127.0.0.1' || u.hostname === 'localhost') && o.allowLoopback === true;
     const testnet = u.protocol === 'https:' && (TESTNET_RPC_HOSTS as readonly string[]).includes(u.hostname) && u.pathname === '/' && u.search === '';
-    if (!loopback && !testnet) throw new RpcHostRefused(`RPC host refused: ${u.origin}`);
-    this.url = u.toString();
+    const quicknode = o.operatorEndpoint === 'QUICKNODE' && u.protocol === 'https:' && isQuickNodeHost(u.hostname) && u.username === '' && u.password === '' && u.search === '' && u.hash === '' && u.port === '';
+    // The refusal names the host only: a QuickNode path carries the credential.
+    if (!loopback && !testnet && !quicknode) throw new RpcHostRefused(`RPC host refused: ${u.protocol}//${u.hostname}`);
+    this.#url = u.toString();
+    this.endpoint = testnet ? 'ROBINHOOD_PUBLIC_TESTNET' : quicknode ? 'QUICKNODE' : 'LOOPBACK';
   }
 
   async request<T>(method: string, params: readonly (string | boolean | object)[]): Promise<Read<T>> {
     this.#id += 1;
     let res: Response;
     try {
-      res = await fetch(this.url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: this.#id, method, params }), signal: AbortSignal.timeout(20_000) });
+      res = await fetch(this.#url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: this.#id, method, params }), signal: AbortSignal.timeout(20_000) });
     } catch (e) {
       return fail(`NETWORK.${e instanceof Error ? e.name : 'Error'}`);
     }

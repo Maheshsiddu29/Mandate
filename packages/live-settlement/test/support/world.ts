@@ -17,7 +17,7 @@ import { ScriptedProvider, json } from '../../../live-agents/test/support/provid
 import { TestTime } from '../../../live-agents/test/support/world.ts';
 import { parseDeployment, type TestnetDeployment } from '../../src/deployment.ts';
 import type { Transport } from '../../src/evidence.ts';
-import type { BroadcastResult, PreparedTx, TestnetRpc } from '../../src/rpc.ts';
+import type { BroadcastResult, PreparedTx, RpcProvenance, TestnetRpc, TxLookup } from '../../src/rpc.ts';
 import { LiveSettlement } from '../../src/settlement.ts';
 
 export { AGENT, AGENT_KEY, GATE, MDEMO, MDUSD, PRINCIPAL, PRINCIPAL_KEY, SUBMITTER_KEY };
@@ -172,6 +172,20 @@ export class ModelRpc implements TestnetRpc {
   }
   async transactionKnown(hash: string): Promise<Read<boolean>> {
     return { ok: true, value: this.#mined.has(hash) };
+  }
+  provenance(): RpcProvenance {
+    return 'mock';
+  }
+  async transaction(hash: string): Promise<Read<TxLookup | null>> {
+    const tx = this.#mined.get(hash);
+    return { ok: true, value: tx === undefined ? null : { blockNumber: tx.block, from: SUBMITTER, nonce: 0n } };
+  }
+  async receiptOnce(hash: string): Promise<Read<Receipt | null>> {
+    if (!this.#mined.has(hash) || this.withholdReceipts) return { ok: true, value: null };
+    return this.receipt(hash);
+  }
+  async nonceAt(): Promise<Read<bigint>> {
+    return { ok: true, value: BigInt(this.#mined.size) };
   }
   async receipt(hash: string): Promise<Read<Receipt>> {
     const tx = this.#mined.get(hash);

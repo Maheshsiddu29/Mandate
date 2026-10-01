@@ -279,3 +279,46 @@ command append to one dense, strictly increasing sequence. An event with a
 dedupe key is appended at most once. The server picks up events other
 processes appended every 400 ms and streams them over the existing SSE
 endpoint, which replays from `?after=` or `Last-Event-ID`.
+
+## 6. RPC: QuickNode as infrastructure
+
+**Status: implemented (`packages/live-settlement/src/rpc.ts`,
+`scripts/rpc-config.ts`; the 7E.3 `JsonRpcClient` gains an opt-in
+`operatorEndpoint: 'QUICKNODE'`).**
+
+| Capability | Who holds it | What it can do |
+| --- | --- | --- |
+| `ChainReader` | the settlement path, reconciliation, the smoke check | chain id, blocks, code hash, balances, allowance, the gate's commitment and markets, `eth_call`/`estimateGas` of the gate's `execute` (the manifest gate only), one-shot transaction and receipt lookups, the sender's nonce at `latest`/`pending` |
+| `TransactionBroadcaster` | the settlement boundary only (`SettlementGateChain.submit`) | send one already-signed gate `execute`, exactly as signed, to the primary endpoint |
+
+Nothing else gets a provider object. The browser, the model providers, the
+Room and the local API cannot import this package (structure tests).
+
+**Configuration** — environment only, read by `scripts/rpc-config.ts`, never
+pasted anywhere:
+
+| Variable | Meaning |
+| --- | --- |
+| `ROBINHOOD_TESTNET_RPC_URL` | optional QuickNode Robinhood Chain testnet endpoint, `https://<name>.quiknode.pro/<token>/`; absent → the public RPC |
+| `ROBINHOOD_TESTNET_RPC_FALLBACK` | `public` (default) or `none` |
+| `ROBINHOOD_MAINNET_RPC_URL` | ignored: there is no mainnet path |
+
+The URL carries its credential in the path. `JsonRpcClient` keeps it in a
+private field and refuses other hosts naming the host only; the reader
+reports a provenance label (`quicknode`, `public`, `public-fallback`,
+`mock`), which is what events carry. A refusal never echoes the URL.
+
+**Fallback.** Reads fall back to the public RPC only on a *transport*
+failure (network error, HTTP 5xx/429, unparseable body). Each endpoint
+proves `eth_chainId = 46630` before its first answer is used and refuses
+every known mainnet (1, 42161, 42170, 4663), so a fallback can never cross
+from testnet to anything else. An answer — a wrong chain, a revert, an RPC
+error — is never retried elsewhere. A send never falls back.
+
+**RPC response ≠ authorization.** Provider choice changes which node
+answers, never what Mandate authorized, the portfolio limits, the
+reservation identity or which key may sign.
+
+**Smoke check.** `npm run agents:rpc:smoke [-- --tx 0x…]` is read-only:
+`eth_chainId`, `eth_blockNumber`, the gate's code hash against the
+manifest, and optionally one historical receipt. No key is loaded.
