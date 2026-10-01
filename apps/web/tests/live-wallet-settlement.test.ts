@@ -79,6 +79,8 @@ test('a V2 principal is labelled as the wallet, and same-address settlement is n
   assert.match(outcome, /WALLET_PRINCIPAL_V2/);
   assert.match(outcome, /Same address as the wallet/);
   assert.match(outcome, /Separate testnet custody/);
+  assert.match(outcome, /Wallet gate signature, per execution/);
+  assert.match(read(`${LIVE}sheets.tsx`), /Wallet gate signature, per execution/);
 });
 
 test('a session-bound dry run ends READY · NOT SENT: complete, never settled, both principals shown', () => {

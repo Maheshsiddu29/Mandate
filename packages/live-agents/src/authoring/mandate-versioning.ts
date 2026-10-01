@@ -72,8 +72,9 @@ export interface WalletApprovalFacts {
  * is the demonstration principal key, and `domainDelegation` is
  * `NOT_DELEGATED`. `WALLET_PRINCIPAL_V2` names the wallet as both `principal`
  * and `protocolSigner`; the stored signature is that wallet's EIP-712 V2
- * signature, and domain execution is allowed only for that same address
- * (`SAME_PRINCIPAL`). It does not delegate to any other key.
+ * signature. Domain execution is allowed only for that same address
+ * (`SAME_PRINCIPAL`): it is the manifest principal, or it presents a separate
+ * per-execution gate signature. It does not delegate to any other key.
  */
 export interface PrincipalAuthorization {
   readonly method: AuthorizationMethod;
@@ -86,7 +87,7 @@ export interface PrincipalAuthorization {
 
 export const DEMO_AUTHORIZATION_LABEL = 'Demo principal key: the exact confirmation text, then the publicly derived demonstration key signs. Not a wallet signature.';
 export const WALLET_AUTHORIZATION_LABEL = 'Wallet-signed mandate: EIP-712 approval of the exact mandate digest, verified by this server. The demonstration principal key then countersigns for the frozen Portfolio Verifier. Domain execution authority is not delegated.';
-export const SPINE_AUTHORIZATION_LABEL = 'Wallet is the protocol principal: EIP-712 PortfolioMandateV2 over the canonical mandate digest. Domain execution is permitted only for this same address.';
+export const SPINE_AUTHORIZATION_LABEL = 'Wallet is the protocol principal: EIP-712 PortfolioMandateV2 over the canonical mandate digest. Domain execution still needs this same address to sign each gate mandate.';
 export const SPINE_SIGNATURE_LABEL = 'EIP-712 PortfolioMandateV2 by the wallet principal (Robinhood Chain testnet, chain 46630). Not the demonstration key.';
 
 /** The public record of a version. No key, no core. */

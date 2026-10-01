@@ -7,10 +7,12 @@
  * signature, and refuses every other authorization method. There is no
  * fallback onto the demonstration principal key.
  *
- * A passing check means the wallet is the protocol principal and is the
- * same address as the domain principal this settlement would debit. It does
- * not make the portfolio signature into a gate signature: the frozen gate
- * still needs its own per-execution EIP-712, signed by that same address.
+ * A passing check means the wallet is the protocol principal. It does not
+ * make the portfolio signature into a gate signature, and it does not
+ * require the wallet to equal the gitignored manifest principal. The frozen
+ * gate still needs its own per-execution EIP-712, signed by this same
+ * address (gate-authority.ts). A wallet that is the manifest principal may
+ * still be signed by that key, because the key is that address.
  */
 
 import { mandateSignedByPrincipalV2, type PortfolioMandate } from '@mandate/portfolio';
@@ -27,7 +29,6 @@ export interface SpineFacts {
   readonly authorization: PrincipalAuthorization;
   readonly sessionId: string;
   readonly chainId: bigint;
-  readonly domainPrincipal: string;
   /** Protocol time. The mandate's `expiresAt`, not the challenge window. */
   readonly now: bigint;
 }
@@ -54,6 +55,5 @@ export function reverifySpine(f: SpineFacts): SpineCheck {
   if (wallet === null || wallet.chainId !== SPINE_CHAIN_ID.toString() || wallet.sessionDigest !== bound) return fail('SPINE_SIGNATURE_INVALID');
   if (!mandateSignedByPrincipalV2(f.mandate, f.signature, { chainId: SPINE_CHAIN_ID, sessionDigest: bound })) return fail('SPINE_SIGNATURE_INVALID');
   if (f.now >= f.mandate.expiresAt) return fail('SPINE_EXPIRED');
-  if (!sameAddress(f.domainPrincipal, a.principal)) return fail('CUSTODY_PRINCIPAL_MISMATCH');
   return { ok: true, principal: a.principal };
 }

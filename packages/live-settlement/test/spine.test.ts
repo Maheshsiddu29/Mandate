@@ -2,9 +2,10 @@
  * Mandate authority V2 on the settlement path (docs/demo/authority-spine-v2.md).
  *
  * The wallet that signed the portfolio mandate is the protocol principal.
- * Settlement re-verifies that signature and signs the gate mandate only when
- * that address is the deployment principal. A different wallet, and the
- * demonstration-key path, are refused before any custody signature.
+ * Settlement re-verifies that signature. When the wallet is the deployment
+ * principal, the manifest key signs the gate mandate. When it is not, the
+ * wallet must present MandateAuthorization; a missing or wrong signature
+ * is refused before any broadcast, and the manifest key is not used.
  */
 
 import { describe, it } from 'node:test';
@@ -12,6 +13,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { bytesToHex, eip712SigningHash, type Bytes32 } from '@mandate/kernel';
 import { portfolioMandateV2Hash, type PortfolioMandate } from '@mandate/portfolio';
 import { addressOfKey, signPrehash } from '@mandate/portfolio/demo';
 import { LiveSession, sessionDigest, sessionDir } from '@mandate/live-agents';
@@ -23,8 +25,9 @@ import { SettlementJournal } from '../src/journal.ts';
 import { LiveSettlement } from '../src/settlement.ts';
 import { SendGate } from '../src/send-gate.ts';
 import { settleSpine } from '../src/spine-settlement.ts';
+import { acceptGateExecution, type GateExecutionRequest } from '../src/gate-authority.ts';
 import { reverifySpine, type SpineFacts } from '../src/spine.ts';
-import { ALL_TEST_KEYS, KEYS, PRINCIPAL, PRINCIPAL_KEY, ModelRpc, settlementWorld, testDeployment } from './support/world.ts';
+import { ALL_TEST_KEYS, GATE, KEYS, MDUSD, PRINCIPAL, PRINCIPAL_KEY, ModelRpc, settlementWorld, testDeployment } from './support/world.ts';
 
 const TIMEOUTS = { agentTimeoutMs: 1_000, roomRoundTimeoutMs: 1_000 } as const;
 const OTHER_KEY = `0x${'44'.repeat(32)}`;
@@ -65,11 +68,17 @@ async function restored(dir: string, id: string, rpc: ModelRpc) {
   };
 }
 
-function factsOf(session: LiveSession, domainPrincipal: string): SpineFacts {
+function factsOf(session: LiveSession): SpineFacts {
   const active = session.versions.active;
   const record = session.versions.records.find((r) => r.version === active?.version);
   if (active === null || record === undefined) throw new Error('no active version');
-  return { mandate: active.mandate, signature: active.signature, authorization: record.authorization, sessionId: session.id, chainId: 46_630n, domainPrincipal, now: session.protocolNow() };
+  return { mandate: active.mandate, signature: active.signature, authorization: record.authorization, sessionId: session.id, chainId: 46_630n, now: session.protocolNow() };
+}
+
+function signGate(req: GateExecutionRequest, key: string): string {
+  const hash = eip712SigningHash({ name: 'Mandate', version: '1', chainId: BigInt(req.chainId), verifyingContract: req.gate }, req.mandateDigest as Bytes32);
+  if (bytesToHex(hash) !== req.signingHash) throw new Error('signing hash is not the gate EIP-712 hash');
+  return signPrehash(hash, key);
 }
 
 describe('V2 authority spine settlement', () => {
@@ -112,18 +121,13 @@ describe('V2 authority spine settlement', () => {
     }
   });
 
-  it('refuses a wallet that is not the deployment principal before any custody signature or broadcast', async () => {
+  it('refuses a wallet that is not the deployment principal on the V1 settlement command, before any signature or broadcast', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'mandate-spine-mismatch-'));
     try {
       await v2Session(dir, OTHER_KEY, 'lab-spine-mismatch');
       const rpc = new ModelRpc();
       const world = await restored(dir, 'lab-spine-mismatch', rpc);
       try {
-        const refused = await settleSpine({ session: world.session, journal: world.journal, deployment: world.deployment, rpc, keys: KEYS, mode: 'DRY_RUN', gate: new SendGate(), ledgerPath: world.ledger('dry.db') });
-        assert.equal(refused.status, 'INELIGIBLE');
-        if (refused.status !== 'INELIGIBLE') return;
-        assert.equal(refused.reason, 'CUSTODY_PRINCIPAL_MISMATCH');
-        assert.equal(rpc.broadcasts, 0);
         const settlement = new LiveSettlement({ session: world.session, deployment: world.deployment, rpc, keys: KEYS });
         const p = await settlement.prepare();
         assert.equal('ineligible' in p, false);
@@ -136,6 +140,107 @@ describe('V2 authority spine settlement', () => {
         assert.equal(direct.broadcasts, 0);
         assert.equal(rpc.broadcasts, 0);
         assert.equal(world.journal.get(p.execution.reservation), null);
+      } finally {
+        world.close();
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('dry-runs and sends when the wallet signs the gate mandate, and refuses a missing or wrong signature', async () => {
+    const wallet = addressOfKey(OTHER_KEY);
+    const dir = mkdtempSync(join(tmpdir(), 'mandate-spine-gate-'));
+    try {
+      await v2Session(dir, OTHER_KEY, 'lab-spine-gate');
+      const rpc = new ModelRpc();
+      rpc.chain.fund(MDUSD, wallet, 700_000_000n);
+      rpc.chain.approve(MDUSD, wallet, GATE, 200_000_000n);
+      const world = await restored(dir, 'lab-spine-gate', rpc);
+      try {
+        const missing = await settleSpine({ session: world.session, journal: world.journal, deployment: world.deployment, rpc, keys: KEYS, mode: 'DRY_RUN', gate: new SendGate(), ledgerPath: world.ledger('missing.db') });
+        assert.equal(missing.status, 'INELIGIBLE');
+        if (missing.status !== 'INELIGIBLE') return;
+        assert.equal(missing.reason, 'GATE_EXECUTION_AUTHORITY_REQUIRED');
+        assert.equal(rpc.broadcasts, 0);
+        const asked = world.session.events.events.find((e) => e.kind === 'DOMAIN_EXECUTION_INELIGIBLE' && e.data['reason'] === 'GATE_EXECUTION_AUTHORITY_REQUIRED');
+        assert.ok(asked);
+        const request = asked.data['gateExecution'] as unknown as GateExecutionRequest;
+        assert.equal(request.principal, wallet);
+        assert.equal(request.kind, 'MANDATE_AUTHORIZATION');
+        const absent = acceptGateExecution(request, null, wallet);
+        assert.equal(absent.ok, false);
+        if (!absent.ok) assert.equal(absent.reason, 'GATE_EXECUTION_AUTHORITY_REQUIRED');
+        const malformed = acceptGateExecution(request, `0x${'ab'.repeat(65)}`, wallet);
+        assert.equal(malformed.ok, false);
+        if (!malformed.ok) assert.equal(malformed.reason, 'GATE_EXECUTION_SIGNATURE_INVALID');
+        const wrong = await settleSpine({
+          session: world.session,
+          journal: world.journal,
+          deployment: world.deployment,
+          rpc,
+          keys: KEYS,
+          mode: 'DRY_RUN',
+          gate: new SendGate(),
+          ledgerPath: world.ledger('wrong.db'),
+          resolveGateExecution: (req) => signGate(req, PRINCIPAL_KEY),
+        });
+        assert.equal(wrong.status, 'INELIGIBLE');
+        if (wrong.status !== 'INELIGIBLE') return;
+        assert.equal(wrong.reason, 'GATE_EXECUTION_SIGNER_MISMATCH');
+        assert.equal(rpc.broadcasts, 0);
+
+        const captured: { request: GateExecutionRequest | null } = { request: null };
+        const dry = await settleSpine({
+          session: world.session,
+          journal: world.journal,
+          deployment: world.deployment,
+          rpc,
+          keys: KEYS,
+          mode: 'DRY_RUN',
+          gate: new SendGate(),
+          ledgerPath: world.ledger('dry.db'),
+          resolveGateExecution: (req) => {
+            captured.request = req;
+            return signGate(req, OTHER_KEY);
+          },
+        });
+        assert.equal(dry.status, 'READY');
+        if (dry.status !== 'READY') return;
+        const signed = captured.request;
+        assert.ok(signed);
+        assert.equal(dry.principals.delegation, 'GATE_EIP712_PER_EXECUTION');
+        assert.equal(dry.principals.domainSettlement.kind, 'WALLET_GATE_EIP712');
+        assert.equal(dry.principals.domainSettlement.address, wallet);
+        assert.equal(dry.outcome.wouldSend.principal, wallet);
+        assert.equal(dry.outcome.wouldSend.recipient, wallet);
+        assert.equal(dry.outcome.wouldSend.mandateDigest, signed.mandateDigest);
+        assert.equal(dry.outcome.signatures, 1);
+        assert.equal(rpc.broadcasts, 0);
+        const text = JSON.stringify(world.session.events.events).toLowerCase();
+        for (const k of [...ALL_TEST_KEYS, OTHER_KEY.replace(/^0x/, '').toLowerCase()]) assert.equal(text.includes(k), false);
+
+        const gate = new SendGate();
+        assert.equal(gate.authorize('AUTHORIZE ROBINHOOD TESTNET SEND'), true);
+        const sent = await settleSpine({
+          session: world.session,
+          journal: world.journal,
+          deployment: world.deployment,
+          rpc,
+          keys: KEYS,
+          mode: 'SEND',
+          gate,
+          ledgerPath: world.ledger('send.db'),
+          resolveGateExecution: (req) => signGate(req, OTHER_KEY),
+        });
+        assert.equal(sent.status, 'SENT');
+        if (sent.status !== 'SENT') return;
+        assert.equal(sent.outcome.status, 'CONFIRMED');
+        if (sent.outcome.status !== 'CONFIRMED') return;
+        assert.equal(sent.outcome.evidence, 'REFERENCE_MODEL');
+        assert.equal(sent.outcome.wouldSend.principal, wallet);
+        assert.equal(sent.principals.delegation, 'GATE_EIP712_PER_EXECUTION');
+        assert.equal(rpc.broadcasts, 1);
       } finally {
         world.close();
       }
@@ -170,7 +275,7 @@ describe('V2 authority spine settlement', () => {
       await v2Session(dir, PRINCIPAL_KEY, 'lab-spine-reasons');
       const session = await LiveSession.restore(dir, 'lab-spine-reasons', { ...TIMEOUTS, by: 'spine-test', clock: new ManualClock() });
       try {
-        const base = factsOf(session, PRINCIPAL);
+        const base = factsOf(session);
         assert.equal(reverifySpine(base).ok, true);
         assert.equal(reverifySpine({ ...base, authorization: { ...base.authorization, method: 'DEMO_PRINCIPAL_KEY' } }).ok, false);
         assert.equal((reverifySpine({ ...base, authorization: { ...base.authorization, method: 'DEMO_PRINCIPAL_KEY' } }) as { reason: string }).reason, 'SPINE_METHOD_REQUIRED');
@@ -179,7 +284,6 @@ describe('V2 authority spine settlement', () => {
         assert.equal((reverifySpine({ ...base, signature: `0x${'ab'.repeat(65)}` }) as { reason: string }).reason, 'SPINE_SIGNATURE_INVALID');
         assert.equal((reverifySpine({ ...base, now: base.mandate.expiresAt }) as { reason: string }).reason, 'SPINE_EXPIRED');
         assert.equal((reverifySpine({ ...base, chainId: 1n }) as { reason: string }).reason, 'SPINE_CHAIN_MISMATCH');
-        assert.equal((reverifySpine({ ...base, domainPrincipal: addressOfKey(OTHER_KEY) }) as { reason: string }).reason, 'CUSTODY_PRINCIPAL_MISMATCH');
         const active = session.versions.active;
         assert.ok(active);
         const mandate = { ...active.mandate, principal: { ...active.mandate.principal, value: addressOfKey(OTHER_KEY) } } as PortfolioMandate;

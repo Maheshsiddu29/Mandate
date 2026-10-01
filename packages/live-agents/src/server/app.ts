@@ -223,7 +223,7 @@ export class LiveLab {
       principalAuthorization: {
         methods: ['WALLET_EIP712', 'DEMO_PRINCIPAL_KEY', 'WALLET_PRINCIPAL_V2'],
         wallet: { chainId: APPROVAL_CHAIN_ID, environment: APPROVAL_ENVIRONMENT, domain: { name: APPROVAL_DOMAIN.name, version: APPROVAL_DOMAIN.version }, delegatesDomainExecution: false },
-        spine: { method: 'WALLET_PRINCIPAL_V2', request: { spine: 'V2' }, domain: { name: 'Mandate', version: '2', chainId: APPROVAL_CHAIN_ID }, principalIsWallet: true, domainExecution: 'SAME_PRINCIPAL_ONLY' },
+        spine: { method: 'WALLET_PRINCIPAL_V2', request: { spine: 'V2' }, domain: { name: 'Mandate', version: '2', chainId: APPROVAL_CHAIN_ID }, principalIsWallet: true, domainExecution: 'PER_EXECUTION_GATE_EIP712' },
       },
       roles: ROLES.map((r) => ({ role: r, label: ROLE_LABELS[r], domain: AGENT_DOMAINS[r], objective: DOMAIN_AGENTS[r].objective, candidates: DOMAIN_AGENTS[r].candidates.map((c) => ({ id: c.id, title: c.title })) })),
       catalog: Object.fromEntries(CATALOG_SETS.map((s) => [s, CATALOG[s].map((e) => ({ id: e.id, label: e.label }))])),

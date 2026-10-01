@@ -10,8 +10,11 @@
  * PortfolioMandateV2 signature, then dry-runs the reserved Stock child.
  * `--send` continues that same journal and broadcasts one transaction only
  * after the operator types the existing phrase. A demonstration-key session
- * is refused. A wallet that is not the manifest principal is refused before
- * any key is used.
+ * is refused. A wallet that is not the manifest principal must sign
+ * `MandateAuthorization` for the gate mandate this run derives (stdin, one
+ * line, the 65-byte signature). That signature is not the portfolio
+ * signature. The manifest principal key is not used for that wallet.
+ * `--send` asks again: the send builds a new mandate digest.
  *
  * Keys: the gitignored 7E.3 disposable testnet keys. They must already be
  * the manifest parties. No key is printed. RPC: ROBINHOOD_TESTNET_RPC_URL or
@@ -20,7 +23,8 @@
  * Exit codes: 0 READY, reconciled only, or a confirmed send; 1 usage or
  * configuration; 3 no such session, or corrupt records; 4 not eligible;
  * 5 dry run did not reach READY; 6 the send phrase was refused; 7 a
- * transaction was submitted but is not a confirmed settlement.
+ * transaction was submitted but is not a confirmed settlement; 8 the wallet
+ * must sign the gate mandate and no signature was provided.
  */
 
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -30,6 +34,7 @@ import { parseArgs } from 'node:util';
 import { LiveSession, readConfig, renderEvent, sessionDir, type LiveEvent } from '@mandate/live-agents';
 import { loadKeys, MANIFEST_PATH } from '../../evm-robinhood/scripts/lib.ts';
 import { RobinhoodTestnetRpc, SEND_AUTHORIZATION_PHRASE, SendGate, SettlementJournal, parseDeployment } from '../src/index.ts';
+import type { GateExecutionRequest } from '../src/gate-authority.ts';
 import { settleSpine } from '../src/spine-settlement.ts';
 import { readAuthorizationLine } from './authorization-input.ts';
 import { readRpcConfig } from './rpc-config.ts';
@@ -85,14 +90,32 @@ const rpc = new RobinhoodTestnetRpc(keys.deployer.privateKey, d.gate.address, en
 const domainKeys = { principal: keys.principal.privateKey, agent: keys.agent.privateKey };
 const scratch = mkdtempSync(join(tmpdir(), 'mandate-spine-dry-'));
 let code = 0;
+/** Prints the typed data, then reads one signature line. Does not read a key. */
+const resolveGateExecution = async (req: GateExecutionRequest): Promise<string | null> => {
+  const body = { gateExecution: req };
+  if (values.json) out(JSON.stringify(body));
+  else {
+    say(`\n=== GATE EXECUTION AUTHORITY ===`);
+    say(`Wallet ${req.principal} must sign MandateAuthorization.`);
+    say(`mandate ${req.mandateDigest}`);
+    say(`signing hash ${req.signingHash}`);
+    say(req.note);
+    say(show(req.typedData));
+    say(`\nPaste the 65-byte signature (0x and 130 hex characters) within ${timeoutSeconds} s. Anything else, including a private key, is not a signature and sends nothing.`);
+  }
+  const input = await readAuthorizationLine(process.stdin, timeoutSeconds * 1_000);
+  if (input.kind !== 'LINE') return null;
+  const line = input.line.trim();
+  return line === '' ? null : line;
+};
 try {
-  const dry = await settleSpine({ session, journal, deployment: d, rpc, keys: domainKeys, mode: 'DRY_RUN', gate: new SendGate(), ledgerPath: join(scratch, 'domain-ledger.db') });
+  const dry = await settleSpine({ session, journal, deployment: d, rpc, keys: domainKeys, mode: 'DRY_RUN', gate: new SendGate(), ledgerPath: join(scratch, 'domain-ledger.db'), resolveGateExecution });
   for (const rep of dry.reports) say(`reconciled ${rep.reservation.slice(0, 12)}… ${rep.from} → ${rep.to} · ${rep.outcome}${rep.detail === '' ? '' : ` · ${rep.detail}`}`);
   if (dry.status === 'RECONCILED_ONLY') {
     say(`\nThe reservation's attempt is ${dry.attempt.state}${dry.attempt.quarantine === null ? '' : ` (${dry.attempt.quarantine})`}: reconciliation only; nothing is resent.`);
   } else if (dry.status === 'INELIGIBLE') {
     say(`\nNot eligible (${dry.stage}: ${dry.reason}). Nothing was signed for broadcast or sent.`);
-    code = 4;
+    code = dry.reason === 'GATE_EXECUTION_AUTHORITY_REQUIRED' ? 8 : 4;
   } else if (dry.status === 'NOT_READY') {
     say(`\nThe dry run did not reach READY: ${show(dry.outcome)}\nNothing was broadcast.`);
     code = 5;
@@ -112,7 +135,7 @@ try {
       say('Not authorized. Nothing was broadcast.');
       code = 6;
     } else {
-      const sent = await settleSpine({ session, journal, deployment: d, rpc, keys: domainKeys, mode: 'SEND', gate, ledgerPath: join(sessionDir(config.stateDir, session.id), 'domain-ledger.db') });
+      const sent = await settleSpine({ session, journal, deployment: d, rpc, keys: domainKeys, mode: 'SEND', gate, ledgerPath: join(sessionDir(config.stateDir, session.id), 'domain-ledger.db'), resolveGateExecution });
       if (sent.status === 'SENT' && sent.outcome.status === 'CONFIRMED') {
         say(`\n=== SETTLEMENT ===\n${show(sent.outcome)}`);
         code = sent.outcome.evidence === 'LIVE_TESTNET' ? 0 : 7;
@@ -120,7 +143,7 @@ try {
         say(`\nThe reservation's attempt is ${sent.attempt.state}: reconciliation only; nothing is resent.`);
       } else if (sent.status === 'INELIGIBLE') {
         say(`\nNot eligible (${sent.stage}: ${sent.reason}). Nothing further was sent.`);
-        code = 4;
+        code = sent.reason === 'GATE_EXECUTION_AUTHORITY_REQUIRED' ? 8 : 4;
       } else {
         say(`\n=== SETTLEMENT ===\n${show(sent.status === 'SENT' || sent.status === 'NOT_READY' ? sent.outcome : sent)}`);
         code = 7;
