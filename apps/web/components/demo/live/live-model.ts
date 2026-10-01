@@ -28,6 +28,38 @@ export const ACTIVITY: Record<RoleName, string> = {
   perps: "Evaluating bounded exposure…",
 };
 
+const REASON_LABELS: Readonly<Record<string, string>> = {
+  VENUE_NOT_ALLOWED: "Venue not allowed",
+  RECIPIENT_NOT_ALLOWED: "Recipient not allowed",
+  ASSET_NOT_ALLOWED: "Asset not allowed",
+  REPRESENTATION_NOT_ALLOWED: "Representation not allowed",
+  ISSUER_NOT_ALLOWED: "Issuer not allowed",
+  INSTRUMENT_UNKNOWN: "Unknown instrument",
+  SYNTHETIC_NOT_ALLOWED: "Synthetic exposure not allowed",
+  PORTFOLIO_LIMIT_EXCEEDED: "Portfolio limit exceeded",
+  AGENT_LIMIT_EXCEEDED: "Agent limit exceeded",
+  ALLOCATION_INSUFFICIENT: "Insufficient authority",
+};
+
+const RESOURCE_LABELS: Readonly<Record<string, string>> = {
+  "portfolio-notional": "Portfolio capital",
+  "derivative-notional": "Derivative exposure",
+  "illiquid-notional": "Illiquid exposure",
+  "spot-capital": "Stock spot capital",
+  "perp-margin": "Perpetual margin",
+};
+
+/** Web-only copy. Protocol reason codes remain unchanged and available in details. */
+export function reasonLabel(reason: string): string {
+  const exact = reason.split(":")[0] ?? reason;
+  return REASON_LABELS[exact] ?? exact.toLowerCase().replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());
+}
+
+/** Web-only label for one typed resource. Typed resources are never combined. */
+export function resourceLabel(resource: string): string {
+  return RESOURCE_LABELS[resource] ?? resource;
+}
+
 const HARD_BLOCK = new Set([
   "VENUE_NOT_ALLOWED",
   "RECIPIENT_NOT_ALLOWED",
@@ -84,6 +116,19 @@ export interface RoomView {
   readonly noFeasible: boolean;
   readonly lines: readonly ResourceLine[];
   readonly notes: readonly { readonly sequence: number; readonly agent: string | null; readonly text: string }[];
+  readonly activity: readonly RoomActivity[];
+  readonly reserved: string | null;
+}
+
+export interface RoomActivity {
+  readonly sequence: number;
+  readonly agent: string | null;
+  readonly generation: number | null;
+  readonly action: string;
+  readonly from: string;
+  readonly to: string;
+  readonly rationale: string;
+  readonly state: "MESSAGE" | "TIMEOUT" | "IGNORED" | "SYSTEM";
 }
 
 export interface StressAttempt {
@@ -129,6 +174,23 @@ export interface LivePresentation {
   readonly paused: boolean;
   readonly amendmentRefused: string | null;
   readonly reverifySeen: boolean;
+}
+
+export interface EventGroup {
+  readonly elapsedMs: number;
+  readonly at: string;
+  readonly events: readonly LiveEvent[];
+}
+
+/** Equal authoritative times are grouped, never altered or randomized. */
+export function groupEventsByElapsed(events: readonly LiveEvent[]): EventGroup[] {
+  const groups: { elapsedMs: number; at: string; events: LiveEvent[] }[] = [];
+  for (const event of events) {
+    const last = groups.at(-1);
+    if (last !== undefined && last.elapsedMs === event.elapsedMs) last.events.push(event);
+    else groups.push({ elapsedMs: event.elapsedMs, at: event.at, events: [event] });
+  }
+  return groups;
 }
 
 function blank(role: RoleName): AgentCard {
@@ -307,7 +369,7 @@ export function deriveAgents(events: readonly LiveEvent[], timing: readonly Json
         cards.set(role, {
           ...card,
           phase: "RESPONDED",
-          candidate: str(data.candidateId),
+          candidate: str(data.candidate) === "—" ? str(data.candidateId) : str(data.candidate),
           requested: amount(data.requested),
           rationale: str(data.rationale) === "—" ? "" : str(data.rationale),
           providerMs: num(data.providerLatencyMs),
@@ -389,7 +451,9 @@ export function deriveRoom(events: readonly LiveEvent[]): RoomView {
   let refused = false;
   let noFeasible = false;
   let open = false;
+  let reserved: string | null = null;
   const notes: { sequence: number; agent: string | null; text: string }[] = [];
+  const activity: RoomActivity[] = [];
   for (const event of events) {
     if (event.kind === "ROOM_OPENED") {
       open = true;
@@ -403,15 +467,39 @@ export function deriveRoom(events: readonly LiveEvent[]): RoomView {
       refused = false;
     }
     if (event.kind === "MANDATE_REVERIFY_STARTED") reverify = true;
-    if (event.kind === "PORTFOLIO_AUTHORIZED") authorized = true;
+    if (event.kind === "PORTFOLIO_AUTHORIZED") {
+      authorized = true;
+      reserved = amount(event.data.reserved) === "—" ? null : amount(event.data.reserved);
+    }
     if (event.kind === "PORTFOLIO_REFUSED") refused = true;
     if (event.kind === "ROOM_NO_FEASIBLE_PORTFOLIO") noFeasible = true;
     if (event.kind === "ROOM_AGENT_STALE_RESPONSE" || event.kind === "ROOM_AGENT_TIMEOUT" || event.kind === "ROOM_NO_FEASIBLE_PORTFOLIO") {
       const label = event.kind === "ROOM_AGENT_STALE_RESPONSE" ? (event.data.reason === "ANSWERED_AFTER_TIMEOUT" ? "LATE — IGNORED" : "STALE — IGNORED") : event.kind === "ROOM_AGENT_TIMEOUT" ? "TIMED OUT · no allocation change" : "NO FEASIBLE PORTFOLIO";
       notes.push({ sequence: event.sequence, agent: event.agent, text: label });
     }
+    if (event.kind === "ROOM_AGENT_RESPONSE") {
+      activity.push({
+        sequence: event.sequence,
+        agent: event.agent,
+        generation: event.generation,
+        action: str(event.data.action),
+        from: amount(event.data.from),
+        to: amount(event.data.to),
+        rationale: str(event.data.rationale) === "—" ? "" : str(event.data.rationale),
+        state: "MESSAGE",
+      });
+    }
+    if (event.kind === "ROOM_AGENT_TIMEOUT") {
+      activity.push({ sequence: event.sequence, agent: event.agent, generation: event.generation, action: "TIMED OUT", from: "—", to: "—", rationale: "No allocation change recorded.", state: "TIMEOUT" });
+    }
+    if (event.kind === "ROOM_AGENT_STALE_RESPONSE") {
+      activity.push({ sequence: event.sequence, agent: event.agent, generation: event.generation, action: event.data.reason === "ANSWERED_AFTER_TIMEOUT" ? "LATE — IGNORED" : "STALE — IGNORED", from: "—", to: "—", rationale: "The Room had already moved on. The portfolio did not change.", state: "IGNORED" });
+    }
+    if (event.kind === "MANDATE_REVERIFY_STARTED") {
+      activity.push({ sequence: event.sequence, agent: null, generation: event.generation, action: "RE-VERIFYING", from: "—", to: "—", rationale: "Checking the negotiated portfolio against the principal's authority.", state: "SYSTEM" });
+    }
   }
-  return { open, roomId, generation, proposal, reverify, authorized, refused, noFeasible, lines: resourceLines(events), notes };
+  return { open, roomId, generation, proposal, reverify, authorized, refused, noFeasible, lines: resourceLines(events), notes, activity, reserved };
 }
 
 export function deriveStress(events: readonly LiveEvent[]): { started: boolean; attempts: StressAttempt[]; ended: string } {
