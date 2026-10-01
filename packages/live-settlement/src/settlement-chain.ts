@@ -72,12 +72,13 @@ export interface DomainAuthorizationRef {
 }
 
 /** Why `call` is not exactly the fixture settlement's call, or `null`. */
-export function checkCall(call: GateCall, s: FixtureSettlement, d: TestnetDeployment, authorization: DomainAuthorizationRef, chainNow: bigint): string | null {
+export function checkCall(call: GateCall, s: FixtureSettlement, d: TestnetDeployment, authorization: DomainAuthorizationRef, chainNow: bigint, authorizedRecipient?: string): string | null {
   const a = call.attempt;
   if (!call.calldata.startsWith(EXECUTE_SELECTOR)) return 'SELECTOR_NOT_EXECUTE';
   if (call.calldata !== executeCalldata(a.mandate, a.principalSignature, a.candidate, a.terms, a.agentSignature)) return 'CALLDATA_NOT_THE_ATTEMPT';
   if (s.gate !== d.gate.address || s.chainId !== ROBINHOOD_TESTNET) return 'TARGET_NOT_MANIFEST_GATE';
-  if (a.terms.recipient !== s.recipient || a.mandate.principal !== s.recipient || s.recipient !== d.principal) return 'RECIPIENT_MISMATCH';
+  // The debited address is the deployment principal unless this call is the V2 wallet's own gate mandate.
+  if (a.terms.recipient !== s.recipient || a.mandate.principal !== s.recipient || s.recipient !== (authorizedRecipient ?? d.principal)) return 'RECIPIENT_MISMATCH';
   if (a.mandate.agent !== s.agent || a.candidate.agent !== s.agent) return 'AGENT_MISMATCH';
   if (a.candidate.representationId !== fixtureRepresentationId(s) || s.tokenOut !== d.mdemo.address || s.tokenIn !== d.mdusd.address) return 'TOKEN_MISMATCH';
   if (a.candidate.registrySnapshotDigest !== reviewedMarketDigest(d.reviewed, d.market)) return 'MARKET_NOT_REVIEWED';
@@ -100,14 +101,17 @@ export class SettlementGateChain implements GateChain {
   #simulated: { readonly calldata: string; readonly gas: bigint } | null = null;
   #prepared: PreparedTx | null = null;
   #broadcasts = 0;
+  /** When set, the only recipient this chain will simulate. Otherwise the deployment principal. */
+  readonly #authorizedRecipient: string | undefined;
 
-  constructor(rpc: TestnetRpc, s: FixtureSettlement, d: TestnetDeployment, mode: SettlementMode, gate: SendGate, hooks: SubmissionHooks) {
+  constructor(rpc: TestnetRpc, s: FixtureSettlement, d: TestnetDeployment, mode: SettlementMode, gate: SendGate, hooks: SubmissionHooks, authorizedRecipient?: string) {
     this.#rpc = rpc;
     this.#s = s;
     this.#d = d;
     this.#mode = mode;
     this.#gate = gate;
     this.#hooks = hooks;
+    this.#authorizedRecipient = authorizedRecipient;
   }
 
   /** The domain authorization this chain serves calls for; set once, before issuance. */
@@ -162,7 +166,7 @@ export class SettlementGateChain implements GateChain {
     if (this.#authorization === null) return fail('CHAIN_NOT_BOUND');
     const now = await this.#rpc.latest();
     if (!now.ok) return fail(`CHAIN_TIME_UNREADABLE.${now.error}`);
-    const bad = checkCall(call, this.#s, this.#d, this.#authorization, now.value.timestamp);
+    const bad = checkCall(call, this.#s, this.#d, this.#authorization, now.value.timestamp, this.#authorizedRecipient);
     if (bad !== null) return fail(`CALL_NOT_BOUND.${bad}`);
     const id = await this.#rpc.chainId();
     if (!id.ok || id.value !== ROBINHOOD_TESTNET) return fail(id.ok ? `WRONG_CHAIN.${id.value}` : `CHAIN_ID_UNREADABLE.${id.error}`);

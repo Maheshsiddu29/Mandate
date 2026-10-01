@@ -11,10 +11,11 @@
  *   ─▶ simulate: exact-call check, journal the artifact, eth_call, estimateGas
  *        DRY_RUN: stop — nothing is broadcast
  *        SEND:    only through an open SendGate, only with a durable journal. A B.5.3 wallet approval
- *                 never sends. V2 sends only after reverifySpine accepts the wallet as this deployment's
- *                 principal ─▶ journal hash + envelope ─▶ one broadcast ─▶ journal SUBMITTED ─▶ receipt
- *                 ─▶ journal CONFIRMED_* ─▶ postconditions ─▶ journal SETTLED ─▶ portfolio CONSUME + CLOSE
- *                 ─▶ journal CONSUMED
+ *                 never sends. V2 sends only after reverifySpine accepts the wallet. When that wallet
+ *                 is not the manifest principal, it must also present a per-execution gate EIP-712
+ *                 (gate-authority.ts); the manifest principal key is not used. Then journal hash +
+ *                 envelope ─▶ one broadcast ─▶ journal SUBMITTED ─▶ receipt ─▶ journal CONFIRMED_*
+ *                 ─▶ postconditions ─▶ journal SETTLED ─▶ portfolio CONSUME + CLOSE ─▶ journal CONSUMED
  * ```
  *
  * The journal (journal.ts) is written ahead of every point where something
@@ -45,6 +46,7 @@ import { admitSettlement, admittedFor, consumeReservation } from './portfolio-le
 import { preflight, type PreflightReport } from './preflight.ts';
 import type { ChainReader, TestnetRpc } from './rpc.ts';
 import { SEND_AUTHORIZATION_PHRASE, type SendGate } from './send-gate.ts';
+import { acceptGateExecution, describeGateExecution, type GateExecutionRequest } from './gate-authority.ts';
 import { reverifySpine } from './spine.ts';
 import { DRY_RUN_HALT, SEND_NOT_AUTHORIZED, SettlementGateChain, type SettlementMode, type SimulationRecord } from './settlement-chain.ts';
 
@@ -149,30 +151,44 @@ export interface RunOptions {
   readonly journal?: SettlementJournal;
   /** Crash tests: called at each fault point. */
   readonly fault?: (p: FaultPoint) => void;
+  /**
+   * Opt-in for a V2 wallet that is not the manifest principal. Absent, that
+   * wallet is `CUSTODY_PRINCIPAL_MISMATCH` and the manifest key is not used.
+   * The B.5.2 and B.5.3 commands leave this unset.
+   */
+  readonly gateExecution?: 'WALLET_EIP712';
+  /**
+   * Called once the gate mandate exists, before any principal signature is
+   * attached. Return the wallet's `MandateAuthorization` signature, or null
+   * to stop. Not called when the manifest key signs.
+   */
+  readonly resolveGateExecution?: (request: GateExecutionRequest) => Promise<string | null> | string | null;
 }
 
 /** Who authorized what, as every settlement event states it. */
 export interface PrincipalBinding {
   readonly portfolio: { readonly method: string; readonly address: string };
   readonly protocolSigner: string;
-  readonly domainSettlement: { readonly kind: 'TESTNET_FIXTURE_CUSTODY' | 'SAME_PRINCIPAL'; readonly address: string };
-  readonly delegation: 'NOT_DELEGATED' | 'SAME_PRINCIPAL';
+  readonly domainSettlement: { readonly kind: 'TESTNET_FIXTURE_CUSTODY' | 'SAME_PRINCIPAL' | 'WALLET_GATE_EIP712'; readonly address: string };
+  readonly delegation: 'NOT_DELEGATED' | 'SAME_PRINCIPAL' | 'GATE_EIP712_PER_EXECUTION';
 }
 
 /**
- * V2 is `SAME_PRINCIPAL` only when the wallet, the protocol signer and the
- * deployment principal are the same address. Every other authorization,
- * including a V2 wallet that is not that address, stays
+ * V2 is `SAME_PRINCIPAL` when the wallet is the deployment principal: the
+ * gitignored key is that address and signs the gate mandate.
+ * `WALLET_GATE_EIP712` is a V2 wallet that is not that address: each
+ * execution needs that wallet's own `MandateAuthorization`. The portfolio
+ * signature is not that signature. Every other authorization stays
  * `TESTNET_FIXTURE_CUSTODY` / `NOT_DELEGATED`.
  */
-export function principalBinding(a: PrincipalAuthorization | undefined, d: TestnetDeployment): PrincipalBinding {
-  const same = a?.method === 'WALLET_PRINCIPAL_V2' && a.domainDelegation === 'SAME_PRINCIPAL' && a.protocolSigner.toLowerCase() === a.principal.toLowerCase() && a.principal.toLowerCase() === d.principal.toLowerCase();
-  return {
-    portfolio: { method: a?.method ?? 'UNKNOWN', address: a?.principal ?? 'UNKNOWN' },
-    protocolSigner: a?.protocolSigner ?? 'UNKNOWN',
-    domainSettlement: same ? { kind: 'SAME_PRINCIPAL', address: d.principal } : { kind: 'TESTNET_FIXTURE_CUSTODY', address: d.principal },
-    delegation: same ? 'SAME_PRINCIPAL' : 'NOT_DELEGATED',
-  };
+export function principalBinding(a: PrincipalAuthorization | undefined, d: TestnetDeployment, gateExecution?: 'WALLET_EIP712'): PrincipalBinding {
+  const portfolio = { method: a?.method ?? 'UNKNOWN', address: a?.principal ?? 'UNKNOWN' };
+  const protocolSigner = a?.protocolSigner ?? 'UNKNOWN';
+  if (a?.method === 'WALLET_PRINCIPAL_V2' && a.domainDelegation === 'SAME_PRINCIPAL' && a.protocolSigner.toLowerCase() === a.principal.toLowerCase()) {
+    if (a.principal.toLowerCase() === d.principal.toLowerCase()) return { portfolio, protocolSigner, domainSettlement: { kind: 'SAME_PRINCIPAL', address: d.principal }, delegation: 'SAME_PRINCIPAL' };
+    if (gateExecution === 'WALLET_EIP712') return { portfolio, protocolSigner, domainSettlement: { kind: 'WALLET_GATE_EIP712', address: a.principal }, delegation: 'GATE_EIP712_PER_EXECUTION' };
+  }
+  return { portfolio, protocolSigner, domainSettlement: { kind: 'TESTNET_FIXTURE_CUSTODY', address: d.principal }, delegation: 'NOT_DELEGATED' };
 }
 
 /** Each lifecycle event of a send is appended at most once per reservation, however often it is reconciled. */
@@ -213,8 +229,13 @@ export class LiveSettlement {
     return checkEligibility(view, x);
   }
 
-  /** Select, check and map. Emits `DOMAIN_EXECUTION_INELIGIBLE` and returns `null` when there is nothing to settle. */
-  async prepare(): Promise<Prepared | { readonly ineligible: string; readonly stage: string }> {
+  /**
+   * Select, check and map. Emits `DOMAIN_EXECUTION_INELIGIBLE` and returns
+   * `null` when there is nothing to settle. `executionPrincipal` is the V2
+   * wallet when it is not the deployment principal; omitted, the recipient
+   * stays the deployment principal.
+   */
+  async prepare(executionPrincipal?: string): Promise<Prepared | { readonly ineligible: string; readonly stage: string }> {
     const sel = selectStockExecution(this.#env.session.reservedExecutions);
     const refuse = (stage: string, reason: string, extra: { readonly [k: string]: unknown } = {}) => {
       this.#emit('DOMAIN_EXECUTION_INELIGIBLE', { stage, reason, transactions: 0, ...extra });
@@ -223,7 +244,7 @@ export class LiveSettlement {
     if (!sel.ok) return refuse('SELECT', sel.reason);
     const x = sel.execution;
     await this.#refresh(x.version);
-    const m = mapToFixture(x, this.#env.deployment);
+    const m = executionPrincipal === undefined ? mapToFixture(x, this.#env.deployment) : mapToFixture(x, this.#env.deployment, executionPrincipal);
     if (!m.ok) return refuse('FIXTURE', m.reason, { proposal: x.proposal });
     // An attempt this settlement admitted (an earlier dry run, or a crash) is its own: eligibility accepts that one only.
     const e = this.#eligibility(x, m.value.bindingDigest);
@@ -232,9 +253,9 @@ export class LiveSettlement {
   }
 
   /** The preflight report for a prepared settlement, emitted as TESTNET_PREFLIGHT_*. */
-  async preflight(p: Prepared | null): Promise<PreflightReport> {
+  async preflight(p: Prepared | null, fundingPrincipal?: string): Promise<PreflightReport> {
     this.#emit('TESTNET_PREFLIGHT_STARTED', { network: this.#env.deployment.networkName, expectedChainId: this.#env.deployment.chainId });
-    const r = await preflight(this.#env.rpc, this.#env.deployment, p === null ? null : { debit: p.settlement.debit, quantity: p.settlement.quantity });
+    const r = await preflight(this.#env.rpc, this.#env.deployment, p === null ? null : { debit: p.settlement.debit, quantity: p.settlement.quantity }, fundingPrincipal);
     this.#emit(r.ok ? 'TESTNET_PREFLIGHT_PASSED' : 'TESTNET_PREFLIGHT_FAILED', { ...r });
     return r;
   }
@@ -247,7 +268,7 @@ export class LiveSettlement {
       to: s.gate,
       function: 'MandateExecutionGate.execute',
       from: this.#env.rpc.submitter,
-      principal: d.principal,
+      principal: s.recipient,
       agent: d.agent,
       recipient: s.recipient,
       tokenIn: { symbol: 'MDUSD', address: s.tokenIn, atoms: s.debit.toString(), amount: decimal(s.debit, MDUSD_DECIMALS) },
@@ -272,8 +293,8 @@ export class LiveSettlement {
     const j = o.journal ?? null;
     const fault = (f: FaultPoint) => o.fault?.(f);
     const authorization = session.versions.records.find((r) => r.version === x.version)?.authorization;
-    const principals = principalBinding(authorization, d);
-    const ids = { proposal: x.proposal, candidate: x.candidateDigest, child: x.child, reservation: x.reservation, receiptDigest: x.receiptDigest, bindingDigest: s.bindingDigest, fixture: TESTNET_SETTLEMENT_FIXTURE.id, mode: o.mode, sessionId: session.id, principals };
+    let principals = principalBinding(authorization, d);
+    let ids = { proposal: x.proposal, candidate: x.candidateDigest, child: x.child, reservation: x.reservation, receiptDigest: x.receiptDigest, bindingDigest: s.bindingDigest, fixture: TESTNET_SETTLEMENT_FIXTURE.id, mode: o.mode, sessionId: session.id, principals };
     const ineligible = (stage: string, reason: string): SettlementOutcome => {
       this.#emit('DOMAIN_EXECUTION_INELIGIBLE', { ...ids, stage, reason, transactions: 0 });
       return { status: 'INELIGIBLE', stage, reason, signatures: 0, broadcasts: 0 };
@@ -281,7 +302,7 @@ export class LiveSettlement {
     if (o.mode === 'SEND') {
       if (this.#submitted) return ineligible('SEND_GATE', 'ALREADY_SUBMITTED_IN_THIS_SESSION');
       if (j === null) return ineligible('JOURNAL', 'DURABLE_JOURNAL_REQUIRED_FOR_SEND');
-      // B.5.3 wallet approvals do not delegate domain execution. V2 may send only after reverifySpine, below, accepts this wallet as the deployment principal.
+      // B.5.3 wallet approvals do not delegate domain execution. V2 may send only after reverifySpine, below. A wallet that is not the manifest principal must also present a gate signature.
       if (authorization?.method !== 'DEMO_PRINCIPAL_KEY' && authorization?.method !== 'WALLET_PRINCIPAL_V2') return ineligible('PRINCIPAL', 'WALLET_PRINCIPAL_NOT_DELEGATED_TO_DOMAIN');
       if (o.gate.state !== 'AUTHORIZED') {
         this.#emit('TESTNET_SEND_AUTHORIZATION_REFUSED', { ...ids, required: SEND_AUTHORIZATION_PHRASE, transactions: 0 });
@@ -305,17 +326,26 @@ export class LiveSettlement {
     // The portfolio ledger holds an attempt this journal never recorded: whoever made it may have signed. Reconcile, never send.
     if (o.mode === 'SEND' && existing === null && this.#ledger !== null && admittedFor(this.#ledger, x.reservation) !== null) return ineligible('JOURNAL', 'PORTFOLIO_ATTEMPT_WITHOUT_JOURNAL_RECORD');
     // The settlement must be exactly the fixture's derivation from this execution: nothing is taken on trust, nothing rebuilt.
-    const again = mapToFixture(x, d);
+    const again = mapToFixture(x, d, s.recipient);
     if (!again.ok || again.value.bindingDigest !== s.bindingDigest || settlementBindingDigest(s) !== s.bindingDigest || again.value.actionNonce !== s.actionNonce) return ineligible('FIXTURE', 'SETTLEMENT_NOT_DERIVED_FROM_EXECUTION');
 
     // V2 is re-checked before the journal is written and before any key is used. A failure never falls through to the demonstration signer.
     let boundPrincipal: string | undefined;
+    let presented = false;
     if (authorization?.method === 'WALLET_PRINCIPAL_V2') {
       const held = session.versions.coreOf(x.version);
       if (held === null) return ineligible('PRINCIPAL', 'VERSION_UNKNOWN');
-      const check = reverifySpine({ mandate: held.mandate, signature: held.signature, authorization, sessionId: session.id, chainId: d.chainId, domainPrincipal: d.principal, now: session.protocolNow() });
+      const check = reverifySpine({ mandate: held.mandate, signature: held.signature, authorization, sessionId: session.id, chainId: d.chainId, now: session.protocolNow() });
       if (!check.ok) return ineligible('PRINCIPAL', check.reason);
+      presented = check.principal.toLowerCase() !== d.principal.toLowerCase();
+      // B.5.2 and B.5.3 do not opt in: a different wallet stays a custody mismatch, and the manifest key is not used.
+      if (presented && o.gateExecution !== 'WALLET_EIP712') return ineligible('PRINCIPAL', 'CUSTODY_PRINCIPAL_MISMATCH');
+      if (presented && s.recipient.toLowerCase() !== check.principal.toLowerCase()) return ineligible('GATE_AUTHORITY', 'GATE_EXECUTION_RECIPIENT_MISMATCH');
       boundPrincipal = check.principal;
+      if (presented) {
+        principals = principalBinding(authorization, d, 'WALLET_EIP712');
+        ids = { ...ids, principals };
+      }
     }
 
     if (j !== null) {
@@ -334,7 +364,7 @@ export class LiveSettlement {
     fault('AFTER_PORTFOLIO_ATTEMPT');
     this.#emit('SETTLEMENT_ATTEMPT_PREPARED', { ...ids, portfolioAttempt: admitted.fresh ? 'ADMITTED' : 'EXISTING', journal: j === null ? 'NONE' : 'PREPARED', note: 'The portfolio ledger now records one settlement attempt for this reservation: no second, independent attempt can be admitted.' });
 
-    const pre = await this.preflight(p);
+    const pre = await this.preflight(p, presented ? boundPrincipal : undefined);
     if (!pre.ok) return { status: 'PREFLIGHT_FAILED', preflight: pre, signatures: 0, broadcasts: 0 };
 
     // Filled by the chain's hooks while the signer runs.
@@ -374,7 +404,7 @@ export class LiveSettlement {
           fault('AFTER_SUBMITTED');
         }
       },
-    });
+    }, presented ? boundPrincipal : undefined);
 
     const block = await rpc.latest();
     if (!block.ok) return ineligible('DOMAIN', `CHAIN_TIME_UNREADABLE.${block.error}`);
@@ -390,10 +420,32 @@ export class LiveSettlement {
     if (!opened.ok) return ineligible(opened.stage, opened.reason);
     const leg = opened.leg;
     try {
+      if (presented) {
+        const described = describeGateExecution({
+          record: leg.record,
+          state: leg.store.readCommitted(leg.principalId).state,
+          gate: d.reviewed,
+          market: s.market,
+          principal: s.recipient,
+          agent: s.agent,
+          quantity: s.quantity,
+          domainSeparator: d.gate.domainSeparator,
+        });
+        if (!described.ok) return ineligible('GATE_AUTHORITY', described.reason);
+        const supplied = (await o.resolveGateExecution?.(described.value)) ?? null;
+        const verdict = acceptGateExecution(described.value, supplied, boundPrincipal ?? '');
+        if (!verdict.ok) {
+          this.#emit('DOMAIN_EXECUTION_INELIGIBLE', { ...ids, stage: 'GATE_AUTHORITY', reason: verdict.reason, transactions: 0, gateExecution: described.value });
+          return { status: 'INELIGIBLE', stage: 'GATE_AUTHORITY', reason: verdict.reason, signatures: 0, broadcasts: 0 };
+        }
+        if (leg.presentGateSignature === null) return ineligible('GATE_AUTHORITY', 'GATE_EXECUTION_CUSTODY_UNAVAILABLE');
+        leg.presentGateSignature(verdict.signature);
+      }
       this.#emit('DOMAIN_EXECUTION_READY', {
         ...ids,
         domain: 'robinhood-evm/gate-spot v1',
         adapter: 'robinhood-gate-signer v1',
+        gateAuthority: presented ? 'WALLET_EIP712' : 'MANIFEST_KEY',
         domainReservation: leg.record.reservation,
         domainExecutionAuthorization: leg.record.executionId,
         mapping: TESTNET_SETTLEMENT_FIXTURE.rule,
@@ -481,7 +533,7 @@ export class LiveSettlement {
       status: 'SUCCESS',
       target: s.gate,
       signer: rpc.submitter,
-      principal: d.principal,
+      principal: s.recipient,
       agent: d.agent,
       gasUsed: receipt.gasUsed,
       effectiveGasPrice: receipt.effectiveGasPrice,

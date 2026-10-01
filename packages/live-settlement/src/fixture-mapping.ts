@@ -21,9 +21,10 @@
  * **The rule (quantity-preserving).** The gate BUY's quantity is the
  * reserved STOCK_BUY's quantity, atom for atom (both 18 decimals). The debit
  * is whatever the fixture venue charges for that quantity at its immutable
- * price (`buyCost`), which the gate itself enforces. The recipient is the
- * deployment's principal — the only recipient the gate accepts. Nothing else
- * is carried over, and nothing comes from a model.
+ * price (`buyCost`), which the gate itself enforces. The recipient defaults
+ * to the deployment's principal. A V2 settlement may name the wallet instead:
+ * the gate accepts any principal that signs, and debits that address. Nothing
+ * else is carried over, and nothing comes from a model.
  *
  * Every field that reaches the chain is bound into `bindingDigest`, and the
  * Core action the domain leg reserves carries its first eight bytes as its
@@ -33,7 +34,7 @@
 
 import { ByteWriter } from '@mandate/kernel';
 import { keccakDigest, type Digest32 } from '@mandate/core';
-import { buyCost, grossCost, representationIdOf, type Address, type ReviewedMarket } from '@mandate/evm-robinhood';
+import { ADDRESS, buyCost, grossCost, representationIdOf, type Address, type ReviewedMarket } from '@mandate/evm-robinhood';
 import { DEMO_GATE_CONFIG, STOCK_APPROVED } from '@mandate/portfolio/demo';
 import type { AuthorizedExecution } from './authorized-execution.ts';
 import type { TestnetDeployment } from './deployment.ts';
@@ -43,7 +44,7 @@ export const TESTNET_SETTLEMENT_FIXTURE = {
   version: 1,
   decision: 'nvda-note-a — Fixture Backed NVIDIA Note (Live AI Lab decision semantics, Phase 7F offline demonstration market)',
   execution: 'MDUSD → MDEMO through the Phase 7E.3 MandateExecutionGate on Robinhood Chain testnet (valueless execution-fixture assets)',
-  rule: 'quantity-preserving: gate BUY quantity = the reserved STOCK_BUY quantity, atom for atom; debit = the fixture venue’s quote for that quantity; recipient = the deployment principal',
+  rule: 'quantity-preserving: gate BUY quantity = the reserved STOCK_BUY quantity, atom for atom; debit = the fixture venue’s quote for that quantity; recipient = the deployment principal, or the V2 wallet when that wallet is the execution principal',
   disclaimer: 'Robinhood Chain testnet fixture settlement. MDEMO is not NVDA and not a Robinhood Stock Token; MDUSD is not a stablecoin. Valueless demo assets. This is not an NVDA trade.',
 } as const;
 
@@ -88,8 +89,14 @@ export function settlementBindingDigest(s: Omit<FixtureSettlement, 'bindingDiges
   return keccakDigest<Digest32>(w.finish());
 }
 
-/** The fixture settlement of `x` on `d`, or why the fixture does not define one. Pure. */
-export function mapToFixture(x: AuthorizedExecution, d: TestnetDeployment): Mapped {
+/**
+ * The fixture settlement of `x` on `d`, or why the fixture does not define one.
+ * `recipient` defaults to the deployment principal. A V2 wallet that is not
+ * that address passes itself: the binding then commits to that recipient.
+ * Pure.
+ */
+export function mapToFixture(x: AuthorizedExecution, d: TestnetDeployment, recipient: Address = d.principal): Mapped {
+  if (!ADDRESS.test(recipient)) return { ok: false, reason: 'FIXTURE_RECIPIENT_INVALID' };
   const c = x.candidate;
   if (c.representation !== FIXTURE_SOURCE_REPRESENTATION || sourceMarket === undefined) return { ok: false, reason: 'FIXTURE_UNDEFINED_FOR_CANDIDATE' };
   const market = d.market;
@@ -100,7 +107,7 @@ export function mapToFixture(x: AuthorizedExecution, d: TestnetDeployment): Mapp
   const debit = buyCost(market, c.quantity);
   if (debit <= 0n) return { ok: false, reason: 'FIXTURE_DEBIT_NOT_POSITIVE' };
   if (debit > FIXTURE_MAX_DEBIT_ATOMS) return { ok: false, reason: 'FIXTURE_DEBIT_ABOVE_CEILING' };
-  const base = { execution: x, chainId: d.chainId, gate: d.gate.address, tokenIn: market.fundingToken, tokenOut: market.representation, quantity: c.quantity, debit, gross: grossCost(market, c.quantity), recipient: d.principal, agent: d.agent };
+  const base = { execution: x, chainId: d.chainId, gate: d.gate.address, tokenIn: market.fundingToken, tokenOut: market.representation, quantity: c.quantity, debit, gross: grossCost(market, c.quantity), recipient, agent: d.agent };
   const bindingDigest = settlementBindingDigest(base);
   return { ok: true, value: { ...base, fixture: TESTNET_SETTLEMENT_FIXTURE, market, bindingDigest, actionNonce: BigInt(bindingDigest.slice(0, 18)) } };
 }

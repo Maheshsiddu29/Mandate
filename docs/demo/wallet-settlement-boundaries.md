@@ -552,11 +552,13 @@ session.
   7E.3 fixture principal, whose key is in local custody. Wallet-approved
   versions therefore never send.
 
-V2 ([authority-spine-v2.md](authority-spine-v2.md)) is additive and does not
-change the paragraphs above. A caller that names `spine: "V2"` makes the
-wallet the protocol principal (`WALLET_PRINCIPAL_V2`). Settlement then
-proceeds only when that address is already the manifest principal. A B.5.3
-approval, and any other wallet, still does not send.
+V2 ([authority-spine-v2.md](authority-spine-v2.md)) is additive. A caller
+that names `spine: "V2"` makes the wallet the protocol principal
+(`WALLET_PRINCIPAL_V2`). That portfolio signature is still not a gate
+signature. `npm run agents:settle:v2` then requires a separate
+`MandateAuthorization` by the same wallet whenever the wallet is not the
+manifest principal, and debits that wallet. A B.5.3 approval still does not
+send. The B.5.3 command does not accept the per-execution gate signature.
 
 ### 9.3 Before five-domain testnet
 
