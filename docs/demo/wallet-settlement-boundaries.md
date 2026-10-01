@@ -365,6 +365,47 @@ wallet. Their dry runs run, and every settlement event names both:
 `delegation: NOT_DELEGATED`. A send also requires a durable journal
 (`DURABLE_JOURNAL_REQUIRED_FOR_SEND`).
 
+### 5.4 Restart reconciliation
+
+**Status: implemented (`packages/live-settlement/src/reconcile.ts`).**
+
+On start, the settlement command restores the durable session and runs
+`reconcileAttempts` over every journaled attempt before anything else. It
+holds a `ChainReader` only — it cannot send — and involves no model, no Room
+and no browser.
+
+| Evidence | Outcome | Next |
+| --- | --- | --- |
+| receipt, status 1 | `CONFIRMED_SUCCESS` | postconditions at the receipt block from the journaled balances → `SETTLED` → portfolio `CONSUME` + `CLOSE` → `CONSUMED`; or `POSTCONDITION_ANOMALY` |
+| receipt, status 0 | `CONFIRMED_REVERT` | held until every artifact of the attempt is past its gate deadline with no commitment, then portfolio `CLOSE` → `RELEASED` |
+| no receipt, the node knows the hash | `STILL_PENDING` | nothing changes ("checking settlement status") |
+| no receipt, hash unknown or never sent; a commitment exists for one of its artifacts | `AMBIGUOUS` | `EXECUTED_OUTSIDE_ATTEMPT` quarantine, terminal |
+| … and every artifact is past its gate deadline with no commitment | `NEVER_SUBMITTED` | portfolio `CLOSE` → `RELEASED` |
+| … otherwise | `AMBIGUOUS` | `AWAITING_DEADLINE`: held |
+| anything unreadable | `AMBIGUOUS` | nothing changes |
+
+The release rule rests on the gate: `terms.deadline` is checked onchain, so
+an artifact past it can never execute, by anyone; the commitment read at a
+block past every deadline proves none did. Time alone never releases —
+the chain's evidence does. `NEVER_SUBMITTED` never leads to a fresh send:
+exact same-attempt resubmission is not implemented (the raw transaction is
+not kept), so the reservation is released instead and a new trade needs a
+new session.
+
+A `PREPARED` attempt with no send leg (a dry run, or a crash before the
+send leg opened) is left as it is: it may still be sent once. After
+`CONSUMED` or `RELEASED` the reconciler re-emits the browser-facing events
+with their dedupe keys, so a crash between the ledger write and the
+notification is repaired and a repeat changes nothing.
+
+**Crash points** (`FAULT_POINTS`), each just after the named durable write:
+`AFTER_PREPARED`, `AFTER_PORTFOLIO_ATTEMPT`, `AFTER_DOMAIN_BOUND`,
+`AFTER_ARTIFACT_JOURNALED`, `AFTER_TX_HASH_PERSISTED`,
+`AFTER_BROADCAST_ACCEPTED`, `AFTER_SUBMITTED`, `AFTER_RECEIPT`,
+`AFTER_CONFIRMED`, `AFTER_SETTLED`, `AFTER_CONSUMED`. Each is covered by a
+unit simulation (`test/reconcile.test.ts`), and the B.5.3 list by real
+SIGKILL tests (`test/crash.test.ts`, §8).
+
 ## 6. RPC: QuickNode as infrastructure
 
 **Status: implemented (`packages/live-settlement/src/rpc.ts`,

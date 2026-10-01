@@ -11,7 +11,8 @@
  *   handed to the existing custody and agent signer.
  * - `journal` is the durable settlement lifecycle (no authority);
  *   `portfolio-ledger` is the settlement's admit / consume / release in the
- *   portfolio ledger (B.5.3).
+ *   portfolio ledger (B.5.3); `reconcile` drives non-terminal attempts from
+ *   chain evidence after a restart, with a reader only — it cannot send.
  *
  * Nothing in `@mandate/live-agents`, the web app or the frozen protocol
  * depends on this package.
@@ -28,4 +29,5 @@ export { preflight, MIN_SUBMITTER_WEI, type PreflightReport } from './preflight.
 export { LiveSettlement, safeReason, checkPostconditions, principalBinding, lifecycleDedupe, FAULT_POINTS, type SettlementOutcome, type SettlementRecord, type WouldSend, type Prepared, type RunOptions, type FaultPoint, type PrincipalBinding } from './settlement.ts';
 export { SettlementJournal, JournalRefusal, ATTEMPT_STATES, QUARANTINES, JOURNAL_SCHEMA, isTerminal, type AttemptRecord, type AttemptState, type AttemptBinding, type ArtifactRecord, type Quarantine } from './journal.ts';
 export { reservationStatus, SETTLEMENT_ARTIFACT_KIND, type ReservationStatus } from './portfolio-ledger.ts';
+export { reconcileAttempts, judge, gatherEvidence, RECONCILE_OUTCOMES, type ReconcileOutcome, type ReconcileReport, type ChainEvidence } from './reconcile.ts';
 export type { DomainKeys } from './domain-leg.ts';
