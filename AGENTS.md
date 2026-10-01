@@ -430,7 +430,11 @@ opens a file of its own), restart reconciliation (`src/reconcile.ts`, which
 holds a reader and cannot send), the portfolio-ledger attempt and
 consumption (`src/portfolio-ledger.ts`), and `npm run agents:settle:testnet
 -- --session <id>`, which restores a durable browser session and stops at
-`READY_FOR_TESTNET_SEND` — it has no send path. Only
+`READY_FOR_TESTNET_SEND` — it has no send path. V2
+([docs/demo/authority-spine-v2.md](docs/demo/authority-spine-v2.md)) is
+opt-in: `npm run agents:settle:v2 -- --session <id>` re-verifies an EIP-712
+wallet principal and dry-runs; `--send` broadcasts once after the existing
+operator phrase, only when that wallet is the manifest principal. Only
 `scripts/rpc-config.ts` reads the environment
 (`ROBINHOOD_TESTNET_RPC_URL`, an optional QuickNode endpoint whose URL is
 never printed); `npm run agents:rpc:smoke` is read-only.

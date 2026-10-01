@@ -90,6 +90,13 @@ belong to: the operator runs `npm run agents:settle:testnet -- --session
 <id>`, whose events land in that session's log. In B.5.3 that command is a
 dry run ending at *Ready for testnet send · nothing was sent*.
 
+V2 ([authority-spine-v2.md](authority-spine-v2.md)) is opt-in on
+`POST …/wallet/challenge` with `{ "spine": "V2" }`. The wallet is then the
+protocol principal, and `npm run agents:settle:v2 -- --session <id>`
+re-verifies that signature and dry-runs; `--send` broadcasts once after the
+existing operator phrase, and only when the wallet is the manifest
+principal. The UI does not offer V2. B.5.2 and B.5.3 are unchanged.
+
 ## 1. The trust model in one table
 
 | Component | May | May never |

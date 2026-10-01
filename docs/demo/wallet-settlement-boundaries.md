@@ -552,6 +552,12 @@ session.
   7E.3 fixture principal, whose key is in local custody. Wallet-approved
   versions therefore never send.
 
+V2 ([authority-spine-v2.md](authority-spine-v2.md)) is additive and does not
+change the paragraphs above. A caller that names `spine: "V2"` makes the
+wallet the protocol principal (`WALLET_PRINCIPAL_V2`). Settlement then
+proceeds only when that address is already the manifest principal. A B.5.3
+approval, and any other wallet, still does not send.
+
 ### 9.3 Before five-domain testnet
 
 - Only the Stock child has a settlement path (the MDEMO fixture on the 7E.3

@@ -10,8 +10,9 @@
  *   ─▶ existing GateSigner: ADMIT_ATTEMPT ─▶ guarded custody (eligibility again) ─▶ agent signature
  *   ─▶ simulate: exact-call check, journal the artifact, eth_call, estimateGas
  *        DRY_RUN: stop — nothing is broadcast
- *        SEND:    only through an open SendGate, only with a durable journal, never for a wallet-approved
- *                 version ─▶ journal hash + envelope ─▶ one broadcast ─▶ journal SUBMITTED ─▶ receipt
+ *        SEND:    only through an open SendGate, only with a durable journal. A B.5.3 wallet approval
+ *                 never sends. V2 sends only after reverifySpine accepts the wallet as this deployment's
+ *                 principal ─▶ journal hash + envelope ─▶ one broadcast ─▶ journal SUBMITTED ─▶ receipt
  *                 ─▶ journal CONFIRMED_* ─▶ postconditions ─▶ journal SETTLED ─▶ portfolio CONSUME + CLOSE
  *                 ─▶ journal CONSUMED
  * ```
@@ -44,6 +45,7 @@ import { admitSettlement, admittedFor, consumeReservation } from './portfolio-le
 import { preflight, type PreflightReport } from './preflight.ts';
 import type { ChainReader, TestnetRpc } from './rpc.ts';
 import { SEND_AUTHORIZATION_PHRASE, type SendGate } from './send-gate.ts';
+import { reverifySpine } from './spine.ts';
 import { DRY_RUN_HALT, SEND_NOT_AUTHORIZED, SettlementGateChain, type SettlementMode, type SimulationRecord } from './settlement-chain.ts';
 
 const MDUSD_DECIMALS = 6n;
@@ -149,20 +151,27 @@ export interface RunOptions {
   readonly fault?: (p: FaultPoint) => void;
 }
 
-/** Who authorized what, as every settlement event states it: the portfolio principal is never presented as the domain signer. */
+/** Who authorized what, as every settlement event states it. */
 export interface PrincipalBinding {
   readonly portfolio: { readonly method: string; readonly address: string };
   readonly protocolSigner: string;
-  readonly domainSettlement: { readonly kind: 'TESTNET_FIXTURE_CUSTODY'; readonly address: string };
-  readonly delegation: 'NOT_DELEGATED';
+  readonly domainSettlement: { readonly kind: 'TESTNET_FIXTURE_CUSTODY' | 'SAME_PRINCIPAL'; readonly address: string };
+  readonly delegation: 'NOT_DELEGATED' | 'SAME_PRINCIPAL';
 }
 
+/**
+ * V2 is `SAME_PRINCIPAL` only when the wallet, the protocol signer and the
+ * deployment principal are the same address. Every other authorization,
+ * including a V2 wallet that is not that address, stays
+ * `TESTNET_FIXTURE_CUSTODY` / `NOT_DELEGATED`.
+ */
 export function principalBinding(a: PrincipalAuthorization | undefined, d: TestnetDeployment): PrincipalBinding {
+  const same = a?.method === 'WALLET_PRINCIPAL_V2' && a.domainDelegation === 'SAME_PRINCIPAL' && a.protocolSigner.toLowerCase() === a.principal.toLowerCase() && a.principal.toLowerCase() === d.principal.toLowerCase();
   return {
     portfolio: { method: a?.method ?? 'UNKNOWN', address: a?.principal ?? 'UNKNOWN' },
     protocolSigner: a?.protocolSigner ?? 'UNKNOWN',
-    domainSettlement: { kind: 'TESTNET_FIXTURE_CUSTODY', address: d.principal },
-    delegation: 'NOT_DELEGATED',
+    domainSettlement: same ? { kind: 'SAME_PRINCIPAL', address: d.principal } : { kind: 'TESTNET_FIXTURE_CUSTODY', address: d.principal },
+    delegation: same ? 'SAME_PRINCIPAL' : 'NOT_DELEGATED',
   };
 }
 
@@ -272,8 +281,8 @@ export class LiveSettlement {
     if (o.mode === 'SEND') {
       if (this.#submitted) return ineligible('SEND_GATE', 'ALREADY_SUBMITTED_IN_THIS_SESSION');
       if (j === null) return ineligible('JOURNAL', 'DURABLE_JOURNAL_REQUIRED_FOR_SEND');
-      // A wallet approval authorizes the portfolio mandate, not the 7E.3 custody: settling under it would misstate the binding.
-      if (authorization?.method !== 'DEMO_PRINCIPAL_KEY') return ineligible('PRINCIPAL', 'WALLET_PRINCIPAL_NOT_DELEGATED_TO_DOMAIN');
+      // B.5.3 wallet approvals do not delegate domain execution. V2 may send only after reverifySpine, below, accepts this wallet as the deployment principal.
+      if (authorization?.method !== 'DEMO_PRINCIPAL_KEY' && authorization?.method !== 'WALLET_PRINCIPAL_V2') return ineligible('PRINCIPAL', 'WALLET_PRINCIPAL_NOT_DELEGATED_TO_DOMAIN');
       if (o.gate.state !== 'AUTHORIZED') {
         this.#emit('TESTNET_SEND_AUTHORIZATION_REFUSED', { ...ids, required: SEND_AUTHORIZATION_PHRASE, transactions: 0 });
         return ineligible('SEND_GATE', SEND_NOT_AUTHORIZED);
@@ -298,6 +307,16 @@ export class LiveSettlement {
     // The settlement must be exactly the fixture's derivation from this execution: nothing is taken on trust, nothing rebuilt.
     const again = mapToFixture(x, d);
     if (!again.ok || again.value.bindingDigest !== s.bindingDigest || settlementBindingDigest(s) !== s.bindingDigest || again.value.actionNonce !== s.actionNonce) return ineligible('FIXTURE', 'SETTLEMENT_NOT_DERIVED_FROM_EXECUTION');
+
+    // V2 is re-checked before the journal is written and before any key is used. A failure never falls through to the demonstration signer.
+    let boundPrincipal: string | undefined;
+    if (authorization?.method === 'WALLET_PRINCIPAL_V2') {
+      const held = session.versions.coreOf(x.version);
+      if (held === null) return ineligible('PRINCIPAL', 'VERSION_UNKNOWN');
+      const check = reverifySpine({ mandate: held.mandate, signature: held.signature, authorization, sessionId: session.id, chainId: d.chainId, domainPrincipal: d.principal, now: session.protocolNow() });
+      if (!check.ok) return ineligible('PRINCIPAL', check.reason);
+      boundPrincipal = check.principal;
+    }
 
     if (j !== null) {
       try {
@@ -367,7 +386,7 @@ export class LiveSettlement {
       j.bindDomain(x.reservation, states.block.timestamp, states.block.timestamp + DOMAIN_AUTHORITY_SECONDS + 60n);
       fault('AFTER_DOMAIN_BOUND');
     }
-    const opened = await openDomainLeg({ deployment: d, settlement: s, keys: this.#env.keys, ledgerPath: o.ledgerPath, states: states.states, at: states.block.timestamp, chain, eligibleNow: () => this.#eligibility(x, s.bindingDigest) });
+    const opened = await openDomainLeg({ deployment: d, settlement: s, keys: this.#env.keys, ledgerPath: o.ledgerPath, states: states.states, at: states.block.timestamp, chain, eligibleNow: () => this.#eligibility(x, s.bindingDigest), ...(boundPrincipal === undefined ? {} : { boundPrincipal }) });
     if (!opened.ok) return ineligible(opened.stage, opened.reason);
     const leg = opened.leg;
     try {

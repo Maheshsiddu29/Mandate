@@ -109,6 +109,11 @@ export interface DomainLegInput {
   readonly chain: SettlementGateChain;
   /** The Live AI side's eligibility, re-derived when custody is asked to sign. */
   readonly eligibleNow: () => Eligibility;
+  /**
+   * When set, custody signs only if its address is this principal. V2 passes
+   * the wallet. Omitted on the B.5.2 demonstration path.
+   */
+  readonly boundPrincipal?: string;
 }
 
 /**
@@ -209,7 +214,7 @@ export async function openDomainLeg(i: DomainLegInput): Promise<DomainLegResult>
   const record = out.authorization;
   i.chain.bind({ executionId: record.executionId, reservation: record.reservation, generation: record.generation, adapter });
 
-  const custody = guardCustody(inner, s, i.eligibleNow);
+  const custody = guardCustody(inner, s, i.eligibleNow, i.boundPrincipal);
   const signer = new GateSigner({
     engine,
     store,
