@@ -26,3 +26,19 @@ with the installed font package.
 
 Geist Sans and Geist Mono are vendored under `fonts/` from the Geist project,
 under the SIL Open Font License. `fonts/OFL.txt` is the license text.
+
+## React Bits
+
+Adapted from [React Bits](https://www.reactbits.dev) (MIT + Commons Clause):
+
+- Prompt Bar and Lattice Loader (TS + CSS), source commit
+  `e1bbb696fc53f7f91e694c529e4d68c899773b6e`, adapted in
+  `components/react-bits/prompt-bar.tsx` and `lattice-loader.tsx`.
+- Pattern Waves (TS + CSS), the registry item
+  `https://reactbits.dev/r/PatternWaves-TS-CSS.json` fetched 2026-09-30,
+  vendored in `components/react-bits/pattern-waves.tsx` with type-only edits.
+
+## OGL
+
+Pattern Waves renders with [`ogl`](https://github.com/oframe/ogl) 1.0.11,
+released under the Unlicense (public domain).

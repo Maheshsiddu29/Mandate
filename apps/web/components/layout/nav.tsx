@@ -78,8 +78,8 @@ function NavigationLinks({
           </Link>
         );
       })}
-      <Link href="/demo" className="mobile-nav__link focus-ring" onClick={onNavigate}>
-        Launch Demo
+      <Link href="/demo/live" className="mobile-nav__link focus-ring" onClick={onNavigate}>
+        Live Demo
       </Link>
     </>
   );
@@ -178,8 +178,8 @@ export function Nav(): ReactNode {
           })}
         </ul>
 
-        <Link href="/demo" className="nav-launch button button--primary focus-ring">
-          Launch Demo
+        <Link href="/demo/live" className="nav-launch button button--primary focus-ring">
+          Live Demo
         </Link>
 
         <button

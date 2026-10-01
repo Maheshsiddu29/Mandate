@@ -21,7 +21,7 @@ body:has(.landing-main) .site-nav-wrap,
 
 body:has(.landing-main) .glass-nav {
   border-color: var(--mandate-border);
-  background: rgba(14, 14, 27, 0.9);
+  background: rgba(18, 15, 23, 0.9);
   box-shadow:
     0 16px 40px rgba(0, 0, 0, 0.36),
     inset 0 1px 0 rgba(247, 247, 250, 0.05);
@@ -29,7 +29,7 @@ body:has(.landing-main) .glass-nav {
 
 @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
   body:has(.landing-main) .glass-nav {
-    background: rgba(14, 14, 27, 0.78);
+    background: rgba(18, 15, 23, 0.78);
     -webkit-backdrop-filter: blur(16px) saturate(1.04);
     backdrop-filter: blur(16px) saturate(1.04);
   }
@@ -59,7 +59,7 @@ body:has(.landing-main) .desktop-nav__pill,
 body:has(.landing-main) .mobile-nav__link:hover,
 body:has(.landing-main) .mobile-nav__link[aria-current="page"] {
   border-color: var(--mandate-border-strong);
-  background: rgba(92, 92, 153, 0.18);
+  background: rgba(99, 102, 241, 0.18);
 }
 
 body:has(.landing-main) .menu-toggle {
@@ -114,14 +114,12 @@ body:has(.landing-main) .menu-toggle i {
   font-weight: 680;
 }
 
-.landing-main .button--primary,
 .landing-main .button--light {
   background: #ffffff;
   color: #081126;
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.22);
 }
 
-.landing-main .button--primary:hover,
 .landing-main .button--light:hover {
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
 }

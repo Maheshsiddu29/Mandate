@@ -33,7 +33,7 @@ body {
 
 .glass-nav {
   border-color: var(--mandate-border);
-  background: rgba(14, 14, 27, 0.92);
+  background: rgba(18, 15, 23, 0.92);
   box-shadow:
     0 16px 40px rgba(0, 0, 0, 0.36),
     inset 0 1px 0 rgba(247, 247, 250, 0.05);
@@ -41,7 +41,7 @@ body {
 
 @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
   .glass-nav {
-    background: rgba(14, 14, 27, 0.78);
+    background: rgba(18, 15, 23, 0.78);
     -webkit-backdrop-filter: blur(16px) saturate(1.04);
     backdrop-filter: blur(16px) saturate(1.04);
   }
@@ -71,7 +71,7 @@ body {
 .mobile-nav__link:hover,
 .mobile-nav__link[aria-current="page"] {
   border-color: var(--mandate-border-strong);
-  background: rgba(92, 92, 153, 0.18);
+  background: rgba(99, 102, 241, 0.18);
 }
 
 .menu-toggle {

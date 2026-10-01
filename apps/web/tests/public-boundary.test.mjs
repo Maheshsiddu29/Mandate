@@ -54,7 +54,10 @@ test("the landing page tells the Mandate product story", async () => {
   assert.match(pageSource, /<LandingPage\s*\/>/);
   assert.match(heroSource, /One authority layer/);
   assert.match(heroSource, /for autonomous markets/);
-  assert.match(heroSource, /Agents propose\. Mandate authorizes\. Markets settle\./);
+  assert.match(heroSource, /Agents propose\. Agents negotiate\. Mandate authorizes\. Markets settle\./);
+  assert.match(heroSource, /href="\/demo\/live"/);
+  assert.match(heroSource, /Launch Live Demo/);
+  assert.match(heroSource, /<HeroWaves/);
   assert.match(landingSource, /WhyMandate/);
   assert.match(landingSource, /CanonicalAssets/);
   assert.match(landingSource, /AuthorityPipeline/);
@@ -74,16 +77,24 @@ test("landing claims stay inside the mock mandate boundary", async () => {
   assert.doesNotMatch(source, /mainnet execution|StateGuard/i);
 });
 
-test("the hero field pauses outside the viewport and when motion is reduced", async () => {
-  const fieldSource = await readFile(
-    new URL("mandate/authorization-field.tsx", COMPONENT_URL),
-    "utf8"
-  );
+test("the hero surface is React Bits Pattern Waves and respects motion and visibility", async () => {
+  const [waves, hero] = await Promise.all([
+    readFile(new URL("react-bits/pattern-waves.tsx", COMPONENT_URL), "utf8"),
+    readFile(new URL("mandate/hero-waves.tsx", COMPONENT_URL), "utf8"),
+  ]);
 
-  assert.match(fieldSource, /prefersReducedMotion/);
-  assert.match(fieldSource, /IntersectionObserver/);
-  assert.match(fieldSource, /visibilitychange/);
-  assert.match(fieldSource, /SOURCE_COUNT = 5/);
+  assert.match(waves, /reactbits\.dev\/r\/PatternWaves-TS-CSS\.json/);
+  assert.match(waves, /prefers-reduced-motion: reduce/);
+  assert.match(waves, /IntersectionObserver/);
+  assert.match(waves, /ResizeObserver/);
+  assert.match(waves, /visibilitychange/);
+  assert.match(waves, /cancelAnimationFrame\(raf\)/);
+  assert.match(waves, /resizeObserver\.disconnect\(\)/);
+  assert.match(waves, /WEBGL_lose_context/);
+  assert.match(hero, /ssr: false/);
+  assert.match(hero, /preset: "silk"/);
+  assert.match(hero, /color: "#6366F1"/);
+  assert.match(hero, /backgroundColor: "#120F17"/);
 });
 
 test("the public routes stay on the dark Mandate surface", async () => {

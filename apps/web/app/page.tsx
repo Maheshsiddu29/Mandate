@@ -11,7 +11,7 @@ export const metadata: Metadata = createMetadata({
 });
 
 export const viewport: Viewport = {
-  themeColor: "#0E0E1B",
+  themeColor: "#120F17",
 };
 
 export default function HomePage(): ReactNode {

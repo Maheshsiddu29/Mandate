@@ -30,7 +30,7 @@ const geistMono = localFont({
 export const metadata: Metadata = baseMetadata;
 
 export const viewport: Viewport = {
-  themeColor: "#0E0E1B",
+  themeColor: "#120F17",
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
