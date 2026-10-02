@@ -176,7 +176,9 @@ prompt ─▶ interpreter (model or local parser) ─▶ DRAFT ─▶ determinis
 
 The reviewed catalog is the upper bound: the lab lets the principal narrow
 it, never extend it, because the domain bindings only recognise reviewed
-instruments.
+instruments. It is the Live Lab market set V2's scope (§4): the Phase 7F
+demonstration scope plus the reviewed Series C note, the second swap pool,
+and the Beta vault with its issuer and protocol.
 
 ## 3. Versioning and optional human intervention
 
@@ -214,16 +216,69 @@ The default flow needs no human after authorization.
 ## 4. Agents and the candidate boundary
 
 Five domain agents, each with an objective and a closed set of discovered
-candidates built by trusted local code from the Phase 7F demonstration
-markets (labelled fixtures):
+candidates built by trusted local code from the **Live Lab market set V2**
+(`@mandate/portfolio/demo` `live-markets.ts`; labelled fixtures). V2 is the
+Phase 7F demonstration markets plus one more reviewed, approved alternative
+in stock, swap and yield. With only one approved instrument per domain, a
+model offered the actionable set had nothing to compare. V2 gives it a
+real economic choice among opportunities that can be authorized.
+`markets.ts` and `mandate.ts` are untouched, so the judge demo and the
+generated corpus keep the V1 world.
 
-| Agent | Objective | Discovered candidates (Mandate decides which are allowed) |
+| Agent | Objective | Discovered candidates |
 | --- | --- | --- |
-| Stock | useful NVDA exposure | the approved backed note at 125.00; a same-ticker token at 122.50 from another issuer |
-| Swap | best execution USDC→WETH | the approved router; a router quoting 4.16 % more |
+| Stock | useful NVDA exposure | two approved backed notes; a cheaper same-ticker synthetic token from another issuer |
+| Swap | best execution USDC→WETH | two routes through reviewed pools under the reviewed router; a router quoting 4.17 % more |
 | NFT | an acceptable Genesis purchase, or abstain | a listing of the Genesis collection; a cheaper same-name listing on another contract whose seller text contains a prompt injection |
-| Yield | best **advertised** APY | the approved vault at 5.20 %; an unvetted vault at 12.60 % |
+| Yield | the vault that best serves the portfolio, weighing **advertised** APY against capacity | two reviewed vaults; an unvetted vault at 12.60 % |
 | Perps | BTC exposure | a 2x long; a 5x long |
+
+### Candidate evidence (balanced preset; the same sets under every preset)
+
+Every price, fee, quote, APY, depth and capacity below is **FIXTURE**
+data: constants in the repository, not live market quotes. The decision
+is **LIVE_MODEL** only when the OpenAI provider makes it. The stub's
+decisions are `STUB` and test scripts' are `SCRIPTED`. Events carry both
+labels (`marketEvidence`, `modelEvidence`). On-chain settlement evidence
+(`LIVE_TESTNET`) is a separate question (§0, live-testnet-settlement.md).
+
+| Domain | Actionable (choose among) | Discovery only (reason) | Model evidence | Market evidence |
+| --- | --- | --- | --- | --- |
+| Stock | `nvda-note-a`, `nvda-note-c` | `nvda-token-b` (`REGISTRY:ISSUER_NOT_ALLOWED`, `REGISTRY:SYNTHETIC_NOT_ALLOWED`) | LIVE_MODEL with the OpenAI provider | FIXTURE |
+| Swap | `route-a`, `route-c` | `route-b` (`VENUE_NOT_ALLOWED`) | LIVE_MODEL with the OpenAI provider | FIXTURE |
+| Yield | `alpha-usd-vault`, `beta-usd-vault` | `high-yield-usd` (asset, issuer, representation, venue) | LIVE_MODEL with the OpenAI provider | FIXTURE |
+| NFT | `genesis-11` | `genesis-7` (`ASSET_NOT_ALLOWED`, `REPRESENTATION_NOT_ALLOWED`) | LIVE_MODEL with the OpenAI provider | FIXTURE |
+| Perps | `btc-long-2x` | `btc-long-5x` (`LEVERAGE_NOT_ALLOWED`) | LIVE_MODEL with the OpenAI provider | FIXTURE |
+
+The approved alternatives, and what makes each pair a real tradeoff. The
+model sees every fact listed here; neither option dominates on all of them:
+
+| Candidate | Identity (reviewed) | Economics (fixture) | Limit enforced by the bounds |
+| --- | --- | --- | --- |
+| `nvda-note-a` | fully backed NVDA note, approved issuer, qualified-holder redemption | 125.00 per token, no gate fee: 125.00 all-in | up to 800 USDC |
+| `nvda-note-c` | fully backed NVDA note Series C, the same approved issuer, **open redemption** (the registry's own second backed record) | 124.75 per token plus a 0.25 % gate fee: ≈125.06 all-in | up to 600 USDC |
+| `route-a` | reviewed router, reviewed pool (0.30 % fee tier, deep) | 0.000012 WETH per 100 USDC, minimum out quote − 0.30 % | up to 500 USDC |
+| `route-c` | the same router, a second reviewed pool (0.05 % fee tier, shallow) | +0.20 % output, minimum out quote − 0.30 % | up to 250 USDC |
+| `alpha-usd-vault` | Alpha vault, Alpha vault issuer, its protocol | 5.20 % advertised APY | up to 800 USDC capacity |
+| `beta-usd-vault` | Beta vault, Beta vault issuer, its protocol | 6.10 % advertised APY | up to 400 USDC capacity |
+
+Stock quantity is fee-aware: the all-in cost stays within the requested
+amount (two atoms are left for the gate's separate round-ups).
+
+**Not added, on purpose.** *Perps:* the fixture Lighter sub-account is
+configured isolated at 2x (an initial margin fraction of 50 %), and Core
+re-derives the margin demand from that admitted setting. A 3x long passes
+scope, but its reservation is refused with `RESERVATION_DEMAND_MISMATCH`,
+so offering it would offer something that cannot execute. Perps keeps one
+strategy, and its real choice is its size, which is also what decides
+whether the shared derivative cap is exceeded. *NFT:* a listing is one
+fixed-price token, and a second Genesis listing would differ only in
+price, which is not a tradeoff. Neither domain got a new market.
+
+**Settlement.** Only `nvda-note-a` has a deployed Robinhood Chain testnet
+market (MDEMO). A reserved `nvda-note-c` is authorized offchain like any
+other reservation. Settlement then refuses it before any RPC call with
+`FIXTURE_UNDEFINED_FOR_CANDIDATE`, unchanged and fail-closed.
 
 ### Discovered, actionable, authorized
 
@@ -294,8 +349,8 @@ What it means at runtime:
   any model call.
 - An agent with no authority under the mandate is not asked at all.
 
-Under every preset, the reviewed instruments are actionable and the
-look-alikes are discovery only. The registry excludes `nvda-token-b` with
+Under every preset, the reviewed instruments, now two per stock, swap and
+yield, are actionable, and the look-alikes are discovery only. The registry excludes `nvda-token-b` with
 `REGISTRY:ISSUER_NOT_ALLOWED` and `REGISTRY:SYNTHETIC_NOT_ALLOWED`.
 `route-b` fails `VENUE_NOT_ALLOWED`. `genesis-7` fails `ASSET_NOT_ALLOWED`
 and `REPRESENTATION_NOT_ALLOWED`, so its prompt-injecting seller text no
@@ -314,10 +369,17 @@ with candidates that can never pass.
 
 ### What the model sees
 
-The model sees, per actionable candidate: an id, factual fields (price, quote,
-advertised APY, leverage, issuer and venue labels), an **untrusted**
-description (seller/marketplace text, marked as such) and the allowed
-amount bounds. It never sees an address it could return. Its whole output:
+The model sees, per actionable candidate, in a fixed order that implies no
+ranking: an id, factual fields (price, fee, all-in cost, quote, depth,
+advertised APY, capacity, redemption terms, leverage, issuer and venue
+labels), `marketEvidence: FIXTURE`, an **untrusted** description
+(seller/marketplace text, marked as such) and the allowed amount bounds. It
+never sees an address it could return. It also sees `principalIntent`: the
+principal's own words, which are the prompt the mandate was drafted from or
+an explicit preference (`SessionOptions.intent`, `npm run agents:live --
+--intent="…"`). They are ranking guidance only ("prefer liquidity over
+yield") and grant nothing, because every limit is already fixed by the
+mandate. Its whole output:
 
 ```json
 { "action": "PROPOSE" | "ABSTAIN", "candidateId": "…" | null, "requestedAtoms": "<integer>" | null, "rationale": "…" }
@@ -325,8 +387,20 @@ amount bounds. It never sees an address it could return. Its whole output:
 
 Its instructions frame the task as ranking: compare the supplied candidates
 on their facts (price, output, advertised return, exposure, slippage, fit)
-and choose the best, or abstain. The instructions say eligibility is not
-approval. Nothing in them is a control.
+in light of the principal's intent, and choose the best, or abstain. When
+more than one candidate is offered, the rationale should say why the
+choice beats the alternatives. The rationale is the model's own; nothing
+is generated client-side. The instructions say eligibility is not
+approval. Nothing in them is a control. Choice is never randomized,
+alternated or seeded. If real runs converge on one candidate, that is
+reported as it is.
+
+The stub provider is deterministic infrastructure, not a model. It picks
+the first offered id in a fixed preference list, at a fixed size clamped
+to the candidate's bounds, and never reads a fact or the intent. Seed 1
+prefers the best headline number among what it is offered (`nvda-note-c`,
+`route-c`, `beta-usd-vault`). Its picks are never evidence of economic
+reasoning.
 
 Trusted code rejects anything else (`INVALID_RESPONSE`): an extra field, an
 id that was not offered, an amount out of bounds, a non-integer. Otherwise it looks the id
@@ -556,6 +630,7 @@ settlement commands (`agents:live:testnet:dry-run`, `agents:live:testnet`)
 are separate; see [live-testnet-settlement.md](live-testnet-settlement.md).
 
 Runner options: `--preset=…`, `--prompt="…" [--fill=<preset>]`,
+`--intent="…"` (the principal's ranking preference; no authority),
 `--policy-attempts=N`, `--no-policy-stress`, `--seed=N` (stub) and
 `--chaos=<spec>` (development only). A draft with blocking issues exits 3
 and is never authorized; the OpenAI modes exit 2 without a key. The
