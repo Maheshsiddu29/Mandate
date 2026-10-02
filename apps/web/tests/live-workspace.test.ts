@@ -62,3 +62,17 @@ test('the browser never sends a chaos spec or any development-only setting', () 
   assert.match(lab, /api\(SERVER, "POST", "\/sessions", \{ provider: providerChoice \}\)/);
   assert.doesNotMatch(lab, /chaos/);
 });
+
+test('the Mandate Room is conditional: a run without a conflict never shows the Room phase or its chrome', () => {
+  const e = (sequence: number, kind: string, agent: string | null = null): LiveEvent => ({ schema: 'MANDATE_LIVE_AI.V1', sessionId: 'lab-1', sequence, kind, at: '2026-10-02T00:00:00.000Z', elapsedMs: sequence * 100, protocolTime: '0', mandateVersion: 1, agent, roomId: null, generation: null, data: {} });
+  const direct = [e(1, 'AGENT_REQUEST_STARTED', 'stock'), e(2, 'AGENT_DECISION_COMPLETED', 'stock'), e(3, 'PROPOSAL_ADMISSIBLE', 'stock'), e(4, 'MANDATE_REVERIFY_STARTED'), e(5, 'PORTFOLIO_AUTHORIZED')];
+  const phases = direct.map((_, i) => deriveFlow({ ...base, runEvents: direct.slice(0, i + 1) }).phase);
+  assert.ok(!phases.includes('ROOM'), phases.join(' → '));
+  assert.equal(phases.at(-1), 'AUTHORIZED');
+  // The Room sheet, its trail entry and the failure's Room link appear only once a ROOM_OPENED was seen.
+  assert.match(lab, /const roomSeen = runEvents\.some\(\(event\) => event\.kind === "ROOM_OPENED"\);/);
+  assert.match(lab, /\{roomSeen && phase !== "ROOM" \? <button/);
+  // With a conflict, the Room opens automatically from the real event.
+  const conflicted = [...direct.slice(0, 3), e(4, 'PORTFOLIO_CONFLICT'), e(5, 'ROOM_OPENED')];
+  assert.equal(deriveFlow({ ...base, runEvents: conflicted }).phase, 'ROOM');
+});
