@@ -132,6 +132,26 @@ export class LiveLab {
     return true;
   }
 
+  /**
+   * The in-memory session, restoring it from disk when this lab is durable.
+   * Settlement uses this same object so its events reach the browser stream.
+   * A restored session may be settled: the reservation already exists. This
+   * does not authorize a new mandate version.
+   */
+  async openSession(id: string): Promise<LiveSession | null> {
+    if (!/^[A-Za-z0-9-]{1,64}$/.test(id)) return null;
+    if (!(await this.ensure(id))) return null;
+    const entry = this.#sessions.get(id);
+    if (entry === undefined) return null;
+    entry.touchedMs = this.#o.clock.nowMs();
+    return entry.session;
+  }
+
+  /** The background task on an in-memory session, if one is running. */
+  taskOf(id: string): 'RUN' | 'POLICY_STRESS' | null {
+    return this.#sessions.get(id)?.task ?? null;
+  }
+
   /** Pick up events other processes appended to durable sessions; listeners hear them in order. */
   syncEvents(): void {
     for (const e of this.#sessions.values()) {

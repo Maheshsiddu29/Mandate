@@ -1,0 +1,329 @@
+/**
+ * The Live Lab's in-page V2 settlement (docs/demo/authority-spine-v2.md).
+ *
+ * This is the same spine as `npm run agents:settle:v2`: re-verify the
+ * wallet's PortfolioMandateV2 signature, then dry-run or send. It does not
+ * skip re-verification and it does not substitute an asset. The browser
+ * never broadcasts. When the wallet is not the manifest principal, this
+ * returns the gate typed data and waits; the wallet signs
+ * `MandateAuthorization` and a later request delivers that signature into
+ * the run that is already open. `--send`'s operator phrase is checked here,
+ * with the same SendGate, before that run starts. The deployer key still
+ * pays gas. A signature is not reused across runs.
+ *
+ * No environment, file, clock or socket lives here. The composition script
+ * opens those and passes them in.
+ */
+
+import type { LiveSession } from '@mandate/live-agents';
+import { ASSET_QUALIFICATION } from './evidence.ts';
+import type { GateExecutionRequest } from './gate-authority.ts';
+import type { SettlementJournal } from './journal.ts';
+import type { TestnetRpc } from './rpc.ts';
+import { SendGate, SEND_AUTHORIZATION_PHRASE } from './send-gate.ts';
+import type { SpineSettlementInput, SpineSettlementResult } from './spine-settlement.ts';
+import type { TestnetDeployment } from './deployment.ts';
+import type { DomainKeys } from './domain-leg.ts';
+
+type LabJson = string | number | boolean | null | readonly LabJson[] | { readonly [k: string]: LabJson };
+
+export interface LabRouteResponse {
+  readonly status: number;
+  readonly body: { readonly [k: string]: LabJson };
+}
+
+export interface ScratchLedger {
+  readonly path: string;
+  readonly cleanup: () => void;
+}
+
+export interface SpineUiHost {
+  readonly openSession: (id: string) => Promise<LiveSession | null>;
+  readonly taskOf: (id: string) => 'RUN' | 'POLICY_STRESS' | null;
+  readonly settle: (input: SpineSettlementInput) => Promise<SpineSettlementResult>;
+  readonly deployment: TestnetDeployment;
+  readonly rpc: TestnetRpc;
+  readonly keys: DomainKeys;
+  readonly journalFor: (session: LiveSession) => SettlementJournal;
+  readonly scratch: () => ScratchLedger;
+  readonly ledgerPath: (session: LiveSession) => string;
+  /** Arm a timer. Return a function that cancels it. No timer lives in this module. */
+  readonly schedule: (ms: number, fn: () => void) => () => void;
+  readonly signatureWaitMs: number;
+}
+
+interface Job {
+  readonly mode: 'DRY_RUN' | 'SEND';
+  phase: 'RUNNING' | 'AWAITING_SIGNATURE';
+  request: GateExecutionRequest | null;
+  deliver: ((signature: string | null) => void) | null;
+  done: Promise<SpineSettlementResult>;
+}
+
+const SETTLE_PATH = /^\/api\/live\/sessions\/([A-Za-z0-9-]{1,64})\/settle$/;
+const SIG = /^0x[0-9a-fA-F]{130}$/;
+
+const ok = (body: { readonly [k: string]: LabJson }, status = 200): LabRouteResponse => ({ status, body });
+const refuse = (status: number, error: string, message: string): LabRouteResponse => ({ status, body: { error, message } });
+
+function asJson(value: unknown): LabJson {
+  return JSON.parse(JSON.stringify(value, (_k, x: unknown) => (typeof x === 'bigint' ? x.toString() : x))) as LabJson;
+}
+
+interface ParsedBody {
+  readonly mode: 'DRY_RUN' | 'SEND';
+  readonly gateSignature: string | null;
+  readonly sendAuthorization: string | null;
+  readonly cancel: boolean;
+}
+
+function parseBody(body: unknown): { readonly ok: true; readonly value: ParsedBody } | { readonly ok: false; readonly response: LabRouteResponse } {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return { ok: false, response: refuse(400, 'BAD_REQUEST', 'POST body must be a JSON object.') };
+  const rec = body as { readonly [k: string]: unknown };
+  const mode = rec['mode'];
+  if (mode !== 'DRY_RUN' && mode !== 'SEND') return { ok: false, response: refuse(400, 'BAD_REQUEST', 'mode must be "DRY_RUN" or "SEND".') };
+  const gateSignature = rec['gateSignature'];
+  if (gateSignature !== undefined && gateSignature !== null && typeof gateSignature !== 'string') return { ok: false, response: refuse(400, 'BAD_REQUEST', 'gateSignature must be the wallet signature.') };
+  if (typeof gateSignature === 'string' && (gateSignature.length > 140 || !SIG.test(gateSignature))) return { ok: false, response: refuse(400, 'BAD_REQUEST', 'gateSignature must be a 65-byte hex signature.') };
+  const sendAuthorization = rec['sendAuthorization'];
+  if (sendAuthorization !== undefined && sendAuthorization !== null && typeof sendAuthorization !== 'string') return { ok: false, response: refuse(400, 'BAD_REQUEST', 'sendAuthorization must be the operator phrase.') };
+  if (typeof sendAuthorization === 'string' && sendAuthorization.length > 80) return { ok: false, response: refuse(400, 'BAD_REQUEST', 'sendAuthorization is not the operator phrase.') };
+  if (rec['cancel'] !== undefined && rec['cancel'] !== true) return { ok: false, response: refuse(400, 'BAD_REQUEST', 'cancel must be true.') };
+  return {
+    ok: true,
+    value: {
+      mode,
+      gateSignature: typeof gateSignature === 'string' ? gateSignature : null,
+      sendAuthorization: typeof sendAuthorization === 'string' ? sendAuthorization : null,
+      cancel: rec['cancel'] === true,
+    },
+  };
+}
+
+function signResponse(sessionId: string, mode: 'DRY_RUN' | 'SEND', request: GateExecutionRequest): LabRouteResponse {
+  return ok({
+    status: 'GATE_SIGNATURE_REQUIRED',
+    sessionId,
+    mode,
+    message: 'The wallet must sign MandateAuthorization for this execution. It is not a transaction. The deployer pays gas. Nothing has been broadcast.',
+    gateExecution: asJson({
+      kind: request.kind,
+      principal: request.principal,
+      agent: request.agent,
+      gate: request.gate,
+      chainId: request.chainId,
+      mandateDigest: request.mandateDigest,
+      signingHash: request.signingHash,
+      mandateExpiresAt: request.mandateExpiresAt,
+      note: request.note,
+      typedData: request.typedData,
+    }),
+  });
+}
+
+/**
+ * One settlement job per session. A dry run or send that needs a gate
+ * signature parks inside `settleSpine` until the next request delivers it,
+ * or until the timer delivers null and the run stops with nothing broadcast.
+ */
+export class SpineUi {
+  readonly #host: SpineUiHost;
+  readonly #jobs = new Map<string, Job>();
+
+  constructor(host: SpineUiHost) {
+    this.#host = host;
+  }
+
+  /** Null when this request is not a settlement route, so the lab handles it. */
+  async handle(method: string, path: string, body: unknown): Promise<LabRouteResponse | null> {
+    if (method === 'GET' && path === '/api/live/settlement') {
+      return ok({
+        available: true,
+        spine: 'V2',
+        chainId: this.#host.deployment.chainId.toString(),
+        sendAuthorization: SEND_AUTHORIZATION_PHRASE,
+        reverify: 'EIP-712 PortfolioMandateV2',
+        gasPayer: 'DEPLOYER',
+        walletBroadcasts: false,
+      });
+    }
+    const match = SETTLE_PATH.exec(path);
+    if (match === null) return null;
+    if (method !== 'POST') return refuse(405, 'METHOD_NOT_ALLOWED', 'Use POST.');
+    const id = match[1];
+    if (id === undefined) return refuse(400, 'BAD_REQUEST', 'Missing session id.');
+    const parsed = parseBody(body);
+    if (!parsed.ok) return parsed.response;
+    return this.#settle(id, parsed.value);
+  }
+
+  async #settle(id: string, body: ParsedBody): Promise<LabRouteResponse> {
+    const pending = this.#jobs.get(id);
+    if (pending !== undefined && pending.phase === 'AWAITING_SIGNATURE') {
+      if (body.mode !== pending.mode) return refuse(409, 'SETTLEMENT_IN_PROGRESS', 'This session is waiting on a signature for a different settlement mode.');
+      if (body.cancel) return this.#deliver(id, pending, null);
+      if (body.gateSignature === null) {
+        const request = pending.request;
+        return request === null ? refuse(409, 'SETTLEMENT_IN_PROGRESS', 'Settlement is still preparing the gate typed data.') : signResponse(id, pending.mode, request);
+      }
+      return this.#deliver(id, pending, body.gateSignature);
+    }
+    if (pending !== undefined) return refuse(409, 'SETTLEMENT_IN_PROGRESS', 'A settlement is already running for this session.');
+    if (body.gateSignature !== null || body.cancel) return refuse(409, 'NO_PENDING_SIGNATURE', 'No gate signature was requested. Start a dry run or send first. A signature from an earlier run is not accepted.');
+    if (this.#host.taskOf(id) !== null) return refuse(409, 'BUSY', 'A run is still in progress. Settlement starts after it finishes.');
+    const session = await this.#host.openSession(id);
+    if (session === null) return refuse(404, 'SESSION_NOT_FOUND', 'No such session.');
+
+    const gate = new SendGate();
+    if (body.mode === 'SEND' && !gate.authorize(body.sendAuthorization ?? '')) {
+      session.events.emit('TESTNET_SEND_AUTHORIZATION_REFUSED', { agent: 'stock', data: { required: SEND_AUTHORIZATION_PHRASE, received: 'another text', transactions: 0 } });
+      return refuse(409, 'SEND_NOT_AUTHORIZED', `Broadcast needs the operator to type exactly "${SEND_AUTHORIZATION_PHRASE}". Nothing was sent.`);
+    }
+
+    const journal = this.#host.journalFor(session);
+    const scratch = body.mode === 'DRY_RUN' ? this.#host.scratch() : null;
+    const job: Job = { mode: body.mode, phase: 'RUNNING', request: null, deliver: null, done: Promise.resolve({ status: 'INELIGIBLE', stage: 'INTERNAL', reason: 'NOT_STARTED', reports: [] }) };
+    let cancelTimer: (() => void) | null = null;
+    let deliverSignature: ((signature: string | null) => void) | null = null;
+    const signature = new Promise<string | null>((resolve) => {
+      deliverSignature = (value) => {
+        cancelTimer?.();
+        cancelTimer = null;
+        resolve(value);
+      };
+    });
+    job.deliver = (value) => deliverSignature?.(value);
+    let asked: ((request: GateExecutionRequest) => void) | null = null;
+    const askedPromise = new Promise<GateExecutionRequest>((resolve) => {
+      asked = resolve;
+    });
+
+    let done: Promise<SpineSettlementResult>;
+    try {
+      done = this.#host.settle({
+        session,
+        journal,
+        deployment: this.#host.deployment,
+        rpc: this.#host.rpc,
+        keys: this.#host.keys,
+        mode: body.mode,
+        gate,
+        ledgerPath: scratch === null ? this.#host.ledgerPath(session) : scratch.path,
+        resolveGateExecution: (request) => {
+          job.phase = 'AWAITING_SIGNATURE';
+          job.request = request;
+          session.events.emit('GATE_EXECUTION_SIGNATURE_REQUIRED', {
+            agent: 'stock',
+            data: {
+              sessionId: session.id,
+              mode: body.mode,
+              principal: request.principal,
+              agentAddress: request.agent,
+              gate: request.gate,
+              chainId: request.chainId,
+              mandateDigest: request.mandateDigest,
+              signingHash: request.signingHash,
+              note: request.note,
+              typedData: request.typedData,
+              transactions: 0,
+              qualification: ASSET_QUALIFICATION,
+            },
+          });
+          cancelTimer = this.#host.schedule(this.#host.signatureWaitMs, () => deliverSignature?.(null));
+          asked?.(request);
+          return signature;
+        },
+      });
+    } catch {
+      journal.close();
+      scratch?.cleanup();
+      return refuse(500, 'INTERNAL', 'The settlement could not be started. Nothing was broadcast.');
+    }
+    job.done = done.finally(() => {
+      cancelTimer?.();
+      journal.close();
+      scratch?.cleanup();
+      if (this.#jobs.get(id) === job) this.#jobs.delete(id);
+    });
+    // A rejection after the HTTP response has already returned must not surface as unhandled.
+    void job.done.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.#jobs.set(id, job);
+
+    try {
+      const first = await Promise.race([
+        done.then((result) => ({ kind: 'DONE' as const, result })),
+        askedPromise.then((request) => ({ kind: 'SIGN' as const, request })),
+      ]);
+      if (first.kind === 'SIGN') return signResponse(session.id, body.mode, first.request);
+      return this.#finish(session, first.result);
+    } catch {
+      return refuse(500, 'INTERNAL', 'The settlement could not be completed. Nothing further was broadcast.');
+    }
+  }
+
+  async #deliver(id: string, job: Job, signature: string | null): Promise<LabRouteResponse> {
+    const session = await this.#host.openSession(id);
+    if (session === null) return refuse(404, 'SESSION_NOT_FOUND', 'No such session.');
+    job.deliver?.(signature);
+    try {
+      return this.#finish(session, await job.done);
+    } catch {
+      return refuse(500, 'INTERNAL', 'The settlement could not be completed. Nothing further was broadcast.');
+    }
+  }
+
+  #finish(session: LiveSession, result: SpineSettlementResult): LabRouteResponse {
+    if (result.status === 'READY') {
+      const would = result.outcome.wouldSend;
+      session.events.emit('SPINE_DRY_RUN_READY', {
+        agent: 'stock',
+        data: {
+          sessionId: session.id,
+          spine: 'V2',
+          broadcast: 'NOT_SENT',
+          transactions: 0,
+          note: 'Re-verified. Dry run READY. Nothing was broadcast. The deployer pays gas.',
+          principals: result.principals,
+          network: would.network,
+          chainId: would.chainId,
+          tokenIn: would.tokenIn,
+          tokenOut: would.tokenOut,
+          qualification: ASSET_QUALIFICATION,
+        },
+      });
+      return ok({ status: 'READY', sessionId: session.id, transactions: 0, message: 'Re-verified. Dry run READY. Nothing was broadcast.' });
+    }
+    if (result.status === 'RECONCILED_ONLY') {
+      return ok({
+        status: 'RECONCILED_ONLY',
+        sessionId: session.id,
+        attemptState: result.attempt.state,
+        message: `The reservation's attempt is ${result.attempt.state}. Reconciliation only; nothing is resent.`,
+      });
+    }
+    if (result.status === 'INELIGIBLE') {
+      const message = result.reason === 'GATE_EXECUTION_AUTHORITY_REQUIRED' ? 'No gate signature was provided. Nothing was broadcast. Dry-run again to request a new MandateAuthorization.' : `${result.stage}: ${result.reason}. Nothing was broadcast.`;
+      return refuse(409, result.reason, message);
+    }
+    if (result.status === 'NOT_READY') return refuse(409, 'NOT_READY', `The dry run did not reach READY (${result.outcome.status}). Nothing was broadcast.`);
+    const outcome = result.outcome;
+    if (outcome.status === 'CONFIRMED') {
+      return ok({
+        status: 'SENT',
+        sessionId: session.id,
+        outcome: 'CONFIRMED',
+        evidence: outcome.evidence,
+        txHash: outcome.txHash,
+        explorerUrl: outcome.explorerUrl,
+        transactions: 1,
+        message: outcome.evidence === 'LIVE_TESTNET' ? 'Confirmed on Robinhood Chain testnet.' : 'The transaction was mined. It is not labelled LIVE_TESTNET.',
+      });
+    }
+    if (outcome.status === 'SUBMITTED_UNCONFIRMED') return ok({ status: 'SENT', sessionId: session.id, outcome: outcome.status, txHash: outcome.txHash, evidence: outcome.evidence, transactions: 1, message: 'Submitted. A transaction hash is not settlement.' });
+    if (outcome.status === 'FAILED') return refuse(409, outcome.reason, `${outcome.evidence}: ${outcome.reason}`);
+    return refuse(409, outcome.status, `Settlement ended ${outcome.status}. Nothing further was broadcast.`);
+  }
+}

@@ -145,6 +145,10 @@ function detail(e: LiveEvent): string {
       return `portfolio attempt ${str(d['portfolioAttempt'])} · journal ${str(d['journal'])}`;
     case 'TESTNET_READY_FOR_SEND':
       return `READY_FOR_TESTNET_SEND · broadcast ${str(d['broadcast'])} · transactions 0`;
+    case 'GATE_EXECUTION_SIGNATURE_REQUIRED':
+      return `wallet signs MandateAuthorization ${str(d['mandateDigest'])} · ${str(d['mode'])} · not a transaction`;
+    case 'SPINE_DRY_RUN_READY':
+      return `V2 dry run READY · broadcast ${str(d['broadcast'])} · transactions 0`;
     case 'SETTLEMENT_RECONCILIATION_STARTED':
       return `${str(d['attempts'])} open attempt(s) · no model, no Room`;
     case 'SETTLEMENT_RECONCILED':

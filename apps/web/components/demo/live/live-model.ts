@@ -158,7 +158,7 @@ export interface SettlementView {
    * execution's outcome is still being established: "checking settlement status"), NEEDS_REVIEW (quarantined
    * after reconciliation: no retry was sent) and RELEASED (definitively not executed; the reservation released).
    */
-  readonly stage: "NONE" | "PREFLIGHT" | "PREFLIGHT_FAILED" | "READY" | "SIMULATION" | "SIMULATION_FAILED" | "SEND_REQUIRED" | "READY_FOR_SEND" | "SUBMITTED" | "RECONCILING" | "FAILED" | "NEEDS_REVIEW" | "RELEASED" | "SETTLED";
+  readonly stage: "NONE" | "PREFLIGHT" | "PREFLIGHT_FAILED" | "READY" | "SIGN_GATE" | "SIMULATION" | "SIMULATION_FAILED" | "SEND_REQUIRED" | "READY_FOR_SEND" | "SPINE_READY" | "SUBMITTED" | "RECONCILING" | "FAILED" | "NEEDS_REVIEW" | "RELEASED" | "SETTLED";
   readonly settled: boolean;
   readonly evidence: string | null;
   readonly network: string;
@@ -179,6 +179,8 @@ export interface SettlementView {
   readonly principals: PrincipalBinding | null;
   /** Which RPC endpoint answered: a provider label from the event, never a URL. */
   readonly rpcProvider: string | null;
+  /** The MandateAuthorization typed data the wallet still has to sign, when the spine is waiting. */
+  readonly gateSign: { readonly mode: "DRY_RUN" | "SEND"; readonly typedData: Json; readonly note: string } | null;
 }
 
 export interface LivePresentation {
@@ -602,12 +604,14 @@ export function deriveSettlement(events: readonly LiveEvent[]): SettlementView {
     consumed: false,
     principals: null,
     rpcProvider: null,
+    gateSign: null,
   };
   let view = base;
   for (const event of events) {
     const data = event.data;
     const touch = (patch: Partial<SettlementView>): void => {
-      view = { ...view, present: true, ...patch };
+      const gateSign = patch.gateSign !== undefined ? patch.gateSign : patch.stage !== undefined && patch.stage !== "SIGN_GATE" ? null : view.gateSign;
+      view = { ...view, present: true, ...patch, gateSign };
     };
     const p = rec(data.principals);
     if (typeof p.delegation === "string") {
@@ -633,6 +637,31 @@ export function deriveSettlement(events: readonly LiveEvent[]): SettlementView {
       });
     }
     if (event.kind === "TESTNET_PREFLIGHT_FAILED") touch({ stage: "PREFLIGHT_FAILED", settled: false, detail: str(data.reason) });
+    if (event.kind === "GATE_EXECUTION_SIGNATURE_REQUIRED") {
+      const typed = data.typedData;
+      const mode = data.mode === "SEND" ? "SEND" : "DRY_RUN";
+      touch({
+        stage: "SIGN_GATE",
+        settled: false,
+        detail: str(data.note),
+        gateSign: typeof typed === "object" && typed !== null ? { mode, typedData: typed, note: str(data.note) } : null,
+      });
+    }
+    if (event.kind === "SPINE_DRY_RUN_READY") {
+      touch({
+        stage: "SPINE_READY",
+        settled: false,
+        evidence: "DRY_RUN",
+        network: textField(data, "network") ?? view.network,
+        chainId: textField(data, "chainId") ?? view.chainId,
+        detail: str(data.note),
+        fixtureIn: tokenLabel(rec(data.tokenIn)) ?? view.fixtureIn,
+        fixtureOut: tokenLabel(rec(data.tokenOut)) ?? view.fixtureOut,
+        gateSign: null,
+      });
+    }
+    if (event.kind === "DOMAIN_EXECUTION_INELIGIBLE" && !view.settled) touch({ stage: "FAILED", settled: false, detail: str(data.reason), gateSign: null });
+    if (event.kind === "TESTNET_SEND_AUTHORIZATION_REFUSED" && !view.settled) view = { ...view, present: true, detail: "The operator phrase was refused. Nothing was sent." };
     if (event.kind === "TESTNET_SIMULATION_STARTED") touch({ stage: "SIMULATION", settled: false });
     if (event.kind === "TESTNET_SIMULATION_PASSED") touch({ stage: "SIMULATION", settled: false, detail: data.gasEstimate === undefined ? view.detail : `Gas estimate ${str(data.gasEstimate)}` });
     if (event.kind === "TESTNET_SIMULATION_FAILED") touch({ stage: "SIMULATION_FAILED", settled: false, detail: str(data.reason) });
@@ -679,7 +708,7 @@ export function deriveSettlement(events: readonly LiveEvent[]): SettlementView {
 }
 
 /** Stages after which nothing further happens without a new action: the flow may show the receipt. */
-export const SETTLEMENT_TERMINAL = ["SETTLED", "FAILED", "PREFLIGHT_FAILED", "SIMULATION_FAILED", "READY_FOR_SEND", "NEEDS_REVIEW", "RELEASED"] as const;
+export const SETTLEMENT_TERMINAL = ["SETTLED", "FAILED", "PREFLIGHT_FAILED", "SIMULATION_FAILED", "READY_FOR_SEND", "SPINE_READY", "NEEDS_REVIEW", "RELEASED"] as const;
 
 export function settlementTerminal(s: SettlementView): boolean {
   return (SETTLEMENT_TERMINAL as readonly string[]).includes(s.stage);

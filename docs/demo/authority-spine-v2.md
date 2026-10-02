@@ -12,8 +12,9 @@ the gate; the gate debits the signer.
 V1 is unchanged. A caller that does not name `V2_EIP712` still uses
 `mandateSignedByPrincipal` (the raw `PORTFOLIO_MANDATE_SIGNATURE.V1` prehash).
 B.5.2 (`npm run agents:live:testnet`), B.5.3 (`npm run agents:settle:testnet`)
-and the B.6.2 playback client stay on that path. The browser does not offer
-V2; an operator asks for it on the API.
+and the recorded playback client stay on that path. The Live Lab page offers
+V2 when the local server is `npm run agents:lab`. `npm run agents:serve` does
+not settle. `npm run agents:settle:v2` is the same spine, from the terminal.
 
 **Status.** Implemented locally. The happy path below is what the command
 does. This repository run did not broadcast a transaction and did not create
@@ -160,8 +161,9 @@ then builds a new gate mandate and, when the wallet is not the manifest
 principal, asks for a second gate signature. It does not broadcast without
 the phrase, and it does not reuse the dry run's signature. A real RPC send
 still requires a live model (`provider.kind === 'LIVE'`); a stub or script
-is refused. The command does not emit `TESTNET_READY_FOR_SEND` (the B.6.2
-client still hardcodes that event as "broadcast disabled").
+is refused. The command does not emit `TESTNET_READY_FOR_SEND`. The page
+still reads that B.5.3 event as "broadcast disabled". A V2 dry run emits
+`SPINE_DRY_RUN_READY` instead, which the page shows as READY · NOT SENT.
 
 Exit codes: `0` ready, reconciled only, or a confirmed `LIVE_TESTNET` send;
 `1` usage or configuration; `3` the session cannot be restored; `4` not
@@ -169,6 +171,48 @@ eligible (including a gate signature that does not recover to the wallet);
 `5` the dry run did not reach READY; `6` the phrase was refused; `7` a
 transaction was submitted but is not a confirmed live-testnet settlement;
 `8` the wallet must sign the gate mandate and no signature was provided.
+
+## In the Live Lab
+
+`npm run agents:lab` is the Live AI Lab and this spine on one loopback port.
+`npm run agents:serve` is unchanged and has no settlement routes. A missing
+manifest or key file does not stop the lab: `GET /api/live/settlement` and
+`POST /api/live/sessions/:id/settle` answer 503, and the rest of the API
+still serves. When the files are usable, the GET advertises spine `V2`,
+chain 46630, gas payer `DEPLOYER`, `walletBroadcasts: false`, and the
+operator phrase. The browser never imports this package and never broadcasts.
+
+Dry-run from the page:
+
+1. Start `npm run agents:lab` from the repository root, and open `/demo/live`.
+2. Compose a mandate and choose **Approve in wallet**. Sign Mandate is
+   `PortfolioMandateV2` (`POST …/wallet/challenge` with `{ "spine": "V2" }`).
+   The demo principal key still works for a run. It cannot settle on V2
+   (`SPINE_METHOD_REQUIRED`). `reverifySpine` is not skipped.
+3. After the portfolio is authorized, the receipt offers **Dry-run testnet
+   settlement**. That is `POST …/settle` with `{ "mode": "DRY_RUN" }`, the
+   same `settleSpine` as the CLI. The fixture stays MDEMO/MDUSD. Registry
+   matching is unchanged.
+4. If the wallet is not the manifest principal, the page moves to **Sign
+   stock authorization** before simulation. Phantom signs
+   `MandateAuthorization` (`eth_signTypedData_v4` only). That signature is
+   not a gas transaction. The deployer key broadcasts. A wallet rejection
+   cancels the parked run. The wait is 180 seconds; after that the run stops
+   and nothing is broadcast.
+5. The receipt then shows the session id and **READY · NOT SENT**. Nothing
+   was broadcast.
+
+To send, type the phrase from that GET (`AUTHORIZE ROBINHOOD TESTNET SEND`)
+into the receipt and choose **Send testnet transaction**. The page posts
+`{ "mode": "SEND", "sendAuthorization": "<phrase>" }`. The same `SendGate`
+checks it before `settleSpine` runs. `--send` still builds a new mandate
+digest, so a different-address wallet is asked to sign `MandateAuthorization`
+again. The deployer pays gas. A stub session cannot live-send. A transaction
+hash is not CONFIRMED; only `LIVE_TESTNET` evidence is. The wallet must hold
+the MDUSD debit and have approved the gate.
+
+If the receipt says to start `npm run agents:lab`, the page is talking to
+`agents:serve`. Settlement routes are absent there on purpose.
 
 ## Remaining technical debt
 
@@ -186,11 +230,12 @@ transaction was submitted but is not a confirmed live-testnet settlement;
   still sends only after the operator phrase.
 - Exact resubmission is still absent: the raw transaction is not stored.
 - The domain ledger is still per attempt and is not fully reconciled.
-- The B.6.2 client still describes `TESTNET_READY_FOR_SEND` as broadcast
-  disabled. V2 avoids that event. The client does not offer `spine: "V2"`;
-  the API does. The playback client labels `SAME_PRINCIPAL` and
-  `WALLET_GATE_EIP712` when a settlement event carries them. It does not
-  collect the gate signature.
+- The page still describes `TESTNET_READY_FOR_SEND` as broadcast disabled.
+  That event is the B.5.3 dry run. V2 emits `SPINE_DRY_RUN_READY` instead.
+  With `npm run agents:lab`, the page offers `spine: "V2"`, collects
+  `MandateAuthorization` in the wallet, and posts the operator phrase for a
+  send. The deployer still broadcasts. The recorded playback client does not
+  collect that signature.
 - Session, portfolio, and settlement state are local SQLite.
 - The settled leg is the MDEMO/MDUSD fixture, not an NVDA trade.
 - A dry run still reveals a signed gate artifact to the RPC through

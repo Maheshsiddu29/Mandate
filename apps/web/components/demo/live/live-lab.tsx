@@ -13,7 +13,7 @@ import { EventLogBody, PauseBody, ReviewBody, StressBody } from "./sheets";
 import { AgentsStage, AgentSummaryList } from "./stage-agents";
 import { DraftingStage, PromptStage } from "./stage-compose";
 import { ApproveStage, ConfigureStage, draftAccess, PermissionsBody, type WalletState } from "./stage-configure";
-import { AuthorizedStage, FailedStage, ReceiptStage, SettlingStage, VerifyStage } from "./stage-outcome";
+import { AuthorizedStage, FailedStage, ReceiptStage, SettlingStage, VerifyStage, type SettlementOffer } from "./stage-outcome";
 import { APPROVAL_CHAIN, injectedWallet, shortAddress } from "./wallet";
 import { Sheet } from "./workspace-ui";
 import "./live-workspace.css";
@@ -106,6 +106,8 @@ export function LiveLab(): ReactNode {
   const [now, setNow] = useState(() => Date.now());
   const [wallet, setWallet] = useState<WalletState>({ available: false, address: null, chainId: null });
   const [resumed, setResumed] = useState(false);
+  const [signing, setSigning] = useState(false);
+  const [settlementOffer, setSettlementOffer] = useState<SettlementOffer>({ kind: "loading" });
   const lastSequence = useRef(-1);
   const stageRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
@@ -118,6 +120,18 @@ export function LiveLab(): ReactNode {
       if (!result.ok) return;
       setStatus(result.body);
       if (rec(rec(result.body.providers).openai).available === true) setProviderChoice("openai");
+      void api(SERVER, "GET", "/settlement").then((settlement) => {
+        if (settlement.status === 404) {
+          setSettlementOffer({ kind: "unavailable", message: "Settlement is not on this server. Start it with npm run agents:lab, then dry-run from this page." });
+          return;
+        }
+        if (!settlement.ok) {
+          setSettlementOffer({ kind: "unavailable", message: message(settlement.body) });
+          return;
+        }
+        const phrase = str(settlement.body.sendAuthorization);
+        setSettlementOffer(phrase === "—" ? { kind: "unavailable", message: "This server did not advertise the operator phrase. Nothing will be sent." } : { kind: "ready", phrase });
+      });
       // A reload (or a server restart) returns to the same durable session; its events replay from the start.
       const id = rememberedSession();
       if (id === null) return;
@@ -327,7 +341,7 @@ export function LiveLab(): ReactNode {
       await readWallet();
       return;
     }
-    const challenge = await call("POST", "/wallet/challenge", { address });
+    const challenge = await call("POST", "/wallet/challenge", { address, spine: "V2" });
     if (challenge === null) {
       setAuthorizing(false);
       return;
@@ -370,6 +384,58 @@ export function LiveLab(): ReactNode {
     setReviewing(false);
     setComposing(false);
   };
+
+  /** Settlement JSON includes a session id and must not replace the session view. */
+  async function postSettle(body: JsonRecord): Promise<JsonRecord | null> {
+    if (SERVER === null || sessionId === null) return null;
+    const result = await api(SERVER, "POST", `/sessions/${sessionId}/settle`, body);
+    if (!result.ok) {
+      setError(message(result.body));
+      return null;
+    }
+    setError("");
+    return result.body;
+  }
+
+  async function dryRun(): Promise<void> {
+    setSigning(true);
+    setError("");
+    await postSettle({ mode: "DRY_RUN" });
+    setSigning(false);
+  }
+
+  async function signStock(): Promise<void> {
+    const gate = presentation.settlement.gateSign;
+    const w = injectedWallet();
+    const address = wallet.address;
+    if (SERVER === null || sessionId === null || gate === null || w === null || address === null) {
+      setError("Connect the wallet that signed this mandate. Nothing was broadcast.");
+      return;
+    }
+    const chain = await w.getChainId();
+    if (!chain.ok || chain.value !== APPROVAL_CHAIN.chainId) {
+      setError("Switch your wallet to Robinhood Chain testnet to sign. Nothing was broadcast.");
+      await readWallet();
+      return;
+    }
+    setSigning(true);
+    const signed = await w.signTypedData(address, gate.typedData);
+    if (!signed.ok) {
+      await api(SERVER, "POST", `/sessions/${sessionId}/settle`, { mode: gate.mode, cancel: true });
+      setSigning(false);
+      setError(`${signed.error.message} Nothing was broadcast.`);
+      return;
+    }
+    await postSettle({ mode: gate.mode, gateSignature: signed.value });
+    setSigning(false);
+  }
+
+  async function sendTestnet(phrase: string): Promise<void> {
+    setSigning(true);
+    setError("");
+    await postSettle({ mode: "SEND", sendAuthorization: phrase });
+    setSigning(false);
+  }
 
   const runAgain = async (): Promise<void> => {
     setSheet(null);
@@ -464,7 +530,19 @@ export function LiveLab(): ReactNode {
       stage = <AuthorizedStage review={review} />;
       break;
     case "SETTLING":
-      stage = <SettlingStage settlement={presentation.settlement} />;
+      stage = (
+        <SettlingStage
+          settlement={presentation.settlement}
+          sessionId={sessionId}
+          signing={signing}
+          walletReady={wallet.address !== null && wallet.chainId === APPROVAL_CHAIN.chainId}
+          onSignStock={() => void signStock()}
+          onPrepareWallet={() => {
+            if (wallet.address === null) void connectWallet();
+            else void switchChain();
+          }}
+        />
+      );
       break;
     case "COMPLETE":
       stage = (
@@ -472,7 +550,11 @@ export function LiveLab(): ReactNode {
           review={review}
           settlement={presentation.settlement}
           stock={stock}
-          busy={task !== null}
+          sessionId={sessionId}
+          offer={settlementOffer}
+          busy={task !== null || signing}
+          onDryRun={() => void dryRun()}
+          onSend={(phrase) => void sendTestnet(phrase)}
           onDetails={() => setSheet("review")}
           onRoom={roomSeen ? () => setSheet("room") : null}
           onStress={() => setSheet("stress")}

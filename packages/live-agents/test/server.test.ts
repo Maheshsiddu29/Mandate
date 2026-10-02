@@ -155,6 +155,31 @@ describe('the HTTP binding', () => {
     assert.equal((await raw({ method: 'POST', path: '/api/live/sessions', headers: { 'content-type': 'application/json' }, body: `"${'x'.repeat(MAX_BODY_BYTES + 10)}"` })).status, 413);
   });
 
+  it('an attached route answers before the lab, and an unknown path still falls through', async () => {
+    const extra = createLabServer(lab(false), {
+      port: 0,
+      allowedOrigins: [ORIGIN],
+      before: (r) => Promise.resolve(r.path === '/api/live/settlement' ? { status: 200, body: { available: true } } : null),
+    });
+    await listen(extra, 0);
+    const extraPort = (extra.address() as AddressInfo).port;
+    const hit = await new Promise<{ status: number; text: string }>((resolve, reject) => {
+      const r = request({ host: '127.0.0.1', port: extraPort, method: 'GET', path: '/api/live/settlement', headers: { host: `127.0.0.1:${extraPort}` } }, (res) => {
+        let text = '';
+        res.setEncoding('utf8');
+        res.on('data', (c: string) => { text += c; });
+        res.on('end', () => resolve({ status: res.statusCode ?? 0, text }));
+      });
+      r.on('error', reject);
+      r.end();
+    });
+    extra.closeAllConnections();
+    extra.close();
+    assert.equal(hit.status, 200);
+    assert.match(hit.text, /"available":true/);
+    assert.equal((await raw({ method: 'GET', path: '/api/live/settlement' })).status, 404);
+  });
+
   it('streams MANDATE_LIVE_AI.V1 events as Server-Sent Events', async () => {
     const created = await raw({ method: 'POST', path: '/api/live/sessions', headers: { 'content-type': 'application/json', origin: ORIGIN }, body: JSON.stringify({ provider: 'stub' }) });
     assert.equal(created.status, 201);

@@ -40,17 +40,25 @@ export function Sheet({ open, onClose, title, kicker, wide = false, children }: 
     if (!open && dialog.open) dialog.close();
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return undefined;
+    // The page's smooth scroll listens on the window. Lock the document while a sheet is open.
+    document.documentElement.setAttribute("data-sheet-open", "");
+    return () => document.documentElement.removeAttribute("data-sheet-open");
+  }, [open]);
+
   return (
     <dialog
       ref={ref}
       className={wide ? "mw-sheet mw-sheet--wide" : "mw-sheet"}
       aria-labelledby={id}
+      data-lenis-prevent=""
       onClose={onClose}
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <div className="mw-sheet__inner">
+      <div className="mw-sheet__inner" data-lenis-prevent="">
         <header className="mw-sheet__head">
           <div>
             {kicker === undefined ? null : <p className="mw-kicker">{kicker}</p>}
@@ -60,7 +68,7 @@ export function Sheet({ open, onClose, title, kicker, wide = false, children }: 
             <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
           </button>
         </header>
-        <div className="mw-sheet__body">{open ? children : null}</div>
+        <div className="mw-sheet__body" data-lenis-prevent="">{open ? children : null}</div>
       </div>
     </dialog>
   );

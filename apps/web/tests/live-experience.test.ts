@@ -125,6 +125,17 @@ test('advanced permissions start closed and open as an accessible dialog', () =>
   assert.match(configure, /What Mandate enforces/);
 });
 
+test('an open sheet scrolls its own body and does not hand the wheel to the page', () => {
+  assert.match(shared, /data-lenis-prevent=""/);
+  assert.match(shared, /data-sheet-open/);
+  assert.match(css, /dialog\.mw-sheet \{[\s\S]*overflow: hidden;/);
+  assert.match(css, /html\[data-sheet-open\]/);
+  assert.match(css, /\.mw-sheet__body \{[\s\S]*overflow-y: auto;[\s\S]*overscroll-behavior: contain;/);
+  const smooth = read('../components/layout/smooth-scroll.tsx');
+  assert.match(smooth, /lenis\.stop\(\)/);
+  assert.match(smooth, /data-sheet-open/);
+});
+
 test('Trade is the one dominant action on the agent team', () => {
   const stage = configure.slice(configure.indexOf('export function ConfigureStage'), configure.indexOf('export function ApproveStage'));
   assert.equal(stage.match(/className="mw-cta"/g)?.length, 1);
@@ -152,7 +163,17 @@ test('the review step signs with a real wallet, or with the labelled demo key â€
   // Signing a mandate is not a transaction: the review step shows no gas estimate or limit.
   assert.doesNotMatch(configure, /gas estimate|gasEstimate|estimateGas|gasLimit/i);
   // The wallet path: a server challenge, the wallet's EIP-712 signature, server verification; the browser sends only id and signature.
-  assert.match(lab, /call\("POST", "\/wallet\/challenge", \{ address \}\)/);
+  assert.match(lab, /call\("POST", "\/wallet\/challenge", \{ address, spine: "V2" \}\)/);
+  assert.match(lab, /api\(SERVER, "GET", "\/settlement"\)/);
+  assert.match(lab, /mode: "DRY_RUN"/);
+  assert.match(lab, /gateSignature: signed\.value/);
+  assert.match(lab, /cancel: true/);
+  assert.match(lab, /sendAuthorization: phrase/);
+  assert.match(lab, /npm run agents:lab/);
+  assert.match(outcome, /Sign stock authorization/);
+  assert.match(outcome, /Nothing is broadcast\./);
+  assert.match(outcome, /Dry-run testnet settlement/);
+  assert.doesNotMatch(browserSources, /live-settlement|eth_sendTransaction|sendTransaction/);
   assert.match(lab, /w\.signTypedData\(address, challenge\.typedData\)/);
   assert.match(lab, /call\("POST", "\/wallet\/authorize", \{ challenge: str\(challenge\.challenge\), signature: signed\.value \}\)/);
   assert.doesNotMatch(lab, /console\.|localStorage\.setItem\([^)]*signature/);
