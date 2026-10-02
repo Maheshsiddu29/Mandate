@@ -77,6 +77,7 @@
     "agents:live": "node --env-file-if-exists=.env packages/live-agents/scripts/live.ts --provider=openai",
     "agents:live:json": "node --env-file-if-exists=.env packages/live-agents/scripts/live.ts --provider=openai --json",
     "agents:serve": "node --env-file-if-exists=.env packages/live-agents/scripts/serve.ts",
+    "agents:lab": "node --env-file-if-exists=.env packages/live-settlement/scripts/lab.ts",
     "agents:live:testnet:dry-run": "node --env-file-if-exists=.env packages/live-settlement/scripts/testnet.ts --provider=openai --dry-run",
     "agents:live:testnet": "node --env-file-if-exists=.env packages/live-settlement/scripts/testnet.ts --provider=openai",
     "agents:rpc:smoke": "node --env-file-if-exists=.env packages/live-settlement/scripts/rpc-smoke.ts",

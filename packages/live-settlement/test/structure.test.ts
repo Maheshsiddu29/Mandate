@@ -101,6 +101,8 @@ describe('live-settlement structural boundary', () => {
     const scripts = (JSON.parse(readFileSync(new URL('package.json', REPO), 'utf8')) as { scripts: { [k: string]: string } }).scripts;
     assert.match(scripts['agents:settle:testnet'] ?? '', /live-settlement\/scripts\/settle\.ts$/);
     assert.match(scripts['agents:settle:v2'] ?? '', /live-settlement\/scripts\/spine\.ts$/);
+    assert.match(scripts['agents:lab'] ?? '', /live-settlement\/scripts\/lab\.ts$/);
+    assert.doesNotMatch(scripts['agents:serve'] ?? '', /agents:lab|ui-settle/);
     assert.match(scripts['agents:rpc:smoke'] ?? '', /live-settlement\/scripts\/rpc-smoke\.ts$/);
     const spine = SCRIPTS.find((s) => s.file === 'spine.ts')?.text ?? '';
     assert.ok(spine.length > 0, 'spine.ts');
