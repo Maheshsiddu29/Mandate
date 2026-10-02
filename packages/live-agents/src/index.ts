@@ -16,7 +16,7 @@ export { DRAFT_FIELD_PATHS, parseFieldValue } from './authoring/draft-fields.ts'
 export { CATALOG, CATALOG_SETS, AGENT_DOMAINS, REVIEWED_BOUNDS } from './authoring/catalog.ts';
 export { PAUSE_CONFIRMATION, AUTHORIZATION_METHODS, type VersionRecord, type AuthorizeResult, type ActiveMandate, type PrincipalAuthorization, type AuthorizationMethod } from './authoring/mandate-versioning.ts';
 export type { DraftValidation, GuardrailRow } from './authoring/draft-validator.ts';
-export { DOMAIN_AGENTS } from './agents/index.ts';
+export { DOMAIN_AGENTS, actionableCandidates, assessCandidate, STATIC_SCOPE_CODES, type CandidateEligibility, type CandidateUniverse, type EligibilityFilter } from './agents/index.ts';
 export { POLICY_CASE_IDS, POLICY_CASES, type PolicyCaseId } from './policy-stress/cases.ts';
 export { DEFAULT_POLICY_STRESS_ATTEMPTS, MAX_POLICY_STRESS_ATTEMPTS, type PolicyStressResult, type PolicyStressAttempt } from './policy-stress/runner.ts';
 export { OpenAIProvider, DEFAULT_OPENAI_MODEL } from './runtime/openai-provider.ts';

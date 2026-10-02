@@ -17,3 +17,4 @@ export const DOMAIN_AGENTS: { readonly [R in Role]: DomainAgentSpec } = {
 export { STOCK_AGENT, SWAP_AGENT, NFT_AGENT, YIELD_AGENT, PERPS_AGENT };
 export { PROMPT_INJECTION_FIXTURE } from './nft-agent.ts';
 export * from './spec.ts';
+export * from './eligibility.ts';
