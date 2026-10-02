@@ -26,6 +26,115 @@ Different reasoning.  Different negotiation.  Same authority boundary.
 VALID AGENT != VALID ACTION
 ```
 
+<a id="stock-agent-blocked-by-mandate"></a>
+
+## Live Demo — Stock Agent Blocked by Mandate
+
+During a live OpenAI run, the Stock Agent may select a cheaper NVIDIA-linked
+representation instead of the approved NVIDIA instrument.
+
+This is intentional evidence of the security model rather than a protocol
+failure or a Stock agent bug.
+
+The agent is allowed to search and optimize among candidate opportunities. In
+this run, it selected `nvda-token-b`, a cheaper lookalike representation.
+
+Mandate then independently evaluated the exact proposed action against the
+principal’s registry and rejected it because the issuer / representation was
+not approved.
+
+The two candidates are the Stock row in
+[§4](#4-agents-and-the-candidate-boundary): `nvda-note-a` is the approved
+backed note; `nvda-token-b` is the same-ticker token from another issuer.
+Screening is the frozen `screenProposal`. A non-quantity refusal is blocked
+and never enters the Room ([§5](#5-runtime)). The offline judge demo shows
+the scripted form of the same look-alike block in
+[judge-demo.md](judge-demo.md) scene 2. Reason-code definitions:
+[`ISSUER_NOT_ALLOWED`](../registry-reason-codes.md),
+[`SYNTHETIC_NOT_ALLOWED`](../registry-reason-codes.md).
+
+### Example flow
+
+```text
+Stock Agent
+  discovers a cheaper NVIDIA-linked candidate
+  proposes nvda-token-b
+        │
+        ▼
+Mandate
+  canonicalizes the proposed asset
+  checks issuer and representation
+  rejects the action
+        │
+        ▼
+BLOCKED
+```
+
+Possible reason:
+
+`REGISTRY:ISSUER_NOT_ALLOWED`
+
+or
+
+`REGISTRY:SYNTHETIC_NOT_ALLOWED`
+
+No reservation is created.
+No settlement is attempted.
+No transaction is sent.
+
+### Core property
+
+This demonstrates a core Mandate property:
+
+**VALID AGENT ≠ VALID ACTION**
+
+The agent itself remains authorized to participate, but this specific action
+is outside the principal’s authority.
+
+The important distinction is that Mandate does not rely on the model to
+perfectly remember every financial constraint. Agents may search, reason, and
+optimize freely; Mandate independently enforces the final action before
+execution.
+
+The same property, with a closed list of preconstructed cases under the Swap
+Agent’s identity, is the
+[policy-stress agent](#7-the-policy-stress-agent).
+
+### Dual demo outcomes
+
+Keep both paths available so the demo is credible (the agent is not only
+following a scripted safe path):
+
+- **Live run:** Agent chooses cheaper lookalike → Mandate blocks it
+- **Another run / approved candidate:** Agent chooses `nvda-note-a` → Mandate authorizes it
+
+### Suggested Live Lab chrome (product copy; UI change later)
+
+Product copy only. The Live Lab UI is unchanged.
+
+```text
+Stock Agent
+
+Found a cheaper NVIDIA-linked representation.
+
+$800
+nvda-token-b
+
+Mandate
+BLOCKED
+
+Synthetic representation not approved.
+
+No transaction sent.
+```
+
+**Why?**
+
+The agent preferred the lower-priced candidate.
+
+Mandate checked the exact issuer and representation against your approved
+asset registry and refused it.
+
 ## 0. B.6.2 product workspace
 
 `/demo/live` is one adaptive workspace, not a stepper. One main panel
@@ -204,7 +313,7 @@ fixtures):
 
 | Agent | Objective | Candidates (the Mandate decides which are allowed) |
 | --- | --- | --- |
-| Stock | useful NVDA exposure | the approved backed note at 125.00; a same-ticker token at 122.50 from another issuer |
+| Stock | useful NVDA exposure | the approved backed note at 125.00 (`nvda-note-a`); a same-ticker token at 122.50 from another issuer (`nvda-token-b`). A live choice of the cheaper token is the block in [Live Demo — Stock Agent Blocked by Mandate](#stock-agent-blocked-by-mandate) |
 | Swap | best execution USDC→WETH | the approved router; a router quoting 4.16 % more |
 | NFT | an acceptable Genesis purchase, or abstain | a listing of the Genesis collection; a cheaper same-name listing on another contract whose seller text contains a prompt injection |
 | Yield | best **advertised** APY | the approved vault at 5.20 %; an unvetted vault at 12.60 % |

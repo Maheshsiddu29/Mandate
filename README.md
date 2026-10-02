@@ -243,6 +243,7 @@ grant to agents.**
 | Document | What it covers |
 | --- | --- |
 | **[docs/mandate-design.md](docs/mandate-design.md)** | **Canonical specification.** The complete Mandate design: problem, primitives, lifecycle, verification, routing, corporate actions, settlement, invariants, threat model, scope and roadmap. Start here. |
+| [docs/demo/live-ai-lab.md](docs/demo/live-ai-lab.md) | Live AI Lab. [Live Demo — Stock Agent Blocked by Mandate](docs/demo/live-ai-lab.md#stock-agent-blocked-by-mandate): a live Stock Agent choice of `nvda-token-b` is blocked (`REGISTRY:ISSUER_NOT_ALLOWED` or `REGISTRY:SYNTHETIC_NOT_ALLOWED`). **VALID AGENT ≠ VALID ACTION.** |
 | [docs/architecture.md](docs/architecture.md) | System structure, components and their boundaries, data flow, and where each concern is enforced. |
 | [docs/roadmap.md](docs/roadmap.md) | Phased engineering plan, what each phase delivers, and its exit criteria. |
 | [docs/core-v1/README.md](docs/core-v1/README.md) | Phase 7A: the Mandate Core v1 specification — authority graph, global authority ledger, typed actions, state and quantities, reservations and reconciliation, enforcement adapters, receipts, security invariants and worked examples. Specification only. |
