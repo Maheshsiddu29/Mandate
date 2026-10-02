@@ -3,7 +3,8 @@
 import { LatticeLoader } from "@/components/react-bits/lattice-loader";
 import { useState, type ReactNode } from "react";
 import type { Failure } from "./live-flow";
-import { ROLE_TITLES, usd, type AgentCard, type RoleName, type SettlementView, type TradeReview } from "./live-model";
+import type { AuthorizedStockTrade } from "./allocation-model";
+import { ROLE_TITLES, usd, type RoleName, type SettlementView, type TradeReview } from "./live-model";
 import { shortAddress } from "./wallet";
 import { AgentGlyph, Pill } from "./workspace-ui";
 
@@ -211,21 +212,33 @@ function SettleActions(props: {
 
 function SettlementProof(props: {
   readonly settlement: SettlementView;
-  readonly stock: AgentCard | undefined;
+  readonly stockTrade: AuthorizedStockTrade;
   readonly sessionId: string | null;
   readonly offer: SettlementOffer;
   readonly busy: boolean;
   readonly onDryRun: () => void;
   readonly onSend: (phrase: string) => void;
 }): ReactNode {
-  const { settlement, stock } = props;
+  const { settlement, stockTrade } = props;
+  // No Stock reservation, no Stock trade: the model's choice alone is never a trade decision, and offers no settlement control.
+  if (!stockTrade.authorized && !settlement.present) {
+    return (
+      <section className="mw-proof" aria-label="Settlement">
+        <div className="mw-proof__decision">
+          <p className="mw-kicker">Trade decision</p>
+          <p className="mw-proof__main">No authorized Stock trade</p>
+          <p className="mw-fine">The Stock proposal did not receive execution authority. Only an authorized, reserved Stock action has a testnet settlement path.</p>
+        </div>
+      </section>
+    );
+  }
   const detail = settlement.detail !== "" && (settlement.stage === "FAILED" || settlement.stage === "SPINE_READY" || settlement.stage === "SIMULATION_FAILED" || settlement.stage === "PREFLIGHT_FAILED") ? settlement.detail : "";
   return (
     <section className="mw-proof" aria-label="Settlement">
       <div className="mw-proof__decision">
         <p className="mw-kicker">Trade decision</p>
-        <p className="mw-proof__main">{stock !== undefined && stock.candidate !== "—" ? stock.candidate : "Stock"}</p>
-        <p className="mw-fine">Authorized allocation {stock?.finalOutcome === "RESERVED" ? usd(stock.finalAmount) : "—"}</p>
+        <p className="mw-proof__main">{stockTrade.candidate ?? "Stock"}</p>
+        <p className="mw-fine">Authorized allocation {stockTrade.amount === null ? "—" : usd(stockTrade.amount)}</p>
       </div>
       <div className="mw-proof__chain">
         <p className="mw-kicker">Settlement proof</p>
@@ -265,7 +278,7 @@ function SettlementProof(props: {
 export function ReceiptStage(props: {
   readonly review: TradeReview;
   readonly settlement: SettlementView;
-  readonly stock: AgentCard | undefined;
+  readonly stockTrade: AuthorizedStockTrade;
   readonly sessionId: string | null;
   readonly offer: SettlementOffer;
   readonly onDryRun: () => void;
@@ -312,7 +325,7 @@ export function ReceiptStage(props: {
         )}
       </div>
 
-      <SettlementProof settlement={settlement} stock={props.stock} sessionId={props.sessionId} offer={props.offer} busy={props.busy} onDryRun={props.onDryRun} onSend={props.onSend} />
+      <SettlementProof settlement={settlement} stockTrade={props.stockTrade} sessionId={props.sessionId} offer={props.offer} busy={props.busy} onDryRun={props.onDryRun} onSend={props.onSend} />
 
       <footer className="mw-stage-foot mw-stage-foot--receipt">
         <button type="button" className="mw-cta" onClick={props.onDetails}>Review details</button>

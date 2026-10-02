@@ -7,6 +7,7 @@
  */
 
 import { amount, arr, code, rec, str, type Json, type JsonRecord, type LiveEvent } from "./live-client.ts";
+import { roomCopy } from "./allocation-model.ts";
 
 export const ROLES = ["stock", "swap", "nft", "yield", "perps"] as const;
 export type RoleName = (typeof ROLES)[number];
@@ -940,7 +941,19 @@ export function deriveRoomChat(events: readonly LiveEvent[]): ChatMessage[] {
     switch (event.kind) {
       case "ROOM_OPENED": {
         const names = arr(data.participants).map((item) => (typeof item === "string" ? item : str(rec(item).role))).filter((item) => item !== "—");
-        out.push({ ...base(event), kind: "system", title: "Mandate opened the Room", detail: names.length === 0 ? "Agents are resolving a shared authority conflict." : `${roleList(names)} are resolving a shared authority conflict.`, tone: "neutral" });
+        // The Room says why it exists: a real shared-resource conflict, or released capital being reassigned.
+        const purpose = roomCopy(data.roomPurpose);
+        out.push({ ...base(event), kind: "system", title: data.roomPurpose === "REALLOCATION" ? "Released capital" : "Mandate opened the Room", detail: names.length === 0 ? purpose : `${purpose} ${roleList(names)} take part.`, tone: "neutral" });
+        break;
+      }
+      case "OPPORTUNITY_CARD_CREATED": {
+        const action = str(data.action);
+        out.push({ ...base(event), kind: "agent", action, title: action === "PROPOSE" ? `Can use up to ${usd(amountOf(data.maximumUseful))}` : "Keep", detail: typeof data.rationale === "string" ? data.rationale : "", tone: action === "PROPOSE" ? "good" : "neutral" });
+        break;
+      }
+      case "ALLOCATION_PLAN_PROPOSED": {
+        const moves = arr(data.budgets).map(rec).filter((row) => amountOf(row.increment) !== null && amountOf(row.increment) !== "0").map((row) => `${ROLE_TITLES[str(row.role) as RoleName] ?? str(row.role)} +${usd(amountOf(row.increment))}`);
+        out.push({ ...base(event), kind: "system", title: "Reassignment proposed", detail: `${moves.length === 0 ? "No agent can use it." : moves.join(" · ")}. ${usd(amountOf(data.unallocated))} stays in your wallet. Not authorized yet.`, tone: "neutral" });
         break;
       }
       case "ROOM_GENERATION_STARTED":

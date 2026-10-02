@@ -125,7 +125,7 @@ function Allocation({ access }: { readonly access: DraftAccess }): ReactNode {
       </div>
       <p className="mw-allocation__note">
         {deployable === null ? "Capital is not set yet." : summary.oversubscribed
-          ? `Ceilings add up to more than the ${deployable} you deploy. Mandate holds that line; overlapping requests go to the Room.`
+          ? `Ceilings add up to more than the ${deployable} you deploy. Mandate holds that line; agents re-divide capital only if you allow it.`
           : summary.unassigned !== null ? `${usd(String(summary.unassigned))} not assigned to any agent.` : `${deployable} deployable.`}
         {reserve !== "" && reserve !== "0" ? ` Keeps ${usd(reserve)} unallocated.` : ""}
       </p>
@@ -153,6 +153,8 @@ export function ConfigureStage(props: {
   readonly onPermissions: () => void;
   readonly onTrade: () => void;
   readonly onStartOver: () => void;
+  /** Mandate Room V2: agent selection, "Your allocation", or "Ask agents for a split". Replaces the ceiling summary. */
+  readonly allocation?: ReactNode;
 }): ReactNode {
   const missing = props.blocking.filter((issue) => str(issue.code) === "MISSING_VALUE");
   const other = props.blocking.filter((issue) => str(issue.code) !== "MISSING_VALUE");
@@ -164,7 +166,7 @@ export function ConfigureStage(props: {
         <div>
           <p className="mw-kicker">{props.amending === null ? "Draft mandate" : `Amending · draft V${props.amending}`}</p>
           <h2>Your agent team</h2>
-          <p>Each agent gets a ceiling. Mandate decides what actually executes.</p>
+          <p>You decide which agents may act and how much each may use. Mandate decides what actually executes.</p>
         </div>
         <button type="button" className="mw-ghost-button" onClick={props.onPermissions}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></svg>
@@ -176,7 +178,7 @@ export function ConfigureStage(props: {
         {ROLES.map((role) => <AgentConfigRow key={role} role={role} access={props.access} busy={props.busy} onField={props.onField} />)}
       </ul>
 
-      <Allocation access={props.access} />
+      {props.allocation ?? <Allocation access={props.access} />}
 
       {open > 0 ? (
         <section className="mw-open" aria-label="Open choices">
@@ -228,6 +230,9 @@ export interface WalletState {
 
 export function ApproveStage(props: {
   readonly access: DraftAccess;
+  /** The budgets about to be signed, as the draft holds them now (after any edit). */
+  readonly budgets?: readonly { readonly role: RoleName; readonly amount: string | null }[];
+  readonly autoReallocate?: boolean;
   readonly expected: string;
   readonly authorizing: boolean;
   readonly error: string;
@@ -259,6 +264,10 @@ export function ApproveStage(props: {
         <div><dt>Capital</dt><dd>{usd(props.access.text("portfolio.totalCapital"))}</dd></div>
         <div><dt>Derivative exposure</dt><dd>≤ {usd(props.access.text("portfolio.maxDerivative"))}</dd></div>
         <div className="mw-summary__wide"><dt>Agents</dt><dd>{enabled.length === 0 ? "None" : enabled.map((role) => ROLE_TITLES[role]).join(" · ")}</dd></div>
+        {props.budgets === undefined || props.budgets.every((b) => b.amount === null) ? null : (
+          <div className="mw-summary__wide"><dt>Allocation</dt><dd>{props.budgets.map((b) => `${ROLE_TITLES[b.role].replace(" Agent", "")} ${b.amount === null ? "—" : usd(b.amount)}`).join(" · ")}</dd></div>
+        )}
+        {props.autoReallocate === undefined ? null : <div className="mw-summary__wide"><dt>Reallocation</dt><dd>{props.autoReallocate ? "Allowed inside each signed maximum" : "Not allowed: unused capital stays in your wallet"}</dd></div>}
         <div><dt>Markets</dt><dd>{venues === null ? "Not set" : `${venues.length} approved venues only`}</dd></div>
         <div><dt>Valid for</dt><dd>{props.access.text("portfolio.validityMinutes") === "" ? "Not set" : `${props.access.text("portfolio.validityMinutes")} minutes`}</dd></div>
       </dl>

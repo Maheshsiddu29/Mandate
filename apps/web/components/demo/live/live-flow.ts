@@ -15,6 +15,7 @@ export const PHASES = [
   "PROMPT",
   "DRAFTING",
   "CONFIGURE",
+  "PLANNING",
   "APPROVE",
   "AGENTS_WORKING",
   "MANDATE_REVIEW",
@@ -34,6 +35,8 @@ export interface FlowInput {
   readonly drafting: boolean;
   /** The server holds a draft for this session. */
   readonly draftPresent: boolean;
+  /** The principal asked the agents for a split and is in the Planning Room (before signing). */
+  readonly planning?: boolean;
   /** The principal pressed Trade and is reviewing what they are about to sign. */
   readonly reviewing: boolean;
   /** The active signed mandate version, if any. */
@@ -64,6 +67,7 @@ const STATUS: Record<Phase, string> = {
   PROMPT: "Drafting",
   DRAFTING: "Drafting",
   CONFIGURE: "Configuring",
+  PLANNING: "Mandate Room",
   APPROVE: "Approving",
   AGENTS_WORKING: "Agents working",
   MANDATE_REVIEW: "Mandate review",
@@ -92,6 +96,7 @@ export function deriveFlow(input: FlowInput): Flow {
   if (input.activeVersion === null || input.amending || !input.runStarted) {
     if (input.drafting) return flow("DRAFTING");
     if (!input.draftPresent) return flow("PROMPT");
+    if (input.planning === true && !input.reviewing) return flow("PLANNING");
     return flow(input.reviewing ? "APPROVE" : "CONFIGURE");
   }
 

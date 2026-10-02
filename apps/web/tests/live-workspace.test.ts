@@ -12,7 +12,7 @@ const run: LiveEvent[] = JSON.parse(read('./fixtures/live-stub-run.json'));
 const base: FlowInput = { drafting: false, draftPresent: true, reviewing: false, activeVersion: 1, amending: false, runStarted: true, task: 'RUN', lastRunStatus: null, lastError: null, runEvents: [], paused: false };
 
 test('one main panel: every phase renders exactly one stage inside one animated section', () => {
-  assert.equal(PHASES.length, 12);
+  assert.equal(PHASES.length, 13);
   for (const phase of PHASES) assert.match(lab, new RegExp(`case "${phase}":`), phase);
   assert.equal(lab.match(/<motion\.section/g)?.length, 1);
   assert.match(lab, /<AnimatePresence mode="wait" initial=\{false\}>/);

@@ -9,6 +9,8 @@ import { api, arr, liveServerUrl, rec, str, streamEvents, type Json, type JsonRe
 import { deriveFlow, eventsAfter, type Phase } from "./live-flow";
 import { awaitingReplies, derivePresentation, deriveReview, deriveRoomChat, proposedPortfolio, ROLES, usd } from "./live-model";
 import { RoomChat } from "./room-chat";
+import { allocationState, authorizedStockTrade, budgetRows, planningCards, planView, serverCompatible, STALE_SERVER } from "./allocation-model";
+import { AgentSelection, AllocationPanel, PlanningStage } from "./stage-planning";
 import { EventLogBody, PauseBody, ReviewBody, StressBody } from "./sheets";
 import { AgentsStage, AgentSummaryList } from "./stage-agents";
 import { DraftingStage, PromptStage } from "./stage-compose";
@@ -34,6 +36,7 @@ const STAGE_KEY: Record<Phase, string> = {
   PROMPT: "prompt",
   DRAFTING: "drafting",
   CONFIGURE: "configure",
+  PLANNING: "planning",
   APPROVE: "approve",
   AGENTS_WORKING: "agents",
   MANDATE_REVIEW: "agents",
@@ -108,6 +111,7 @@ export function LiveLab(): ReactNode {
   const [resumed, setResumed] = useState(false);
   const [signing, setSigning] = useState(false);
   const [settlementOffer, setSettlementOffer] = useState<SettlementOffer>({ kind: "loading" });
+  const [planOpen, setPlanOpen] = useState(false);
   const lastSequence = useRef(-1);
   const stageRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
@@ -218,9 +222,14 @@ export function LiveLab(): ReactNode {
   const review = useMemo(() => deriveReview(runEvents), [runEvents]);
   const chat = useMemo(() => deriveRoomChat(runEvents), [runEvents]);
   const awaiting = useMemo(() => awaitingReplies(runEvents), [runEvents]);
+  const allocation = allocationState(validation);
+  const plan = useMemo(() => planView(view.lastPlan), [view.lastPlan]);
+  const planCards = useMemo(() => planningCards(events, null), [events]);
+  const compatible = status === null || serverCompatible(status);
   const flow = deriveFlow({
     drafting,
     draftPresent,
+    planning: planOpen,
     reviewing,
     activeVersion,
     amending,
@@ -282,6 +291,10 @@ export function LiveLab(): ReactNode {
 
   async function buildMandate(): Promise<void> {
     if (SERVER === null || prompt.trim() === "" || drafting) return;
+    if (!compatible) {
+      setError(STALE_SERVER);
+      return;
+    }
     setDrafting(true);
     setSubmitted(prompt.trim());
     setError("");
@@ -376,6 +389,25 @@ export function LiveLab(): ReactNode {
     void call("POST", "/draft/field", { path, value });
   };
 
+  /** Agent selection is authority: the principal's own choice, written field by field. */
+  const chooseAgents = async (chosen: readonly string[]): Promise<void> => {
+    for (const role of ROLES) await call("POST", "/draft/field", { path: `agents.${role}.enabled`, value: chosen.includes(role) });
+  };
+
+  /** Ask the agents the principal left the split to for a proposal. Nothing is signed. */
+  const askPlan = async (): Promise<void> => {
+    setError("");
+    setPlanOpen(true);
+    await call("POST", "/plan", {});
+  };
+
+  /** Use the proposed split, with the principal's edits. The draft changes; nothing is signed. */
+  const acceptPlan = async (edits: { readonly [role: string]: string }): Promise<void> => {
+    if (plan === null) return;
+    const body = await call("POST", "/draft/allocation", { plan: plan.roomId, budgets: { ...edits } });
+    if (body !== null) setPlanOpen(false);
+  };
+
   const adjust = async (): Promise<void> => {
     setSheet(null);
     const body = await call("POST", "/draft", { from: "active" });
@@ -457,12 +489,13 @@ export function LiveLab(): ReactNode {
   const showTrail = activeVersion !== null && !amending && runStart !== null && phase !== "AGENTS_WORKING" && phase !== "MANDATE_REVIEW";
   const blockedCount = presentation.agents.filter((agent) => agent.phase === "BLOCKED").length;
   const allowedCount = presentation.agents.filter((agent) => agent.phase === "ADMISSIBLE" || agent.finalOutcome === "RESERVED").length;
-  const stock = presentation.agents.find((agent) => agent.role === "stock");
+  const stockTrade = authorizedStockTrade(runEvents, arr(view.reservations).map(rec));
+  const enabledRoles = ROLES.filter((role) => access.enabled(role) === true);
 
   let stage: ReactNode;
   switch (phase) {
     case "PROMPT":
-      stage = <PromptStage prompt={prompt} onPrompt={setPrompt} onSend={() => void buildMandate()} connected={connected} error={error} />;
+      stage = <PromptStage prompt={prompt} onPrompt={setPrompt} onSend={() => void buildMandate()} connected={connected} error={compatible ? error : STALE_SERVER} />;
       break;
     case "DRAFTING":
       stage = <DraftingStage prompt={submitted} />;
@@ -493,6 +526,30 @@ export function LiveLab(): ReactNode {
             setAmending(false);
             setPrompt(amending ? prompt : submitted);
           }}
+          allocation={
+            allocation === null ? undefined : allocation.intent === "NEEDS_AGENT_SELECTION" ? (
+              <AgentSelection undecided={allocation.undecided} busy={task !== null} onChoose={(chosen) => void chooseAgents(chosen)} />
+            ) : (
+              <AllocationPanel state={allocation} access={access} busy={task !== null} blockedOtherwise={blocking.some((issue) => str(issue.code) !== "ALLOCATION_PLAN_REQUIRED")} onAskPlan={() => void askPlan()} onField={field} />
+            )
+          }
+        />
+      );
+      break;
+    case "PLANNING":
+      stage = (
+        <PlanningStage
+          state={allocation}
+          cards={planCards}
+          plan={task === "PLAN" ? null : plan}
+          working={task === "PLAN"}
+          busy={task !== null}
+          error={str(view.lastPlanError) === "—" ? error : str(view.lastPlanError)}
+          ceilings={Object.fromEntries(ROLES.map((role) => [role, access.text(`agents.${role}.maxAllocation`) || null]))}
+          derivativeCap={access.text("portfolio.maxDerivative") || null}
+          illiquidCap={access.text("portfolio.maxIlliquid") || null}
+          onUse={(edits) => void acceptPlan(edits)}
+          onCancel={() => setPlanOpen(false)}
         />
       );
       break;
@@ -500,6 +557,8 @@ export function LiveLab(): ReactNode {
       stage = (
         <ApproveStage
           access={access}
+          budgets={budgetRows(draft, enabledRoles)}
+          autoReallocate={allocation?.autoReallocate ?? false}
           expected={str(view.expectedConfirmation)}
           authorizing={authorizing}
           error={error}
@@ -549,7 +608,7 @@ export function LiveLab(): ReactNode {
         <ReceiptStage
           review={review}
           settlement={presentation.settlement}
-          stock={stock}
+          stockTrade={stockTrade}
           sessionId={sessionId}
           offer={settlementOffer}
           busy={task !== null || signing}
