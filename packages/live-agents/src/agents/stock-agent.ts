@@ -32,7 +32,8 @@ function stock(id: string, representation: string, price: bigint, feeBps: number
     maxAtoms: USDC(maxWhole),
     resizable: true,
     // Whole tokens at 18 decimals whose all-in cost (price plus the gate's fee) is at most `size` USDC atoms, rounded down.
-    build: (size) => ({ kind: 'STOCK_BUY', representation, account: PRINCIPAL_ON_ROBINHOOD, quantity: (size * TOKEN * 10_000n) / (price * BigInt(10_000 + feeBps)), claims: { ...NO_CLAIMS, ticker: 'NVDA', asset } }),
+    // With a fee the gate rounds the gross cost and the fee up separately, so two atoms are left for that rounding.
+    build: (size) => ({ kind: 'STOCK_BUY', representation, account: PRINCIPAL_ON_ROBINHOOD, quantity: feeBps === 0 ? (size * TOKEN) / price : ((size - 2n) * TOKEN * 10_000n) / (price * BigInt(10_000 + feeBps)), claims: { ...NO_CLAIMS, ticker: 'NVDA', asset } }),
   };
 }
 
