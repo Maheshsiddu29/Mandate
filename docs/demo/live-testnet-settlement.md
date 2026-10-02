@@ -43,21 +43,49 @@ with the send gate, the evidence rule, and the runner.
 
 ## 2. The asset mapping, and why the label is truthful
 
-The Live AI Stock agent decides over the Phase 7F demonstration market:
-`nvda-note-a`, a fictional *Fixture Backed NVIDIA Note* on an **offline**
-reviewed gate configuration that settles an engineered USDC
-(`packages/portfolio/src/demo/markets.ts`). The repository defines no mapping
-from it to the deployed gate, whose only market is MDEMO against MDUSD. So
-B.5.2 adds one, explicitly (`src/fixture-mapping.ts`,
-`TESTNET_SETTLEMENT_FIXTURE`):
+The Live AI Stock agent decides over the labelled market set V2: two
+reviewed, approved NVDA notes, `nvda-note-a` and `nvda-note-c`, on an
+**offline** reviewed gate configuration that settles an engineered USDC
+(`packages/portfolio/src/demo/live-markets.ts`). The deployed gate's only
+market is MDEMO against MDUSD. The mapping between them is explicit
+(`src/fixture-mapping.ts`, `TESTNET_SETTLEMENT_FIXTURE`):
 
 | | |
 | --- | --- |
-| Decision semantics | `nvda-note-a` — what the model chose and Mandate screened, verified and reserved. Its canonical asset stays NVIDIA. |
-| Execution fixture | a BUY of MDEMO for MDUSD through the deployed gate: valueless assets that exist only to exercise the Robinhood Chain testnet settlement path |
-| Rule | **quantity-preserving**: gate BUY quantity = the reserved `STOCK_BUY` quantity, atom for atom (both 18 decimals); debit = the fixture venue's quote for it (10 MDUSD per MDEMO, no fee), which the gate enforces; recipient = the manifest principal |
-| Example | 400 USDC authorized for the 125-USDC note = 3.2 notes → 3.2 MDEMO for 32 MDUSD |
-| Ceiling | 100 MDUSD (the Stock agent's own maximum, 800 USDC, maps to 64) |
+| Decision semantics | the exact reserved semantic candidate — `nvda-note-a` or `nvda-note-c`, by candidate id and registry representation together — what the model chose and Mandate screened, verified and reserved. Its canonical asset stays NVIDIA. |
+| Execution fixture | a BUY of MDEMO for MDUSD through the deployed gate, for either note: valueless assets that exist only to exercise the Robinhood Chain testnet settlement path |
+| Rule | **quantity-preserving**, the same for both notes: gate BUY quantity = the reserved `STOCK_BUY` quantity, atom for atom (both 18 decimals); debit = the fixture venue's quote for it (10 MDUSD per MDEMO, no fee), which the gate enforces; recipient = the manifest principal (or the V2 wallet) |
+| Example (note A) | 400 USDC authorized for the 125-USDC note = 3.2 notes → 3.2 MDEMO for 32 MDUSD |
+| Example (note C) | 600 USDC authorized for the 124.75-USDC note plus its 25 bps fee ≈ 4.7976 notes → 4.7976 MDEMO for 47.976252 MDUSD |
+| Ceiling | 100 MDUSD (note A's 800 USDC maximum maps to 64, note C's 600 to under 48) |
+| Supported candidates | exactly `ROBINHOOD_TESTNET_STOCK_FIXTURES` in `@mandate/live-agents`; anything else is `FIXTURE_UNDEFINED_FOR_CANDIDATE` |
+
+The semantic note's own price and fee are fixture economics of the
+decision. They are not reproduced on chain and never claimed to be; only
+the quantity carries over. Both notes reach the same fixture token, so the
+chain alone cannot say which note was settled — the binding does. The
+settlement binding digest commits to the reserved candidate's
+representation and candidate digest along with the proposal, child,
+reservation, action and every chain-reaching field. The domain leg's Core
+action takes the digest's first eight bytes as its nonce, so the
+principal-signed gate mandate commits to that exact note. A note C
+reservation cannot produce a note A binding. Note A's mapping is unchanged
+from B.5.2: the formula, its domain string and its version did not change,
+and a test pins a note A binding digest to its value from before note C had
+a definition (`test/stock-binding.test.ts`).
+
+The same table decided, before the model was asked, which Stock candidates
+were offered as executable (live-ai-lab.md, *Actionable ≠ executable*).
+Settlement does not trust that earlier answer; it looks the reservation up
+again. No second testnet deployment was needed: the deployed fixture
+market is quantity-generic and the identity lives in the binding, not in
+the token.
+
+| Evidence | Class |
+| --- | --- |
+| model inference (OpenAI provider) | `LIVE_MODEL` |
+| candidate market data (prices, fees, depth) | `FIXTURE` |
+| Robinhood Chain testnet fixture settlement, once broadcast, mined and checked | `LIVE_TESTNET` |
 
 Every event says: *Robinhood Chain testnet fixture settlement — valueless
 demo assets (MDUSD → MDEMO); not an NVDA trade, not a Robinhood Stock

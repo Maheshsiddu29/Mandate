@@ -275,10 +275,12 @@ whether the shared derivative cap is exceeded. *NFT:* a listing is one
 fixed-price token, and a second Genesis listing would differ only in
 price, which is not a tradeoff. Neither domain got a new market.
 
-**Settlement.** Only `nvda-note-a` has a deployed Robinhood Chain testnet
-market (MDEMO). A reserved `nvda-note-c` is authorized offchain like any
-other reservation. Settlement then refuses it before any RPC call with
-`FIXTURE_UNDEFINED_FOR_CANDIDATE`, unchanged and fail-closed.
+**Settlement.** Both approved notes settle on Robinhood Chain testnet
+through the one deployed fixture market: a quantity-preserving BUY of the
+valueless MDEMO for MDUSD, each bound to its own exact candidate (see
+*Actionable ≠ executable* below and live-testnet-settlement.md §2). Anything
+else that reaches settlement is still refused before any RPC call with
+`FIXTURE_UNDEFINED_FOR_CANDIDATE`, fail-closed.
 
 ### Discovered, actionable, authorized
 
@@ -367,6 +369,66 @@ the adversarial tests) challenges Mandate directly with forbidden actions.
 VALID AGENT ≠ VALID ACTION is shown there, not by filling the normal run
 with candidates that can never pass.
 
+### Actionable ≠ executable: settlement capability
+
+A candidate can be allowed by the mandate and still be something the
+configured connector cannot execute. Until now that surfaced only after
+authorization: a live model chose the valid `nvda-note-c`, Mandate
+reserved it, and settlement refused it with
+`FIXTURE_UNDEFINED_FOR_CANDIDATE`. Capability is now a separate, explicit
+question, answered before the model is asked
+(`src/agents/capability.ts`):
+
+```text
+discovered ─▶ mandate-actionable ─▶ connector-capable ─▶ live executable ─▶ model
+              (policy: eligibility)   (capability: the active settlement profile)
+```
+
+| Question | Answered by | Meaning |
+| --- | --- | --- |
+| Is the principal's agent allowed to do this? | eligibility, then `screenProposal`, the Room, the verifier, the ledger | authority |
+| Can the configured connector execute this? | the active `SettlementProfile` | a fact about the connector; no authority |
+
+The Live Lab profile (`live-lab.robinhood-testnet-fixture.v1`) settles one
+domain, Stock, through the Robinhood testnet fixture connector. Its table
+(`ROBINHOOD_TESTNET_STOCK_FIXTURES`) names each supported candidate by its
+exact id **and** the exact representation its trusted build produces; both
+must match one entry. A relabelled candidate, a swapped id, an unknown id or
+a build that fails is `SETTLEMENT_UNSUPPORTED`. Swap, NFT, yield and perps
+are `OUTSIDE_PROFILE`: the profile settles nothing there, they are still
+offered, their execution stays the offline fixture executors, and nothing
+presents them as testnet-settleable.
+
+| Candidate | Policy | Capability | Offered to the model |
+| --- | --- | --- | --- |
+| `nvda-note-a` | actionable | `SETTLEMENT_CAPABLE` | yes |
+| `nvda-note-c` | actionable | `SETTLEMENT_CAPABLE` | yes |
+| `nvda-token-b` | discovery only (`REGISTRY:*`) | `SETTLEMENT_UNSUPPORTED` | no |
+
+- An actionable candidate the profile cannot settle is never offered. If
+  every actionable candidate is unsupported, the agent abstains without a
+  model call (`cause: NO_EXECUTABLE_CANDIDATES`).
+- `AGENT_CANDIDATES_EVALUATED` reports `actionable` (policy), `executable`
+  (what the model is offered), `settlementProfile` and a per-candidate
+  `capability` list, separately. The Evidence tab shows *POLICY ELIGIBLE*
+  and *SETTLEMENT CAPABLE* (or *NOT SETTLEABLE · NOT OFFERED*, or *NO
+  TESTNET SETTLEMENT*) as different labels.
+- **Capability is not authorization.** A capable candidate is screened,
+  negotiated, verified and reserved in full. A profile that calls the
+  look-alike capable changes nothing: eligibility still excludes it and,
+  bypassed, Mandate still blocks it (`test/capability.test.ts`).
+- **Settlement still decides for itself.** The fixture mapping looks the
+  reserved candidate up in the same table again, by id and representation,
+  and refuses anything it does not name with
+  `FIXTURE_UNDEFINED_FOR_CANDIDATE`. Nothing ever substitutes note A for
+  note C, or the reverse.
+
+The candidate the model selected is the one proposed, screened, reserved
+and settled — `MODEL_SELECTED == SCREENED == RESERVED == SETTLED_SEMANTIC` —
+including when the Room reduces its amount (the Room changes size, never
+identity) (`live-settlement/test/stock-binding.test.ts`). If the Room
+releases Stock, there is no Stock reservation and nothing settles.
+
 ### What the model sees
 
 The model sees, per actionable candidate, in a fixed order that implies no
@@ -437,8 +499,83 @@ most 280 characters.
 
 ## 6. The live Mandate Room
 
-When the admissible demand exceeds what the portfolio can still give, the
-lab opens a Room. It is autonomous; no human joins it.
+The Room is conditional, not a stage. After discovery, the session prices
+every **admissible** proposal's typed demand with the portfolio's own
+binding code and compares it with what the ledger says is still available
+(`session.ts` → `room/negotiation.ts` `assess`). It opens a Room only when
+all of these hold:
+
+1. the proposals reached Mandate and passed screening: their only reasons,
+   if any, are quantity reasons (`AGENT_LIMIT_EXCEEDED`,
+   `PORTFOLIO_LIMIT_EXCEEDED`), so a smaller request could pass;
+2. at least one typed resource is over: a portfolio limit
+   (`portfolio-notional` and `spot-capital` are capital,
+   `derivative-notional` and `perp-margin` derivative, `illiquid-notional`
+   NFT) summed over the admissible requests, or an agent's own maximum
+   (its domain allocation);
+3. the excess is resolvable by concession: participants may KEEP, REDUCE
+   (resizable candidates, never below their minimum) or RELEASE.
+
+A hard violation — asset, issuer, representation, synthetic, venue,
+recipient or leverage outside scope, an unknown instrument, a bad
+signature, expired or missing authority, a malformed proposal — is
+`BLOCKED` at screening. It never counts toward a conflict, never enters a
+Room, is never reserved and never settles, even when its size would have
+caused a conflict (`test/conditional-room.test.ts`). When everything
+admissible fits, there is no `PORTFOLIO_CONFLICT`, no Room event and no
+negotiation call: the proposals go straight to the Portfolio Verifier and
+the ledger.
+
+### Why every default run used to open a Room
+
+The old balanced preset deployed 2,000 USDC across agents whose maxima
+summed to 3,100, and gave perps a 600 allocation against a 400 derivative
+limit. Live models size near their maxima. Ten gpt runs on that preset
+(2026-10-02; four with no stated intent, three preferring capital
+preservation, three maximizing return) asked for 2,650 to 3,000 of 2,000
+and perps 500 to 600 of 400 derivative: all seven unconstrained runs opened
+a Room on **capital and derivative together**. Only the three
+capital-preservation runs sized small and went direct; all three chose
+`nvda-note-c`, which then could not settle.
+
+| Balanced | Old | New |
+| --- | ---: | ---: |
+| Deployable (`portfolio-notional`, `spot-capital`) | 2,000 | 2,500 |
+| Derivative (`derivative-notional`, `perp-margin`) | 400 | 400 |
+| Illiquid | 400 | 400 |
+| Agents: stock / swap / NFT / yield / perps | 800 / 500 / 400 / 800 / **600** | 800 / 500 / 400 / 800 / **400** |
+| Sum of agent maxima | 3,100 (155 %) | 2,900 (116 %) |
+
+2,500 sits between conservative (1,500 deployable) and aggressive
+(3,000). The perps allocation now equals the derivative limit: an agent
+whose own maximum exceeds the only resource its domain can use collides
+with that limit on every request above it. Nothing is clamped: the perps
+market still goes to 1,000, and a request above 400 is screened at that
+size and is a real derivative (and domain) conflict. Conservative and
+aggressive are unchanged. Typed demand per candidate under balanced:
+
+| Domain | Candidate request range (USDC) | Capital | Derivative | Domain resource |
+| --- | --- | --- | --- | --- |
+| Stock | 100–800 (note A), 100–600 (note C) | = request (note C: the request less its 25 bps gate fee) | — | `spot-capital` = request |
+| Swap | 100–500 (route A), 100–250 (route C) | = request | — | — |
+| NFT | 300 (fixed) | 300 | — | `illiquid-notional` 300 |
+| Yield | 100–800 (Alpha), 100–400 (Beta) | = request | — | — |
+| Perps | 100–1,000 (2x) | = request | = request; margin ≈ request / 2 | — |
+
+Thirteen gpt runs on the new preset (no broadcast; the same three
+objectives): seven opened a Room, every one on **capital only** (2,550 of
+2,500, reduce 50); six were authorized directly (two with no stated intent
+at 2,400, four capital-preservation runs at 849 to 1,099). No run had a
+derivative conflict, because every perps request was at most 400. Nine
+chose `nvda-note-a`, four `nvda-note-c`, and every Stock reservation was
+settlement-capable: it mapped onto the real manifest's fixture market and
+an offline dry run against the reference chain reached `READY`. In one
+Room the Stock agent itself reduced 800 → 750; the reservation and the
+settlement stayed `nvda-note-a`. Choice was never seeded or alternated.
+
+### Room mechanics
+
+The Room is autonomous; no human joins it.
 
 ```text
 generation g (roomId, g):
