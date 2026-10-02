@@ -212,8 +212,10 @@ export const propose = (candidateId: string, whole: number): string => json({ ac
 export const abstain = json({ action: 'ABSTAIN', candidateId: null, requestedAtoms: null, rationale: 'nothing acceptable' });
 
 /** A provider that answers as scripted and reports `kind` — `LIVE` only to exercise the evidence rule. */
-function provider(decide: (role: string) => string, kind: 'SCRIPTED' | 'LIVE'): AgentModelProvider {
-  const inner = new ScriptedProvider({ decide: (r) => ({ text: decide(r.role) }), negotiate: () => ({ text: json({ action: 'KEEP', newRequestedAtoms: null, rationale: 'keep' }) }) });
+const KEEP = json({ action: 'KEEP', newRequestedAtoms: null, rationale: 'keep' });
+
+function provider(decide: (role: string) => string, kind: 'SCRIPTED' | 'LIVE', negotiate: (role: string) => string = () => KEEP): AgentModelProvider {
+  const inner = new ScriptedProvider({ decide: (r) => ({ text: decide(r.role) }), negotiate: (r) => ({ text: negotiate(r.role) }) });
   return kind === 'SCRIPTED' ? inner : { name: 'scripted-as-live', model: 'scripted-v1', kind: 'LIVE', decide: (r, o) => inner.decide(r, o), negotiate: (r, o) => inner.negotiate(r, o), interpretMandateDraft: (r, o) => inner.interpretMandateDraft(r, o), selectPolicyCase: (r, o) => inner.selectPolicyCase(r, o) };
 }
 
@@ -233,12 +235,12 @@ export interface SettlementWorld {
 /**
  * A session whose Stock agent proposes `stock` (default: nvda-note-a at 400
  * USDC) and every other agent answers `others[role]` (default: abstains),
- * already run.
+ * already run. In a Room, each agent answers `negotiate(role)` (default: KEEP).
  */
-export async function settlementWorld(o: { stock?: string; others?: { readonly [role: string]: string }; kind?: 'SCRIPTED' | 'LIVE'; run?: boolean; eligibility?: EligibilityFilter; settlement?: SettlementProfile | null } = {}): Promise<SettlementWorld> {
+export async function settlementWorld(o: { stock?: string; others?: { readonly [role: string]: string }; kind?: 'SCRIPTED' | 'LIVE'; run?: boolean; eligibility?: EligibilityFilter; settlement?: SettlementProfile | null; negotiate?: (role: string) => string } = {}): Promise<SettlementWorld> {
   const time = new TestTime();
   const decide = (role: string) => (role === 'stock' ? (o.stock ?? propose('nvda-note-a', 400)) : (o.others?.[role] ?? abstain));
-  const session = new LiveSession({ provider: provider(decide, o.kind ?? 'SCRIPTED'), sessionId: 'settlement-test', agentTimeoutMs: 1_000, roomRoundTimeoutMs: 1_000, protocolNow: time.read, ...(o.eligibility === undefined ? {} : { eligibility: o.eligibility }), ...(o.settlement === undefined ? {} : { settlement: o.settlement }) });
+  const session = new LiveSession({ provider: provider(decide, o.kind ?? 'SCRIPTED', o.negotiate), sessionId: 'settlement-test', agentTimeoutMs: 1_000, roomRoundTimeoutMs: 1_000, protocolNow: time.read, ...(o.eligibility === undefined ? {} : { eligibility: o.eligibility }), ...(o.settlement === undefined ? {} : { settlement: o.settlement }) });
   const auth = await session.authorize(presetDraft('balanced'), 'AUTHORIZE MANDATE V1');
   if (!auth.ok) throw new Error(`mandate refused: ${auth.code}`);
   if (o.run !== false) await session.run();
