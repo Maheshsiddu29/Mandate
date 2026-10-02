@@ -146,6 +146,10 @@ export interface AgentCard {
   readonly startedAt: string | null;
   /** Discovered → actionable, as the runtime's advisory eligibility reported it; null before it does (or in older runs). */
   readonly eligibility: CandidateEligibility | null;
+  /** The id the model chose, exactly as the runtime recorded it. */
+  readonly chosenId: string | null;
+  /** What kind of inference decided: LIVE_MODEL, STUB or SCRIPTED (older runs: null). */
+  readonly modelEvidence: string | null;
 }
 
 /** One excluded candidate: discovery only, never offered to the model. */
@@ -159,6 +163,8 @@ export interface CandidateEligibility {
   readonly discovered: readonly string[];
   readonly actionable: readonly string[];
   readonly excluded: readonly ExcludedCandidate[];
+  /** Where the candidates' economics come from, e.g. FIXTURE. Empty in older runs. */
+  readonly marketEvidence: readonly string[];
 }
 
 function eligibilityOf(data: JsonRecord): CandidateEligibility {
@@ -167,6 +173,7 @@ function eligibilityOf(data: JsonRecord): CandidateEligibility {
     discovered: ids(data.discovered),
     actionable: ids(data.actionable),
     excluded: arr(data.excluded).map(rec).map((row) => ({ candidateId: str(row.candidateId), candidate: str(row.candidate), codes: reasonCodes(arr(row.reasons)) })),
+    marketEvidence: ids(data.marketEvidence),
   };
 }
 
@@ -313,6 +320,8 @@ function blank(role: RoleName): AgentCard {
     finalAmount: "",
     startedAt: null,
     eligibility: null,
+    chosenId: null,
+    modelEvidence: null,
   };
 }
 
@@ -459,7 +468,7 @@ export function deriveAgents(events: readonly LiveEvent[], timing: readonly Json
         break;
       case "AGENT_REQUEST_STARTED":
         // The eligibility just evaluated for this same request is kept; anything older is reset.
-        cards.set(role, { ...blank(role), phase: "PENDING", startedAt: event.at, eligibility: card.phase === "PENDING" ? card.eligibility : null });
+        cards.set(role, { ...blank(role), phase: "PENDING", startedAt: event.at, eligibility: card.phase === "PENDING" ? card.eligibility : null, modelEvidence: typeof data.modelEvidence === "string" ? data.modelEvidence : null });
         break;
       case "AGENT_FIRST_RESPONSE":
         cards.set(role, { ...card, phase: "RESPONDING", firstResponseMs: num(data.timeToFirstResponseMs) ?? card.firstResponseMs });
@@ -468,6 +477,7 @@ export function deriveAgents(events: readonly LiveEvent[], timing: readonly Json
         cards.set(role, {
           ...card,
           phase: "RESPONDED",
+          chosenId: typeof data.candidateId === "string" ? data.candidateId : null,
           candidate: str(data.candidate) === "—" ? str(data.candidateId) : str(data.candidate),
           requested: amount(data.requested),
           rationale: str(data.rationale) === "—" ? "" : str(data.rationale),

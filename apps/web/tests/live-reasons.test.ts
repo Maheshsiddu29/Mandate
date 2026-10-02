@@ -137,3 +137,22 @@ test('eligibility is evidence, not the trade flow: discovery-only candidates and
   assert.match(sheets, /DISCOVERY ONLY/);
   assert.doesNotMatch(agentsUi, /CandidateEvidence|DISCOVERY ONLY/);
 });
+
+test('several executable choices: the evidence view labels fixture market data, the inference kind and the chosen id; the trade flow shows only the choice', () => {
+  const events = [
+    event(0, 'AGENT_CANDIDATES_EVALUATED', { basis: 'ADVISORY', marketEvidence: ['FIXTURE'], discovered: ['route-a', 'route-c', 'route-b'], actionable: ['route-a', 'route-c'], excluded: [{ candidateId: 'route-b', candidate: 'USDC → WETH via router …bad0', reasons: ['VENUE_NOT_ALLOWED:venues'] }] }, 'swap'),
+    event(1, 'AGENT_REQUEST_STARTED', { modelEvidence: 'LIVE_MODEL', candidates: ['route-a', 'route-c'] }, 'swap'),
+    event(2, 'AGENT_DECISION_COMPLETED', { candidateId: 'route-c', candidate: 'USDC → WETH via router …5a01, pool …0a05', requested: { atoms: '250000000', amount: '250' }, rationale: 'Better quote than route-a at this size.', alternatives: ['route-a'], modelEvidence: 'LIVE_MODEL', marketEvidence: 'FIXTURE' }, 'swap'),
+  ];
+  const swap = deriveAgents(events).find((a) => a.role === 'swap');
+  assert.deepEqual(swap?.eligibility?.actionable, ['route-a', 'route-c']);
+  assert.deepEqual(swap?.eligibility?.marketEvidence, ['FIXTURE']);
+  assert.equal(swap?.modelEvidence, 'LIVE_MODEL');
+  assert.equal(swap?.chosenId, 'route-c');
+  // The rationale is the model's, verbatim; nothing is generated client-side.
+  assert.equal(swap?.rationale, 'Better quote than route-a at this size.');
+  assert.match(sheets, /executable under your mandate/);
+  assert.match(sheets, /market data \$\{agent\.eligibility\.marketEvidence\.join/);
+  assert.match(sheets, /<Pill tone="accent">CHOSEN<\/Pill>/);
+  assert.doesNotMatch(agentsUi, /executable under your mandate|CHOSEN|marketEvidence/);
+});

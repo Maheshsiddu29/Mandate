@@ -104,8 +104,9 @@ function CandidateEvidence({ agents }: { readonly agents: readonly AgentCard[] }
         {evaluated.map((agent) => (
           <li key={agent.role}>
             <p className="mw-decisions__name"><span className="mw-glyph mw-glyph--sm"><AgentGlyph role={agent.role} size={16} /></span>{agent.title}</p>
+            <p className="mw-fine">{agent.eligibility?.discovered.length ?? 0} discovered · {agent.eligibility?.actionable.length ?? 0} executable under your mandate{agent.eligibility?.marketEvidence.length ? ` · market data ${agent.eligibility.marketEvidence.join(", ")}` : ""}{agent.modelEvidence === null ? "" : ` · decided by ${agent.modelEvidence}`}</p>
             <ul className="mw-candidates__list">
-              {agent.eligibility?.actionable.map((id) => <li key={id}><code>{id}</code><Pill tone="good">ACTIONABLE</Pill></li>)}
+              {agent.eligibility?.actionable.map((id) => <li key={id}><code>{id}</code><Pill tone="good">ACTIONABLE</Pill>{agent.chosenId === id ? <Pill tone="accent">CHOSEN</Pill> : null}</li>)}
               {agent.eligibility?.excluded.map((row) => (
                 <li key={row.candidateId}>
                   <code>{row.candidateId}</code><Pill>DISCOVERY ONLY</Pill>
