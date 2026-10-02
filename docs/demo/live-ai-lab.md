@@ -57,6 +57,17 @@ answer or time out. Nothing is generated client-side and no hidden reasoning
 is read. The Room header states `AUTHORITY NONE`, and a Room proposal is
 labelled not authorized until `PORTFOLIO_AUTHORIZED`.
 
+A Mandate refusal reads words first. The verdict line is the most specific
+reason, such as `Synthetic representation not approved`, or `This
+opportunity is outside the approved market set.` when several market-set
+checks fail at once. Each distinct reason follows in words. The exact
+protocol codes sit under *Technical details*, one element per code,
+deduplicated in emitted order. A registry code keeps its component
+(`REGISTRY:ISSUER_NOT_ALLOWED`) and drops only its subject. The labels are
+web-only; protocol codes are unchanged. The review's Evidence tab lists, per
+agent, the discovered candidates: which were actionable and which stayed
+discovery only, and why (§4).
+
 The equal-timestamp grouping of B.6.1 is unchanged. The landing hero uses
 React Bits Pattern Waves (Silk preset, `#6366F1` on `#120F17`), loaded on the
 client only, paused offscreen and static under reduced motion. The Prompt Bar
@@ -106,7 +117,8 @@ B.5.3 are unchanged.
 | --- | --- | --- |
 | Principal (the user) | author a draft; review it; **explicitly** authorize a version; author and authorize an amendment | edit a live Room allocation; speak for an agent |
 | Draft interpreter (a model) | map a prompt onto known fields; suggest values; flag ambiguity and conflict | sign; activate; widen; invent an asset, issuer, venue, recipient or address; fill a missing value with a permissive default |
-| Domain agent (a model) | read a closed candidate set, its own authority and bounded portfolio context; choose a candidate id and an amount inside supplied bounds; abstain; negotiate KEEP / REDUCE / RELEASE / ABSTAIN | name an address, venue, recipient, calldata or contract; call a tool; read a key, file, environment variable or URL; sign; write the ledger or the mandate |
+| Domain agent (a model) | read a closed set of **actionable** candidates, its own authority and bounded portfolio context; choose a candidate id and an amount inside supplied bounds; abstain; negotiate KEEP / REDUCE / RELEASE / ABSTAIN | name an address, venue, recipient, calldata or contract; call a tool; read a key, file, environment variable or URL; sign; write the ledger or the mandate |
+| Candidate eligibility (trusted local code, advisory) | decide which discovered candidates a model is offered, from the active mandate through the domain bindings and `permits` (§4) | authorize, reserve, replace a model's choice, or stand in for Mandate's screening |
 | Policy-stress agent (a model, under the swap agent's identity) | select one preconstructed test-case identifier from a closed list; see the high-level result; select another, up to a bound | anything a domain agent may never do; supply any value (address, amount, venue, calldata, chain, signature); any capability at all beyond choosing an identifier |
 | JEV advisor (optional) | rank candidate ids already in the set | authorize, sign, reserve, add or alter a candidate, widen |
 | Trusted local code | look up the chosen id in its own table; build the exact candidate; sign it with the agent's local key; hand it to Mandate | decide whether an action is permitted |
@@ -201,11 +213,11 @@ The default flow needs no human after authorization.
 
 ## 4. Agents and the candidate boundary
 
-Five domain agents, each with an objective and a closed candidate set built
-by trusted local code from the Phase 7F demonstration markets (labelled
-fixtures):
+Five domain agents, each with an objective and a closed set of discovered
+candidates built by trusted local code from the Phase 7F demonstration
+markets (labelled fixtures):
 
-| Agent | Objective | Candidates (the Mandate decides which are allowed) |
+| Agent | Objective | Discovered candidates (Mandate decides which are allowed) |
 | --- | --- | --- |
 | Stock | useful NVDA exposure | the approved backed note at 125.00; a same-ticker token at 122.50 from another issuer |
 | Swap | best execution USDC→WETH | the approved router; a router quoting 4.16 % more |
@@ -213,7 +225,96 @@ fixtures):
 | Yield | best **advertised** APY | the approved vault at 5.20 %; an unvetted vault at 12.60 % |
 | Perps | BTC exposure | a 2x long; a 5x long |
 
-The model sees, per candidate: an id, factual fields (price, quote,
+### Discovered, actionable, authorized
+
+```text
+discovery universe        every candidate the agent meets (broad; evidence)
+  ─▶ eligibility          deterministic, advisory: identity and static scope under the ACTIVE mandate
+actionable universe       the only candidates the model is offered
+  ─▶ model decision       ranks and chooses among them, or abstains
+  ─▶ trusted builder      exact lookup of the chosen id; never another candidate
+  ─▶ Mandate              the full screenProposal, Room, verifier and ledger, unchanged
+```
+
+A capable model optimizes the universe it is given. Offered the reviewed
+NVDA note *and* a cheaper look-alike, a live model kept choosing the
+look-alike on price. Mandate then correctly blocked it, so no Stock
+reservation existed, and settlement correctly refused with
+`NO_STOCK_RESERVATION`. The model and Mandate both behaved correctly; the
+candidate universe was wrong. A production agent should not spend its
+choice on actions that can never be authorized, so the model now optimizes
+only among actions that could become authorized proposals.
+
+**Eligibility comes from the policy itself, not a copy of it.**
+`agents/eligibility.ts` builds each discovered candidate at its minimum
+size, then resolves it with the domain binding's `resolveCandidate` (for
+the stock agent, the registry's `evaluateRepresentation`). It then applies
+`permits` under the agent's scope and the portfolio's. These are the same
+functions `screenProposal` runs. No candidate is named anywhere. Whatever
+the active mandate and registry admit is actionable, so two approved NVDA
+representations would both be offered and compared on price. A candidate
+is excluded only for a reason that is a fact of the candidate itself, the
+same at every size and moment:
+
+| Pre-model (eligibility) | Post-model only (screening, Room, verifier, ledger) |
+| --- | --- |
+| unresolvable identity (`INSTRUMENT_UNKNOWN`, every `REGISTRY:*`), `IDENTITY_CLAIM_MISMATCH`; domain, action, chain, venue, route, asset, representation, issuer, recipient, synthetic policy, required rights, leverage | amount against agent and portfolio limits; shared portfolio resources and conflicts; quote age and slippage; mandate, agent and proposal windows; signatures, replay, the final recipient as built; execution-time state |
+
+Eligibility fails closed: a candidate that cannot be built, validated or
+resolved is not actionable. It is evaluated against the version active
+when the agent is asked, so an amendment changes what the next decision is
+offered. Filtering never copies or rebuilds a candidate. The model selects
+the original object, so candidate and proposal digests, asset identity and
+the registry commitment are untouched.
+
+**Eligibility is not authorization.** The filter improves agent quality;
+Mandate provides security. The proposal the model makes is built, signed
+and screened in full, exactly as before: asset, issuer, representation,
+venue, recipient, amount, agent authority, freshness and portfolio
+resources. If the model is compromised, the filter has a bug, a stale
+client replays an old candidate, or an agent fabricates an id, Mandate
+still refuses anything unauthorized. **Capability ≠ authority.** Tests
+replace the filter with one that offers everything and show the forbidden
+NVDA token, router, vault, NFT listing and leverage still blocked, with
+zero reservations (`test/eligibility.test.ts`, `test/discovery.test.ts`).
+
+What it means at runtime:
+
+- The decision schema's candidate enum is built from the actionable set. An
+  id outside it, including a discovery-only one, is `INVALID_RESPONSE`.
+  Trusted code never substitutes another candidate for the one the model
+  chose.
+- With no actionable candidate, the agent **abstains without a model
+  call**: `AGENT_ABSTAINED` with `cause: NO_ACTIONABLE_CANDIDATES`,
+  `modelCalled: false` and the rationale `No eligible opportunities under
+  this mandate.` There is no placeholder, proposal, reservation or
+  transaction.
+- `AGENT_CANDIDATES_EVALUATED` (`basis: ADVISORY`) records `discovered`,
+  `actionable` and each `excluded` candidate with its reason codes, before
+  any model call.
+- An agent with no authority under the mandate is not asked at all.
+
+Under every preset, the reviewed instruments are actionable and the
+look-alikes are discovery only. The registry excludes `nvda-token-b` with
+`REGISTRY:ISSUER_NOT_ALLOWED` and `REGISTRY:SYNTHETIC_NOT_ALLOWED`.
+`route-b` fails `VENUE_NOT_ALLOWED`. `genesis-7` fails `ASSET_NOT_ALLOWED`
+and `REPRESENTATION_NOT_ALLOWED`, so its prompt-injecting seller text no
+longer reaches a model in a normal run. `high-yield-usd` fails
+`ASSET_NOT_ALLOWED`, `ISSUER_NOT_ALLOWED`, `REPRESENTATION_NOT_ALLOWED` and
+`VENUE_NOT_ALLOWED`. `btc-long-5x` fails `LEVERAGE_NOT_ALLOWED`.
+
+**Two flows, on purpose.** In the *normal product flow*, models rank
+executable candidates. A good action is authorized. A proposal that is
+valid alone but conflicts at portfolio level goes to the Mandate Room. A
+hard violation that still reaches Mandate is blocked. A run need not show
+all three, and none is staged. The *security flow* (policy stress, §7, and
+the adversarial tests) challenges Mandate directly with forbidden actions.
+VALID AGENT ≠ VALID ACTION is shown there, not by filling the normal run
+with candidates that can never pass.
+
+### What the model sees
+
+The model sees, per actionable candidate: an id, factual fields (price, quote,
 advertised APY, leverage, issuer and venue labels), an **untrusted**
 description (seller/marketplace text, marked as such) and the allowed
 amount bounds. It never sees an address it could return. Its whole output:
@@ -222,8 +323,13 @@ amount bounds. It never sees an address it could return. Its whole output:
 { "action": "PROPOSE" | "ABSTAIN", "candidateId": "…" | null, "requestedAtoms": "<integer>" | null, "rationale": "…" }
 ```
 
+Its instructions frame the task as ranking: compare the supplied candidates
+on their facts (price, output, advertised return, exposure, slippage, fit)
+and choose the best, or abstain. The instructions say eligibility is not
+approval. Nothing in them is a control.
+
 Trusted code rejects anything else (`INVALID_RESPONSE`): an extra field, an
-unknown id, an amount out of bounds, a non-integer. Otherwise it looks the id
+id that was not offered, an amount out of bounds, a non-integer. Otherwise it looks the id
 up, builds the exact candidate (recipient, router, contract and quote time
 all from local tables), prices the demand with the portfolio's public
 binding code, and signs it with the agent's **local** demonstration key.
@@ -313,6 +419,11 @@ of the supplied proposal variants to check whether the active authorization
 policy correctly accepts or refuses it. It is never asked to bypass, evade
 or maximize anything.
 
+This is the security flow. Its cases are fixed proposals handed to Mandate
+directly, never filtered by candidate eligibility, so forbidden actions
+keep reaching Mandate here while the normal run offers agents only
+actionable candidates (§4).
+
 The model sees the swap agent's own authority, a closed list of case
 identifiers with neutral descriptions, and — after each evaluation — the
 case it selected and the high-level result (outcome and reason codes; no
@@ -375,6 +486,10 @@ model output, no reasoning trace. Kinds are listed in
 `@mandate/live-settlement` in its explicit testnet modes
 ([live-testnet-settlement.md §7](live-testnet-settlement.md#7-lifecycle-and-evidence));
 the runs below never emit them.
+
+`AGENT_CANDIDATES_EVALUATED` is advisory evidence (§4). It authorizes
+nothing. Reasons in every event are protocol codes with their subject
+(`code:subject`), and the browser keeps them as separate values.
 
 Resource conflicts are typed and never summed. `PORTFOLIO_CONFLICT`,
 `ROOM_OPENED`, `ROOM_GENERATION_STARTED`, `ROOM_PROPOSAL_CREATED` and
