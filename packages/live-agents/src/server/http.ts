@@ -20,7 +20,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net';
 import type { JsonValue } from '../runtime/strict-json.ts';
 import type { LiveEvent } from '../telemetry/events.ts';
-import type { ApiResponse, LiveLab } from './app.ts';
+import type { ApiRequest, ApiResponse, LiveLab } from './app.ts';
 
 export const MAX_BODY_BYTES = 32 * 1024;
 const HEARTBEAT_MS = 15_000;
@@ -29,6 +29,12 @@ const EVENTS = /^\/api\/live\/sessions\/([A-Za-z0-9-]{1,64})\/events$/;
 export interface HttpOptions {
   readonly port: number;
   readonly allowedOrigins: readonly string[];
+  /**
+   * Handled before the lab, after the loopback and origin checks. Return
+   * null to fall through. The lab itself never settles; an explicit
+   * composition script may attach the V2 settlement spine here.
+   */
+  readonly before?: (r: ApiRequest) => Promise<ApiResponse | null>;
 }
 
 function send(res: ServerResponse, r: ApiResponse, cors: { readonly [k: string]: string }): void {
@@ -129,7 +135,12 @@ export function createLabServer(lab: LiveLab, o: HttpOptions): Server {
         if (!b.ok) return send(res, { status: b.status, body: { error: b.error, message: 'The request body was refused.' } }, cors);
         body = b.value;
       }
-      return send(res, await lab.handle({ method: req.method ?? 'GET', path: url.pathname, query: url.searchParams, body }), cors);
+      const request: ApiRequest = { method: req.method ?? 'GET', path: url.pathname, query: url.searchParams, body };
+      if (o.before !== undefined) {
+        const extra = await o.before(request);
+        if (extra !== null) return send(res, extra, cors);
+      }
+      return send(res, await lab.handle(request), cors);
     })();
   });
   server.on('close', () => {

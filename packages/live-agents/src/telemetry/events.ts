@@ -85,6 +85,12 @@ export const LIVE_EVENT_KINDS = [
   // (a send is disabled in B.5.3), reconciliation after a restart, and the reservation's consumption or release.
   'SETTLEMENT_ATTEMPT_PREPARED',
   'TESTNET_READY_FOR_SEND',
+  // V2 lab UI: the wallet must sign MandateAuthorization before this run can continue.
+  // Not the operator send phrase. Emitted only by the explicit settlement bridge.
+  'GATE_EXECUTION_SIGNATURE_REQUIRED',
+  // V2 dry run reached READY. Nothing was broadcast. Distinct from TESTNET_READY_FOR_SEND,
+  // which the B.5.3 client still reads as "broadcast disabled".
+  'SPINE_DRY_RUN_READY',
   'SETTLEMENT_RECONCILIATION_STARTED',
   'SETTLEMENT_RECONCILED',
   'RESERVATION_CONSUMED',
