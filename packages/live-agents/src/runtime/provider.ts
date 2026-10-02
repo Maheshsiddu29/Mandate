@@ -162,7 +162,40 @@ export interface PolicyStressRequest {
   readonly maxAttempts: number;
 }
 
-export type ModelRequest = DecisionRequest | NegotiationRequest | DraftRequest | PolicyStressRequest;
+/** One research item an agent is shown: what kind of evidence it is, whether it exists, and where it came from. */
+export interface ResearchEvidenceView {
+  readonly kind: string;
+  /** `FIXTURE`: labelled demonstration data. `DATA_UNAVAILABLE`: this kind of evidence was not available; do not assume it. */
+  readonly evidence: 'FIXTURE' | 'LIVE_MARKET_DATA' | 'DATA_UNAVAILABLE';
+  readonly source: string;
+  readonly observedAt: string;
+  readonly note: string;
+}
+
+export const ROOM_PLANNING_PURPOSES = ['INITIAL_ALLOCATION', 'HYBRID_ALLOCATION', 'REALLOCATION'] as const;
+export type PlanningPurpose = (typeof ROOM_PLANNING_PURPOSES)[number];
+
+/**
+ * An opportunity analysis (docs/v2/mandate-room-v2.md §5.1): the agent
+ * describes the best opportunity it sees among the offered candidates — or
+ * abstains — as a structured card for a Planning or Reallocation Room. It
+ * proposes no transaction and decides no dollars: a deterministic allocator
+ * does, inside the principal's authority.
+ */
+export interface OpportunityRequest {
+  readonly kind: 'OPPORTUNITY';
+  readonly role: Role;
+  readonly objective: string;
+  readonly principalIntent: string | null;
+  readonly purpose: PlanningPurpose;
+  readonly authority: AuthorityView;
+  /** What is being split, and among whom. No other agent's analysis is shown. */
+  readonly pool: { readonly poolAtoms: string; readonly participants: readonly Role[] };
+  readonly candidates: readonly CandidateView[];
+  readonly research: readonly ResearchEvidenceView[];
+}
+
+export type ModelRequest = DecisionRequest | NegotiationRequest | DraftRequest | PolicyStressRequest | OpportunityRequest;
 
 export type ProviderKind = 'LIVE' | 'STUB' | 'SCRIPTED';
 
@@ -174,6 +207,7 @@ export interface AgentModelProvider {
   negotiate(request: NegotiationRequest, o: CallOptions): Promise<ModelResponse>;
   interpretMandateDraft(request: DraftRequest, o: CallOptions): Promise<ModelResponse>;
   selectPolicyCase(request: PolicyStressRequest, o: CallOptions): Promise<ModelResponse>;
+  assessOpportunity(request: OpportunityRequest, o: CallOptions): Promise<ModelResponse>;
 }
 
 /** Dispatch a request to the provider method for its kind. */
@@ -187,5 +221,7 @@ export function callProvider(p: AgentModelProvider, request: ModelRequest, o: Ca
       return p.interpretMandateDraft(request, o);
     case 'POLICY_STRESS':
       return p.selectPolicyCase(request, o);
+    case 'OPPORTUNITY':
+      return p.assessOpportunity(request, o);
   }
 }

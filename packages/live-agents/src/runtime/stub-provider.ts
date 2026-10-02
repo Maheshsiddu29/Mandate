@@ -11,7 +11,7 @@
 
 import { interpretLocallyAsText } from '../authoring/prompt-to-draft.ts';
 import type { Role } from '../types.ts';
-import type { AgentModelProvider, CallOptions, DecisionRequest, DraftRequest, ModelResponse, NegotiationRequest, PolicyStressRequest } from './provider.ts';
+import type { AgentModelProvider, CallOptions, DecisionRequest, DraftRequest, ModelResponse, NegotiationRequest, OpportunityRequest, PolicyStressRequest } from './provider.ts';
 
 /** Candidate ids in order of preference — the first one offered is chosen; none offered (or none listed) abstains — and a size. */
 type Pick = readonly [preference: readonly string[], wholeUsdc: bigint];
@@ -33,6 +33,20 @@ const BEHAVIOURS: readonly { readonly [R in Role]: Pick }[] = [
   // 2: reviewed instruments, at full size: a large conflict.
   { stock: [['nvda-note-a'], 800n], swap: [['route-a'], 500n], nft: [['genesis-11'], 300n], yield: [['alpha-usd-vault'], 800n], perps: [['btc-long-2x'], 600n] },
 ];
+
+/**
+ * Fixed opportunity ratings per role for the stub's cards, in the order
+ * opportunityQuality, liquidity, executionQuality, downsideRisk,
+ * dataConfidence. Constants, not judgements: they let an offline Planning
+ * Room produce an uneven split so the allocator's arithmetic is visible.
+ */
+const STUB_METRICS: { readonly [R in Role]: readonly [number, number, number, number, number] } = {
+  stock: [3, 3, 4, 2, 2],
+  swap: [2, 4, 3, 2, 2],
+  nft: [1, 1, 2, 3, 1],
+  yield: [3, 3, 3, 1, 2],
+  perps: [2, 2, 2, 3, 2],
+};
 
 const USDC = 1_000_000n;
 const clamp = (v: bigint, lo: bigint, hi: bigint) => (v < lo ? lo : v > hi ? hi : v);
@@ -61,6 +75,18 @@ export class StubProvider implements AgentModelProvider {
     if (c === undefined) return this.#answer(o, { action: 'ABSTAIN', candidateId: null, requestedAtoms: null, rationale: 'STUB: no candidate matches this behaviour.' });
     const atoms = clamp(whole * USDC, BigInt(c.minAtoms), BigInt(c.maxAtoms));
     return this.#answer(o, { action: 'PROPOSE', candidateId: c.id, requestedAtoms: atoms.toString(), rationale: `STUB: behaviour rule picks ${c.id}.` });
+  }
+
+  /** The same preference rule as `decide`, as a card: the chosen size is both the request and the most it finds useful. */
+  assessOpportunity(r: OpportunityRequest, o: CallOptions): Promise<ModelResponse> {
+    const [preference, whole] = this.#behaviour[r.role];
+    const [q, l, e, d, c] = STUB_METRICS[r.role];
+    const metrics = { opportunityQuality: q, liquidity: l, executionQuality: e, downsideRisk: d, dataConfidence: c };
+    const id = preference.find((p) => r.candidates.some((x) => x.id === p));
+    const cand = r.candidates.find((x) => x.id === id);
+    if (cand === undefined) return this.#answer(o, { action: 'ABSTAIN', candidateId: null, requestedAtoms: null, minimumUsefulAtoms: null, maximumUsefulAtoms: null, ...metrics, marketRegime: 'UNKNOWN', rationale: 'STUB: no candidate matches this behaviour.' });
+    const atoms = clamp(whole * USDC, BigInt(cand.minAtoms), BigInt(cand.maxAtoms));
+    return this.#answer(o, { action: 'PROPOSE', candidateId: cand.id, requestedAtoms: atoms.toString(), minimumUsefulAtoms: cand.minAtoms, maximumUsefulAtoms: atoms.toString(), ...metrics, marketRegime: 'NEUTRAL', rationale: `STUB: behaviour rule picks ${cand.id}; fixed ratings.` });
   }
 
   /** Offer a proportional share of the required reduction, or all of a constraint only this agent holds. */

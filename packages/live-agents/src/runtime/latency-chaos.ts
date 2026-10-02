@@ -11,7 +11,7 @@
 
 import type { Clock } from './clock.ts';
 import { ProviderError } from './errors.ts';
-import { callProvider, type AgentModelProvider, type ProviderKind, type CallOptions, type DecisionRequest, type DraftRequest, type ModelRequest, type ModelResponse, type NegotiationRequest, type PolicyStressRequest } from './provider.ts';
+import { callProvider, type AgentModelProvider, type ProviderKind, type CallOptions, type DecisionRequest, type DraftRequest, type ModelRequest, type ModelResponse, type NegotiationRequest, type OpportunityRequest, type PolicyStressRequest } from './provider.ts';
 import { isRole, type Role } from '../types.ts';
 
 export const CHAOS_DELAYS_MS = [0, 250, 1000, 3000, 8000] as const;
@@ -28,11 +28,12 @@ export interface ChaosRule {
 export type ChaosPlan = readonly ChaosRule[];
 
 function roleOf(r: ModelRequest): Role | null {
-  return r.kind === 'DECISION' || r.kind === 'NEGOTIATION' ? r.role : null;
+  return r.kind === 'DECISION' || r.kind === 'NEGOTIATION' || r.kind === 'OPPORTUNITY' ? r.role : null;
 }
 
 export function effectFor(plan: ChaosPlan, r: ModelRequest): ChaosEffect {
-  const phase = r.kind === 'DECISION' ? 'decide' : r.kind === 'NEGOTIATION' ? 'room' : null;
+  // An opportunity card is a decision for chaos purposes: the agent's own analysis, before any Room reply.
+  const phase = r.kind === 'DECISION' || r.kind === 'OPPORTUNITY' ? 'decide' : r.kind === 'NEGOTIATION' ? 'room' : null;
   const role = roleOf(r);
   if (phase === null || role === null) return { kind: 'DELAY', ms: 0 };
   const rule = plan.find((x) => (x.phase === 'any' || x.phase === phase) && (x.role === '*' || x.role === role));
@@ -104,6 +105,9 @@ export class LatencyChaosProvider implements AgentModelProvider {
     return this.#run(r, o);
   }
   selectPolicyCase(r: PolicyStressRequest, o: CallOptions): Promise<ModelResponse> {
+    return this.#run(r, o);
+  }
+  assessOpportunity(r: OpportunityRequest, o: CallOptions): Promise<ModelResponse> {
     return this.#run(r, o);
   }
 }

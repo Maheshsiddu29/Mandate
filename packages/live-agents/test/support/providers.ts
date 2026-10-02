@@ -6,7 +6,7 @@
  * when asked, so late answers can be produced on purpose.
  */
 
-import type { AgentModelProvider, CallOptions, DecisionRequest, DraftRequest, ModelRequest, ModelResponse, NegotiationRequest, PolicyStressRequest } from '../../src/runtime/provider.ts';
+import type { AgentModelProvider, CallOptions, DecisionRequest, DraftRequest, ModelRequest, ModelResponse, NegotiationRequest, OpportunityRequest, PolicyStressRequest } from '../../src/runtime/provider.ts';
 
 export interface Scripted {
   readonly text: string | ((request: ModelRequest) => string);
@@ -23,6 +23,7 @@ export interface ScriptedHandlers {
   readonly negotiate?: Handler<NegotiationRequest>;
   readonly interpret?: Handler<DraftRequest>;
   readonly policyCase?: Handler<PolicyStressRequest>;
+  readonly opportunity?: Handler<OpportunityRequest>;
 }
 
 function delay(ms: number, signal: AbortSignal | null): Promise<void> {
@@ -73,6 +74,9 @@ export class ScriptedProvider implements AgentModelProvider {
   }
   selectPolicyCase(r: PolicyStressRequest, o: CallOptions): Promise<ModelResponse> {
     return this.#run(this.#h.policyCase, r, o);
+  }
+  assessOpportunity(r: OpportunityRequest, o: CallOptions): Promise<ModelResponse> {
+    return this.#run(this.#h.opportunity, r, o);
   }
 }
 

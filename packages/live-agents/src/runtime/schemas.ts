@@ -10,7 +10,7 @@
  */
 
 import { ATOMS_PATTERN, parseAtoms } from '../types.ts';
-import type { DecisionRequest, ModelRequest, NegotiationAction, NegotiationRequest, PolicyStressRequest } from './provider.ts';
+import type { DecisionRequest, ModelRequest, NegotiationAction, NegotiationRequest, OpportunityRequest, PolicyStressRequest } from './provider.ts';
 import { NEGOTIATION_ACTIONS } from './provider.ts';
 import { DRAFT_SCHEMA } from '../authoring/prompt-to-draft.ts';
 import { MAX_RATIONALE, bad, boundedText, enumSchema, exactKeys, good, nullableText, objectSchema, oneOf, parseJsonObject, type JsonObject, type Parsed } from './strict-json.ts';
@@ -133,6 +133,83 @@ export function parsePolicyStress(text: string, r: PolicyStressRequest): Parsed<
   return good({ caseId: caseId.value, rationale: why.value });
 }
 
+// --- Opportunity analysis (Planning and Reallocation Rooms) ---------------------------------------
+
+/** Ordinal judgements on a fixed 0–4 scale. The agent judges them from the supplied facts; trusted code never reads them as dollars. */
+export const OPPORTUNITY_METRICS = ['opportunityQuality', 'liquidity', 'executionQuality', 'downsideRisk', 'dataConfidence'] as const;
+export type OpportunityMetric = (typeof OPPORTUNITY_METRICS)[number];
+export type OpportunityMetrics = { readonly [M in OpportunityMetric]: number };
+export const MARKET_REGIMES = ['CONSTRUCTIVE', 'NEUTRAL', 'STRESSED', 'UNKNOWN'] as const;
+export type MarketRegime = (typeof MARKET_REGIMES)[number];
+export const METRIC_MAX = 4;
+
+export interface OpportunityAnswer {
+  readonly action: (typeof DECISION_ACTIONS)[number];
+  readonly candidateId: string | null;
+  readonly requestedAtoms: bigint;
+  readonly minimumUsefulAtoms: bigint;
+  readonly maximumUsefulAtoms: bigint;
+  readonly metrics: OpportunityMetrics;
+  readonly marketRegime: MarketRegime;
+  readonly rationale: string;
+}
+
+const metric: JsonObject = { type: 'integer', enum: [0, 1, 2, 3, 4] };
+
+export function opportunitySchema(r: OpportunityRequest): JsonObject {
+  return objectSchema({
+    action: enumSchema(DECISION_ACTIONS),
+    candidateId: enumSchema(r.candidates.map((c) => c.id), true),
+    requestedAtoms: nullableAtoms,
+    minimumUsefulAtoms: nullableAtoms,
+    maximumUsefulAtoms: nullableAtoms,
+    ...Object.fromEntries(OPPORTUNITY_METRICS.map((m) => [m, metric])),
+    marketRegime: enumSchema(MARKET_REGIMES),
+    rationale,
+  });
+}
+
+/**
+ * PROPOSE: a supplied candidate, and candidate minimum ≤ minimumUseful ≤
+ * requested ≤ maximumUseful ≤ candidate maximum. ABSTAIN: no candidate and
+ * no amounts. Every metric an integer 0–4.
+ */
+export function parseOpportunity(text: string, r: OpportunityRequest): Parsed<OpportunityAnswer> {
+  const o = parseJsonObject(text);
+  if (!o.ok) return o;
+  const k = exactKeys(o.value, ['action', 'candidateId', 'requestedAtoms', 'minimumUsefulAtoms', 'maximumUsefulAtoms', ...OPPORTUNITY_METRICS, 'marketRegime', 'rationale'], 'opportunity');
+  if (!k.ok) return k;
+  const action = oneOf(o.value['action'], DECISION_ACTIONS, 'action');
+  if (!action.ok) return action;
+  const why = boundedText(o.value['rationale'], MAX_RATIONALE, 'rationale');
+  if (!why.ok) return why;
+  const regime = oneOf(o.value['marketRegime'], MARKET_REGIMES, 'marketRegime');
+  if (!regime.ok) return regime;
+  const metrics: { [M in OpportunityMetric]?: number } = {};
+  for (const m of OPPORTUNITY_METRICS) {
+    const v = o.value[m];
+    if (typeof v !== 'number' || !Number.isInteger(v) || v < 0 || v > METRIC_MAX) return bad(`${m}: not an integer 0–${METRIC_MAX}`);
+    metrics[m] = v;
+  }
+  const common = { metrics: metrics as OpportunityMetrics, marketRegime: regime.value, rationale: why.value };
+  if (action.value === 'ABSTAIN') {
+    if (o.value['candidateId'] !== null || o.value['requestedAtoms'] !== null || o.value['minimumUsefulAtoms'] !== null || o.value['maximumUsefulAtoms'] !== null) return bad('ABSTAIN names no candidate and no amount');
+    return good({ action: 'ABSTAIN', candidateId: null, requestedAtoms: 0n, minimumUsefulAtoms: 0n, maximumUsefulAtoms: 0n, ...common });
+  }
+  const id = nullableText(o.value['candidateId'], 64, 'candidateId');
+  if (!id.ok) return id;
+  const candidate = r.candidates.find((c) => c.id === id.value);
+  if (candidate === undefined) return bad('candidateId: not one of the supplied candidates');
+  const requested = parseAtoms(o.value['requestedAtoms']);
+  const min = parseAtoms(o.value['minimumUsefulAtoms']);
+  const max = parseAtoms(o.value['maximumUsefulAtoms']);
+  if (requested === null || min === null || max === null) return bad('PROPOSE needs requestedAtoms, minimumUsefulAtoms and maximumUsefulAtoms as integer strings');
+  const lo = BigInt(candidate.minAtoms);
+  const hi = BigInt(candidate.maxAtoms);
+  if (!(lo <= min && min <= requested && requested <= max && max <= hi)) return bad('amounts: need candidate minimum ≤ minimumUseful ≤ requested ≤ maximumUseful ≤ candidate maximum');
+  return good({ action: 'PROPOSE', candidateId: candidate.id, requestedAtoms: requested, minimumUsefulAtoms: min, maximumUsefulAtoms: max, ...common });
+}
+
 // --- Dispatch ------------------------------------------------------------------------------------
 
 export function schemaFor(r: ModelRequest): { readonly name: string; readonly schema: JsonObject } {
@@ -145,6 +222,8 @@ export function schemaFor(r: ModelRequest): { readonly name: string; readonly sc
       return { name: 'mandate_draft', schema: DRAFT_SCHEMA };
     case 'POLICY_STRESS':
       return { name: 'policy_case_selection', schema: policyStressSchema(r) };
+    case 'OPPORTUNITY':
+      return { name: 'opportunity_card', schema: opportunitySchema(r) };
   }
 }
 

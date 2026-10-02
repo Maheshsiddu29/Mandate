@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 import * as pkg from '../src/index.ts';
 import { createAgentSigners, LocalPrincipalSigner } from '../src/mandate/signer.ts';
 import { caseViews } from '../src/policy-stress/cases.ts';
-import { decisionSchema, negotiationSchema, policyStressSchema } from '../src/runtime/schemas.ts';
+import { decisionSchema, negotiationSchema, opportunitySchema, policyStressSchema } from '../src/runtime/schemas.ts';
 import { DOMAIN_AGENTS } from '../src/agents/index.ts';
 import { viewOf } from '../src/agents/spec.ts';
 import { containsKey } from './support/world.ts';
@@ -119,6 +119,7 @@ describe('live-agents structural boundary', () => {
       decisionSchema({ kind: 'DECISION', role: 'swap', objective: '', principalIntent: null, authority, portfolio: { deployableAtoms: '0', availableAtoms: '0', enabledAgents: [] }, candidates: agent.candidates.map((c) => viewOf(c)) }),
       negotiationSchema({ kind: 'NEGOTIATION', role: 'swap', objective: '', roomId: 'r', generation: 1, portfolioAuthorityAtoms: '0', admissibleDemandAtoms: '0', requiredReductionAtoms: '0', constraints: [], candidateTitle: '', yourCurrentAtoms: '1', yourMinimumAtoms: '1', yourOwnLimitAtoms: '1', permittedActions: ['KEEP', 'REDUCE', 'RELEASE', 'ABSTAIN'], participants: [] }),
       policyStressSchema({ kind: 'POLICY_STRESS', role: 'swap', task: '', authority, cases: caseViews(['COMPLIANT_CONTROL', 'ABSTAIN']), history: [], attempt: 1, maxAttempts: 5 }),
+      opportunitySchema({ kind: 'OPPORTUNITY', role: 'swap', objective: '', principalIntent: null, purpose: 'INITIAL_ALLOCATION', authority, pool: { poolAtoms: '0', participants: [] }, candidates: agent.candidates.map((c) => viewOf(c)), research: [] }),
     ];
     for (const s of schemas) {
       const o = s as { additionalProperties?: unknown; required?: unknown; properties?: { [k: string]: unknown } };

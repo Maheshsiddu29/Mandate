@@ -40,4 +40,8 @@ export class RecordedProvider implements AgentModelProvider {
   selectPolicyCase(): Promise<ModelResponse> {
     return this.#refuse();
   }
+
+  assessOpportunity(): Promise<ModelResponse> {
+    return this.#refuse();
+  }
 }

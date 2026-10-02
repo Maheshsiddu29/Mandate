@@ -216,7 +216,7 @@ const KEEP = json({ action: 'KEEP', newRequestedAtoms: null, rationale: 'keep' }
 
 function provider(decide: (role: string) => string, kind: 'SCRIPTED' | 'LIVE', negotiate: (role: string) => string = () => KEEP): AgentModelProvider {
   const inner = new ScriptedProvider({ decide: (r) => ({ text: decide(r.role) }), negotiate: (r) => ({ text: negotiate(r.role) }) });
-  return kind === 'SCRIPTED' ? inner : { name: 'scripted-as-live', model: 'scripted-v1', kind: 'LIVE', decide: (r, o) => inner.decide(r, o), negotiate: (r, o) => inner.negotiate(r, o), interpretMandateDraft: (r, o) => inner.interpretMandateDraft(r, o), selectPolicyCase: (r, o) => inner.selectPolicyCase(r, o) };
+  return kind === 'SCRIPTED' ? inner : { name: 'scripted-as-live', model: 'scripted-v1', kind: 'LIVE', decide: (r, o) => inner.decide(r, o), negotiate: (r, o) => inner.negotiate(r, o), interpretMandateDraft: (r, o) => inner.interpretMandateDraft(r, o), selectPolicyCase: (r, o) => inner.selectPolicyCase(r, o), assessOpportunity: (r, o) => inner.assessOpportunity(r, o) };
 }
 
 export interface SettlementWorld {
