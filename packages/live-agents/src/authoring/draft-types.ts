@@ -22,6 +22,12 @@ export interface PortfolioDraft {
   readonly maxDerivative: string | null;
   readonly maxIlliquid: string | null;
   readonly validityMinutes: string | null;
+  /**
+   * Whether capital an agent leaves unused may be reassigned to other agents
+   * after signing, inside the signed maxima (docs/v2/mandate-room-v2.md §3.3).
+   * `null` is `false`. It is authority: a fill never sets it.
+   */
+  readonly autoReallocate: boolean | null;
 }
 
 export interface AgentDraft {
@@ -30,6 +36,12 @@ export interface AgentDraft {
   readonly maxAllocation: string | null;
   /** The agent's own ceiling in its domain resource; `null` leaves it bounded by the portfolio limit alone. */
   readonly maxExposure: string | null;
+  /**
+   * The agent's budget: the most capital it may use in this plan — a maximum,
+   * never an obligation. Set by the principal (FIXED, or the fixed part of
+   * HYBRID) or by accepting a Planning Room proposal (`PLANNED`).
+   */
+  readonly budget: string | null;
 }
 
 export interface MarketDraft {
@@ -58,7 +70,8 @@ export interface DraftIssue {
   readonly text: string;
 }
 
-export type FieldSource = 'PRESET' | 'INTERPRETED' | 'USER';
+/** `PLANNED`: a budget the principal accepted from a Planning Room proposal. */
+export type FieldSource = 'PRESET' | 'INTERPRETED' | 'USER' | 'PLANNED';
 
 export interface MandateDraft {
   readonly portfolio: PortfolioDraft;
@@ -72,11 +85,11 @@ export interface MandateDraft {
   readonly provenance: { readonly [path: string]: FieldSource };
 }
 
-const UNSET_AGENT: AgentDraft = { enabled: null, maxAllocation: null, maxExposure: null };
+const UNSET_AGENT: AgentDraft = { enabled: null, maxAllocation: null, maxExposure: null, budget: null };
 
 export function emptyDraft(): MandateDraft {
   return {
-    portfolio: { totalCapital: null, minUnallocated: null, maxDeployed: null, deployAll: null, maxDerivative: null, maxIlliquid: null, validityMinutes: null },
+    portfolio: { totalCapital: null, minUnallocated: null, maxDeployed: null, deployAll: null, maxDerivative: null, maxIlliquid: null, validityMinutes: null, autoReallocate: null },
     agents: { stock: UNSET_AGENT, swap: UNSET_AGENT, nft: UNSET_AGENT, yield: UNSET_AGENT, perps: UNSET_AGENT },
     market: { assets: null, issuers: null, representations: null, venues: null, chains: null, maxLeverage: null, maxSlippageBps: null, maxQuoteAgeSeconds: null },
     execution: { recipients: null },
@@ -140,6 +153,8 @@ export function presetFields(p: Preset): { readonly [path: string]: string | boo
     'portfolio.maxDerivative': v.portfolio[3],
     'portfolio.maxIlliquid': v.portfolio[4],
     'portfolio.validityMinutes': v.portfolio[5],
+    // A preset is an explicit envelope: agents coordinate inside the signed maxima, without a fixed split.
+    'portfolio.autoReallocate': true,
     'market.maxLeverage': v.bounds[0],
     'market.maxSlippageBps': v.bounds[1],
     'market.maxQuoteAgeSeconds': v.bounds[2],
@@ -181,12 +196,24 @@ export function withField(d: MandateDraft, path: string, value: string | boolean
   return { ...d, [section]: { ...current, [a]: value }, provenance } as MandateDraft;
 }
 
-/** Apply a preset: to every field (`onlyUnset = false`) or only to fields no one has set. */
+/**
+ * Fields that grant authority by choice, not by default: which agents may act
+ * at all, and whether capital may move between them after signing. Filling
+ * unset fields from a preset never sets them: a button must not grant an
+ * agent a domain the principal did not name.
+ */
+export const AUTHORITY_CHOICES: readonly string[] = [...ROLES.map((r) => `agents.${r}.enabled`), 'portfolio.autoReallocate'];
+
+/**
+ * Apply a preset: to every field (`onlyUnset = false`, an explicit choice of
+ * the whole preset) or only to fields no one has set — never to an
+ * authority choice (AUTHORITY_CHOICES).
+ */
 export function applyPreset(d: MandateDraft, p: Preset, onlyUnset: boolean): { readonly draft: MandateDraft; readonly filled: readonly string[] } {
   let out = d;
   const filled: string[] = [];
   for (const [path, value] of Object.entries(presetFields(p))) {
-    if (onlyUnset && fieldAt(out, path) !== null) continue;
+    if (onlyUnset && (fieldAt(out, path) !== null || AUTHORITY_CHOICES.includes(path))) continue;
     out = withField(out, path, value, 'PRESET');
     filled.push(path);
   }
@@ -196,4 +223,10 @@ export function applyPreset(d: MandateDraft, p: Preset, onlyUnset: boolean): { r
 
 export function presetDraft(p: Preset): MandateDraft {
   return applyPreset(emptyDraft(), p, false).draft;
+}
+
+/** A draft recorded before Room V2 has no budgets or reallocation choice: read them as unset. */
+export function normalizeDraft(d: MandateDraft): MandateDraft {
+  const agents = Object.fromEntries(ROLES.map((r) => [r, { ...d.agents[r], budget: d.agents[r].budget ?? null }])) as unknown as MandateDraft['agents'];
+  return { ...d, portfolio: { ...d.portfolio, autoReallocate: d.portfolio.autoReallocate ?? null }, agents };
 }

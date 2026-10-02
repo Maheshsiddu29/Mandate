@@ -310,7 +310,7 @@ export class LiveLab {
       sessionId: s.id,
       provider: { name: s.provider.name, kind: s.provider.kind, model: s.provider.model },
       draft: entry.draft,
-      validation: v === null ? null : { ok: v.ok, issues: v.issues, guardrails: v.guardrails },
+      validation: v === null ? null : { ok: v.ok, issues: v.issues, guardrails: v.guardrails, allocation: v.allocation },
       expectedConfirmation: s.versions.expectedConfirmation,
       activeVersion: s.versions.active?.version ?? null,
       paused: s.versions.paused,

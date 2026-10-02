@@ -23,7 +23,7 @@
 
 import { authorityId } from '@mandate/core';
 import { createPortfolioCore, decodePortfolioMandate, mandateSignedByPrincipal, mandateSignedByPrincipalV2, portfolioMandateDigest, type DomainBinding, type PortfolioCore, type PortfolioMandate } from '@mandate/portfolio';
-import type { MandateDraft } from '../authoring/draft-types.ts';
+import { normalizeDraft, type MandateDraft } from '../authoring/draft-types.ts';
 import type { RestoredVersion, VersionRecord } from '../authoring/mandate-versioning.ts';
 import { compile } from '../mandate/portfolio-adapter.ts';
 import type { ReservedExecution } from '../session.ts';
@@ -95,7 +95,7 @@ export async function restoreState(store: SessionStore, bindings: readonly Domai
       paused = true;
     }
     if (record.status !== 'ACTIVE' && root.revokedAt === null) throw new SessionStoreCorruption(`V${row.version}: recorded ${record.status} but its root is live in the ledger`);
-    versions.push({ record, active: { version: row.version, mandate: m.value, compiled: c.compiled, core, signature: row.signature, draft: decoded<MandateDraft>(row.draft, `V${row.version} draft`) } });
+    versions.push({ record, active: { version: row.version, mandate: m.value, compiled: c.compiled, core, signature: row.signature, draft: normalizeDraft(decoded<MandateDraft>(row.draft, `V${row.version} draft`)) } });
   }
 
   let reserved = store.flags().reserved;

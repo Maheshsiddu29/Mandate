@@ -19,7 +19,7 @@
 import type { AuthorizationRecord } from '@mandate/control';
 import { encodePortfolioMandate, portfolioMandateV2Hash, proposalDigest, verificationTranscript, type PortfolioAuthorityV2, type Reason, type SignedProposal, type VerificationTranscript, type VerifiedChild } from '@mandate/portfolio';
 import type { TrustedCandidate } from './agents/spec.ts';
-import { applyPreset, presetDraft, type MandateDraft, type Preset } from './authoring/draft-types.ts';
+import { applyPreset, normalizeDraft, presetDraft, type MandateDraft, type Preset } from './authoring/draft-types.ts';
 import type { DraftValidation } from './authoring/draft-validator.ts';
 import { MandateVersions, SPINE_AUTHORIZATION_LABEL, WALLET_AUTHORIZATION_LABEL, type ActiveMandate, type AuthorizeResult, type PrincipalAuthorization, type RefusalCode } from './authoring/mandate-versioning.ts';
 import { interpretPrompt } from './authoring/prompt-to-draft.ts';
@@ -296,7 +296,8 @@ export class LiveSession {
   get recordedDraft(): MandateDraft | null {
     if (this.store === null) return null;
     try {
-      return JSON.parse(this.store.draft()) as MandateDraft | null;
+      const d = JSON.parse(this.store.draft()) as MandateDraft | null;
+      return d === null ? null : normalizeDraft(d);
     } catch {
       return null;
     }

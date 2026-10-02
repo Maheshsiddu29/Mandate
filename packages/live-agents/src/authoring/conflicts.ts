@@ -25,6 +25,12 @@ export const VALIDATION_CODES = [
   'NO_AGENT_ENABLED',
   'AGENT_SCOPE_EMPTY',
   'PROTOCOL_REFUSED',
+  // Room V2 (docs/v2/mandate-room-v2.md §3.4): the allocation the principal is about to sign.
+  'ALLOCATION_PLAN_REQUIRED',
+  'ALLOCATION_EXCEEDS_TOTAL',
+  'ALLOCATION_EXCEEDS_AGENT_MAX',
+  'ALLOCATION_EXCEEDS_DOMAIN_CAP',
+  'ALLOCATION_AGENT_DISABLED',
 ] as const;
 export type ValidationCode = (typeof VALIDATION_CODES)[number];
 

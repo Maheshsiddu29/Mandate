@@ -37,8 +37,9 @@ export interface DraftInterpretation {
     readonly maxDerivative: string | null;
     readonly maxIlliquid: string | null;
     readonly validityMinutes: string | null;
+    readonly autoReallocate: boolean | null;
   };
-  readonly agents: readonly { readonly role: Role; readonly enabled: boolean | null; readonly maxAllocation: string | null; readonly maxExposure: string | null }[];
+  readonly agents: readonly { readonly role: Role; readonly enabled: boolean | null; readonly maxAllocation: string | null; readonly maxExposure: string | null; readonly budget: string | null }[];
   readonly market: { readonly [S in MarketSet]: readonly string[] | null } & {
     readonly maxLeverage: string | null;
     readonly maxSlippageBps: string | null;
@@ -50,7 +51,8 @@ export interface DraftInterpretation {
   readonly notes: readonly string[];
 }
 
-const PORTFOLIO_FIELDS = ['totalCapital', 'minUnallocated', 'maxDeployed', 'deployAll', 'maxDerivative', 'maxIlliquid', 'validityMinutes'] as const;
+const PORTFOLIO_FIELDS = ['totalCapital', 'minUnallocated', 'maxDeployed', 'deployAll', 'maxDerivative', 'maxIlliquid', 'validityMinutes', 'autoReallocate'] as const;
+const PORTFOLIO_BOOLEANS: ReadonlySet<string> = new Set(['deployAll', 'autoReallocate']);
 const MAX_ISSUES = 12;
 const MAX_NOTES = 8;
 const TEXT = 240;
@@ -70,10 +72,11 @@ export const DRAFT_SCHEMA: JsonObject = objectSchema({
     maxDerivative: nullableString(24),
     maxIlliquid: nullableString(24),
     validityMinutes: nullableString(8),
+    autoReallocate: { type: ['boolean', 'null'] },
   }),
   agents: {
     type: 'array',
-    items: objectSchema({ role: enumSchema(ROLES), enabled: { type: ['boolean', 'null'] }, maxAllocation: nullableString(24), maxExposure: nullableString(24) }),
+    items: objectSchema({ role: enumSchema(ROLES), enabled: { type: ['boolean', 'null'] }, maxAllocation: nullableString(24), maxExposure: nullableString(24), budget: nullableString(24) }),
   },
   market: objectSchema({
     assets: idList('assets'),
@@ -124,7 +127,7 @@ export function parseDraftInterpretation(text: string): Parsed<DraftInterpretati
   if (!pk.ok) return pk;
   const portfolio: { [k: string]: string | boolean | null } = {};
   for (const f of PORTFOLIO_FIELDS) {
-    const r = f === 'deployAll' ? nullableBoolean(p[f], `portfolio.${f}`) : nullableText(p[f], 24, `portfolio.${f}`);
+    const r = PORTFOLIO_BOOLEANS.has(f) ? nullableBoolean(p[f], `portfolio.${f}`) : nullableText(p[f], 24, `portfolio.${f}`);
     if (!r.ok) return bad(r.error);
     portfolio[f] = r.value;
   }
@@ -133,7 +136,7 @@ export function parseDraftInterpretation(text: string): Parsed<DraftInterpretati
   const agents: DraftInterpretation['agents'][number][] = [];
   for (const a of agentsRaw.value) {
     if (!isObject(a)) return bad('agents: not an object');
-    const k = exactKeys(a, ['role', 'enabled', 'maxAllocation', 'maxExposure'], 'agents[]');
+    const k = exactKeys(a, ['role', 'enabled', 'maxAllocation', 'maxExposure', 'budget'], 'agents[]');
     if (!k.ok) return k;
     const role = oneOf(a['role'], ROLES, 'agents[].role');
     if (!role.ok) return role;
@@ -143,7 +146,9 @@ export function parseDraftInterpretation(text: string): Parsed<DraftInterpretati
     if (!max.ok) return max;
     const exposure = nullableText(a['maxExposure'], 24, 'agents[].maxExposure');
     if (!exposure.ok) return exposure;
-    agents.push({ role: role.value, enabled: enabled.value, maxAllocation: max.value, maxExposure: exposure.value });
+    const budget = nullableText(a['budget'], 24, 'agents[].budget');
+    if (!budget.ok) return budget;
+    agents.push({ role: role.value, enabled: enabled.value, maxAllocation: max.value, maxExposure: exposure.value, budget: budget.value });
   }
   const m = o.value['market'];
   if (!isObject(m)) return bad('market: not an object');
@@ -234,6 +239,7 @@ export function draftFromInterpretation(x: DraftInterpretation): MandateDraft {
 
   for (const f of ['totalCapital', 'minUnallocated', 'maxDeployed', 'maxDerivative', 'maxIlliquid'] as const) amount(`portfolio.${f}`, x.portfolio[f]);
   set('portfolio.deployAll', x.portfolio.deployAll);
+  set('portfolio.autoReallocate', x.portfolio.autoReallocate);
   count('portfolio.validityMinutes', x.portfolio.validityMinutes, 10_000_000);
 
   const seen = new Set<Role>();
@@ -246,6 +252,7 @@ export function draftFromInterpretation(x: DraftInterpretation): MandateDraft {
     set(`agents.${a.role}.enabled`, a.enabled);
     amount(`agents.${a.role}.maxAllocation`, a.maxAllocation);
     amount(`agents.${a.role}.maxExposure`, a.maxExposure);
+    amount(`agents.${a.role}.budget`, a.budget);
   }
 
   for (const s of MARKET_SETS) {
@@ -311,10 +318,10 @@ export function interpretLocally(prompt: string): DraftInterpretation {
   const p = prompt.toLowerCase().replace(/\s+/g, ' ');
   const issues: DraftIssue[] = [];
   const notes: string[] = [];
-  const portfolio: { [k: string]: string | boolean | null } = { totalCapital: null, minUnallocated: null, maxDeployed: null, deployAll: null, maxDerivative: null, maxIlliquid: null, validityMinutes: null };
-  const agents = new Map<Role, { enabled: boolean | null; maxAllocation: string | null; maxExposure: string | null }>();
+  const portfolio: { [k: string]: string | boolean | null } = { totalCapital: null, minUnallocated: null, maxDeployed: null, deployAll: null, maxDerivative: null, maxIlliquid: null, validityMinutes: null, autoReallocate: null };
+  const agents = new Map<Role, { enabled: boolean | null; maxAllocation: string | null; maxExposure: string | null; budget: string | null }>();
   const agent = (r: Role) => {
-    const a = agents.get(r) ?? { enabled: null, maxAllocation: null, maxExposure: null };
+    const a = agents.get(r) ?? { enabled: null, maxAllocation: null, maxExposure: null, budget: null };
     agents.set(r, a);
     return a;
   };
@@ -326,7 +333,11 @@ export function interpretLocally(prompt: string): DraftInterpretation {
     notes.push('"Deploy everything" read as: the maximum deployed equals total capital.');
   }
   const total = new RegExp(String.raw`\btotal (?:capital|budget|portfolio)(?: of| is|:)?\s*(?:${MONEY})`).exec(p);
-  const upTo = new RegExp(String.raw`\b(?:deploy|invest|allocate|put|use)\s+(?:up to|at most|no more than|a maximum of|max(?:imum)?)?\s*(?:${MONEY})`).exec(p);
+  // "Deploy $2,000", "Manage $2,000", "$2,000 across …", or a prompt that opens with the amount ("$2,000. Stock $800, …").
+  const upTo =
+    new RegExp(String.raw`\b(?:deploy|invest|allocate|put|use|manage)\s+(?:up to|at most|no more than|a maximum of|max(?:imum)?)?\s*(?:${MONEY})`).exec(p) ??
+    new RegExp(String.raw`(?:${MONEY})\s+(?:across|between|among|split (?:across|between))\b`).exec(p) ??
+    new RegExp(String.raw`^\s*(?:${MONEY})\s*(?:[.:;,]|$)`).exec(p);
   if (total !== null) portfolio['totalCapital'] = money(total);
   if (upTo !== null) {
     portfolio['maxDeployed'] = money(upTo);
@@ -349,6 +360,22 @@ export function interpretLocally(prompt: string): DraftInterpretation {
   for (const [role, word] of [['stock', String.raw`stocks?|equit(?:y|ies)`], ['swap', String.raw`swaps?`], ['yield', String.raw`yield|vaults?`]] as const) {
     const m = new RegExp(String.raw`\b(?:${word})\b${cap}`).exec(p);
     if (m !== null) agent(role).maxAllocation = money(m);
+  }
+
+  // A role named directly with an amount is that agent's budget: "Stock $800", "swap: $400", "perps gets $300".
+  for (const r of ROLES) {
+    const word = ROLE_WORDS[r].source.replace(/\\b/g, '');
+    const m = new RegExp(String.raw`\b${word}\s*(?::|=|-|–|gets|budget(?: of)?|with)?\s*(?:${MONEY})`).exec(p);
+    if (m !== null) {
+      agent(r).budget = money(m, 2);
+      notes.push(`"${m[0].trim()}" read as the ${r} agent's budget: the most it may use, not an amount it must spend.`);
+    }
+  }
+  if (/\b(?:let|allow)\b[^.;\n]*\b(?:decide|split|allocate|choose)\b[^.;\n]*\b(?:rest|remainder|remaining|the others?)\b/.test(p)) notes.push('The amount not fixed above is left to the remaining agents to split: they propose, you review before signing.');
+  if (/\b(?:no|without|never|don'?t|do not)\s+(?:automatic(?:ally)?\s+)?(?:re-?allocat|rebalanc)\w*/.test(p)) portfolio['autoReallocate'] = false;
+  else if (/\b(?:automatic(?:ally)?\s+(?:re-?allocat|rebalanc)\w*|(?:re-?allocate|rebalance)\w*\s+automatically|auto[- ]?(?:re-?allocat|rebalanc)\w*|let (?:them|the agents|agents) (?:re-?allocate|rebalance|move capital))/.test(p)) {
+    portfolio['autoReallocate'] = true;
+    notes.push('Automatic reallocation read as allowed: capital an agent leaves unused may move to other agents, inside each signed maximum.');
   }
 
   const mentioned = ROLES.filter((r) => ROLE_WORDS[r].test(p));

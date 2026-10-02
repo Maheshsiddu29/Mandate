@@ -32,6 +32,7 @@ import { DEMO_RESOURCES, DEMO_T0, PRINCIPAL, demoParty } from '@mandate/portfoli
 import { AGENT_DOMAINS, CATALOG, EXPOSURE_RESOURCE, REVIEWED_AGENT_SCOPES, REVIEWED_BOUNDS, REVIEWED_PORTFOLIO_SCOPE, assetInput, entryById, type CatalogSet } from './catalog.ts';
 import { agentConflicts, deployable, issue, portfolioConflicts, type ValidationIssue } from './conflicts.ts';
 import type { MandateDraft } from './draft-types.ts';
+import { classifyAllocation, type AllocationView } from '../allocation/intent.ts';
 import { ROLES, ROLE_LABELS, parseCount, parseUsdc, usdcText, type Role } from '../types.ts';
 
 export interface GuardrailRow {
@@ -50,6 +51,8 @@ export interface DraftValidation {
   readonly issues: readonly ValidationIssue[];
   readonly mandate: PortfolioMandateInput | null;
   readonly guardrails: readonly GuardrailRow[];
+  /** Who decides the split, and what the principal would sign (allocation/intent.ts). */
+  readonly allocation: AllocationView;
 }
 
 export interface ValidationContext {
@@ -63,6 +66,12 @@ export interface ValidationContext {
    * wallet address, which then is the protocol principal.
    */
   readonly principal?: { readonly kind: 'eip155-address'; readonly value: string };
+  /**
+   * Planning only (allocation/planning.ts): compile the provisional mandate a
+   * Planning Room analyzes under, with each delegated agent at its ceiling and
+   * no split yet. Never signed: a planning validation is not authority.
+   */
+  readonly planning?: boolean;
 }
 
 const USDC = (atoms: bigint) => `${usdcText(atoms)} USDC`;
@@ -155,18 +164,27 @@ export function validateDraft(d: MandateDraft, ctx: ValidationContext): DraftVal
   else if (validity === null) issues.push(issue('INVALID_VALUE', 'portfolio.validityMinutes', `"${validityRaw}" is not a whole number of minutes.`));
 
   // Agents.
+  const plan = classifyAllocation(d);
+  const auto = plan.autoReallocate;
   const enabledRoles: Role[] = [];
   const maxAllocation = new Map<Role, bigint>();
   const maxExposure = new Map<Role, bigint>();
+  const budget = new Map<Role, bigint>();
   for (const r of ROLES) {
     const a = d.agents[r];
     if (a.enabled === null) {
-      issues.push(issue('MISSING_VALUE', `agents.${r}.enabled`, `Choose whether the ${ROLE_LABELS[r]} is enabled.`));
+      issues.push(issue('MISSING_VALUE', `agents.${r}.enabled`, `Choose whether the ${ROLE_LABELS[r]} may use this capital.`));
       continue;
     }
-    if (!a.enabled) continue;
+    if (!a.enabled) {
+      if (a.budget !== null) issues.push(issue('ALLOCATION_AGENT_DISABLED', `agents.${r}.budget`, `The ${ROLE_LABELS[r]} is not enabled: it can be given no budget.`));
+      continue;
+    }
     enabledRoles.push(r);
-    const max = amount(`agents.${r}.maxAllocation`, a.maxAllocation, true);
+    const b = amount(`agents.${r}.budget`, a.budget, false);
+    if (b !== null) budget.set(r, b);
+    // The ceiling is what is signed when capital may move between agents, or when there is no budget yet.
+    const max = amount(`agents.${r}.maxAllocation`, a.maxAllocation, auto || a.budget === null);
     if (max !== null) maxAllocation.set(r, max);
     if (EXPOSURE_RESOURCE[r] === null) continue;
     const exposure = amount(`agents.${r}.maxExposure`, a.maxExposure, false);
@@ -222,7 +240,33 @@ export function validateDraft(d: MandateDraft, ctx: ValidationContext): DraftVal
 
   const numbers = total !== null && minUnallocated !== null && validity !== null && (deployAll || maxDeployed !== null) ? { total, minUnallocated, maxDeployed, deployAll, validityMinutes: validity } : null;
   if (numbers !== null) issues.push(...portfolioConflicts(numbers));
-  issues.push(...agentConflicts(enabledRoles.filter((r) => maxAllocation.has(r)).map((r) => ({ role: r, maxAllocation: maxAllocation.get(r) as bigint }))));
+
+  // The allocation (docs/v2/mandate-room-v2.md §3.3): budgets are maxima; without reallocation they are what is signed.
+  const cap0 = numbers === null ? null : deployable(numbers);
+  if (plan.planning === 'REQUIRED' && ctx.planning !== true) {
+    const missing = plan.pool.filter((r) => d.agents[r].budget === null);
+    issues.push(issue('ALLOCATION_PLAN_REQUIRED', null, `You left the split to the agents (${missing.map((r) => ROLE_LABELS[r]).join(', ')}). Ask them for a proposed allocation, or set each budget yourself, before signing.`));
+  }
+  const budgeted = enabledRoles.filter((r) => budget.has(r));
+  const sum = budgeted.reduce((s, r) => s + (budget.get(r) as bigint), 0n);
+  if (cap0 !== null && sum > cap0) issues.push(issue('ALLOCATION_EXCEEDS_TOTAL', null, `The budgets add up to ${USDC(sum)}; at most ${USDC(cap0)} may be deployed.`));
+  for (const r of budgeted) {
+    const b = budget.get(r) as bigint;
+    const ceiling = maxAllocation.get(r);
+    if (ceiling !== undefined && b > ceiling) issues.push(issue('ALLOCATION_EXCEEDS_AGENT_MAX', `agents.${r}.budget`, `The ${ROLE_LABELS[r]}'s budget (${USDC(b)}) is above its maximum allocation (${USDC(ceiling)}).`));
+    const exposure = maxExposure.get(r);
+    if (exposure !== undefined && b > exposure) issues.push(issue('ALLOCATION_EXCEEDS_AGENT_MAX', `agents.${r}.budget`, `The ${ROLE_LABELS[r]}'s budget (${USDC(b)}) is above its own exposure limit (${USDC(exposure)}).`));
+  }
+  if (budget.has('perps') && (budget.get('perps') as bigint) > maxDerivative) issues.push(issue('ALLOCATION_EXCEEDS_DOMAIN_CAP', 'agents.perps.budget', `The Perps Agent's budget (${USDC(budget.get('perps') as bigint)}) is above the derivative exposure limit (${USDC(maxDerivative)}).`));
+  if (budget.has('nft') && (budget.get('nft') as bigint) > maxIlliquid) issues.push(issue('ALLOCATION_EXCEEDS_DOMAIN_CAP', 'agents.nft.budget', `The NFT Agent's budget (${USDC(budget.get('nft') as bigint)}) is above the illiquid exposure limit (${USDC(maxIlliquid)}).`));
+
+  // What each agent's signed maximum will be: its budget, unless capital may move between agents (then its ceiling).
+  const signedMax = new Map<Role, bigint>();
+  for (const r of enabledRoles) {
+    const v = auto ? maxAllocation.get(r) : budget.get(r) ?? maxAllocation.get(r);
+    if (v !== undefined) signedMax.set(r, v);
+  }
+  issues.push(...agentConflicts(enabledRoles.filter((r) => signedMax.has(r)).map((r) => ({ role: r, maxAllocation: signedMax.get(r) as bigint }))));
 
   const selection: Selection = { sets, leverage, slippage, quoteAge };
   const portfolioScope = scopeFor(REVIEWED_PORTFOLIO_SCOPE, selection);
@@ -237,8 +281,8 @@ export function validateDraft(d: MandateDraft, ctx: ValidationContext): DraftVal
 
   const blocking = () => issues.some((i) => i.severity === 'BLOCKING');
   const guardrails: GuardrailRow[] = [];
-  const cap = numbers === null ? null : deployable(numbers);
-  if (cap === null || issues.some((i) => i.code === 'MISSING_VALUE' || i.code === 'INVALID_VALUE')) return { ok: false, issues, mandate: null, guardrails };
+  const cap = cap0;
+  if (cap === null || issues.some((i) => i.code === 'MISSING_VALUE' || i.code === 'INVALID_VALUE')) return { ok: false, issues, mandate: null, guardrails, allocation: plan };
 
   // Build the mandate input exactly as it would be signed.
   const limits: ResourceAmountInput[] = [
@@ -250,7 +294,7 @@ export function validateDraft(d: MandateDraft, ctx: ValidationContext): DraftVal
   ];
   const expiresAt = ctx.protocolNow + BigInt(validity as number) * 60n;
   const agents: AgentPolicyInput[] = enabledRoles.map((r) => {
-    const hard: ResourceAmountInput[] = [{ resource: 'portfolio-notional', atoms: maxAllocation.get(r) ?? 0n }];
+    const hard: ResourceAmountInput[] = [{ resource: 'portfolio-notional', atoms: signedMax.get(r) ?? 0n }];
     const exposureResource = EXPOSURE_RESOURCE[r];
     const exposure = maxExposure.get(r);
     if (exposureResource !== null && exposure !== undefined) hard.push({ resource: exposureResource, atoms: exposure });
@@ -288,7 +332,8 @@ export function validateDraft(d: MandateDraft, ctx: ValidationContext): DraftVal
   row('PORTFOLIO', 'Illiquid exposure', `≤ ${USDC(maxIlliquid)}`, 'limits[illiquid-notional]');
   row('PORTFOLIO', 'Stock spot capital', `≤ ${USDC(cap)}`, 'limits[spot-capital]', 'DERIVED');
   row('PORTFOLIO', 'Validity', `${validity} minutes from authorization`, 'expiresAt');
-  row('PORTFOLIO', 'Allocation', 'DYNAMIC: nothing preallocated; agents claim from one pool inside their own maxima', 'allocationMode', 'EXISTING');
+  row('PORTFOLIO', 'Allocation', allocationText(plan), 'allocationMode', 'EXISTING');
+  row('PORTFOLIO', 'Reallocation after signing', auto ? 'ALLOWED: unused capital may move between agents, up to each signed maximum and the total' : 'NOT ALLOWED: each signed maximum is the agent\'s budget; unused capital stays in the wallet', 'agents[].hardMaxima[portfolio-notional]', 'DERIVED');
   for (const r of ROLES) {
     if (!enabled(r)) {
       row('AGENT', ROLE_LABELS[r], 'NO AUTHORITY: no mandate entry, no delegation, no child authority', 'agents[] (absent)', 'NO_AUTHORITY');
@@ -297,7 +342,9 @@ export function validateDraft(d: MandateDraft, ctx: ValidationContext): DraftVal
     const exposureResource = EXPOSURE_RESOURCE[r];
     const exposure = maxExposure.get(r);
     const s = agentScopes.get(r) as AuthorityScopeInput;
-    row('AGENT', ROLE_LABELS[r], `≤ ${USDC(maxAllocation.get(r) ?? 0n)} · ${AGENT_DOMAINS[r]}`, `agents[${r}].hardMaxima[portfolio-notional]`);
+    row('AGENT', ROLE_LABELS[r], `≤ ${USDC(signedMax.get(r) ?? 0n)} · ${AGENT_DOMAINS[r]}`, `agents[${r}].hardMaxima[portfolio-notional]`);
+    const b = budget.get(r);
+    if (b !== undefined) row('AGENT', `${ROLE_LABELS[r]} budget`, `up to ${USDC(b)} (${plan.fixed.includes(r) ? 'set by you' : 'proposed by the agents, accepted by you'}; a maximum, not an obligation)`, auto ? 'session allocation plan, inside the signed maximum' : `agents[${r}].hardMaxima[portfolio-notional]`, auto ? 'DERIVED' : 'ENFORCED');
     if (exposureResource !== null) {
       row('AGENT', `${ROLE_LABELS[r]} exposure`, exposure === undefined ? `not listed — bounded by the portfolio's ${exposureResource} limit` : `≤ ${USDC(exposure)}`, `agents[${r}].hardMaxima[${exposureResource}]`, exposure === undefined ? 'DERIVED' : 'ENFORCED');
     }
@@ -317,5 +364,18 @@ export function validateDraft(d: MandateDraft, ctx: ValidationContext): DraftVal
   row('EXECUTION', 'Adapter / venue identity', 'exact compiled modules, adapters and venues', 'Core MODULES / ADAPTERS / VENUES', 'EXISTING');
   row('EXECUTION', 'Replay', 'one signed proposal is one Core action; a second reservation is refused', 'ledger RESERVATION_EXISTS', 'EXISTING');
 
-  return { ok: !blocking(), issues, mandate: blocking() ? null : mandate, guardrails };
+  return { ok: !blocking(), issues, mandate: blocking() ? null : mandate, guardrails, allocation: plan };
+}
+
+function allocationText(v: AllocationView): string {
+  switch (v.intent) {
+    case 'FIXED':
+      return 'FIXED: you set every agent\'s budget; no Room decides the split';
+    case 'DYNAMIC':
+      return v.planning === 'OPTIONAL' ? 'DYNAMIC: agents claim from one pool inside their own maxima' : 'DYNAMIC: the agents proposed the split; you reviewed it';
+    case 'HYBRID':
+      return 'HYBRID: you fixed some budgets; the agents proposed the rest';
+    case 'NEEDS_AGENT_SELECTION':
+      return 'Choose which agents may use this capital';
+  }
 }
