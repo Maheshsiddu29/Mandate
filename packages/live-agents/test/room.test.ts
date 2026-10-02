@@ -8,10 +8,10 @@ import type { NegotiationRequest } from '../src/runtime/provider.ts';
 import type { JsonObject } from '../src/runtime/strict-json.ts';
 import { renderEvent } from '../src/telemetry/render.ts';
 import { CONFLICTING, keep, propose, reduce, release, scriptedSession, type Negotiation } from './support/session.ts';
-import { everyCandidate } from './support/world.ts';
+import { WIDE_PERPS, everyCandidate } from './support/world.ts';
 
-/** perps −200 (to 400), yield −200 (to 500), NFT releases 300, stock and swap keep: offers 700 against a need of 500. */
-const cooperative: Negotiation = (r) => ({ text: r.role === 'perps' ? reduce(400) : r.role === 'yield' ? reduce(500) : r.role === 'nft' ? release : keep });
+/** perps −200 (to 400), yield −200 (to 600), NFT releases 300, stock and swap keep: offers 700 against a need of 500. */
+const cooperative: Negotiation = (r) => ({ text: r.role === 'perps' ? reduce(400) : r.role === 'yield' ? reduce(600) : r.role === 'nft' ? release : keep });
 
 describe('the autonomous Mandate Room', () => {
   it('tests 20–23, 31: a resource conflict enters the Room; KEEP, REDUCE and RELEASE; the result is re-verified and reserved', async () => {
@@ -30,7 +30,7 @@ describe('the autonomous Mandate Room', () => {
     const reverify = t.kinds().indexOf('MANDATE_REVERIFY_STARTED');
     assert.ok(reverify > t.kinds().indexOf('ROOM_FINALIZED'));
     assert.equal(result.status, 'AUTHORIZED');
-    assert.equal(result.reservedAtoms, 1_800_000_000n);
+    assert.equal(result.reservedAtoms, 2_300_000_000n);
     assert.deepEqual(result.final.map((f) => [f.role, f.outcome]).sort(), [['perps', 'RESERVED'], ['stock', 'RESERVED'], ['swap', 'RESERVED'], ['yield', 'RESERVED']]);
     const auth = t.of('PORTFOLIO_AUTHORIZED')[0];
     assert.equal(auth?.data['verification'], 'VERIFIED');
@@ -57,7 +57,7 @@ describe('the autonomous Mandate Room', () => {
 
   it('test 24: when the offers do not cover the need, there is no feasible portfolio and nothing executes', async () => {
     // Agents collectively release only 100 against a need of 500.
-    const t = await scriptedSession(CONFLICTING, (r) => ({ text: r.role === 'yield' ? reduce(600) : keep }), { maxGenerations: 2 });
+    const t = await scriptedSession(CONFLICTING, (r) => ({ text: r.role === 'yield' ? reduce(700) : keep }), { maxGenerations: 2 });
     const before = await ledgerView(t.session.versions.active!.core);
     const result = await t.session.run();
     assert.equal(result.status, 'NO_FEASIBLE_PORTFOLIO');
@@ -75,7 +75,7 @@ describe('the autonomous Mandate Room', () => {
     const result = await t.session.run();
     assert.equal(result.status, 'AUTHORIZED');
     // Stock never answered in time: unchanged, not forced, not treated as releasing.
-    assert.equal(result.final.find((f) => f.role === 'stock')?.requested, 600_000_000n);
+    assert.equal(result.final.find((f) => f.role === 'stock')?.requested, 800_000_000n);
     await t.session.complete();
     const late = t.of('ROOM_AGENT_STALE_RESPONSE');
     assert.equal(late.length, 1);
@@ -84,7 +84,7 @@ describe('the autonomous Mandate Room', () => {
     assert.equal(late[0]?.data['effect'], 'IGNORED');
     assert.ok(t.kinds().indexOf('ROOM_AGENT_STALE_RESPONSE') > t.kinds().indexOf('PORTFOLIO_AUTHORIZED'));
     // Its 100 never reached anything.
-    assert.equal(result.reservedAtoms, 1_800_000_000n);
+    assert.equal(result.reservedAtoms, 2_300_000_000n);
   });
 
   it('test 32: model unanimity cannot exceed authority', async () => {
@@ -99,7 +99,7 @@ describe('the autonomous Mandate Room', () => {
     const run = await runProtocol(active.core, active.signature, u.time.now, found.flatMap((o) => (o.signed === null ? [] : [o.signed])));
     assert.ok(run.run.reservations.filter((r) => r.status === 'RESERVED').length < 5);
     const reserved = run.run.after.reserved.find((x) => x.resource === 'portfolio-notional')?.atoms ?? 0n;
-    assert.ok(reserved <= 2_000_000_000n, `reserved ${reserved}`);
+    assert.ok(reserved <= 2_500_000_000n, `reserved ${reserved}`);
     const derivative = run.run.after.reserved.find((x) => x.resource === 'derivative-notional')?.atoms ?? 0n;
     assert.ok(derivative <= 400_000_000n, `derivative ${derivative}`);
   });
@@ -113,22 +113,26 @@ describe('the autonomous Mandate Room', () => {
   });
 });
 
-/** Stock 600 and Perps 600: 1,200 of 2,000 portfolio notional, but 600 of 400 derivative notional. */
+/**
+ * Stock 600 and Perps 600 under WIDE_PERPS (perps may take 600 itself): 1,200
+ * of 2,500 portfolio notional, but 600 of 400 derivative notional.
+ */
 const DERIVATIVE_ONLY = { stock: { text: propose('nvda-note-a', 600) }, perps: { text: propose('btc-long-2x', 600) } };
+const wide = { draft: WIDE_PERPS } as const;
 const perpsTo400: Negotiation = (r) => ({ text: r.role === 'perps' ? reduce(400) : keep });
 const conflictsIn = (data: JsonObject) => (data['conflicts'] as JsonObject[]).map((c) => ({ ...c }));
 const amt = (v: unknown) => (v as { amount: string }).amount;
 
 describe('B.5.1: typed-resource conflicts in MANDATE_LIVE_AI.V1', () => {
   it('total capital under its limit, derivative notional over: consumers see a 200 USDC derivative conflict, not $0', async () => {
-    const t = await scriptedSession(DERIVATIVE_ONLY, perpsTo400);
+    const t = await scriptedSession(DERIVATIVE_ONLY, perpsTo400, wide);
     await t.session.run();
     for (const kind of ['PORTFOLIO_CONFLICT', 'ROOM_OPENED', 'ROOM_GENERATION_STARTED'] as const) {
       const data = t.of(kind)[0]?.data;
       assert.ok(data, kind);
       // Portfolio notional is under its limit, and says so under its own name.
       assert.equal(amt(data['admissibleDemand']), '1200', kind);
-      assert.equal(amt(data['authority'] ?? { amount: '2000' }), '2000', kind);
+      assert.equal(amt(data['authority'] ?? { amount: '2500' }), '2500', kind);
       assert.equal(amt(data['portfolioNotionalRequiredReduction']), '0', kind);
       // No generic scalar that would read as "required reduction: 0".
       assert.equal(data['requiredReduction'], undefined, kind);
@@ -144,7 +148,7 @@ describe('B.5.1: typed-resource conflicts in MANDATE_LIVE_AI.V1', () => {
   });
 
   it('after Perps reduces 600 → 400 the derivative conflict is SATISFIED in ROOM_PROPOSAL_CREATED', async () => {
-    const t = await scriptedSession(DERIVATIVE_ONLY, perpsTo400);
+    const t = await scriptedSession(DERIVATIVE_ONLY, perpsTo400, wide);
     const result = await t.session.run();
     assert.equal(result.status, 'AUTHORIZED');
     const created = t.of('ROOM_PROPOSAL_CREATED')[0];
@@ -161,7 +165,7 @@ describe('B.5.1: typed-resource conflicts in MANDATE_LIVE_AI.V1', () => {
   });
 
   it('conflicts in incomparable resources are listed separately, never summed', async () => {
-    // CONFLICTING: portfolio notional 2,500 of 2,000 (reduce 500) and derivative notional 600 of 400 (reduce 200).
+    // CONFLICTING: portfolio notional 3,000 of 2,500 (reduce 500) and derivative notional 600 of 400 (reduce 200).
     const t = await scriptedSession(CONFLICTING, cooperative);
     await t.session.run();
     for (const kind of ['PORTFOLIO_CONFLICT', 'ROOM_OPENED', 'ROOM_GENERATION_STARTED', 'ROOM_PROPOSAL_CREATED'] as const) {
@@ -177,7 +181,7 @@ describe('B.5.1: typed-resource conflicts in MANDATE_LIVE_AI.V1', () => {
   });
 
   it('a Room that cannot resolve a conflict reports it UNRESOLVED, by resource', async () => {
-    const t = await scriptedSession(DERIVATIVE_ONLY, () => ({ text: keep }), { maxGenerations: 1 });
+    const t = await scriptedSession(DERIVATIVE_ONLY, () => ({ text: keep }), { ...wide, maxGenerations: 1 });
     const result = await t.session.run();
     assert.equal(result.status, 'NO_FEASIBLE_PORTFOLIO');
     const nf = t.of('ROOM_NO_FEASIBLE_PORTFOLIO')[0]!;

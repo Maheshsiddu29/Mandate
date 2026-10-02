@@ -53,11 +53,15 @@ export async function scriptedSession(decisions: Decisions | ((role: Role, call:
   };
 }
 
-/** The five reviewed instruments at sizes that together exceed the balanced mandate: 2,500 notional, 600 derivative. */
+/**
+ * The five reviewed instruments at sizes that together exceed the balanced
+ * mandate: 3,000 of 2,500 portfolio notional (reduce 500) and 600 of 400
+ * derivative notional (reduce 200; perps is also over its own 400).
+ */
 export const CONFLICTING: Decisions = {
-  stock: { text: propose('nvda-note-a', 600) },
-  swap: { text: propose('route-a', 300) },
+  stock: { text: propose('nvda-note-a', 800) },
+  swap: { text: propose('route-a', 500) },
   nft: { text: propose('genesis-11', 300) },
-  yield: { text: propose('alpha-usd-vault', 700) },
+  yield: { text: propose('alpha-usd-vault', 800) },
   perps: { text: propose('btc-long-2x', 600) },
 };

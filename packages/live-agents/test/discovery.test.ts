@@ -8,7 +8,7 @@ import { ROLES, type Role } from '../src/types.ts';
 import { withField } from '../src/authoring/draft-types.ts';
 import { runProtocol } from '../src/mandate/portfolio-adapter.ts';
 import { ScriptedProvider, json } from './support/providers.ts';
-import { containsKey, everyCandidate, world } from './support/world.ts';
+import { WIDE_PERPS, containsKey, everyCandidate, world } from './support/world.ts';
 
 const propose = (candidateId: string, whole: number) => json({ action: 'PROPOSE', candidateId, requestedAtoms: String(BigInt(whole) * 1_000_000n), rationale: `pick ${candidateId}` });
 const abstain = json({ action: 'ABSTAIN', candidateId: null, requestedAtoms: null, rationale: 'nothing acceptable' });
@@ -47,8 +47,8 @@ describe('the real Mandate verdict on every candidate, proposed directly with el
     }
   }
 
-  it('the perps agent at 600 is individually valid and portfolio invalid', async () => {
-    const w = await world();
+  it('the perps agent at 600, under a 600 allocation, is individually valid and portfolio invalid', async () => {
+    const w = await world(WIDE_PERPS);
     const out = await discoverAgent(w.deps(byRole({ perps: { text: propose('btc-long-2x', 600) } })), w.active(), 'perps');
     assert.equal(out.state, 'ADMISSIBLE');
     assert.equal(out.screening?.individuallyValid, true);

@@ -23,7 +23,7 @@ import { LiveSession } from '../src/session.ts';
 import { ROLES } from '../src/types.ts';
 import { ScriptedProvider } from './support/providers.ts';
 import { abstain, propose, scriptedSession } from './support/session.ts';
-import { everyCandidate, TestTime, world } from './support/world.ts';
+import { WIDE_PERPS, everyCandidate, TestTime, world } from './support/world.ts';
 
 const one = (text: string) => new ScriptedProvider({ decide: () => ({ text }) });
 const ids = (cs: readonly { readonly id: string }[]) => cs.map((c) => c.id);
@@ -141,7 +141,7 @@ describe('perps: the bounded choice that the domain can honestly execute', () =>
   });
 
   it('the derivative conflict is computed from the requested size, not from the candidate set', async () => {
-    const w = await world();
+    const w = await world(WIDE_PERPS);
     const small = await discoverAgent(w.deps(one(propose('btc-long-2x', 300))), w.active(), 'perps');
     const large = await discoverAgent(w.deps(one(propose('btc-long-2x', 600))), w.active(), 'perps');
     assert.equal(small.screening?.portfolioValid, true);

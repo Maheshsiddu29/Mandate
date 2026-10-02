@@ -98,9 +98,18 @@ interface PresetValues {
 }
 
 /**
- * Starting points, not recommendations. Balanced is the Phase 7F
- * demonstration's own shape (2,000 across five agents whose maxima sum to
- * 3,100), so the agents' requests can genuinely conflict.
+ * Starting points, not recommendations.
+ *
+ * Balanced has a genuine feasible region on both sides. 2,500 deployable
+ * sits between conservative (1,500) and aggressive (3,000). The agents'
+ * maxima sum to 2,900, so agents that all ask for their maximum still
+ * conflict on capital and meet in the Mandate Room, while more modest
+ * combinations fit and are authorized directly. The perps agent's
+ * allocation equals the portfolio's derivative limit (400): an agent whose
+ * own maximum exceeds the only resource its domain can use would collide
+ * with that limit on every request above it. A perps request above 400 is
+ * still possible (its market goes to 1,000) and is then a real derivative
+ * conflict.
  */
 const PRESET_VALUES: { readonly [P in Preset]: PresetValues } = {
   conservative: {
@@ -109,8 +118,8 @@ const PRESET_VALUES: { readonly [P in Preset]: PresetValues } = {
     bounds: ['2', '30', '120'],
   },
   balanced: {
-    portfolio: ['2000', '0', '2000', '400', '400', '60'],
-    agents: { stock: [true, '800', '800'], swap: [true, '500', null], nft: [true, '400', '400'], yield: [true, '800', null], perps: [true, '600', null] },
+    portfolio: ['2500', '0', '2500', '400', '400', '60'],
+    agents: { stock: [true, '800', '800'], swap: [true, '500', null], nft: [true, '400', '400'], yield: [true, '800', null], perps: [true, '400', null] },
     bounds: ['3', '100', '300'],
   },
   aggressive: {

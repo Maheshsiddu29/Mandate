@@ -4,7 +4,7 @@
  */
 
 import { DEMO_NOW, demoKey } from '@mandate/portfolio/demo';
-import { presetDraft, type MandateDraft } from '../../src/authoring/draft-types.ts';
+import { presetDraft, withField, type MandateDraft } from '../../src/authoring/draft-types.ts';
 import { MandateVersions, type ActiveMandate } from '../../src/authoring/mandate-versioning.ts';
 import type { EligibilityFilter } from '../../src/agents/eligibility.ts';
 import type { DiscoveryDeps } from '../../src/discovery.ts';
@@ -51,6 +51,13 @@ export async function world(draft: MandateDraft = presetDraft('balanced')): Prom
     deps: (provider, timeoutMs = 2_000, eligibility) => ({ provider, jev: new NoopJevAdvisor(), clock: realClock, events, signers, sequences, protocolNow: time.read, timeoutMs, current: () => versions.active, ...(eligibility === undefined ? {} : { eligibility }) }),
   };
 }
+
+/**
+ * The balanced preset with the perps agent's allocation (600) above the
+ * portfolio's derivative limit (400): a 600 perps request is then
+ * individually valid and portfolio invalid on derivative notional alone.
+ */
+export const WIDE_PERPS: MandateDraft = withField(presetDraft('balanced'), 'agents.perps.maxAllocation', '600', 'USER');
 
 /**
  * Adversarial tests only: a filter with a bug, or a client that skipped it —

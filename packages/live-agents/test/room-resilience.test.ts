@@ -46,9 +46,9 @@ describe('timeouts, failures and late replies in the Room', () => {
     assert.match(String(timeouts[0]?.data['effect']), /no consent, no release, no new authority/);
     assert.equal(t.of('ROOM_GENERATION_STARTED').length, 2);
     // Stock kept exactly what it signed for: neither reduced on its behalf nor dropped.
-    assert.equal(result.final.find((f) => f.role === 'stock')?.requested, 600_000_000n);
-    // 2,500 − 200 (perps) − 300 (NFT): exactly the 2,000 limit.
-    assert.equal(result.reservedAtoms, 2_000_000_000n);
+    assert.equal(result.final.find((f) => f.role === 'stock')?.requested, 800_000_000n);
+    // 3,000 − 200 (perps) − 300 (NFT): exactly the 2,500 limit.
+    assert.equal(result.reservedAtoms, 2_500_000_000n);
   });
 
   it('a provider failure in the Room is a runtime failure: the agent is unchanged', async () => {
@@ -95,7 +95,7 @@ describe('tests 28–29: freshness under real negotiation latency', () => {
     const refresh = refreshRequests[1];
     assert.ok(refresh?.kind === 'DECISION');
     assert.equal(refresh.candidates.length, 1);
-    assert.equal(refresh.candidates[0]?.maxAtoms, '300000000');
+    assert.equal(refresh.candidates[0]?.maxAtoms, '500000000');
     const fresh = t.of('AGENT_REQUEST_STARTED').filter((e) => e.agent === 'swap').at(-1);
     assert.equal(BigInt(String(fresh?.data['quoteObservedAt'])), t0 + 12n);
     assert.deepEqual(result.refreshed.map((p) => [p.role, p.outcome]).sort(), [['swap', 'RESERVED'], ['yield', 'RESERVED']]);
