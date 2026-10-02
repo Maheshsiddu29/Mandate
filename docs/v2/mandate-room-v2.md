@@ -551,7 +551,7 @@ receipt only), `DATA_UNAVAILABLE` (a research kind that was not available).
 | coordination Room | `room/coordinator.ts` (`roomPurpose`, `askable`) |
 | signed initial plan | `packages/portfolio/src/initial-allocation.ts`, `live-agents/src/allocation/commitment.ts` |
 | durable planning evidence | `allocation/planning-record.ts`, `persistence/session-store.ts`, `persistence/restore.ts` |
-| reallocation | `LiveSession.#afterAuthorization` |
+| reallocation and lineage | `LiveSession.#afterAuthorization`, `allocation/reallocation-record.ts` |
 | Jev Score | `packages/jev/src/score.ts`; interface `live-agents/src/jev/scorer.ts`; attached in `live-agents/scripts/jev.ts` |
 | browser | `apps/web/components/demo/live/allocation-model.ts`, `stage-planning.tsx`, the `PLANNING` phase |
 
@@ -580,6 +580,12 @@ Decisions worth reviewing:
   they are asked for a fresh card over their own candidate, bounded by its
   remaining depth (as discovered, not as budget-bounded), their signed
   ceiling and every typed limit.
+- **Lineage is evidence, never authority.** Each successful post-sign move
+  records the immutable signed `initialAllocationDigest`, the previous and
+  next canonical plan digests, released sources, actual reserved increments,
+  Room generation, time and evidence digests. The next allocation is checked
+  against the signed agent set, total and per-agent ceiling; the increment
+  itself still passes the complete verifier and durable ledger reservation.
 
 ## 14. Live validation (gpt-5.5, 2026-10-02, no broadcast)
 

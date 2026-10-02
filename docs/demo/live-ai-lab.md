@@ -96,7 +96,11 @@ shown for signing.
 
 Sessions are durable (`.live/`, §4 of the boundaries document): a reload
 or a server restart returns to the same session (`?session=lab-…`) and
-replays its events. Settlement events now reach the browser session they
+replays its events. The structured Planning Room proposal, principal edits,
+accepted allocation and commitment are stored in the same session database;
+restore never calls a model to recreate them. Expired unsigned proposals are
+shown as `PLAN_STALE`. Successful post-sign reallocations append durable
+previous/next-digest lineage from the immutable initial commitment. Settlement events now reach the browser session they
 belong to: the operator runs `npm run agents:settle:testnet -- --session
 <id>`, whose events land in that session's log. In B.5.3 that command is a
 dry run ending at *Ready for testnet send · nothing was sent*.

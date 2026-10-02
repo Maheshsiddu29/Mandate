@@ -22,6 +22,7 @@ import { demoParty } from '@mandate/portfolio/demo';
 import { classifyAllocation, planningPurpose } from './allocation/intent.ts';
 import { initialAllocationOf } from './allocation/commitment.ts';
 import { evidenceDigest, PLANNING_RECORD_SCHEMA, type AllocationEvidence, type PlanningRecordV1 } from './allocation/planning-record.ts';
+import { nextAllocationPlan, planDigest, REALLOCATION_RECORD_SCHEMA, type ReallocationRecordV1 } from './allocation/reallocation-record.ts';
 import { analyzeOpportunity, runPlanning, scoreCard, type AllocationPlan } from './allocation/planning.ts';
 import { allocate } from './allocation/allocator.ts';
 import { scoreBps } from './jev/scorer.ts';
@@ -252,6 +253,7 @@ export class LiveSession {
   #rooms = 0;
   readonly #plans = new Map<string, AllocationPlan>();
   readonly #planning = new Map<string, PlanningRecordV1>();
+  readonly #reallocations: ReallocationRecordV1[] = [];
 
   constructor(o: SessionOptions) {
     this.#o = o;
@@ -278,6 +280,7 @@ export class LiveSession {
         if (restoredRecord.proposal !== null) this.#plans.set(record.planningId, restoredRecord.proposal);
         if (restoredRecord !== record) restoring.store.putPlanning(record.planningId, encodeRecord(restoredRecord));
       }
+      this.#reallocations.push(...restoring.state.reallocations);
     } else {
       this.id = o.sessionId ?? `live-${this.clock.wallIso().replace(/\D/g, '').slice(0, 17)}`;
       this.restored = false;
@@ -386,6 +389,10 @@ export class LiveSession {
   /** The latest structured proposal, including after a process restart. */
   get currentPlan(): AllocationPlan | null {
     return this.planningRecords.at(-1)?.proposal ?? null;
+  }
+
+  get reallocationRecords(): readonly ReallocationRecordV1[] {
+    return this.#reallocations;
   }
 
   close(): void {
@@ -1212,7 +1219,38 @@ export class LiveSession {
       items.push({ role: a.role, candidateId: x.p.candidate.id, signed });
     }
     const second = items.length === 0 ? null : await this.#reverify(active, 'REALLOCATION', items);
-    emit('ROOM_FINALIZED', { roomPurpose: 'REALLOCATION', result: second === null ? 'NOTHING_ASSIGNED' : second.reserved > 0n ? 'REVERIFIED' : 'REFUSED_BY_MANDATE', reserved: v(second?.reserved ?? 0n) });
+    let lineage: ReallocationRecordV1 | null = null;
+    if (second !== null && second.reserved > 0n) {
+      const initial = this.planningRecords.find((record) => record.mandateVersion === active.version && record.status === 'SIGNED');
+      const prior = this.#reallocations.filter((record) => record.mandateVersion === active.version).at(-1);
+      const previousPlan = prior?.nextPlan ?? initial?.initialAllocation ?? null;
+      const successful = second.proposals.filter((proposal) => proposal.outcome === 'RESERVED').map((proposal) => ({ role: proposal.role, atoms: proposal.requested }));
+      const releasedEvidence = released.map((item) => ({ role: item.role, atoms: item.budget }));
+      const next = previousPlan === null ? null : nextAllocationPlan(previousPlan, active.mandate, releasedEvidence, successful);
+      if (initial?.initialAllocationDigest !== null && initial?.initialAllocationDigest !== undefined && previousPlan !== null && next !== null) {
+        const generation = (prior?.generation ?? 0) + 1;
+        lineage = {
+          schema: REALLOCATION_RECORD_SCHEMA,
+          reallocationId: `${roomId}-g${generation}`,
+          sessionId: this.id,
+          initialAllocationDigest: initial.initialAllocationDigest,
+          previousPlanDigest: planDigest(previousPlan),
+          nextPlanDigest: planDigest(next),
+          nextPlan: next,
+          released: releasedEvidence,
+          assigned: successful,
+          reason: 'RELEASED_UNUSED_CAPITAL',
+          roomId,
+          generation,
+          mandateVersion: active.version,
+          timestamp: this.protocolNow(),
+          evidenceDigests: [...analyzed.map((item) => evidenceDigest(item.card)), ...(second.run === null ? [] : [second.run.run.digest as string])],
+        };
+        this.#reallocations.push(lineage);
+        this.store?.putReallocation(lineage.reallocationId, encodeRecord(lineage));
+      }
+    }
+    emit('ROOM_FINALIZED', { roomPurpose: 'REALLOCATION', result: second === null ? 'NOTHING_ASSIGNED' : second.reserved > 0n ? 'REVERIFIED' : 'REFUSED_BY_MANDATE', reserved: v(second?.reserved ?? 0n), lineage: lineage === null ? null : { initialAllocationDigest: lineage.initialAllocationDigest, previousPlanDigest: lineage.previousPlanDigest, nextPlanDigest: lineage.nextPlanDigest, generation: lineage.generation } });
     const leftover = totalUnused - (second?.reserved ?? 0n);
     if (leftover > 0n) this.events.emit('CAPITAL_UNUSED', { data: { total: v(leftover), reallocation: 'AUTHORIZED', effect: 'What no agent could justify stays in your wallet.' } });
     if (second === null) return result;

@@ -26,6 +26,7 @@ import { createPortfolioCore, decodePortfolioMandate, initialAllocationDigest, i
 import { demoParty } from '@mandate/portfolio/demo';
 import { normalizeDraft, type MandateDraft } from '../authoring/draft-types.ts';
 import { PLANNING_RECORD_SCHEMA, type AllocationEvidence, type PlanningRecordV1 } from '../allocation/planning-record.ts';
+import { REALLOCATION_RECORD_SCHEMA, planDigest, type ReallocationRecordV1 } from '../allocation/reallocation-record.ts';
 import type { RestoredVersion, VersionRecord } from '../authoring/mandate-versioning.ts';
 import { compile } from '../mandate/portfolio-adapter.ts';
 import type { ReservedExecution } from '../session.ts';
@@ -46,6 +47,7 @@ export interface RestoredState {
   readonly protocolFloor: bigint;
   readonly draft: MandateDraft | null;
   readonly planning: readonly PlanningRecordV1[];
+  readonly reallocations: readonly ReallocationRecordV1[];
 }
 
 function bytes(h: string): Uint8Array {
@@ -168,7 +170,19 @@ export async function restoreState(store: SessionStore, bindings: readonly Domai
   for (const version of versions.filter((v) => v.record.authorization.method === 'WALLET_PRINCIPAL_V2_PLAN')) {
     if (!planning.some((record) => record.mandateVersion === version.record.version && record.status === 'SIGNED' && record.initialAllocationDigest === version.record.authorization.wallet?.initialAllocationDigest)) throw new SessionStoreCorruption(`V${version.record.version}: plan-bound authorization has no matching planning record`);
   }
-  return { versions, paused, reserved, reservedExecutions, orphans: orphans.sort(), approvals, protocolFloor, draft: decoded<MandateDraft | null>(store.draft(), 'draft'), planning };
+  const reallocations = store.reallocations().map((text, index) => decoded<ReallocationRecordV1>(text, `reallocation record ${index}`));
+  let previousByVersion = new Map<number, string>();
+  for (const record of reallocations) {
+    const version = versions.find((v) => v.record.version === record.mandateVersion);
+    const initial = planning.find((p) => p.mandateVersion === record.mandateVersion && p.status === 'SIGNED');
+    const expectedPrevious = previousByVersion.get(record.mandateVersion) ?? initial?.initialAllocationDigest;
+    if (record.schema !== REALLOCATION_RECORD_SCHEMA || record.sessionId !== store.meta.sessionId || version === undefined || initial?.initialAllocationDigest === null || initial?.initialAllocationDigest === undefined || record.initialAllocationDigest !== initial.initialAllocationDigest || record.previousPlanDigest !== expectedPrevious) throw new SessionStoreCorruption(`${record.reallocationId}: reallocation lineage mismatch`);
+    const checked = validateInitialAllocationPlan(initialAllocationPlanInputOf(record.nextPlan), version.active.mandate);
+    if (!checked.ok || planDigest(checked.value) !== record.nextPlanDigest) throw new SessionStoreCorruption(`${record.reallocationId}: next allocation digest mismatch`);
+    if (!Number.isSafeInteger(record.generation) || record.generation < 1 || typeof record.timestamp !== 'bigint') throw new SessionStoreCorruption(`${record.reallocationId}: reallocation fields invalid`);
+    previousByVersion.set(record.mandateVersion, record.nextPlanDigest);
+  }
+  return { versions, paused, reserved, reservedExecutions, orphans: orphans.sort(), approvals, protocolFloor, draft: decoded<MandateDraft | null>(store.draft(), 'draft'), planning, reallocations };
 }
 
 function indexOf(records: readonly PlanningRecordV1[], record: PlanningRecordV1): number {

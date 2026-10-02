@@ -12,6 +12,9 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { applyPreset, withField, type MandateDraft } from '../src/authoring/draft-types.ts';
 import { draftFromInterpretation, interpretLocally } from '../src/authoring/prompt-to-draft.ts';
 import { ledgerView } from '../src/mandate/portfolio-adapter.ts';
@@ -46,14 +49,14 @@ const takeAll = (r: OpportunityRequest) => {
   return c === undefined ? json({ action: 'ABSTAIN', candidateId: null, requestedAtoms: null, minimumUsefulAtoms: null, maximumUsefulAtoms: null, opportunityQuality: 0, liquidity: 0, executionQuality: 0, downsideRisk: 4, dataConfidence: 0, marketRegime: 'UNKNOWN', rationale: 'none' }) : json({ action: 'PROPOSE', candidateId: c.id, requestedAtoms: c.maxAtoms, minimumUsefulAtoms: c.minAtoms, maximumUsefulAtoms: c.maxAtoms, opportunityQuality: 3, liquidity: 3, executionQuality: 3, downsideRisk: 1, dataConfidence: 2, marketRegime: 'NEUTRAL', rationale: 'can use more' });
 };
 
-async function session(draft: MandateDraft, moves: { readonly [R in Role]?: string } = MOVES) {
+async function session(draft: MandateDraft, moves: { readonly [R in Role]?: string } = MOVES, stateDir?: string) {
   const time = new TestTime();
   const provider = new ScriptedProvider({
     decide: (r) => ({ text: moves[r.role] ?? abstain }),
     negotiate: () => ({ text: keep }),
     opportunity: (r) => ({ text: takeAll(r) }),
   });
-  const s = new LiveSession({ provider, sessionId: 'v2', agentTimeoutMs: 500, roomRoundTimeoutMs: 500, protocolNow: time.read });
+  const s = new LiveSession({ provider, sessionId: 'v2', agentTimeoutMs: 500, roomRoundTimeoutMs: 500, protocolNow: time.read, ...(stateDir === undefined ? {} : { stateDir }) });
   const a = await s.authorize(draft, 'AUTHORIZE MANDATE V1');
   if (!a.ok) throw new Error(`${a.code} ${a.issues.map((i) => i.code).join(',')}`);
   return { s, provider, time, of: (k: string) => s.events.events.filter((e) => e.kind === k) };
@@ -110,11 +113,13 @@ describe('Room V2: reallocation after authorization', () => {
     assert.match(String(unused?.data['effect']), /wallet/);
     assert.doesNotMatch(String(unused?.data['effect']), /was refunded|refund issued/);
     assert.deepEqual(result.reallocated, []);
+    assert.equal(t.s.reallocationRecords.length, 0);
     assert.equal((await ledgerView(t.s.versions.active!.core)).reservations.length, before + 3);
   });
 
   it('test 25 / 28: reallocation authorized — released capital is reassigned inside every signed maximum and re-verified', async () => {
-    const t = await session(envelope(true));
+    const dir = mkdtempSync(join(tmpdir(), 'mandate-lineage-'));
+    const t = await session(envelope(true), MOVES, dir);
     const result = await t.s.run();
     const opened = t.of('ROOM_OPENED');
     assert.equal(opened.length, 1);
@@ -135,6 +140,23 @@ describe('Room V2: reallocation after authorization', () => {
     assert.deepEqual(result.reallocated.map((p) => [p.role, p.requested]).sort(), [['perps', U(100)], ['stock', U(100)], ['swap', U(150)]]);
     const leftover = t.of('CAPITAL_UNUSED').at(-1);
     assert.equal(leftover?.data['reallocation'], 'AUTHORIZED');
+    const lineage = t.s.reallocationRecords[0];
+    assert.ok(lineage !== undefined);
+    assert.equal(lineage.initialAllocationDigest, t.s.planningRecords[0]?.initialAllocationDigest);
+    assert.equal(lineage.previousPlanDigest, lineage.initialAllocationDigest);
+    assert.notEqual(lineage.nextPlanDigest, lineage.previousPlanDigest);
+    assert.deepEqual(lineage.released, [{ role: 'yield', atoms: U(650) }]);
+    assert.deepEqual(lineage.assigned.map((x) => [x.role, x.atoms]).sort(), [['perps', U(100)], ['stock', U(100)], ['swap', U(150)]]);
+    assert.equal(t.s.planningRecords[0]?.initialAllocationDigest, lineage.initialAllocationDigest, 'the signed initial digest is immutable');
+    const repeat = await session(envelope(true));
+    await repeat.s.run();
+    assert.equal(repeat.s.reallocationRecords[0]?.nextPlanDigest, lineage.nextPlanDigest, 'the next plan digest is deterministic');
+    t.s.close();
+    const restored = await LiveSession.restore(dir, 'v2', { agentTimeoutMs: 500, roomRoundTimeoutMs: 500, by: 'test' });
+    assert.deepEqual(restored.reallocationRecords, t.s.reallocationRecords, 'lineage is durable evidence');
+    assert.equal(restored.planningRecords[0]?.initialAllocationDigest, lineage.initialAllocationDigest);
+    restored.close();
+    rmSync(dir, { recursive: true, force: true });
   });
 
   it('tests 26 / 27: capital already reserved (pending, unsettled) is never reassigned: only the ledger\'s free capital is', async () => {
