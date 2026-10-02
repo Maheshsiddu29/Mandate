@@ -70,7 +70,7 @@ describe('stock, swap and yield: two approved alternatives each, the forbidden o
       const named = await discoverAgent(w.deps(one(propose(FORBIDDEN[role], 200))), w.active(), role);
       assert.equal(named.state, 'INVALID_RESPONSE');
       assert.equal(named.candidate, null);
-      const t = await scriptedSession({ [role]: { text: propose(FORBIDDEN[role], 200) } }, undefined, { eligibility: everyCandidate });
+      const t = await scriptedSession({ [role]: { text: propose(FORBIDDEN[role], 200) } }, undefined, { eligibility: everyCandidate, settlement: null });
       const result = await t.session.run();
       assert.equal(t.of('PROPOSAL_BLOCKED').length, 1);
       assert.equal(result.reservedAtoms, 0n);
@@ -81,7 +81,7 @@ describe('stock, swap and yield: two approved alternatives each, the forbidden o
   it('the stock look-alike keeps its exact registry reasons; the router and the vault keep theirs', async () => {
     const w = await world();
     const reasons = async (role: 'stock' | 'swap' | 'yield') => {
-      const out = await discoverAgent(w.deps(one(propose(FORBIDDEN[role], 200)), undefined, everyCandidate), w.active(), role);
+      const out = await discoverAgent(w.deps(one(propose(FORBIDDEN[role], 200)), undefined, everyCandidate, null), w.active(), role);
       return [...new Set(out.screening?.reasons.map((r) => r.code))];
     };
     assert.deepEqual(await reasons('stock'), ['REGISTRY:ISSUER_NOT_ALLOWED', 'REGISTRY:SYNTHETIC_NOT_ALLOWED']);
@@ -181,7 +181,7 @@ describe('general invariants', () => {
     const w = await world();
     for (const role of ROLES) {
       for (const c of DOMAIN_AGENTS[role].candidates) {
-        const out = await discoverAgent(w.deps(one(propose(c.id, Number(c.minAtoms / 1_000_000n))), undefined, everyCandidate), w.active(), role);
+        const out = await discoverAgent(w.deps(one(propose(c.id, Number(c.minAtoms / 1_000_000n))), undefined, everyCandidate, null), w.active(), role);
         assert.ok(out.signed, c.id);
         const a = w.active();
         const direct = screenProposal(a.mandate, a.compiled.bindings, out.signed, w.time.now);

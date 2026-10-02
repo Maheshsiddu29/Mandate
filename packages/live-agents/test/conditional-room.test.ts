@@ -158,7 +158,7 @@ describe('hard violations are blocked, never negotiated', () => {
     it(`${role}/${id}: BLOCKED with ${code}, not counted toward any conflict, no Room, no reservation`, async () => {
       const t = await scriptedSession({ ...CAPITAL_OVER, [role]: { text: propose(id, size) } }, () => {
         throw new Error('no negotiation may be asked for');
-      }, { eligibility: everyCandidate });
+      }, { eligibility: everyCandidate, settlement: null });
       const result = await t.session.run();
       const blocked = t.of('PROPOSAL_BLOCKED');
       assert.deepEqual(blocked.map((e) => e.agent), [role]);

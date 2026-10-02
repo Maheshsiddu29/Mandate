@@ -6,9 +6,11 @@
  *
  * ```text
  * observe candidates (quote time = now)
- *   ─▶ eligibility: discovered ─▶ actionable (agents/eligibility.ts; advisory, deterministic)
+ *   ─▶ eligibility: discovered ─▶ actionable (agents/eligibility.ts; policy, advisory, deterministic)
  *        none actionable  ABSTAINED without a model call
- *   ─▶ model call over the actionable candidates only (bounded, streamed, validated)
+ *   ─▶ capability: actionable ─▶ executable (agents/capability.ts; the active settlement profile, no authority)
+ *        none executable  ABSTAINED without a model call
+ *   ─▶ model call over the executable candidates only (bounded, streamed, validated)
  *   ─▶ PROPOSE: exact lookup ─▶ build under the version it was asked under ─▶ local signature
  *   ─▶ screen under the version active *now* (the frozen screenProposal)
  *        BLOCKED     security invalid; never enters the Room
@@ -19,15 +21,17 @@
  * A runtime failure (timeout, provider failure, invalid answer) is recorded
  * as such and produces no proposal; it is never a Mandate refusal.
  *
- * Eligibility narrows what the model optimizes over; it authorizes nothing.
- * The model's choice is looked up exactly — never replaced by another
- * candidate — and its proposal is screened in full whatever the filter said.
+ * Eligibility and capability narrow what the model optimizes over; neither
+ * authorizes anything. The model's choice is looked up exactly — never
+ * replaced by another candidate — and its proposal is screened in full
+ * whatever either filter said.
  */
 
 import { candidateDigest, proposalDigest, validateActionCandidate, type SignedProposal } from '@mandate/portfolio';
 import type { ActiveMandate } from './authoring/mandate-versioning.ts';
 import { DOMAIN_AGENTS } from './agents/index.ts';
 import { actionableCandidates, type EligibilityFilter } from './agents/eligibility.ts';
+import { LIVE_LAB_SETTLEMENT_PROFILE, executableCandidates, type SettlementProfile } from './agents/capability.ts';
 import { candidateById, viewOf, type TrustedCandidate } from './agents/spec.ts';
 import { amountViews, authorityView, portfolioView } from './context.ts';
 import { applyAdvice, type JevAdvisor } from './jev/advisor.ts';
@@ -57,10 +61,18 @@ export interface DiscoveryDeps {
   readonly eligibility?: EligibilityFilter;
   /** The principal's stated preference for this session, passed to the models as ranking guidance; null for none. */
   readonly intent?: string | null;
+  /**
+   * The active settlement profile: actionable → executable. Defaults to the
+   * Live Lab profile. `null` evaluates no capability: for adversarial tests
+   * that must reach Mandate's screening with a candidate no connector settles.
+   */
+  readonly settlement?: SettlementProfile | null;
 }
 
 /** The declared reason when eligibility leaves nothing to choose from. */
 export const NO_ELIGIBLE_OPPORTUNITIES = 'No eligible opportunities under this mandate.';
+/** The declared reason when every actionable candidate is one the active connector cannot settle. */
+export const NO_EXECUTABLE_OPPORTUNITIES = 'No opportunity under this mandate can be settled by the active connector.';
 
 export interface AgentOutcome {
   readonly role: Role;
@@ -90,19 +102,29 @@ export async function discoverAgent(deps: DiscoveryDeps, active: ActiveMandate, 
   const emit = (kind: Parameters<EventLog['emit']>[0], data: { readonly [k: string]: unknown }) => events.emit(kind, { agent: role, mandateVersion: active.version, data });
   const base = { role, version: active.version, observedAt } as const;
 
-  // Discovery is broad; the model is offered only what could be authorized. The excluded remain evidence.
+  // Discovery is broad; the model is offered only what could be authorized and then settled. The rest remain evidence.
   const universe = (deps.eligibility ?? actionableCandidates)(active, role, o.candidates ?? spec.candidates, observedAt);
-  const candidates = universe.actionable;
+  const profile = deps.settlement === undefined ? LIVE_LAB_SETTLEMENT_PROFILE : deps.settlement;
+  const live = executableCandidates(profile, role, universe.actionable, observedAt);
+  const candidates = live.executable;
   emit('AGENT_CANDIDATES_EVALUATED', {
     basis: 'ADVISORY',
     marketEvidence: [...new Set(universe.discovered.map((c) => c.marketEvidence))],
     discovered: universe.discovered.map((c) => c.id),
-    actionable: candidates.map((c) => c.id),
+    actionable: universe.actionable.map((c) => c.id),
     excluded: universe.excluded.map((x) => ({ candidateId: x.candidate.id, candidate: x.candidate.title, reasons: reasonCodes(x.reasons) })),
+    settlementProfile: profile?.id ?? null,
+    executable: candidates.map((c) => c.id),
+    capability: live.capability.map((c) => ({ candidateId: c.candidateId, status: c.status, connector: c.connector, reason: c.reason })),
   });
-  if (candidates.length === 0) {
+  if (universe.actionable.length === 0) {
     // Nothing to choose from: no model call, no placeholder candidate, no proposal.
     emit('AGENT_ABSTAINED', { rationale: NO_ELIGIBLE_OPPORTUNITIES, cause: 'NO_ACTIONABLE_CANDIDATES', modelCalled: false });
+    return { ...base, state: 'ABSTAINED', decision: null, candidate: null, sizeAtoms: 0n, signed: null, screening: null, error: null, timing: null };
+  }
+  if (candidates.length === 0) {
+    // Allowed, but nothing the active connector can settle: never offered as executable.
+    emit('AGENT_ABSTAINED', { rationale: NO_EXECUTABLE_OPPORTUNITIES, cause: 'NO_EXECUTABLE_CANDIDATES', modelCalled: false });
     return { ...base, state: 'ABSTAINED', decision: null, candidate: null, sizeAtoms: 0n, signed: null, screening: null, error: null, timing: null };
   }
 

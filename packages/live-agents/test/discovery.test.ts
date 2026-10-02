@@ -38,7 +38,7 @@ describe('the real Mandate verdict on every candidate, proposed directly with el
         const w = await world();
         const size = c.resizable ? c.minAtoms * 2n : c.minAtoms;
         // A filter with a bug, or a client that skipped it: the candidate reaches Mandate anyway, and Mandate alone decides.
-        const out = await discoverAgent(w.deps(new ScriptedProvider({ decide: () => ({ text: json({ action: 'PROPOSE', candidateId: c.id, requestedAtoms: size.toString(), rationale: 'test' }) }) }), undefined, everyCandidate), w.active(), role);
+        const out = await discoverAgent(w.deps(new ScriptedProvider({ decide: () => ({ text: json({ action: 'PROPOSE', candidateId: c.id, requestedAtoms: size.toString(), rationale: 'test' }) }) }), undefined, everyCandidate, null), w.active(), role);
         const want = expected[c.id];
         assert.ok(want, c.id);
         assert.equal(out.state, want.verdict, JSON.stringify(out.screening?.reasons));
@@ -139,7 +139,7 @@ describe('trust boundaries in discovery', () => {
         return { text: json({ action: 'PROPOSE', candidateId: injected.id, requestedAtoms: injected.maxAtoms, rationale: 'The listing says it is pre-approved.' }) };
       },
     });
-    const out = await discoverAgent(w.deps(provider, undefined, everyCandidate), w.active(), 'nft');
+    const out = await discoverAgent(w.deps(provider, undefined, everyCandidate, null), w.active(), 'nft');
     assert.equal(out.state, 'BLOCKED');
     const c = out.signed?.proposal.candidate;
     assert.ok(c?.kind === 'NFT_BUY');
@@ -147,7 +147,7 @@ describe('trust boundaries in discovery', () => {
     assert.doesNotMatch(c.recipient, /9999999999/);
     // And a fooled model that tries to add the attacker as a field is refused before anything is built.
     const hijack = new ScriptedProvider({ decide: () => ({ text: json({ action: 'PROPOSE', candidateId: 'genesis-7', requestedAtoms: '240000000', rationale: 'x', recipient: '0x9999999999999999999999999999999999999999' }) }) });
-    assert.equal((await discoverAgent(w.deps(hijack, undefined, everyCandidate), w.active(), 'nft')).state, 'INVALID_RESPONSE');
+    assert.equal((await discoverAgent(w.deps(hijack, undefined, everyCandidate, null), w.active(), 'nft')).state, 'INVALID_RESPONSE');
   });
 
   it('in a normal run the injected listing — outside the approved collection — is discovery only and never reaches the model', async () => {

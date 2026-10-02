@@ -7,6 +7,7 @@ import { DEMO_NOW, demoKey } from '@mandate/portfolio/demo';
 import { presetDraft, withField, type MandateDraft } from '../../src/authoring/draft-types.ts';
 import { MandateVersions, type ActiveMandate } from '../../src/authoring/mandate-versioning.ts';
 import type { EligibilityFilter } from '../../src/agents/eligibility.ts';
+import type { SettlementProfile } from '../../src/agents/capability.ts';
 import type { DiscoveryDeps } from '../../src/discovery.ts';
 import { NoopJevAdvisor } from '../../src/jev/noop-advisor.ts';
 import { SequenceBook } from '../../src/mandate/proposal-builder.ts';
@@ -26,7 +27,7 @@ export interface World {
   readonly time: TestTime;
   readonly versions: MandateVersions;
   readonly events: EventLog;
-  readonly deps: (provider: AgentModelProvider, timeoutMs?: number, eligibility?: EligibilityFilter) => DiscoveryDeps;
+  readonly deps: (provider: AgentModelProvider, timeoutMs?: number, eligibility?: EligibilityFilter, settlement?: SettlementProfile | null) => DiscoveryDeps;
   readonly active: () => ActiveMandate;
 }
 
@@ -48,7 +49,7 @@ export async function world(draft: MandateDraft = presetDraft('balanced')): Prom
     versions,
     events,
     active,
-    deps: (provider, timeoutMs = 2_000, eligibility) => ({ provider, jev: new NoopJevAdvisor(), clock: realClock, events, signers, sequences, protocolNow: time.read, timeoutMs, current: () => versions.active, ...(eligibility === undefined ? {} : { eligibility }) }),
+    deps: (provider, timeoutMs = 2_000, eligibility, settlement) => ({ provider, jev: new NoopJevAdvisor(), clock: realClock, events, signers, sequences, protocolNow: time.read, timeoutMs, current: () => versions.active, ...(eligibility === undefined ? {} : { eligibility }), ...(settlement === undefined ? {} : { settlement }) }),
   };
 }
 
@@ -62,7 +63,9 @@ export const WIDE_PERPS: MandateDraft = withField(presetDraft('balanced'), 'agen
 /**
  * Adversarial tests only: a filter with a bug, or a client that skipped it —
  * every discovered candidate offered as actionable. Whatever unauthorized
- * action then reaches Mandate, its screening must refuse on its own.
+ * action then reaches Mandate, its screening must refuse on its own. Pass
+ * it with `settlement: null` so the capability filter (which would also
+ * hide a look-alike no connector settles) does not stand in for Mandate.
  */
 export const everyCandidate: EligibilityFilter = (_active, _role, candidates) => ({ discovered: candidates, actionable: candidates, excluded: [] });
 

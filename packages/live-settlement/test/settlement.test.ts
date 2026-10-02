@@ -136,7 +136,7 @@ describe('nothing reaches a key or the chain unless the Live AI authorization is
       const p = await w.settlement.prepare();
       assert.ok('ineligible' in p && p.ineligible === 'NO_STOCK_RESERVATION');
       assert.equal(w.rpc.simulations + w.rpc.prepared + w.rpc.broadcasts, 0);
-    }, { stock: propose('nvda-token-b', 400), eligibility: everyCandidate });
+    }, { stock: propose('nvda-token-b', 400), eligibility: everyCandidate, settlement: null });
   });
 
   it('the look-alike is not offered in a normal run: an answer naming it is an invalid response, and there is still nothing to settle', async () => {

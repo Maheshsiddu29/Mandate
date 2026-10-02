@@ -53,7 +53,7 @@ describe('stock: the approved notes are actionable, the look-alike is discovery 
 
   it('the exclusion reasons are exactly the ones Mandate itself gives the look-alike when it is proposed', async () => {
     const w = await world();
-    const direct = await discoverAgent(w.deps(one(propose('nvda-token-b', 400)), undefined, everyCandidate), w.active(), 'stock');
+    const direct = await discoverAgent(w.deps(one(propose('nvda-token-b', 400)), undefined, everyCandidate, null), w.active(), 'stock');
     const filtered = assessCandidate(w.active(), 'stock', byId(STOCK_AGENT.candidates, 'nvda-token-b'), w.time.now);
     assert.equal(direct.state, 'BLOCKED');
     assert.deepEqual(reasonCodes(filtered.reasons), reasonCodes(direct.screening?.reasons ?? []));
@@ -107,7 +107,7 @@ describe('stock: the approved notes are actionable, the look-alike is discovery 
   });
 
   it('9–10: proposed directly (filter bypassed), the look-alike is still BLOCKED by the registry, with zero reservations and zero transactions', async () => {
-    const t = await scriptedSession({ stock: { text: propose('nvda-token-b', 400) } }, undefined, { eligibility: everyCandidate });
+    const t = await scriptedSession({ stock: { text: propose('nvda-token-b', 400) } }, undefined, { eligibility: everyCandidate, settlement: null });
     const result = await t.session.run();
     const blocked = t.of('PROPOSAL_BLOCKED');
     assert.equal(blocked.length, 1);
@@ -142,7 +142,7 @@ describe('swap and yield: the same rule, no domain-specific code', () => {
 
   it('swap: proposed directly (filter bypassed), the unapproved router still gets VENUE_NOT_ALLOWED', async () => {
     const w = await world();
-    const out = await discoverAgent(w.deps(one(propose('route-b', 300)), undefined, everyCandidate), w.active(), 'swap');
+    const out = await discoverAgent(w.deps(one(propose('route-b', 300)), undefined, everyCandidate, null), w.active(), 'swap');
     assert.equal(out.state, 'BLOCKED');
     assert.deepEqual(out.screening?.reasons.map((r) => r.code), ['VENUE_NOT_ALLOWED']);
   });
@@ -160,7 +160,7 @@ describe('swap and yield: the same rule, no domain-specific code', () => {
 
   it('yield: proposed directly (filter bypassed), the unapproved vault still gets every relevant Mandate reason', async () => {
     const w = await world();
-    const out = await discoverAgent(w.deps(one(propose('high-yield-usd', 300)), undefined, everyCandidate), w.active(), 'yield');
+    const out = await discoverAgent(w.deps(one(propose('high-yield-usd', 300)), undefined, everyCandidate, null), w.active(), 'yield');
     assert.equal(out.state, 'BLOCKED');
     for (const code of ['ASSET_NOT_ALLOWED', 'ISSUER_NOT_ALLOWED', 'REPRESENTATION_NOT_ALLOWED', 'VENUE_NOT_ALLOWED']) assert.ok(out.screening?.reasons.some((r) => r.code === code), code);
   });
@@ -205,7 +205,7 @@ describe('eligibility is derived from the active mandate, not from candidate nam
       for (const role of ROLES) {
         const u = actionableCandidates(w.active(), role, DOMAIN_AGENTS[role].candidates, w.time.now);
         for (const c of DOMAIN_AGENTS[role].candidates) {
-          const direct = await discoverAgent(w.deps(one(json({ action: 'PROPOSE', candidateId: c.id, requestedAtoms: c.minAtoms.toString(), rationale: 'probe' })), undefined, everyCandidate), w.active(), role);
+          const direct = await discoverAgent(w.deps(one(json({ action: 'PROPOSE', candidateId: c.id, requestedAtoms: c.minAtoms.toString(), rationale: 'probe' })), undefined, everyCandidate, null), w.active(), role);
           const staticReasons = (direct.screening?.reasons ?? []).filter((r) => STATIC_SCOPE_CODES.has(r.code) || r.code.startsWith('REGISTRY:') || r.code === 'INSTRUMENT_UNKNOWN');
           assert.equal(u.actionable.includes(c), staticReasons.length === 0, `${preset}/${role}/${c.id}: ${JSON.stringify(direct.screening?.reasons)}`);
         }

@@ -38,7 +38,7 @@ describe('the autonomous Mandate Room', () => {
   });
 
   it('test 19: a security-invalid proposal stays outside the Room (eligibility bypassed, so it reaches Mandate)', async () => {
-    const t = await scriptedSession({ ...CONFLICTING, swap: { text: propose('route-b', 300) } }, cooperative, { eligibility: everyCandidate });
+    const t = await scriptedSession({ ...CONFLICTING, swap: { text: propose('route-b', 300) } }, cooperative, { eligibility: everyCandidate, settlement: null });
     await t.session.run();
     assert.equal(t.of('PROPOSAL_BLOCKED')[0]?.agent, 'swap');
     const participants = (t.of('ROOM_OPENED')[0]?.data['participants'] as { role: string }[]).map((p) => p.role);

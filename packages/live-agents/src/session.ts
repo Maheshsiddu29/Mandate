@@ -25,6 +25,7 @@ import { MandateVersions, SPINE_AUTHORIZATION_LABEL, WALLET_AUTHORIZATION_LABEL,
 import { interpretPrompt } from './authoring/prompt-to-draft.ts';
 import { amountViews, enabledRoles } from './context.ts';
 import { actionableCandidates, type EligibilityFilter } from './agents/eligibility.ts';
+import { LIVE_LAB_SETTLEMENT_PROFILE, type SettlementProfile } from './agents/capability.ts';
 import { discover, discoverAgent, type AgentOutcome, type DiscoveryDeps } from './discovery.ts';
 import type { JevAdvisor } from './jev/advisor.ts';
 import { NoopJevAdvisor } from './jev/noop-advisor.ts';
@@ -81,6 +82,13 @@ export interface SessionOptions {
    * depends on it; the default is the deterministic filter.
    */
   readonly eligibility?: EligibilityFilter;
+  /**
+   * The active settlement profile (agents/capability.ts): which actionable
+   * candidates the configured connector can settle, known before any model
+   * call. Defaults to the Live Lab profile. `null` evaluates no capability —
+   * tests only, to reach Mandate with a candidate no connector settles.
+   */
+  readonly settlement?: SettlementProfile | null;
   /** Internal: `LiveSession.restore` builds a restored session through this. */
   readonly restoredFrom?: { readonly store: SessionStore; readonly state: RestoredState; readonly by: string };
 }
@@ -576,7 +584,7 @@ export class LiveSession {
   }
 
   #deps(): DiscoveryDeps {
-    return { provider: this.provider, jev: this.#jev, clock: this.clock, events: this.events, signers: this.signers, sequences: this.#sequences, protocolNow: this.protocolNow, timeoutMs: this.#o.agentTimeoutMs, current: () => this.versions.active, eligibility: this.#o.eligibility ?? actionableCandidates, intent: this.#intent ?? this.#o.intent ?? null };
+    return { provider: this.provider, jev: this.#jev, clock: this.clock, events: this.events, signers: this.signers, sequences: this.#sequences, protocolNow: this.protocolNow, timeoutMs: this.#o.agentTimeoutMs, current: () => this.versions.active, eligibility: this.#o.eligibility ?? actionableCandidates, settlement: this.#o.settlement === undefined ? LIVE_LAB_SETTLEMENT_PROFILE : this.#o.settlement, intent: this.#intent ?? this.#o.intent ?? null };
   }
 
   /** Everything superseded is re-screened under the version now in force: Mandate refuses the old digest. */
