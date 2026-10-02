@@ -44,6 +44,17 @@ export const LIVE_EVENT_KINDS = [
   'PROPOSAL_BLOCKED',
   'PROPOSAL_ADMISSIBLE',
   'PROPOSAL_STALE',
+  // Room V2 (docs/v2/mandate-room-v2.md): opportunity analysis, advisory scores and allocation plans. None authorizes.
+  'OPPORTUNITY_CARD_CREATED',
+  'JEV_SCORE_RECORDED',
+  'ALLOCATION_PLAN_PROPOSED',
+  'ALLOCATION_PLAN_APPLIED',
+  // An agent alone over its own limit (or the only one demanding a resource that is over): its own bounded re-plan, never a Room.
+  'AGENT_LOCAL_REPLAN_REQUESTED',
+  'AGENT_LOCAL_REFUSED',
+  // After authorization: capital an agent left unused, and whether it was reassigned.
+  'CAPITAL_UNUSED',
+  'REALLOCATION_SKIPPED',
   'PORTFOLIO_CONFLICT',
   'ROOM_OPENED',
   'ROOM_GENERATION_STARTED',

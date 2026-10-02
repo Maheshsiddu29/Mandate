@@ -36,9 +36,11 @@ import { StubProvider } from '../runtime/stub-provider.ts';
 import { reservationLedgerStatus } from '../mandate/portfolio-adapter.ts';
 import { sessionExists } from '../persistence/session-store.ts';
 import { LiveSession, type RunResult } from '../session.ts';
+import type { AllocationPlan } from '../allocation/planning.ts';
+import type { OpportunityScorer } from '../jev/scorer.ts';
+import { ROLES, ROLE_LABELS, usdcText, isRole, type Role } from '../types.ts';
 import { LIVE_SCHEMA, safe, type LiveEvent } from '../telemetry/events.ts';
 import { summarizePolicyStress, summarizeRun } from '../telemetry/summary.ts';
-import { ROLES, ROLE_LABELS } from '../types.ts';
 import { APPROVAL_CHAIN_ID, APPROVAL_DOMAIN, APPROVAL_ENVIRONMENT } from '../wallet/approval.ts';
 
 export interface ApiRequest {
@@ -69,14 +71,47 @@ export interface LabOptions {
   readonly entropy?: Entropy;
   /** Durable sessions live here; absent: in memory only. */
   readonly stateDir?: string;
+  /** Advisory opportunity scoring (Jev) for Planning and Reallocation Rooms; absent: none, and none is invented. */
+  readonly scorer?: OpportunityScorer;
+}
+
+/**
+ * What this server's discovery offers a model, advertised so a browser can
+ * refuse to run against a server built from older code that offered
+ * discovery-only candidates (docs/v2/mandate-room-v2.md §1.5).
+ */
+export const CANDIDATE_PIPELINE = 'DISCOVERED>ACTIONABLE>EXECUTABLE>MODEL';
+export const ROOM_SEMANTICS = 'MANDATE_ROOM_V2';
+
+/** A plan as the browser sees it: budgets, what stays unallocated, why, and each agent's declared rationale. */
+export function summarizePlan(p: AllocationPlan): { readonly [k: string]: unknown } {
+  const v = (atoms: bigint) => ({ atoms, amount: usdcText(atoms) });
+  return {
+    roomId: p.roomId,
+    roomPurpose: p.purpose,
+    pool: v(p.poolAtoms),
+    fixed: p.fixed.map((f) => ({ role: f.role, budget: v(f.atoms) })),
+    budgets: p.allocations.map((a) => {
+      const c = p.cards.find((x) => x.role === a.role);
+      return { role: a.role, budget: v(a.atoms), zero: a.zero, capped: a.capped, action: c?.action ?? null, candidate: c?.candidateTitle ?? null, rationale: c?.rationale ?? null, marketRegime: c?.marketRegime ?? null, runtime: c?.runtime ?? null };
+    }),
+    allocated: v(p.allocatedAtoms),
+    unallocated: v(p.unallocatedAtoms),
+    explanation: p.explanation,
+    freshUntil: p.freshUntil,
+    jev: p.jev,
+    evidence: { market: 'FIXTURE', inference: p.cards[0]?.modelEvidence ?? null },
+  };
 }
 
 interface Entry {
   readonly session: LiveSession;
   readonly provider: string;
   draft: MandateDraft | null;
-  task: 'RUN' | 'POLICY_STRESS' | null;
+  task: 'RUN' | 'POLICY_STRESS' | 'PLAN' | null;
   lastRun: RunResult | null;
+  lastPlan: AllocationPlan | null;
+  lastPlanError: string | null;
   lastPolicyStress: PolicyStressResult | null;
   lastError: string | null;
   touchedMs: number;
@@ -128,7 +163,7 @@ export class LiveLab {
       session.close();
       return true;
     }
-    this.#sessions.set(id, { session, provider: session.provider.name, draft: session.recordedDraft, task: null, lastRun: null, lastPolicyStress: null, lastError: null, touchedMs: this.#o.clock.nowMs() });
+    this.#sessions.set(id, { session, provider: session.provider.name, draft: session.recordedDraft, task: null, lastRun: null, lastPlan: null, lastPlanError: null, lastPolicyStress: null, lastError: null, touchedMs: this.#o.clock.nowMs() });
     return true;
   }
 
@@ -148,7 +183,7 @@ export class LiveLab {
   }
 
   /** The background task on an in-memory session, if one is running. */
-  taskOf(id: string): 'RUN' | 'POLICY_STRESS' | null {
+  taskOf(id: string): 'RUN' | 'POLICY_STRESS' | 'PLAN' | null {
     return this.#sessions.get(id)?.task ?? null;
   }
 
@@ -225,6 +260,10 @@ export class LiveLab {
         return this.#walletAuthorize(entry, body);
       case 'pause':
         return this.#pause(entry, body);
+      case 'plan':
+        return this.#plan(entry);
+      case 'draft/allocation':
+        return this.#allocation(entry, body);
       case 'run':
         return this.#start(entry, 'RUN', body);
       case 'policy-stress':
@@ -250,6 +289,9 @@ export class LiveLab {
       policyCases: POLICY_CASE_IDS.map((id) => ({ caseId: id, description: POLICY_CASES[id] })),
       maxPolicyStressAttempts: MAX_POLICY_STRESS_ATTEMPTS,
       allowChaos: this.#o.allowChaos,
+      candidatePipeline: CANDIDATE_PIPELINE,
+      roomSemantics: ROOM_SEMANTICS,
+      jev: { available: this.#o.scorer !== undefined, evidence: this.#o.scorer?.evidence ?? 'NONE' },
       sessions: { open: this.#sessions.size, max: this.maxSessions },
     });
   }
@@ -281,8 +323,8 @@ export class LiveLab {
     const entropy = this.#o.entropy ?? realEntropy;
     // 128 random bits: unique across restarts and processes, never a timestamp.
     const id = `lab-${entropy.bytes32().slice(-32)}`;
-    const session = new LiveSession({ provider, clock: this.#o.clock, sessionId: id, agentTimeoutMs: this.#o.agentTimeoutMs, roomRoundTimeoutMs: this.#o.roomRoundTimeoutMs, chaos, entropy, ...(this.#o.stateDir === undefined ? {} : { stateDir: this.#o.stateDir }) });
-    const entry: Entry = { session, provider: provider.name, draft: null, task: null, lastRun: null, lastPolicyStress: null, lastError: null, touchedMs: this.#o.clock.nowMs() };
+    const session = new LiveSession({ provider, clock: this.#o.clock, sessionId: id, agentTimeoutMs: this.#o.agentTimeoutMs, roomRoundTimeoutMs: this.#o.roomRoundTimeoutMs, chaos, entropy, ...(this.#o.stateDir === undefined ? {} : { stateDir: this.#o.stateDir }), ...(this.#o.scorer === undefined ? {} : { scorer: this.#o.scorer }) });
+    const entry: Entry = { session, provider: provider.name, draft: null, task: null, lastRun: null, lastPlan: null, lastPlanError: null, lastPolicyStress: null, lastError: null, touchedMs: this.#o.clock.nowMs() };
     this.#sessions.set(id, entry);
     return ok({ sessionId: id, ...this.#view(entry) }, 201);
   }
@@ -319,6 +361,8 @@ export class LiveLab {
       task: entry.task,
       lastRun: entry.lastRun === null ? null : summarizeRun(entry.lastRun),
       lastPolicyStress: entry.lastPolicyStress === null ? null : summarizePolicyStress(entry.lastPolicyStress),
+      lastPlan: entry.lastPlan === null ? null : summarizePlan(entry.lastPlan),
+      lastPlanError: entry.lastPlanError,
       lastError: entry.lastError,
       events: s.events.events.length,
       durable: s.store !== null,
@@ -416,9 +460,50 @@ export class LiveLab {
     return ok(this.#view(entry));
   }
 
+  /** Ask the agents the principal left the split to for a proposed allocation, in the background; its progress is the event stream. */
+  #plan(entry: Entry): ApiResponse {
+    if (entry.draft === null) return refuse(409, 'NO_DRAFT', 'Create a draft first.');
+    if (entry.task !== null) return refuse(409, 'BUSY', 'Another task is in progress.');
+    const draft = entry.draft;
+    entry.task = 'PLAN';
+    entry.lastPlanError = null;
+    void entry.session
+      .plan(draft)
+      .then((r) => {
+        if (r.ok) entry.lastPlan = r.plan;
+        else entry.lastPlanError = `${r.code}: ${r.message}`;
+      })
+      .catch((e: unknown) => {
+        entry.lastPlanError = e instanceof Error ? e.name : 'error';
+      })
+      .finally(() => {
+        entry.task = null;
+      });
+    return ok({ started: 'PLAN', ...this.#view(entry) }, 202);
+  }
+
+  /** Use a proposed split, with the principal's edits: budgets are written into the draft and validated. Nothing is signed. */
+  #allocation(entry: Entry, body: JsonObject): ApiResponse {
+    if (entry.draft === null) return refuse(409, 'NO_DRAFT', 'Create a draft first.');
+    if (entry.task !== null) return refuse(409, 'BUSY', 'Another task is in progress.');
+    const plan = body['plan'];
+    if (typeof plan !== 'string' || !/^[a-z0-9-]{1,64}$/.test(plan)) return refuse(400, 'BAD_REQUEST', 'plan must be the id of a proposed split.');
+    const raw = body['budgets'] ?? {};
+    if (!isObject(raw)) return refuse(400, 'BAD_REQUEST', 'budgets must map agent roles to USDC amounts.');
+    const edits: { [R in Role]?: string } = {};
+    for (const [k, v] of Object.entries(raw)) {
+      if (!isRole(k) || typeof v !== 'string' || v.length > 24 || /[\u0000-\u001f\u007f]/.test(v)) return refuse(400, 'BAD_REQUEST', 'budgets must map agent roles to USDC amounts.');
+      edits[k] = v.trim();
+    }
+    const r = entry.session.applyPlan(entry.draft, plan, edits);
+    if (!r.ok) return { status: 409, body: safe({ error: r.code, message: r.message, ...this.#view(entry) }) };
+    entry.draft = r.draft;
+    return ok(this.#view(entry));
+  }
+
   /** Start a run or a policy-stress test in the background; its progress is the event stream. */
   #start(entry: Entry, task: 'RUN' | 'POLICY_STRESS', body: JsonObject): ApiResponse {
-    if (entry.task !== null) return refuse(409, 'BUSY', `A ${entry.task === 'RUN' ? 'run' : 'policy-stress test'} is in progress.`);
+    if (entry.task !== null) return refuse(409, 'BUSY', `A ${entry.task === 'RUN' ? 'run' : entry.task === 'PLAN' ? 'planning pass' : 'policy-stress test'} is in progress.`);
     if (entry.session.versions.active === null) return refuse(409, 'NO_ACTIVE_MANDATE', 'Authorize a mandate version first.');
     const attempts = body['maxAttempts'];
     if (attempts !== undefined && (typeof attempts !== 'number' || !Number.isSafeInteger(attempts) || attempts < 1 || attempts > MAX_POLICY_STRESS_ATTEMPTS)) return refuse(400, 'BAD_REQUEST', `maxAttempts must be 1–${MAX_POLICY_STRESS_ATTEMPTS}.`);

@@ -39,7 +39,7 @@ export interface ScratchLedger {
 
 export interface SpineUiHost {
   readonly openSession: (id: string) => Promise<LiveSession | null>;
-  readonly taskOf: (id: string) => 'RUN' | 'POLICY_STRESS' | null;
+  readonly taskOf: (id: string) => 'RUN' | 'POLICY_STRESS' | 'PLAN' | null;
   readonly settle: (input: SpineSettlementInput) => Promise<SpineSettlementResult>;
   readonly deployment: TestnetDeployment;
   readonly rpc: TestnetRpc;

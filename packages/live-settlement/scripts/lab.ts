@@ -24,6 +24,7 @@ import { OpenAIProvider, readConfig, realClock, sessionDir } from '@mandate/live
 import type { ApiRequest, ApiResponse } from '../../live-agents/src/server/app.ts';
 import { LiveLab } from '../../live-agents/src/server/app.ts';
 import { createLabServer, listen } from '../../live-agents/src/server/http.ts';
+import { configuredScorer } from '../../live-agents/scripts/jev.ts';
 import { loadKeys, MANIFEST_PATH } from '../../evm-robinhood/scripts/lib.ts';
 import { RobinhoodTestnetRpc, SettlementJournal, parseDeployment, settleSpine } from '../src/index.ts';
 import { SpineUi, type LabRouteResponse } from '../src/ui-settle.ts';
@@ -99,9 +100,12 @@ function settlement(lab: LiveLab): { readonly before: (r: ApiRequest) => Promise
 }
 
 const live = config.openaiApiKey === null ? null : new OpenAIProvider({ apiKey: config.openaiApiKey, model: config.openaiModel });
-const lab = new LiveLab({ live, clock: realClock, agentTimeoutMs: config.agentTimeoutMs, roomRoundTimeoutMs: config.roomRoundTimeoutMs, allowChaos: values['dev-chaos'], stateDir: config.stateDir });
+// Advisory Jev scoring for Planning Rooms, attached by the live-agents composition root when configured.
+const scorer = configuredScorer();
+const lab = new LiveLab({ live, clock: realClock, agentTimeoutMs: config.agentTimeoutMs, roomRoundTimeoutMs: config.roomRoundTimeoutMs, allowChaos: values['dev-chaos'], stateDir: config.stateDir, ...(scorer === undefined ? {} : { scorer }) });
 const attached = settlement(lab);
 const server = createLabServer(lab, { port: config.port, allowedOrigins: config.allowedOrigins, before: attached.before });
 await listen(server, config.port);
 process.stdout.write(`Live AI Lab API on http://127.0.0.1:${config.port} · ${attached.note}${values['dev-chaos'] ? ' · DEV latency chaos allowed' : ''}\n`);
 if (live === null) process.stdout.write('OPENAI_API_KEY is absent: only the deterministic stub provider is available. A testnet send still requires a live model.\n');
+process.stdout.write(scorer === undefined ? 'Jev scoring is not configured: Planning Rooms allocate on model ratings alone.\n' : `Jev scoring: ${scorer.name} (advisory only).\n`);

@@ -9,7 +9,7 @@
 
 import { agentPolicyOf, amountOf, type ResourceVector } from '@mandate/portfolio';
 import { demoParty } from '@mandate/portfolio/demo';
-import type { ActiveMandate } from './authoring/mandate-versioning.ts';
+import type { ActiveMandate, MandateView } from './authoring/mandate-versioning.ts';
 import { AGENT_DOMAINS, EXPOSURE_RESOURCE } from './authoring/catalog.ts';
 import { availabilityAt } from './mandate/portfolio-adapter.ts';
 import type { AuthorityView, PortfolioView } from './runtime/provider.ts';
@@ -30,7 +30,7 @@ export function enabledRoles(active: ActiveMandate): readonly Role[] {
   return ROLES.filter((r) => agentPolicyOf(active.mandate, demoParty(r)) !== null);
 }
 
-export function authorityView(active: ActiveMandate, role: Role): AuthorityView {
+export function authorityView(active: MandateView, role: Role): AuthorityView {
   const policy = agentPolicyOf(active.mandate, demoParty(role));
   const exposureResource = EXPOSURE_RESOURCE[role];
   const exposure = policy === null || exposureResource === null ? undefined : policy.hardMaxima.find((h) => h.resource === exposureResource);

@@ -13,12 +13,15 @@ import { parseArgs } from 'node:util';
 import { OpenAIProvider, describeConfig, readConfig, realClock } from '../src/index.ts';
 import { LiveLab } from '../src/server/app.ts';
 import { createLabServer, listen } from '../src/server/http.ts';
+import { configuredScorer } from './jev.ts';
 
 const { values } = parseArgs({ options: { 'dev-chaos': { type: 'boolean', default: false } }, strict: true });
 const config = readConfig();
 const live = config.openaiApiKey === null ? null : new OpenAIProvider({ apiKey: config.openaiApiKey, model: config.openaiModel });
-const lab = new LiveLab({ live, clock: realClock, agentTimeoutMs: config.agentTimeoutMs, roomRoundTimeoutMs: config.roomRoundTimeoutMs, allowChaos: values['dev-chaos'], stateDir: config.stateDir });
+const scorer = configuredScorer();
+const lab = new LiveLab({ live, clock: realClock, agentTimeoutMs: config.agentTimeoutMs, roomRoundTimeoutMs: config.roomRoundTimeoutMs, allowChaos: values['dev-chaos'], stateDir: config.stateDir, ...(scorer === undefined ? {} : { scorer }) });
 const server = createLabServer(lab, { port: config.port, allowedOrigins: config.allowedOrigins });
 await listen(server, config.port);
 process.stdout.write(`Live AI Lab API on http://127.0.0.1:${config.port} · ${describeConfig(config)} · origins ${config.allowedOrigins.join(', ')} · durable sessions in ${config.stateDir}${values['dev-chaos'] ? ' · DEV latency chaos allowed' : ''}\n`);
 if (live === null) process.stdout.write('OPENAI_API_KEY is absent: only the deterministic stub provider is available.\n');
+process.stdout.write(scorer === undefined ? 'Jev scoring is not configured: Planning Rooms allocate on model ratings alone, and no score is invented.\n' : `Jev scoring: ${scorer.name} (advisory only).\n`);

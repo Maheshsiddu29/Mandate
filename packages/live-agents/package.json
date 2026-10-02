@@ -13,6 +13,7 @@
   "dependencies": {
     "@mandate/control": "0.1.0",
     "@mandate/core": "0.1.0",
+    "@mandate/jev": "0.1.0",
     "@mandate/kernel": "0.1.0",
     "@mandate/ledger": "0.1.0",
     "@mandate/ledger-sqlite": "0.1.0",

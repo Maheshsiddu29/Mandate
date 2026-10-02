@@ -35,7 +35,7 @@
 
 import { agentPolicyOf, canonicalReasons, permits, reason, resolveCandidate, validateActionCandidate, type Reason } from '@mandate/portfolio';
 import { demoParty } from '@mandate/portfolio/demo';
-import type { ActiveMandate } from '../authoring/mandate-versioning.ts';
+import type { MandateView } from '../authoring/mandate-versioning.ts';
 import type { Role } from '../types.ts';
 import type { TrustedCandidate } from './spec.ts';
 
@@ -82,12 +82,12 @@ export interface CandidateUniverse {
  * adversarial tests can simulate a broken or bypassed filter and show that
  * Mandate's screening still refuses on its own.
  */
-export type EligibilityFilter = (active: ActiveMandate, role: Role, candidates: readonly TrustedCandidate[], now: bigint) => CandidateUniverse;
+export type EligibilityFilter = (active: MandateView, role: Role, candidates: readonly TrustedCandidate[], now: bigint) => CandidateUniverse;
 
 const excluded = (candidate: TrustedCandidate, reasons: readonly Reason[]): CandidateEligibility => ({ candidate, actionable: false, reasons: canonicalReasons(reasons) });
 
 /** One candidate, probed at its minimum size and observed `now`: identity and static scope only. */
-export function assessCandidate(active: ActiveMandate, role: Role, candidate: TrustedCandidate, now: bigint): CandidateEligibility {
+export function assessCandidate(active: MandateView, role: Role, candidate: TrustedCandidate, now: bigint): CandidateEligibility {
   const policy = agentPolicyOf(active.mandate, demoParty(role));
   if (policy === null) return excluded(candidate, [reason('AGENT_UNKNOWN', role)]);
   let built;

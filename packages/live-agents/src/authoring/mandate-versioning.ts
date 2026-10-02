@@ -122,6 +122,9 @@ export interface PreparedVersion {
   readonly preparedAt: bigint;
 }
 
+/** What eligibility and an agent's authority view read: the compiled mandate, signed or (when planning) provisional. */
+export type MandateView = Pick<ActiveMandate, 'version' | 'mandate' | 'compiled'>;
+
 export interface ActiveMandate {
   readonly version: number;
   readonly mandate: PortfolioMandate;
@@ -367,6 +370,24 @@ export class MandateVersions {
     const c = compile(m.value, this.#bindings);
     if (!c.ok) return refuse('DRAFT_INVALID', `Mandate refuses the draft: ${c.reasons.map((r) => r.code).join(', ')}.`);
     return { ok: true, prepared: { version, draft, validation, mandate: m.value, compiled: c.compiled, digest: portfolioMandateDigest(m.value), preparedAt: protocolNow } };
+  }
+
+  /**
+   * The never-signed compilation a Planning Room analyzes under
+   * (allocation/planning.ts): the draft validated in planning mode — each
+   * delegated agent at its ceiling, no split yet — and compiled. It writes
+   * nothing, is not checked against pause or reservations because it can
+   * never be committed, and grants nothing.
+   */
+  provisional(draft: MandateDraft, protocolNow: bigint): { readonly ok: true; readonly mandate: MandateView; readonly validation: DraftValidation } | { readonly ok: false; readonly issues: readonly ValidationIssue[]; readonly message: string } {
+    const version = this.nextVersion;
+    const validation = validateDraft(draft, { version, protocolNow, bindings: this.#bindings, planning: true });
+    if (!validation.ok || validation.mandate === null) return { ok: false, issues: validation.issues, message: 'The draft has blocking issues; resolve them before asking the agents for a split.' };
+    const m = validatePortfolioMandate(validation.mandate);
+    if (!m.ok) return { ok: false, issues: [], message: `Mandate refuses the draft: ${m.error.code}.` };
+    const c = compile(m.value, this.#bindings);
+    if (!c.ok) return { ok: false, issues: [], message: `Mandate refuses the draft: ${c.reasons.map((r) => r.code).join(', ')}.` };
+    return { ok: true, mandate: { version, mandate: m.value, compiled: c.compiled }, validation };
   }
 
   /**

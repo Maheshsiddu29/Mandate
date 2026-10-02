@@ -17,9 +17,15 @@
  */
 
 import type { AuthorizationRecord } from '@mandate/control';
-import { encodePortfolioMandate, portfolioMandateV2Hash, proposalDigest, verificationTranscript, type PortfolioAuthorityV2, type Reason, type SignedProposal, type VerificationTranscript, type VerifiedChild } from '@mandate/portfolio';
+import { agentPolicyOf, amountOf, encodePortfolioMandate, portfolioMandateV2Hash, proposalDigest, verificationTranscript, type PortfolioAuthorityV2, type PortfolioMandate, type Reason, type SignedProposal, type VerificationTranscript, type VerifiedChild } from '@mandate/portfolio';
+import { demoParty } from '@mandate/portfolio/demo';
+import { classifyAllocation, planningPurpose } from './allocation/intent.ts';
+import { runPlanning, type AllocationPlan } from './allocation/planning.ts';
+import { FIXTURE_RESEARCH, type MarketResearchProvider } from './allocation/research.ts';
+import { EXPOSURE_RESOURCE } from './authoring/catalog.ts';
+import { NoScorer, type OpportunityScorer } from './jev/scorer.ts';
 import type { TrustedCandidate } from './agents/spec.ts';
-import { applyPreset, normalizeDraft, presetDraft, type MandateDraft, type Preset } from './authoring/draft-types.ts';
+import { applyPreset, normalizeDraft, presetDraft, withField, type MandateDraft, type Preset } from './authoring/draft-types.ts';
 import type { DraftValidation } from './authoring/draft-validator.ts';
 import { MandateVersions, SPINE_AUTHORIZATION_LABEL, WALLET_AUTHORIZATION_LABEL, type ActiveMandate, type AuthorizeResult, type PrincipalAuthorization, type RefusalCode } from './authoring/mandate-versioning.ts';
 import { interpretPrompt } from './authoring/prompt-to-draft.ts';
@@ -44,7 +50,7 @@ import { RecordedProvider } from './runtime/recorded-provider.ts';
 import type { AgentModelProvider } from './runtime/provider.ts';
 import { realEntropy, type Entropy } from './runtime/entropy.ts';
 import { EventLog } from './telemetry/events.ts';
-import { usdcText, type Role } from './types.ts';
+import { ROLE_LABELS, usdcText, type Role } from './types.ts';
 import { APPROVAL_CHAIN_ID, APPROVAL_DOMAIN, APPROVAL_ENVIRONMENT, APPROVAL_PRIMARY_TYPE, CHALLENGE_LIFETIME_SECONDS, approvalMessage, approvalTypedData, checkApproval, sessionDigest } from './wallet/approval.ts';
 import { ChallengeBook, MAX_SIGNATURE_FAILURES, draftKey, type WalletChallenge } from './wallet/challenges.ts';
 import { keccakHex, recoverAddress } from './wallet/eip712.ts';
@@ -89,6 +95,10 @@ export interface SessionOptions {
    * tests only, to reach Mandate with a candidate no connector settles.
    */
   readonly settlement?: SettlementProfile | null;
+  /** Advisory opportunity scoring for Planning and Reallocation Rooms (Jev); default: none, and no score is invented. */
+  readonly scorer?: OpportunityScorer;
+  /** Evidence for opportunity analysis; default: the labelled fixtures, with every unavailable kind reported. */
+  readonly research?: MarketResearchProvider;
   /** Internal: `LiveSession.restore` builds a restored session through this. */
   readonly restoredFrom?: { readonly store: SessionStore; readonly state: RestoredState; readonly by: string };
 }
@@ -107,6 +117,42 @@ export interface RestoreOptions {
 export type WalletChallengeResult =
   | { readonly ok: true; readonly challenge: string; readonly version: number; readonly digest: string; readonly principal: string; readonly validUntil: string; readonly typedData: { readonly [k: string]: unknown } }
   | { readonly ok: false; readonly code: RefusalCode; readonly message: string };
+
+export type PlanResult =
+  | { readonly ok: true; readonly plan: AllocationPlan }
+  | { readonly ok: false; readonly code: 'SESSION_RESTORED' | 'BUSY' | 'NOTHING_TO_PLAN' | 'DRAFT_INVALID'; readonly message: string; readonly issues: readonly unknown[] };
+
+export type ApplyPlanResult =
+  | { readonly ok: true; readonly draft: MandateDraft }
+  | { readonly ok: false; readonly code: 'PLAN_UNKNOWN' | 'PLAN_STALE' | 'ALLOCATION_INVALID'; readonly message: string };
+
+/** A draft with the delegated agents' budgets unset: what a plan is computed against and compared with. */
+function withoutPoolBudgets(d: MandateDraft): MandateDraft {
+  let out = d;
+  for (const r of classifyAllocation(d).pool) if (out.agents[r].budget !== null) out = withField(out, `agents.${r}.budget`, null, 'USER');
+  return out;
+}
+
+/** The most each delegated agent could hold under a provisional mandate: its own maximum and exposure, its domain's portfolio limit, and the pool. */
+function hardCapsOf(m: PortfolioMandate, pool: readonly Role[], poolAtoms: bigint): ReadonlyMap<Role, bigint> {
+  const DOMAIN_LIMIT: { readonly [R in Role]?: string } = { perps: 'derivative-notional', nft: 'illiquid-notional', stock: 'spot-capital' };
+  const caps = new Map<Role, bigint>();
+  for (const r of pool) {
+    const policy = agentPolicyOf(m, demoParty(r));
+    if (policy === null) {
+      caps.set(r, 0n);
+      continue;
+    }
+    let cap = amountOf(policy.hardMaxima, 'portfolio-notional');
+    const own = EXPOSURE_RESOURCE[r];
+    const listed = own === null ? undefined : policy.hardMaxima.find((h) => h.resource === own);
+    if (listed !== undefined && listed.atoms < cap) cap = listed.atoms;
+    const domain = DOMAIN_LIMIT[r];
+    if (domain !== undefined && amountOf(m.limits, domain) < cap) cap = amountOf(m.limits, domain);
+    caps.set(r, cap < poolAtoms ? cap : poolAtoms);
+  }
+  return caps;
+}
 
 export type RunStatus = 'AUTHORIZED' | 'PARTIALLY_AUTHORIZED' | 'REFUSED' | 'NO_FEASIBLE_PORTFOLIO' | 'NOTHING_TO_AUTHORIZE' | 'NO_ACTIVE_MANDATE' | 'SUPERSEDED_TOO_OFTEN';
 
@@ -188,6 +234,7 @@ export class LiveSession {
   #running = false;
   #intent: string | null = null;
   #rooms = 0;
+  readonly #plans = new Map<string, AllocationPlan>();
 
   constructor(o: SessionOptions) {
     this.#o = o;
@@ -575,6 +622,89 @@ export class LiveSession {
       this.#epoch.abort();
     }
     return r.ok;
+  }
+
+  // --- Planning (pre-authorization) ---------------------------------------------------------
+
+  /**
+   * The Planning Room (docs/v2/mandate-room-v2.md §5): the agents the
+   * principal left the split to analyze their opportunities, and the
+   * deterministic allocator proposes budgets for the pool. Advisory: it signs
+   * nothing and writes no ledger entry; the principal reviews, may edit, and
+   * signs once.
+   */
+  async plan(draft: MandateDraft): Promise<PlanResult> {
+    if (this.restored) return { ok: false, code: 'SESSION_RESTORED', message: 'A restored session plans nothing. Start a new session.', issues: [] };
+    if (this.#running) return { ok: false, code: 'BUSY', message: 'A run is in progress.', issues: [] };
+    const base = withoutPoolBudgets(draft);
+    const v = classifyAllocation(base);
+    const purpose = planningPurpose(v);
+    if (purpose === null || v.pool.length === 0 || v.poolAtoms === null) return { ok: false, code: 'NOTHING_TO_PLAN', message: v.intent === 'NEEDS_AGENT_SELECTION' ? 'Choose which agents may use this capital first.' : 'You set every budget yourself: there is no split to propose.', issues: [] };
+    const provisional = this.versions.provisional(base, this.protocolNow());
+    if (!provisional.ok) return { ok: false, code: 'DRAFT_INVALID', message: provisional.message, issues: provisional.issues };
+    this.#running = true;
+    try {
+      this.#rooms += 1;
+      const roomId = `plan-${this.versions.nextVersion}-${this.#rooms}`;
+      const plan = await runPlanning(this.#planningDeps(), {
+        roomId,
+        purpose,
+        provisional: provisional.mandate,
+        pool: v.pool,
+        poolAtoms: v.poolAtoms,
+        fixed: v.fixed.map((r) => ({ role: r, atoms: v.budgets[r] as bigint })),
+        hardCaps: hardCapsOf(provisional.mandate.mandate, v.pool, v.poolAtoms),
+        draftKey: draftKey(base),
+      });
+      this.#plans.set(roomId, plan);
+      return { ok: true, plan };
+    } finally {
+      this.#running = false;
+    }
+  }
+
+  #planningDeps() {
+    return { provider: this.provider, scorer: this.#o.scorer ?? new NoScorer(), research: this.#o.research ?? FIXTURE_RESEARCH, clock: this.clock, events: this.events, protocolNow: this.protocolNow, timeoutMs: this.#o.agentTimeoutMs, ...(this.#o.eligibility === undefined ? {} : { eligibility: this.#o.eligibility }), settlement: this.#o.settlement === undefined ? LIVE_LAB_SETTLEMENT_PROFILE : this.#o.settlement, intent: this.#intent ?? this.#o.intent ?? null };
+  }
+
+  /** A plan this session proposed, by its Room id. */
+  planOf(roomId: string): AllocationPlan | null {
+    return this.#plans.get(roomId) ?? null;
+  }
+
+  /**
+   * Write a plan's budgets into the draft, with the principal's edits on top.
+   * A budget equal to the plan's is `PLANNED`; an edited one is the
+   * principal's own (`USER`). Refused if the draft changed since the plan
+   * was computed (other than these budgets) or the plan's evidence is stale.
+   * The result is only a draft: validation and the signature still decide.
+   */
+  applyPlan(draft: MandateDraft, roomId: string, edits: { readonly [R in Role]?: string } = {}): ApplyPlanResult {
+    const plan = this.#plans.get(roomId);
+    if (plan === undefined) return { ok: false, code: 'PLAN_UNKNOWN', message: 'No such plan in this session. Ask the agents for a split again.' };
+    if (draftKey(withoutPoolBudgets(draft)) !== plan.draftKey) return { ok: false, code: 'PLAN_STALE', message: 'The draft changed after this split was proposed. Ask the agents again.' };
+    if (this.protocolNow() > plan.freshUntil) return { ok: false, code: 'PLAN_STALE', message: 'The market observations behind this split are stale. Ask the agents again.' };
+    let out = draft;
+    for (const a of plan.allocations) {
+      const edit = edits[a.role];
+      const planned = usdcText(a.atoms);
+      out = withField(out, `agents.${a.role}.budget`, edit ?? planned, edit === undefined || edit === planned ? 'PLANNED' : 'USER');
+    }
+    for (const [role, value] of Object.entries(edits) as [Role, string][]) {
+      if (plan.allocations.some((a) => a.role === role)) continue;
+      if (out.agents[role].enabled !== true) return { ok: false, code: 'ALLOCATION_INVALID', message: `The ${ROLE_LABELS[role]} is not enabled: it can be given no budget.` };
+      out = withField(out, `agents.${role}.budget`, value, 'USER');
+    }
+    this.events.emit('ALLOCATION_PLAN_APPLIED', {
+      roomId,
+      mandateVersion: null,
+      data: {
+        budgets: classifyAllocation(out).enabled.map((r) => ({ role: r, budget: out.agents[r].budget, source: out.provenance[`agents.${r}.budget`] ?? null })),
+        edited: (Object.keys(edits) as Role[]).filter((r) => out.provenance[`agents.${r}.budget`] === 'USER'),
+        authority: 'NONE — a draft until you sign it',
+      },
+    });
+    return { ok: true, draft: out };
   }
 
   // --- Autonomous operation ----------------------------------------------------------------

@@ -48,7 +48,9 @@ describe('live-agents structural boundary', () => {
     const manifest = JSON.parse(readFileSync(new URL('package.json', ROOT), 'utf8')) as { dependencies?: { [name: string]: string } };
     // B.5.3: the kernel's pinned noble packages, for EIP-712 hashing and signer recovery of the principal's wallet approval.
     // B.5.3: the reference SQLite store, so the session's portfolio ledger survives a restart.
-    assert.deepEqual(manifest.dependencies, { '@mandate/control': '0.1.0', '@mandate/core': '0.1.0', '@mandate/kernel': '0.1.0', '@mandate/ledger': '0.1.0', '@mandate/ledger-sqlite': '0.1.0', '@mandate/portfolio': '0.1.0', '@noble/curves': '2.4.0', '@noble/hashes': '2.4.0' });
+    // Room V2: the Jev client, for the composition root only (scripts/jev.ts): no source file imports it.
+    assert.deepEqual(manifest.dependencies, { '@mandate/control': '0.1.0', '@mandate/core': '0.1.0', '@mandate/jev': '0.1.0', '@mandate/kernel': '0.1.0', '@mandate/ledger': '0.1.0', '@mandate/ledger-sqlite': '0.1.0', '@mandate/portfolio': '0.1.0', '@noble/curves': '2.4.0', '@noble/hashes': '2.4.0' });
+    for (const { file, text } of SCRIPTS) if (file !== 'jev.ts') assert.doesNotMatch(text, /@mandate\/jev/, file);
     for (const { file, text } of SRC) {
       for (const m of text.matchAll(/from\s+'(@[^/']+\/[^/']+)/g)) assert.ok(['@mandate/control', '@mandate/core', '@mandate/kernel', '@mandate/ledger', '@mandate/ledger-sqlite', '@mandate/portfolio', '@noble/curves', '@noble/hashes'].includes(m[1] as string), `${file}: ${m[1]}`);
       assert.doesNotMatch(text, /@mandate\/judge-demo|judge-demo\/|@mandate\/jev|anthropic|typesafe/i, file);
