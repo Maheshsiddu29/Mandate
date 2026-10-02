@@ -36,6 +36,10 @@ const REASON_LABELS: Readonly<Record<string, string>> = {
   ISSUER_NOT_ALLOWED: "Issuer not approved",
   INSTRUMENT_UNKNOWN: "Unknown instrument",
   SYNTHETIC_NOT_ALLOWED: "Synthetic exposure not allowed",
+  "REGISTRY:ISSUER_NOT_ALLOWED": "Issuer not approved",
+  "REGISTRY:SYNTHETIC_NOT_ALLOWED": "Synthetic representation not approved",
+  "REGISTRY:REPRESENTATION_NOT_ALLOWED": "Representation not approved",
+  "REGISTRY:ASSET_NOT_ALLOWED": "Asset not approved",
   PORTFOLIO_LIMIT_EXCEEDED: "Portfolio limit exceeded",
   AGENT_LIMIT_EXCEEDED: "Agent limit exceeded",
   ALLOCATION_INSUFFICIENT: "Insufficient authority",
@@ -51,8 +55,10 @@ const RESOURCE_LABELS: Readonly<Record<string, string>> = {
 
 /** Web-only copy. Protocol reason codes remain unchanged and available in details. */
 export function reasonLabel(reason: string): string {
-  const exact = reason.split(":")[0] ?? reason;
-  return REASON_LABELS[exact] ?? exact.toLowerCase().replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());
+  const exact = code(reason);
+  const known = REASON_LABELS[exact] ?? REASON_LABELS[exact.split(":").slice(1).join(":")];
+  if (known !== undefined) return known;
+  return exact.toLowerCase().replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());
 }
 
 /** Web-only label for one typed resource. Typed resources are never combined. */
@@ -248,7 +254,12 @@ function reasonsOf(v: Json | undefined): string[] {
 }
 
 function hard(reasons: readonly string[]): boolean {
-  return reasons.some((reason) => HARD_BLOCK.has(reason));
+  return reasons.some((reason) => {
+    const exact = code(reason);
+    if (HARD_BLOCK.has(exact)) return true;
+    const suffix = exact.startsWith("REGISTRY:") ? exact.slice("REGISTRY:".length) : exact;
+    return HARD_BLOCK.has(suffix);
+  });
 }
 
 /** Preserve millisecond precision so distinct event times never collapse to one displayed time. */

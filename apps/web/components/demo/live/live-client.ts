@@ -90,8 +90,23 @@ export const amount = (v: Json | undefined): string => {
   return typeof r.amount === "string" ? `${r.amount} USDC` : "—";
 };
 export const ms = (v: Json | undefined): string => (typeof v === "number" ? `${v} ms` : "—");
-/** A reason code without its subject, e.g. `RECIPIENT_NOT_ALLOWED`. */
-export const code = (v: Json): string => str(v).split(":")[0] ?? str(v);
+/**
+ * A reason code without its subject.
+ *
+ * Portfolio codes are `CODE` or `CODE:subject`. Registry and ledger codes
+ * already contain one colon (`REGISTRY:ISSUER_NOT_ALLOWED`,
+ * `LEDGER:AUTHORITY_INVALID/AUTHORITY_REVOKED`); a subject, if any, follows
+ * that. Splitting on the first colon collapses every registry refusal to
+ * `REGISTRY`, and two of them then share one React key.
+ */
+export function code(v: Json): string {
+  const raw = str(v);
+  const parts = raw.split(":");
+  const head = parts[0] ?? raw;
+  const second = parts[1];
+  if ((head === "REGISTRY" || head === "LEDGER") && second !== undefined && second !== "") return `${head}:${second}`;
+  return head;
+}
 /**
  * An event's typed-resource conflicts, one per resource and never summed, e.g.
  * `derivative-notional 600 USDC > 400 USDC (reduce 200 USDC)`, or once the Room
