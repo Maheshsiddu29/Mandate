@@ -5,8 +5,11 @@
  * Per agent:
  *
  * ```text
- * observe candidates (quote time = now) ─▶ model call (bounded, streamed, validated)
- *   ─▶ PROPOSE: exact lookup ─▶ build under the version it was asked under ─▶ local signature
+ * observe candidates (quote time = now)
+ *   ─▶ stock only: canonicalize by representation, keep the eligible set
+ *   ─▶ model call over that actionable set (bounded, streamed, validated)
+ *   ─▶ PROPOSE: exact lookup in the actionable set — never a substitution
+ *   ─▶ build under the version it was asked under ─▶ local signature
  *   ─▶ screen under the version active *now* (the frozen screenProposal)
  *        BLOCKED     security invalid; never enters the Room
  *        ADMISSIBLE  individually valid (maybe portfolio invalid); may be negotiated
@@ -21,6 +24,7 @@ import { candidateDigest, proposalDigest, validateActionCandidate, type SignedPr
 import type { ActiveMandate } from './authoring/mandate-versioning.ts';
 import { DOMAIN_AGENTS } from './agents/index.ts';
 import { candidateById, viewOf, type TrustedCandidate } from './agents/spec.ts';
+import { stockEligibility, type ExcludedStockCandidate } from './agents/stock-eligibility.ts';
 import { amountViews, authorityView, portfolioView } from './context.ts';
 import { applyAdvice, type JevAdvisor } from './jev/advisor.ts';
 import { buildProposal, type SequenceBook } from './mandate/proposal-builder.ts';
@@ -71,15 +75,33 @@ export interface DiscoveryOptions {
 export async function discoverAgent(deps: DiscoveryDeps, active: ActiveMandate, role: Role, o: DiscoveryOptions = {}): Promise<AgentOutcome> {
   const { clock, events } = deps;
   const spec = DOMAIN_AGENTS[role];
-  const candidates = o.candidates ?? spec.candidates;
+  const discovered = o.candidates ?? spec.candidates;
   const observedAt = deps.protocolNow();
   const emit = (kind: Parameters<EventLog['emit']>[0], data: { readonly [k: string]: unknown }) => events.emit(kind, { agent: role, mandateVersion: active.version, data });
   const base = { role, version: active.version, observedAt } as const;
+  const signer = deps.signers.get(role);
+  // Stock: discovery may be wider than the set the model can execute.
+  // Other roles still hand their whole closed set to Mandate's screen.
+  const eligibility = role === 'stock'
+    ? signer === undefined
+      ? { discovered, actionable: [] as readonly TrustedCandidate[], excluded: discovered.map((c): ExcludedStockCandidate => ({ candidateId: c.id, reasons: ['AGENT_UNKNOWN'] })) }
+      : stockEligibility(discovered, active.mandate, active.compiled.bindings, signer.party, observedAt)
+    : { discovered, actionable: discovered, excluded: [] as readonly ExcludedStockCandidate[] };
+  const candidates = eligibility.actionable;
 
   const advice = await deps.jev.rank(role, candidates.map((c) => viewOf(c)));
   const views = applyAdvice(candidates.map((c) => viewOf(c)), advice);
   const request: DecisionRequest = { kind: 'DECISION', role, objective: spec.objective, authority: authorityView(active, role), portfolio: await portfolioView(active, observedAt), candidates: views };
-  emit('AGENT_REQUEST_STARTED', { provider: deps.provider.name, providerKind: deps.provider.kind, model: deps.provider.model, candidates: views.map((v) => v.id), quoteObservedAt: observedAt, jev: advice === null ? null : advice.source });
+  emit('AGENT_REQUEST_STARTED', {
+    provider: deps.provider.name,
+    providerKind: deps.provider.kind,
+    model: deps.provider.model,
+    candidates: views.map((v) => v.id),
+    discovered: eligibility.discovered.map((c) => c.id),
+    excluded: eligibility.excluded.map((e) => ({ candidateId: e.candidateId, reasons: [...e.reasons] })),
+    quoteObservedAt: observedAt,
+    jev: advice === null ? null : advice.source,
+  });
 
   const call = await callModel({
     provider: deps.provider,
@@ -114,13 +136,19 @@ export async function discoverAgent(deps: DiscoveryDeps, active: ActiveMandate, 
     return end('ABSTAINED', { decision });
   }
 
-  const candidate = candidateById({ ...spec, candidates }, decision.candidateId ?? '');
+  // Lookup only in the actionable set. An id from discovery that was
+  // excluded is not rewritten onto an eligible candidate.
+  const picked = decision.candidateId ?? '';
+  if (eligibility.excluded.some((e) => e.candidateId === picked)) {
+    emit('AGENT_INVALID_RESPONSE', { error: 'candidate is not in the actionable set', ...latency });
+    return end('INVALID_RESPONSE', { decision, error: 'candidate is not in the actionable set' });
+  }
+  const candidate = candidateById({ ...spec, candidates }, picked);
   const size = decision.requestedAtoms ?? 0n;
   if (candidate === null) return end('INVALID_RESPONSE', { decision, error: 'candidate lookup failed' });
   emit('AGENT_DECISION_COMPLETED', { candidateId: candidate.id, candidate: candidate.title, requested: { atoms: size, amount: usdcText(size) }, rationale: decision.rationale, ...latency });
 
   // Build under the version the agent was asked under; sign locally.
-  const signer = deps.signers.get(role);
   const input = candidate.build(size, observedAt);
   const built = signer === undefined ? null : buildProposal({ mandate: active.mandate, bindings: active.compiled.bindings, agent: signer.party, candidate: input, sizeAtoms: size, minimumAtoms: candidate.resizable ? candidate.minAtoms : size, sequence: deps.sequences.next(signer.party), now: deps.protocolNow() });
   if (signer === undefined || built === null || !built.ok) return end('INVALID_RESPONSE', { decision, candidate, sizeAtoms: size, error: built !== null && !built.ok ? built.error : 'no signer' });

@@ -19,7 +19,9 @@ const byRole = (answers: { readonly [R in Role]?: { text: string; delayMs?: numb
 describe('the real Mandate verdict on every candidate (balanced mandate)', () => {
   const expected: { readonly [id: string]: { readonly verdict: string; readonly codes: RegExp } } = {
     'nvda-note-a': { verdict: 'ADMISSIBLE', codes: /^$/ },
-    'nvda-token-b': { verdict: 'BLOCKED', codes: /REGISTRY:/ },
+    // The lookalike is discovered but not actionable, so the model cannot select it.
+    // Direct registry rejection is covered in stock-eligibility.test.ts.
+    'nvda-token-b': { verdict: 'INVALID_RESPONSE', codes: /^$/ },
     'route-a': { verdict: 'ADMISSIBLE', codes: /^$/ },
     'route-b': { verdict: 'BLOCKED', codes: /VENUE_NOT_ALLOWED/ },
     'genesis-11': { verdict: 'ADMISSIBLE', codes: /^$/ },
@@ -39,6 +41,10 @@ describe('the real Mandate verdict on every candidate (balanced mandate)', () =>
         assert.ok(want, c.id);
         assert.equal(out.state, want.verdict, JSON.stringify(out.screening?.reasons));
         assert.match(out.screening?.reasons.map((r) => r.code).join(',') ?? '', want.codes);
+        if (c.id === 'nvda-token-b') {
+          assert.equal(out.signed, null);
+          assert.equal(out.candidate, null);
+        }
       });
     }
   }
