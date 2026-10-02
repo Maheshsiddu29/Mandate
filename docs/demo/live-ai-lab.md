@@ -499,22 +499,41 @@ most 280 characters.
 
 ## 6. The live Mandate Room
 
-The Room is conditional, not a stage. After discovery, the session prices
-every **admissible** proposal's typed demand with the portfolio's own
-binding code and compares it with what the ledger says is still available
-(`session.ts` → `room/negotiation.ts` `assess`). It opens a Room only when
-all of these hold:
+> If you tell Mandate exactly how much each agent may use, the Room stays
+> out of the way.
+>
+> If you give several agents a shared pool and let them decide, they analyze
+> the opportunities and propose a split.
+>
+> You can edit that split before signing.
+>
+> After authorization, unused capital may be reallocated only if the mandate
+> explicitly permits it.
 
-1. the proposals reached Mandate and passed screening: their only reasons,
-   if any, are quantity reasons (`AGENT_LIMIT_EXCEEDED`,
-   `PORTFOLIO_LIMIT_EXCEEDED`), so a smaller request could pass;
-2. at least one typed resource is over: a portfolio limit
-   (`portfolio-notional` and `spot-capital` are capital,
-   `derivative-notional` and `perp-margin` derivative, `illiquid-notional`
-   NFT) summed over the admissible requests, or an agent's own maximum
-   (its domain allocation);
-3. the excess is resolvable by concession: participants may KEEP, REDUCE
-   (resizable candidates, never below their minimum) or RELEASE.
+Unused capital stays in the wallet. Mandate does not force deployment.
+
+**Room V2** ([docs/v2/mandate-room-v2.md](../v2/mandate-room-v2.md)) replaced
+the old trigger (`!fit.feasible → Room`). A Room now opens for exactly four
+reasons, and every Room event carries its `roomPurpose`:
+
+| purpose | when | stage |
+| --- | --- | --- |
+| `INITIAL_ALLOCATION` | the principal gave a total and enabled agents but no split (`DYNAMIC`) | before signing: `POST /plan` |
+| `HYBRID_ALLOCATION` | some budgets fixed, the rest left to the other agents | before signing |
+| `REALLOCATION` | an agent reserved nothing, its budget is free in the ledger, and the signed mandate allows reallocation | after the first authorization |
+| `SHARED_RESOURCE_COORDINATION` | two or more valid agents demand the same over-limit resource and the signed mandate allows coordination | after screening |
+
+A single agent over its own limit — or the only agent demanding a resource
+that is over, such as perps on derivative notional — is never a Room: it
+gets one bounded re-plan (`AGENT_LOCAL_REPLAN_REQUESTED`, its own candidate
+bounded to the largest size that fits) and is screened again, or is
+refused (`AGENT_LOCAL_REFUSED`). Exact budgets (`FIXED`) never meet a
+Planning Room; without reallocation they are the signed maxima. A prompt
+that names no agent asks "Which agents may use this capital?" — Fill never
+enables an agent. Dollars are split by a deterministic allocator over
+structured OpportunityCards; Jev (TypeSafe Score, when configured) only
+scales a card's weight. The rest of this section describes the mechanics a
+coordination Room shares with the old one.
 
 A hard violation — asset, issuer, representation, synthetic, venue,
 recipient or leverage outside scope, an unknown instrument, a bad

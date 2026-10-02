@@ -515,3 +515,84 @@ receipt only), `DATA_UNAVAILABLE` (a research kind that was not available).
   lifecycle so it becomes reallocatable before its deadline.
 - Expressing the plan in the signed protocol object itself (a future
   allocation mode whose preferred allocation is a bound, not a precedence).
+
+---
+
+## 13. As built (2026-10-02)
+
+| concern | module |
+| --- | --- |
+| intent, planning state | `packages/live-agents/src/allocation/intent.ts` |
+| budgets, `autoReallocate`, what is signed | `authoring/draft-types.ts`, `authoring/draft-validator.ts` (`ALLOCATION_*` codes) |
+| interpreter (budgets, "$X across …", reallocation words; never enables an unnamed agent) | `authoring/prompt-to-draft.ts`, `runtime/prompts.ts` |
+| OpportunityCard, research seam | `allocation/card.ts`, `allocation/research.ts`, `runtime/schemas.ts` (`OPPORTUNITY`) |
+| allocator | `allocation/allocator.ts` |
+| Planning Room | `allocation/planning.ts`, `LiveSession.plan` / `applyPlan`, `POST /plan`, `POST /draft/allocation` |
+| never-signed planning compilation | `MandateVersions.provisional` |
+| post-screen classification, local re-plan | `room/classify.ts`, `LiveSession.#localReplans` |
+| coordination Room | `room/coordinator.ts` (`roomPurpose`, `askable`) |
+| reallocation | `LiveSession.#afterAuthorization` |
+| Jev Score | `packages/jev/src/score.ts`; interface `live-agents/src/jev/scorer.ts`; attached in `live-agents/scripts/jev.ts` |
+| browser | `apps/web/components/demo/live/allocation-model.ts`, `stage-planning.tsx`, the `PLANNING` phase |
+
+Event kinds added to `MANDATE_LIVE_AI.V1`: `OPPORTUNITY_CARD_CREATED`,
+`JEV_SCORE_RECORDED`, `ALLOCATION_PLAN_PROPOSED`, `ALLOCATION_PLAN_APPLIED`,
+`AGENT_LOCAL_REPLAN_REQUESTED`, `AGENT_LOCAL_REFUSED`, `CAPITAL_UNUSED`,
+`REALLOCATION_SKIPPED`. `ROOM_OPENED`, `ROOM_PROPOSAL_CREATED` and
+`ROOM_FINALIZED` carry `roomPurpose`; `PORTFOLIO_CONFLICT` carries
+`classification`, `handling` and `roomPurpose`.
+
+Decisions worth reviewing:
+
+- **Explicit presets** set `autoReallocate = true` and no budgets: they are
+  a live-coordination envelope (`planning: OPTIONAL`), which keeps the
+  operational Room reachable for a real capital conflict among several
+  agents. A prompt's Fill never sets `autoReallocate` or `enabled`.
+- **The plan is not in the signed protocol object** beyond what it changes
+  there: without reallocation, the budgets *are* the signed maxima; with it,
+  the ceilings are, and the budgets are the session's plan (persisted with
+  the version's draft). The frozen HYBRID mode was not used because its
+  Room claims the unallocated remainder automatically.
+- **Sole demander = local.** A portfolio limit only one agent's request
+  uses (derivative for perps, illiquid for NFT) is treated like that
+  agent's own limit.
+- **Reallocation recipients** are agents that already hold a reservation;
+  they are asked for a fresh card over their own candidate, bounded by its
+  remaining depth (as discovered, not as budget-bounded), their signed
+  ceiling and every typed limit.
+
+## 14. Live validation (gpt-5.5, 2026-10-02, no broadcast)
+
+Run from a scratch script outside the repository, against the real OpenAI
+interpreter and agents; the key came from the gitignored `.env` and was
+never printed. `TYPESAFE_API_KEY` was not configured: every Jev result was
+`UNAVAILABLE (JEV_NOT_CONFIGURED)` and no score was invented. Market data
+was `FIXTURE` throughout; inference was `LIVE_MODEL`. Interpreter notes
+("balanced risk-adjusted" is not a mandate term) were marked resolved, as
+the principal does in the UI. Authorization used the demonstration
+principal key (no wallet). `live-agents` has no chain path: every run
+reported 0 transactions.
+
+| prompt | intent | Room | result |
+| --- | --- | --- | --- |
+| A. "$2,000 across Stock, Swap, Yield and Perps. Prefer balanced risk-adjusted opportunities." | DYNAMIC | `INITIAL_ALLOCATION` | cards: Stock note C 100–600, Swap route C 100–250, Yield beta 100–400, Perps **ABSTAIN** (fixture-only, no open-interest evidence). Plan: Stock 600, Swap 250, Yield 400, Perps 0; **750 kept in wallet**. "Stock, Swap and Yield each received the most they said they can usefully take." Applied: valid. |
+| B. "$2,000. Stock $800, Swap $400, Yield $500, Perps $300." | FIXED | none | `NOTHING_TO_PLAN`; valid; signed maxima = the budgets |
+| C. "$2,000 across approved agents." | NEEDS_AGENT_SELECTION | none | every agent unset; "Choose which agents may use this capital first." |
+| D. "Deploy $2,000 across … rebalance automatically if an agent passes." | DYNAMIC (reallocation allowed) | `INITIAL_ALLOCATION` | Perps abstained in planning (budget 0). Signed and run: 1,648.50 reserved (stock note C 598.50 after its fee, swap 250, yield 800); nothing released, so `REALLOCATION_SKIPPED (NOTHING_RELEASED)`. |
+| D3. "$2,000. Stock $700, Swap $250, Yield $450, Perps $300. Very low risk … Rebalance automatically if an agent passes." | FIXED (reallocation allowed) | `REALLOCATION` | the interpreter read "no leveraged position" into the leverage bound, so perps had no actionable candidate and reserved nothing; its 300 entered a Reallocation Room. Only Stock had remaining depth; its live card **abstained** (fixture-only evidence). Nothing reassigned; 350 stays in the wallet (`CAPITAL_UNUSED`). |
+
+Two defects were found by these runs and fixed (`13adbb8`): a plan with an
+abstaining agent could not be signed (a warning treated as fatal), and
+Fill set a maximum deployed above the stated capital.
+
+## 15. Limitations
+
+- All market and candidate data is labelled fixture data; no live market
+  research adapter exists (`DATA_UNAVAILABLE` for fundamentals, news,
+  sentiment, technicals, volatility, protocol risk, open interest, NFT
+  market intelligence).
+- Jev Score was exercised offline only (injected transport); no live
+  TypeSafe call was made in this milestone.
+- Plans are held in memory per session; a restored session re-plans.
+- Releasing a RESERVED-but-unsubmitted reservation early, and market
+  re-planning on staleness before execution, are not built (§12).
