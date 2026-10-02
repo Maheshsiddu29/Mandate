@@ -549,6 +549,8 @@ receipt only), `DATA_UNAVAILABLE` (a research kind that was not available).
 | never-signed planning compilation | `MandateVersions.provisional` |
 | post-screen classification, local re-plan | `room/classify.ts`, `LiveSession.#localReplans` |
 | coordination Room | `room/coordinator.ts` (`roomPurpose`, `askable`) |
+| signed initial plan | `packages/portfolio/src/initial-allocation.ts`, `live-agents/src/allocation/commitment.ts` |
+| durable planning evidence | `allocation/planning-record.ts`, `persistence/session-store.ts`, `persistence/restore.ts` |
 | reallocation | `LiveSession.#afterAuthorization` |
 | Jev Score | `packages/jev/src/score.ts`; interface `live-agents/src/jev/scorer.ts`; attached in `live-agents/scripts/jev.ts` |
 | browser | `apps/web/components/demo/live/allocation-model.ts`, `stage-planning.tsx`, the `PLANNING` phase |
@@ -566,11 +568,11 @@ Decisions worth reviewing:
   a live-coordination envelope (`planning: OPTIONAL`), which keeps the
   operational Room reachable for a real capital conflict among several
   agents. A prompt's Fill never sets `autoReallocate` or `enabled`.
-- **The plan is not in the signed protocol object** beyond what it changes
-  there: without reallocation, the budgets *are* the signed maxima; with it,
-  the ceilings are, and the budgets are the session's plan (persisted with
-  the version's draft). The frozen HYBRID mode was not used because its
-  Room claims the unallocated remainder automatically.
+- **Authority and starting plan remain distinct.** The portfolio mandate
+  contains the hard envelope. The explicit plan-bound V2 authorization also
+  signs `initialAllocationDigest`, the canonical exact starting split. With
+  reallocation enabled, later movement remains possible only inside the
+  mandate; the starting digest is immutable evidence, not an additional cap.
 - **Sole demander = local.** A portfolio limit only one agent's request
   uses (derivative for perps, illiquid for NFT) is treated like that
   agent's own limit.
@@ -611,6 +613,10 @@ Fill set a maximum deployed above the stated capital.
   market intelligence).
 - Jev Score was exercised offline only (injected transport); no live
   TypeSafe call was made in this milestone.
-- Plans are held in memory per session; a restored session re-plans.
+- Structured proposals, accepted edits and their canonical commitments are
+  durable in the existing session SQLite store. Restore never re-plans: a
+  still-unsigned expired proposal is marked `PLAN_STALE`; a signed record is
+  accepted only when its session, version, agents, totals, canonical digest
+  and wallet authorization all agree.
 - Releasing a RESERVED-but-unsubmitted reservation early, and market
   re-planning on staleness before execution, are not built (§12).

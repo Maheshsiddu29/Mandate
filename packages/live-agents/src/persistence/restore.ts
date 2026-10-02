@@ -22,12 +22,15 @@
  */
 
 import { authorityId } from '@mandate/core';
-import { createPortfolioCore, decodePortfolioMandate, mandateSignedByPrincipal, mandateSignedByPrincipalV2, mandateSignedByPrincipalV2Plan, portfolioMandateDigest, type DomainBinding, type PortfolioCore, type PortfolioMandate } from '@mandate/portfolio';
+import { createPortfolioCore, decodePortfolioMandate, initialAllocationDigest, initialAllocationPlanInputOf, mandateSignedByPrincipal, mandateSignedByPrincipalV2, mandateSignedByPrincipalV2Plan, portfolioMandateDigest, validateInitialAllocationPlan, type DomainBinding, type PortfolioCore, type PortfolioMandate } from '@mandate/portfolio';
+import { demoParty } from '@mandate/portfolio/demo';
 import { normalizeDraft, type MandateDraft } from '../authoring/draft-types.ts';
+import { PLANNING_RECORD_SCHEMA, type AllocationEvidence, type PlanningRecordV1 } from '../allocation/planning-record.ts';
 import type { RestoredVersion, VersionRecord } from '../authoring/mandate-versioning.ts';
 import { compile } from '../mandate/portfolio-adapter.ts';
 import type { ReservedExecution } from '../session.ts';
 import { APPROVAL_CHAIN_ID, sessionDigest, type ApprovalMessage } from '../wallet/approval.ts';
+import { ROLES, type Role } from '../types.ts';
 import { decodeRecord } from './codec.ts';
 import { SessionStoreCorruption, type SessionStore } from './session-store.ts';
 
@@ -42,6 +45,7 @@ export interface RestoredState {
   /** The latest protocol time anything durable carries: restored time never runs below it. */
   readonly protocolFloor: bigint;
   readonly draft: MandateDraft | null;
+  readonly planning: readonly PlanningRecordV1[];
 }
 
 function bytes(h: string): Uint8Array {
@@ -120,5 +124,53 @@ export async function restoreState(store: SessionStore, bindings: readonly Domai
   const lastEvent = events[events.length - 1];
   if (lastEvent !== undefined && BigInt(lastEvent.protocolTime) > protocolFloor) protocolFloor = BigInt(lastEvent.protocolTime);
   const approvals = new Map(store.approvals().map((a) => [a.version, { message: decoded<ApprovalMessage>(a.message, `V${a.version} approval`), signature: a.signature }] as const));
-  return { versions, paused, reserved, reservedExecutions, orphans: orphans.sort(), approvals, protocolFloor, draft: decoded<MandateDraft | null>(store.draft(), 'draft') };
+  const planning = store.planning().map((text, index) => decoded<PlanningRecordV1>(text, `planning record ${index}`));
+  const ids = new Set<string>();
+  const validRole = (value: string): value is Role => (ROLES as readonly string[]).includes(value);
+  const validateEntries = (entries: readonly AllocationEvidence[], record: PlanningRecordV1, what: string): void => {
+    const roles = new Set<Role>();
+    let sum = 0n;
+    for (const entry of entries) {
+      if (!validRole(entry.role) || roles.has(entry.role) || typeof entry.atoms !== 'bigint' || entry.atoms < 0n || (entry.source !== 'FIXED' && entry.source !== 'PLANNED')) throw new SessionStoreCorruption(`${record.planningId}: ${what} invalid`);
+      roles.add(entry.role);
+      sum += entry.atoms;
+    }
+    if (entries.length !== record.enabledAgents.length || record.enabledAgents.some((role) => !roles.has(role)) || sum > record.totalCapitalAtoms) throw new SessionStoreCorruption(`${record.planningId}: ${what} totals or agents mismatch`);
+  };
+  for (const record of planning) {
+    if (record.schema !== PLANNING_RECORD_SCHEMA || record.sessionId !== store.meta.sessionId || ids.has(record.planningId) || !Number.isSafeInteger(record.mandateVersion) || record.mandateVersion < 1) throw new SessionStoreCorruption(`planning record ${indexOf(planning, record)} identity invalid`);
+    ids.add(record.planningId);
+    if (typeof record.totalCapitalAtoms !== 'bigint' || record.totalCapitalAtoms < 0n || typeof record.dynamicPoolAtoms !== 'bigint' || record.dynamicPoolAtoms < 0n || typeof record.createdAt !== 'bigint' || typeof record.freshUntil !== 'bigint') throw new SessionStoreCorruption(`${record.planningId}: numeric fields invalid`);
+    if (new Set(record.enabledAgents).size !== record.enabledAgents.length || record.enabledAgents.some((role) => !validRole(role))) throw new SessionStoreCorruption(`${record.planningId}: enabled agents invalid`);
+    validateEntries(record.proposedAllocation, record, 'proposed allocation');
+    if (record.userEditedAllocation !== null) validateEntries(record.userEditedAllocation, record, 'edited allocation');
+    if (record.acceptedAllocation !== null) validateEntries(record.acceptedAllocation, record, 'accepted allocation');
+    if ((record.initialAllocation === null) !== (record.initialAllocationDigest === null)) throw new SessionStoreCorruption(`${record.planningId}: incomplete allocation commitment`);
+    if (record.initialAllocation !== null && record.initialAllocationDigest !== null) {
+      const version = versions.find((v) => v.record.version === record.mandateVersion);
+      if (version === undefined) throw new SessionStoreCorruption(`${record.planningId}: mandate version missing`);
+      const checked = validateInitialAllocationPlan(initialAllocationPlanInputOf(record.initialAllocation), version.active.mandate);
+      if (!checked.ok || initialAllocationDigest(checked.value) !== record.initialAllocationDigest) throw new SessionStoreCorruption(`${record.planningId}: allocation digest mismatch`);
+      const accepted = record.acceptedAllocation;
+      if (accepted === null || record.initialAllocation.totalCapitalAtoms !== record.totalCapitalAtoms || record.initialAllocation.entries.some((entry) => {
+        const role = ROLES.find((r) => demoParty(r).value === entry.agent.value);
+        const stored = role === undefined ? undefined : accepted.find((x) => x.role === role);
+        return stored === undefined || stored.atoms !== entry.allocatedAtoms || stored.source !== entry.source;
+      })) throw new SessionStoreCorruption(`${record.planningId}: accepted allocation mismatch`);
+      if (version.record.authorization.method === 'WALLET_PRINCIPAL_V2_PLAN' && version.record.authorization.wallet?.initialAllocationDigest !== record.initialAllocationDigest) throw new SessionStoreCorruption(`${record.planningId}: wallet authorization digest mismatch`);
+    }
+    if (record.status === 'SIGNED') {
+      const version = versions.find((v) => v.record.version === record.mandateVersion);
+      if (version === undefined || record.initialAllocationDigest === null) throw new SessionStoreCorruption(`${record.planningId}: signed plan has no signed version`);
+    }
+    if (record.proposal !== null && (record.proposal.roomId !== record.planningId || record.proposal.freshUntil !== record.freshUntil)) throw new SessionStoreCorruption(`${record.planningId}: proposal mismatch`);
+  }
+  for (const version of versions.filter((v) => v.record.authorization.method === 'WALLET_PRINCIPAL_V2_PLAN')) {
+    if (!planning.some((record) => record.mandateVersion === version.record.version && record.status === 'SIGNED' && record.initialAllocationDigest === version.record.authorization.wallet?.initialAllocationDigest)) throw new SessionStoreCorruption(`V${version.record.version}: plan-bound authorization has no matching planning record`);
+  }
+  return { versions, paused, reserved, reservedExecutions, orphans: orphans.sort(), approvals, protocolFloor, draft: decoded<MandateDraft | null>(store.draft(), 'draft'), planning };
+}
+
+function indexOf(records: readonly PlanningRecordV1[], record: PlanningRecordV1): number {
+  return records.indexOf(record);
 }

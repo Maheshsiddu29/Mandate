@@ -163,7 +163,8 @@ export class LiveLab {
       session.close();
       return true;
     }
-    this.#sessions.set(id, { session, provider: session.provider.name, draft: session.recordedDraft, task: null, lastRun: null, lastPlan: null, lastPlanError: null, lastPolicyStress: null, lastError: null, touchedMs: this.#o.clock.nowMs() });
+    const latestPlanning = session.planningRecords.at(-1) ?? null;
+    this.#sessions.set(id, { session, provider: session.provider.name, draft: session.recordedDraft, task: null, lastRun: null, lastPlan: session.currentPlan, lastPlanError: latestPlanning?.status === 'PLAN_STALE' ? 'PLAN_STALE: The saved proposal expired; ask the agents for a fresh split.' : null, lastPolicyStress: null, lastError: null, touchedMs: this.#o.clock.nowMs() });
     return true;
   }
 
@@ -363,6 +364,7 @@ export class LiveLab {
       lastPolicyStress: entry.lastPolicyStress === null ? null : summarizePolicyStress(entry.lastPolicyStress),
       lastPlan: entry.lastPlan === null ? null : summarizePlan(entry.lastPlan),
       lastPlanError: entry.lastPlanError,
+      planning: s.planningRecords.at(-1) ?? null,
       lastError: entry.lastError,
       events: s.events.events.length,
       durable: s.store !== null,

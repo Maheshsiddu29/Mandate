@@ -93,6 +93,10 @@ export class SessionStore {
     db.exec('PRAGMA busy_timeout = 5000');
     db.exec('PRAGMA journal_mode = WAL');
     db.exec('PRAGMA synchronous = FULL');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS planning (planning_id TEXT PRIMARY KEY, ordinal INTEGER NOT NULL UNIQUE, json TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS reallocations (reallocation_id TEXT PRIMARY KEY, ordinal INTEGER NOT NULL UNIQUE, json TEXT NOT NULL);
+    `);
     return db;
   }
 
@@ -245,6 +249,31 @@ export class SessionStore {
 
   challenges(): readonly string[] {
     return (this.#db.prepare('SELECT json FROM challenges ORDER BY rowid').all() as { json: string }[]).map((r) => r.json);
+  }
+
+  // --- Planning and reallocation evidence -----------------------------------------------------
+
+  putPlanning(id: string, json: string): void {
+    const seen = this.#db.prepare('SELECT ordinal FROM planning WHERE planning_id = ?').get(id) as { ordinal: number } | undefined;
+    if (seen === undefined) {
+      const n = this.#db.prepare('SELECT COUNT(*) AS n FROM planning').get() as { n: number };
+      this.#db.prepare('INSERT INTO planning (planning_id, ordinal, json) VALUES (?, ?, ?)').run(id, Number(n.n), json);
+      return;
+    }
+    this.#db.prepare('UPDATE planning SET json = ? WHERE planning_id = ?').run(json, id);
+  }
+
+  planning(): readonly string[] {
+    return (this.#db.prepare('SELECT json FROM planning ORDER BY ordinal').all() as { json: string }[]).map((r) => r.json);
+  }
+
+  putReallocation(id: string, json: string): void {
+    const n = this.#db.prepare('SELECT COUNT(*) AS n FROM reallocations').get() as { n: number };
+    this.#db.prepare('INSERT INTO reallocations (reallocation_id, ordinal, json) VALUES (?, ?, ?)').run(id, Number(n.n), json);
+  }
+
+  reallocations(): readonly string[] {
+    return (this.#db.prepare('SELECT json FROM reallocations ORDER BY ordinal').all() as { json: string }[]).map((r) => r.json);
   }
 
   // --- Reserved executions, flags, draft --------------------------------------------------------

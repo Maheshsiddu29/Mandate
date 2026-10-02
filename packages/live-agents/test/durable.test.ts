@@ -21,6 +21,7 @@ import { revokeRoot } from '../src/mandate/portfolio-adapter.ts';
 import { SessionStore, SessionStoreCorruption, sessionDir } from '../src/persistence/session-store.ts';
 import { ManualClock } from '../src/runtime/clock.ts';
 import { CountingEntropy } from '../src/runtime/entropy.ts';
+import { StubProvider } from '../src/runtime/stub-provider.ts';
 import { LiveLab } from '../src/server/app.ts';
 import { LiveSession } from '../src/session.ts';
 import { approvalHash, type ApprovalMessage } from '../src/wallet/approval.ts';
@@ -58,6 +59,77 @@ async function durableRun(dir: string, clock = new ManualClock()): Promise<LiveS
 }
 
 describe('durable Live AI sessions', () => {
+  it('persists proposals and user edits before signing, restores them exactly, and expires stale unsigned evidence', async () => {
+    const dir = stateDir();
+    const clock = new ManualClock();
+    try {
+      const s = new LiveSession({ provider: new StubProvider(0), clock, sessionId: 'lab-planning', stateDir: dir, ...TIMEOUTS });
+      const draft = presetDraft('balanced');
+      const planned = await s.plan(draft);
+      assert.ok(planned.ok);
+      if (!planned.ok) return;
+      assert.equal(s.planningRecords.at(-1)?.status, 'PROPOSED');
+      s.close();
+
+      const proposed = await LiveSession.restore(dir, 'lab-planning', { ...TIMEOUTS, by: 'test', clock });
+      assert.deepEqual(proposed.currentPlan, planned.plan);
+      assert.equal(proposed.planningRecords.at(-1)?.status, 'PROPOSED');
+      proposed.close();
+
+      const editable = await LiveSession.restore(dir, 'lab-planning', { ...TIMEOUTS, by: 'test', clock });
+      const edited = editable.applyPlan(draft, planned.plan.roomId, { stock: '500', yield: '600' });
+      assert.ok(edited.ok);
+      if (!edited.ok) return;
+      editable.rememberDraft(edited.draft);
+      assert.equal(editable.planningRecords.at(-1)?.status, 'ACCEPTED');
+      assert.notEqual(editable.planningRecords.at(-1)?.userEditedAllocation, null);
+      editable.close();
+
+      const accepted = await LiveSession.restore(dir, 'lab-planning', { ...TIMEOUTS, by: 'test', clock });
+      assert.deepEqual(accepted.planningRecords.at(-1)?.acceptedAllocation, editable.planningRecords.at(-1)?.acceptedAllocation);
+      accepted.close();
+
+      await clock.advance(10 * 60_000);
+      const stale = await LiveSession.restore(dir, 'lab-planning', { ...TIMEOUTS, by: 'test', clock });
+      // Accepted allocation is durable evidence and is not retroactively made stale.
+      assert.equal(stale.planningRecords.at(-1)?.status, 'ACCEPTED');
+      stale.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('marks an expired unsigned proposal PLAN_STALE and fails closed on a changed signed allocation digest', async () => {
+    const unsignedDir = stateDir();
+    const clock = new ManualClock();
+    try {
+      const s = new LiveSession({ provider: new StubProvider(0), clock, sessionId: 'lab-stale-plan', stateDir: unsignedDir, ...TIMEOUTS });
+      assert.ok((await s.plan(presetDraft('balanced'))).ok);
+      s.close();
+      await clock.advance(10 * 60_000);
+      const stale = await LiveSession.restore(unsignedDir, 'lab-stale-plan', { ...TIMEOUTS, by: 'test', clock });
+      assert.equal(stale.planningRecords.at(-1)?.status, 'PLAN_STALE');
+      stale.close();
+    } finally {
+      rmSync(unsignedDir, { recursive: true, force: true });
+    }
+
+    const signedDir = stateDir();
+    try {
+      const s = new LiveSession({ provider: new StubProvider(0), clock: new ManualClock(), sessionId: 'lab-corrupt-plan', stateDir: signedDir, ...TIMEOUTS });
+      assert.ok((await s.authorize(presetDraft('balanced'), 'AUTHORIZE MANDATE V1')).ok);
+      const digest = s.planningRecords.at(-1)?.initialAllocationDigest;
+      assert.ok(digest !== null && digest !== undefined);
+      s.close();
+      const db = new DatabaseSync(join(sessionDir(signedDir, 'lab-corrupt-plan'), 'session.db'));
+      db.prepare('UPDATE planning SET json = replace(json, ?, ?)').run(digest, `0x${'00'.repeat(32)}`);
+      db.close();
+      await assert.rejects(() => LiveSession.restore(signedDir, 'lab-corrupt-plan', { ...TIMEOUTS, by: 'test' }), /allocation digest mismatch/);
+    } finally {
+      rmSync(signedDir, { recursive: true, force: true });
+    }
+  });
+
   it('survive their process: versions, authorization, reserved executions, events and the ledger', async () => {
     const dir = stateDir();
     try {

@@ -21,6 +21,7 @@ import { agentPolicyOf, amountOf, encodePortfolioMandate, headroom, portfolioMan
 import { demoParty } from '@mandate/portfolio/demo';
 import { classifyAllocation, planningPurpose } from './allocation/intent.ts';
 import { initialAllocationOf } from './allocation/commitment.ts';
+import { evidenceDigest, PLANNING_RECORD_SCHEMA, type AllocationEvidence, type PlanningRecordV1 } from './allocation/planning-record.ts';
 import { analyzeOpportunity, runPlanning, scoreCard, type AllocationPlan } from './allocation/planning.ts';
 import { allocate } from './allocation/allocator.ts';
 import { scoreBps } from './jev/scorer.ts';
@@ -250,6 +251,7 @@ export class LiveSession {
   #intent: string | null = null;
   #rooms = 0;
   readonly #plans = new Map<string, AllocationPlan>();
+  readonly #planning = new Map<string, PlanningRecordV1>();
 
   constructor(o: SessionOptions) {
     this.#o = o;
@@ -270,6 +272,12 @@ export class LiveSession {
       elapsedMs = () => this.clock.wallMs() - meta.startWallMs;
       this.#reserved.push(...restoring.state.reservedExecutions);
       for (const [v, a] of restoring.state.approvals) this.#approvals.set(v, a);
+      for (const record of restoring.state.planning) {
+        const restoredRecord = record.status === 'PROPOSED' && this.protocolNow() > record.freshUntil ? { ...record, status: 'PLAN_STALE' as const } : record;
+        this.#planning.set(record.planningId, restoredRecord);
+        if (restoredRecord.proposal !== null) this.#plans.set(record.planningId, restoredRecord.proposal);
+        if (restoredRecord !== record) restoring.store.putPlanning(record.planningId, encodeRecord(restoredRecord));
+      }
     } else {
       this.id = o.sessionId ?? `live-${this.clock.wallIso().replace(/\D/g, '').slice(0, 17)}`;
       this.restored = false;
@@ -370,6 +378,16 @@ export class LiveSession {
     this.store?.putDraft(JSON.stringify(d));
   }
 
+  /** Durable planning evidence in creation order. */
+  get planningRecords(): readonly PlanningRecordV1[] {
+    return [...this.#planning.values()];
+  }
+
+  /** The latest structured proposal, including after a process restart. */
+  get currentPlan(): AllocationPlan | null {
+    return this.planningRecords.at(-1)?.proposal ?? null;
+  }
+
   close(): void {
     this.store?.close();
   }
@@ -417,7 +435,18 @@ export class LiveSession {
     if (this.restored) return { ok: false, code: 'SESSION_RESTORED', message: 'A restored session authorizes nothing new. Start a new session.', issues: [] };
     const amending = this.versions.active !== null;
     if (amending) this.events.emit('MANDATE_AMENDMENT_STARTED', { data: { from: this.versions.active?.version ?? null, to: this.versions.nextVersion } });
-    return this.#authorized(await this.versions.authorize(draft, confirmation, this.protocolNow()), amending);
+    const result = this.#authorized(await this.versions.authorize(draft, confirmation, this.protocolNow()), amending);
+    if (result.ok) {
+      const active = this.versions.active;
+      if (active !== null) {
+        const allocation = initialAllocationOf(draft, active.mandate);
+        if (allocation.ok) {
+          const record = this.#acceptanceFor(draft, allocation, result.record.version);
+          this.#savePlanning({ ...record, status: 'SIGNED' });
+        }
+      }
+    }
+    return result;
   }
 
   /**
@@ -451,8 +480,10 @@ export class LiveSession {
     const principal = address.toLowerCase();
     const p = this.versions.prepare(draft, this.protocolNow(), { kind: 'eip155-address', value: principal });
     if (!p.ok) return { ok: false, code: p.code, message: p.message };
+    if (this.planningRecords.some((r) => r.mandateVersion === p.prepared.version && r.status === 'PLAN_STALE') && classifyAllocation(draft).intent !== 'FIXED') return { ok: false, code: 'DRAFT_INVALID', message: 'The accepted allocation plan is stale. Ask the agents for a fresh split before signing.' };
     const allocation = initialAllocationOf(draft, p.prepared.mandate);
     if (!allocation.ok) return { ok: false, code: 'DRAFT_INVALID', message: `The initial allocation cannot be signed: ${allocation.reason}.` };
+    this.#acceptanceFor(draft, allocation);
     if (p.prepared.mandate.principal.value !== principal) return { ok: false, code: 'WALLET_ADDRESS_INVALID', message: 'The mandate principal is not the wallet address.' };
     const id = this.#entropy.bytes32();
     const issuedAt = BigInt(Math.floor(this.clock.wallMs() / 1000));
@@ -617,6 +648,8 @@ export class LiveSession {
       return r;
     }
     const a = r.record.authorization;
+    const planning = this.planningRecords.findLast((x) => x.mandateVersion === r.record.version && x.initialAllocationDigest === a.wallet?.initialAllocationDigest);
+    if (planning !== undefined) this.#savePlanning({ ...planning, status: 'SIGNED' });
     this.events.emit('MANDATE_VERSION_AUTHORIZED', {
       mandateVersion: r.record.version,
       data: {
@@ -683,6 +716,36 @@ export class LiveSession {
         draftKey: draftKey(base),
       });
       this.#plans.set(roomId, plan);
+      const view = classifyAllocation(base);
+      const proposed: AllocationEvidence[] = [
+        ...view.fixed.map((role) => ({ role, atoms: view.budgets[role] as bigint, source: 'FIXED' as const })),
+        ...plan.allocations.map((a) => ({ role: a.role, atoms: a.atoms, source: 'PLANNED' as const })),
+      ];
+      const record: PlanningRecordV1 = {
+        schema: PLANNING_RECORD_SCHEMA,
+        planningId: roomId,
+        sessionId: this.id,
+        mandateVersion: this.versions.nextVersion,
+        allocationIntent: view.intent,
+        totalCapitalAtoms: view.deployableAtoms as bigint,
+        enabledAgents: view.enabled,
+        fixedBudgets: proposed.filter((x) => x.source === 'FIXED'),
+        dynamicPoolAtoms: view.poolAtoms as bigint,
+        opportunityCardDigests: plan.cards.map((card) => evidenceDigest(card)),
+        jevEvidenceDigest: plan.jev === 'NONE' ? null : evidenceDigest({ evidence: plan.jev, scores: plan.scores }),
+        proposedAllocation: proposed,
+        userEditedAllocation: null,
+        acceptedAllocation: null,
+        initialAllocation: null,
+        initialAllocationDigest: null,
+        autoReallocate: view.autoReallocate,
+        createdAt: plan.createdAt,
+        acceptedAt: null,
+        freshUntil: plan.freshUntil,
+        status: 'PROPOSED',
+        proposal: plan,
+      };
+      this.#savePlanning(record);
       return { ok: true, plan };
     } finally {
       this.#running = false;
@@ -696,6 +759,50 @@ export class LiveSession {
   /** A plan this session proposed, by its Room id. */
   planOf(roomId: string): AllocationPlan | null {
     return this.#plans.get(roomId) ?? null;
+  }
+
+  #savePlanning(record: PlanningRecordV1): void {
+    this.#planning.set(record.planningId, record);
+    this.store?.putPlanning(record.planningId, encodeRecord(record));
+  }
+
+  #allocationEvidence(draft: MandateDraft): readonly AllocationEvidence[] {
+    const view = classifyAllocation(draft);
+    return view.enabled.map((role) => ({ role, atoms: view.budgets[role] ?? 0n, source: view.fixed.includes(role) ? 'FIXED' : 'PLANNED' }));
+  }
+
+  #acceptanceFor(draft: MandateDraft, allocation: ReturnType<typeof initialAllocationOf> & { readonly ok: true }, mandateVersion = this.versions.nextVersion): PlanningRecordV1 {
+    const view = classifyAllocation(draft);
+    const accepted = this.#allocationEvidence(draft);
+    const existing = this.planningRecords.findLast((r) => r.mandateVersion === mandateVersion && r.status !== 'PLAN_STALE');
+    const now = this.protocolNow();
+    const base: PlanningRecordV1 = existing ?? {
+      schema: PLANNING_RECORD_SCHEMA,
+      planningId: `${view.intent.toLowerCase()}-v${mandateVersion}`,
+      sessionId: this.id,
+      mandateVersion,
+      allocationIntent: view.intent,
+      totalCapitalAtoms: view.deployableAtoms ?? 0n,
+      enabledAgents: view.enabled,
+      fixedBudgets: accepted.filter((x) => x.source === 'FIXED'),
+      dynamicPoolAtoms: view.poolAtoms ?? 0n,
+      opportunityCardDigests: [],
+      jevEvidenceDigest: null,
+      proposedAllocation: accepted,
+      userEditedAllocation: null,
+      acceptedAllocation: accepted,
+      initialAllocation: null,
+      initialAllocationDigest: null,
+      autoReallocate: view.autoReallocate,
+      createdAt: now,
+      acceptedAt: now,
+      freshUntil: now,
+      status: 'ACCEPTED',
+      proposal: null,
+    };
+    const record: PlanningRecordV1 = { ...base, acceptedAllocation: accepted, initialAllocation: allocation.plan, initialAllocationDigest: allocation.digest, acceptedAt: base.acceptedAt ?? now, status: 'ACCEPTED' };
+    this.#savePlanning(record);
+    return record;
   }
 
   /**
@@ -730,6 +837,12 @@ export class LiveSession {
         authority: 'NONE — a draft until you sign it',
       },
     });
+    const record = this.#planning.get(roomId);
+    if (record !== undefined) {
+      const accepted = this.#allocationEvidence(out);
+      const edited = accepted.some((x) => !record.proposedAllocation.some((p) => p.role === x.role && p.atoms === x.atoms));
+      this.#savePlanning({ ...record, userEditedAllocation: edited ? accepted : null, acceptedAllocation: accepted, acceptedAt: this.protocolNow(), status: 'ACCEPTED', initialAllocation: null, initialAllocationDigest: null });
+    }
     return { ok: true, draft: out };
   }
 

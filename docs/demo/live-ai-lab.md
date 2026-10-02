@@ -83,9 +83,9 @@ labelled fallback.
 
 | | Wallet path | Demo principal key (fallback) |
 | --- | --- | --- |
-| What authorizes a version | the page sends `spine: "V2"`. The wallet signs EIP-712 `PortfolioMandateV2` of the exact mandate digest, for this session, chain 46630, a 300 s server challenge, once; the server rebuilds and verifies it (`POST …/wallet/challenge`, `POST …/wallet/authorize`). Omitting `spine` on the API is still the B.5.3 `PortfolioMandateApproval` | `POST …/authorize` with the exact text `AUTHORIZE MANDATE V<n>` |
+| What authorizes a version | the page sends `spine: "V2"`. The wallet signs EIP-712 `PortfolioMandateAuthorizationV2` over the exact mandate digest and canonical accepted initial-allocation digest, for this session and chain 46630; the server rebuilds and verifies it (`POST …/wallet/challenge`, `POST …/wallet/authorize`). Omitting `spine` on the API is still the B.5.3 `PortfolioMandateApproval` | `POST …/authorize` with the exact text `AUTHORIZE MANDATE V<n>` |
 | Principal identity | the recovered wallet address, and on V2 that address is the protocol principal | the demonstration key's address |
-| Signature the frozen Portfolio Verifier checks | V2: the wallet's `PortfolioMandateV2` signature, checked again by `reverifySpine` at settlement. B.5.3 (spine omitted): the demonstration key's prehash, made only after the wallet approval verified | the demonstration key's prehash |
+| Signature the frozen Portfolio Verifier checks | current V2: the wallet's plan-bound `PortfolioMandateAuthorizationV2` signature, checked again by `reverifySpine` at settlement. Legacy V2 remains explicitly versioned and readable. B.5.3 (spine omitted): the demonstration key's prehash, made only after the wallet approval verified | the demonstration key's prehash |
 | Browser wallet calls | `eth_requestAccounts`, `eth_accounts`, `eth_chainId`, `wallet_switchEthereumChain`, `wallet_addEthereumChain`, `eth_signTypedData_v4` — never a transaction | none |
 | Domain execution | V2: a wallet that is not the manifest principal signs `MandateAuthorization` once per execution; the deployer pays gas and broadcasts. The portfolio signature is not that signature. B.5.3 does not delegate, and that version never sends | not delegated |
 
@@ -760,10 +760,10 @@ The server (`packages/live-agents/src/server/`):
 | --- | --- |
 | `GET /api/live/status` | providers available, presets, roles, catalog, policy cases |
 | `POST /api/live/sessions` | `{ provider: "openai" \| "stub", seed?, chaos? }` |
-| `GET /api/live/sessions/:id` | draft, validation, guardrails, versions (with how each was authorized), last run and policy-stress summaries, each reservation's ledger status, `durable`, `restored` |
+| `GET /api/live/sessions/:id` | draft, validation, guardrails, versions (with how each was authorized), the durable planning record and restored proposal, last run and policy-stress summaries, each reservation's ledger status, `durable`, `restored` |
 | `POST …/draft` | `{ preset }`, `{ prompt }` or `{ from: "active" }` (to amend) |
 | `POST …/draft/fill`, `…/draft/field`, `…/draft/resolve` | fill unset fields from a preset; set one field; resolve one interpretation issue |
-| `POST …/wallet/challenge` | `{ address, spine?: "V2" }` → a one-time EIP-712 approval. Omitted spine is the B.5.3 `PortfolioMandateApproval`. `"V2"` is `PortfolioMandateV2` |
+| `POST …/wallet/challenge` | `{ address, spine?: "V2" }` → a one-time EIP-712 approval. Omitted spine is the B.5.3 `PortfolioMandateApproval`. `"V2"` is the plan-bound `PortfolioMandateAuthorizationV2` and returns `initialAllocationDigest` |
 | `GET /api/live/settlement` | on `agents:lab` only: spine V2 is available, the operator phrase, gas payer `DEPLOYER`. `agents:serve` answers 404. A missing manifest or key answers 503 |
 | `POST …/settle` | on `agents:lab` only: `{ mode: "DRY_RUN" \| "SEND", gateSignature?, sendAuthorization?, cancel? }` — the same spine as `agents:settle:v2`. The wallet does not broadcast |
 | `POST …/wallet/authorize` | `{ challenge, signature }` — the server rebuilds the message and verifies the recovered signer (B.5.3) |
