@@ -151,8 +151,37 @@ test('several executable choices: the evidence view labels fixture market data, 
   assert.equal(swap?.chosenId, 'route-c');
   // The rationale is the model's, verbatim; nothing is generated client-side.
   assert.equal(swap?.rationale, 'Better quote than route-a at this size.');
-  assert.match(sheets, /executable under your mandate/);
-  assert.match(sheets, /market data \$\{agent\.eligibility\.marketEvidence\.join/);
+  assert.match(sheets, /allowed by your mandate/);
+  assert.match(sheets, /market data \$\{e\.marketEvidence\.join/);
   assert.match(sheets, /<Pill tone="accent">CHOSEN<\/Pill>/);
-  assert.doesNotMatch(agentsUi, /executable under your mandate|CHOSEN|marketEvidence/);
+  assert.doesNotMatch(agentsUi, /allowed by your mandate|CHOSEN|marketEvidence/);
+});
+
+test('policy and capability are separate evidence: allowed, executable and settlement-capable are reported apart', () => {
+  const events = [
+    event(0, 'AGENT_CANDIDATES_EVALUATED', {
+      basis: 'ADVISORY', marketEvidence: ['FIXTURE'], discovered: ['nvda-note-a', 'nvda-note-c', 'nvda-token-b'], actionable: ['nvda-note-a', 'nvda-note-c'],
+      excluded: [{ candidateId: 'nvda-token-b', candidate: 'NVDA · NVIDIA Stock Token', reasons: STOCK_RAW }],
+      settlementProfile: 'live-lab.robinhood-testnet-fixture.v1', executable: ['nvda-note-a'],
+      capability: [
+        { candidateId: 'nvda-note-a', status: 'SETTLEMENT_CAPABLE', connector: 'robinhood-testnet-fixture', reason: null },
+        { candidateId: 'nvda-note-c', status: 'SETTLEMENT_UNSUPPORTED', connector: 'robinhood-testnet-fixture', reason: 'FIXTURE_UNDEFINED_FOR_CANDIDATE' },
+      ],
+    }, 'stock'),
+  ];
+  const e = deriveAgents(events).find((a) => a.role === 'stock')?.eligibility;
+  assert.deepEqual(e?.actionable, ['nvda-note-a', 'nvda-note-c']);
+  assert.deepEqual(e?.executable, ['nvda-note-a']);
+  assert.equal(e?.settlementProfile, 'live-lab.robinhood-testnet-fixture.v1');
+  assert.deepEqual(e?.capability.map((c) => [c.candidateId, c.status, c.reason]), [['nvda-note-a', 'SETTLEMENT_CAPABLE', null], ['nvda-note-c', 'SETTLEMENT_UNSUPPORTED', 'FIXTURE_UNDEFINED_FOR_CANDIDATE']]);
+  // Older runs reported no capability: the offered set was the actionable set.
+  const old = deriveAgents([event(0, 'AGENT_CANDIDATES_EVALUATED', { discovered: ['route-a'], actionable: ['route-a'], excluded: [] }, 'swap')]).find((a) => a.role === 'swap')?.eligibility;
+  assert.deepEqual([old?.executable, old?.capability, old?.settlementProfile], [['route-a'], [], null]);
+  // The labels say what each is; settlement is never claimed as anything but the valueless fixture.
+  assert.match(sheets, /POLICY ELIGIBLE/);
+  assert.match(sheets, /SETTLEMENT CAPABLE/);
+  assert.match(sheets, /NOT SETTLEABLE · NOT OFFERED/);
+  assert.match(sheets, /Robinhood Chain testnet fixture \(valueless MDUSD → MDEMO\)/);
+  assert.doesNotMatch(sheets, /NVDA (was )?traded on Robinhood/i);
+  assert.doesNotMatch(agentsUi, /SETTLEMENT CAPABLE|POLICY ELIGIBLE/);
 });

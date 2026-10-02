@@ -3,7 +3,7 @@
 import { LatticeLoader } from "@/components/react-bits/lattice-loader";
 import { useState, type ReactNode } from "react";
 import { rec, str, type JsonRecord, type LiveEvent } from "./live-client";
-import { explainReasons, formatDuration, groupEventsByElapsed, ROLE_TITLES, usd, type AgentCard, type RoleName, type SettlementView, type StressAttempt, type TradeReview } from "./live-model";
+import { explainReasons, formatDuration, groupEventsByElapsed, ROLE_TITLES, usd, type AgentCard, type CandidateCapability, type RoleName, type SettlementView, type StressAttempt, type TradeReview } from "./live-model";
 import { MandateReasons, mandateVerdict } from "./stage-agents";
 import { AgentGlyph, Pill } from "./workspace-ui";
 
@@ -88,10 +88,19 @@ export function ReviewBody(props: {
   );
 }
 
+/** The connector capability of one actionable candidate, in words. Capability is never authorization. */
+function CapabilityPill({ capability }: { readonly capability: CandidateCapability | undefined }): ReactNode {
+  if (capability === undefined) return null;
+  if (capability.status === "SETTLEMENT_CAPABLE") return <><Pill tone="good">SETTLEMENT CAPABLE</Pill><span>Robinhood Chain testnet fixture (valueless MDUSD → MDEMO)</span></>;
+  if (capability.status === "SETTLEMENT_UNSUPPORTED") return <><Pill tone="warn">NOT SETTLEABLE · NOT OFFERED</Pill><span>{capability.reason ?? "the active connector cannot execute it"}</span></>;
+  return <Pill>NO TESTNET SETTLEMENT</Pill>;
+}
+
 /**
- * Developer evidence: what each agent discovered, what eligibility let it
- * choose from, and why the rest stayed discovery only. Eligibility is
- * advisory; Mandate still screened every proposal in full.
+ * Developer evidence: what each agent discovered, what the mandate allows
+ * (policy), what the active settlement connector can execute (capability),
+ * and why the rest stayed discovery only. Neither filter is authorization;
+ * Mandate still screened every proposal in full.
  */
 function CandidateEvidence({ agents }: { readonly agents: readonly AgentCard[] }): ReactNode {
   const evaluated = agents.filter((agent) => agent.eligibility !== null);
@@ -99,25 +108,35 @@ function CandidateEvidence({ agents }: { readonly agents: readonly AgentCard[] }
   return (
     <section className="mw-candidates" aria-label="Candidate eligibility">
       <h3 className="mw-review__h">Candidates</h3>
-      <p className="mw-fine">Discovery is broad; each model chose only among actionable candidates. Eligibility is advisory — every proposal was still checked by Mandate.</p>
+      <p className="mw-fine">Discovery is broad; each model chose only among candidates your mandate allows and the active settlement connector can execute. Neither is authorization — every proposal was still checked by Mandate.</p>
       <ul>
-        {evaluated.map((agent) => (
-          <li key={agent.role}>
-            <p className="mw-decisions__name"><span className="mw-glyph mw-glyph--sm"><AgentGlyph role={agent.role} size={16} /></span>{agent.title}</p>
-            <p className="mw-fine">{agent.eligibility?.discovered.length ?? 0} discovered · {agent.eligibility?.actionable.length ?? 0} executable under your mandate{agent.eligibility?.marketEvidence.length ? ` · market data ${agent.eligibility.marketEvidence.join(", ")}` : ""}{agent.modelEvidence === null ? "" : ` · decided by ${agent.modelEvidence}`}</p>
-            <ul className="mw-candidates__list">
-              {agent.eligibility?.actionable.map((id) => <li key={id}><code>{id}</code><Pill tone="good">ACTIONABLE</Pill>{agent.chosenId === id ? <Pill tone="accent">CHOSEN</Pill> : null}</li>)}
-              {agent.eligibility?.excluded.map((row) => (
-                <li key={row.candidateId}>
-                  <code>{row.candidateId}</code><Pill>DISCOVERY ONLY</Pill>
-                  <span>{explainReasons(row.codes).headline}</span>
-                  <MandateReasons reasons={row.codes} />
-                </li>
-              ))}
-              {agent.eligibility?.actionable.length === 0 ? <li className="mw-fine">No eligible opportunities under this mandate.</li> : null}
-            </ul>
-          </li>
-        ))}
+        {evaluated.map((agent) => {
+          const e = agent.eligibility;
+          if (e === null) return null;
+          return (
+            <li key={agent.role}>
+              <p className="mw-decisions__name"><span className="mw-glyph mw-glyph--sm"><AgentGlyph role={agent.role} size={16} /></span>{agent.title}</p>
+              <p className="mw-fine">{e.discovered.length} discovered · {e.actionable.length} allowed by your mandate · {e.executable.length} executable{e.marketEvidence.length ? ` · market data ${e.marketEvidence.join(", ")}` : ""}{agent.modelEvidence === null ? "" : ` · decided by ${agent.modelEvidence}`}</p>
+              <ul className="mw-candidates__list">
+                {e.actionable.map((id) => (
+                  <li key={id}>
+                    <code>{id}</code><Pill tone="good">POLICY ELIGIBLE</Pill>
+                    <CapabilityPill capability={e.capability.find((c) => c.candidateId === id)} />
+                    {agent.chosenId === id ? <Pill tone="accent">CHOSEN</Pill> : null}
+                  </li>
+                ))}
+                {e.excluded.map((row) => (
+                  <li key={row.candidateId}>
+                    <code>{row.candidateId}</code><Pill>DISCOVERY ONLY</Pill>
+                    <span>{explainReasons(row.codes).headline}</span>
+                    <MandateReasons reasons={row.codes} />
+                  </li>
+                ))}
+                {e.actionable.length === 0 ? <li className="mw-fine">No eligible opportunities under this mandate.</li> : null}
+              </ul>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );

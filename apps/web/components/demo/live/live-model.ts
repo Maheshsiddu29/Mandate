@@ -159,21 +159,41 @@ export interface ExcludedCandidate {
   readonly codes: readonly string[];
 }
 
+/** Whether the active settlement profile's connector can execute an actionable candidate. Not authorization. */
+export interface CandidateCapability {
+  readonly candidateId: string;
+  /** SETTLEMENT_CAPABLE, SETTLEMENT_UNSUPPORTED (never offered) or OUTSIDE_PROFILE (the profile settles nothing in this domain). */
+  readonly status: string;
+  readonly connector: string | null;
+  readonly reason: string | null;
+}
+
 export interface CandidateEligibility {
   readonly discovered: readonly string[];
+  /** Policy: allowed by the mandate. */
   readonly actionable: readonly string[];
+  /** Policy and capability: what the model was offered. Older runs: the actionable set. */
+  readonly executable: readonly string[];
   readonly excluded: readonly ExcludedCandidate[];
   /** Where the candidates' economics come from, e.g. FIXTURE. Empty in older runs. */
   readonly marketEvidence: readonly string[];
+  /** The active settlement profile's id; null when none was reported. */
+  readonly settlementProfile: string | null;
+  readonly capability: readonly CandidateCapability[];
 }
 
 function eligibilityOf(data: JsonRecord): CandidateEligibility {
   const ids = (v: Json | undefined) => arr(v).map((item) => str(item));
+  const text = (v: Json | undefined) => (typeof v === "string" ? v : null);
+  const actionable = ids(data.actionable);
   return {
     discovered: ids(data.discovered),
-    actionable: ids(data.actionable),
+    actionable,
+    executable: data.executable === undefined ? actionable : ids(data.executable),
     excluded: arr(data.excluded).map(rec).map((row) => ({ candidateId: str(row.candidateId), candidate: str(row.candidate), codes: reasonCodes(arr(row.reasons)) })),
     marketEvidence: ids(data.marketEvidence),
+    settlementProfile: text(data.settlementProfile),
+    capability: arr(data.capability).map(rec).map((row) => ({ candidateId: str(row.candidateId), status: str(row.status), connector: text(row.connector), reason: text(row.reason) })),
   };
 }
 
