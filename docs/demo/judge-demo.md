@@ -15,6 +15,13 @@ Agents propose.  Agents negotiate.  Mandate authorizes.  Markets settle.
 VALID AGENT != VALID ACTION
 ```
 
+The same property in a live OpenAI run, when the Stock Agent selects the
+cheaper lookalike `nvda-token-b` and Mandate blocks it
+(`REGISTRY:ISSUER_NOT_ALLOWED` or `REGISTRY:SYNTHETIC_NOT_ALLOWED`):
+[Live Demo — Stock Agent Blocked by Mandate](live-ai-lab.md#stock-agent-blocked-by-mandate).
+Choosing the approved `nvda-note-a` on another run is authorized. Both
+outcomes are intentional.
+
 ## 1. What the judge sees
 
 One principal, one signed Portfolio Mandate, five deterministic agents, ten
