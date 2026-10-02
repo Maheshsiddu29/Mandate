@@ -19,6 +19,7 @@ export { PortfolioTag, PORTFOLIO_SCHEMA_VERSION, PORTFOLIO_RECEIPT_SCHEMA_VERSIO
 export * from './resources.ts';
 export * from './scope.ts';
 export * from './mandate.ts';
+export * from './initial-allocation.ts';
 export * from './mandate-v2.ts';
 export * from './candidate.ts';
 export * from './proposal.ts';

@@ -19,6 +19,18 @@ canonical vector stay exactly as they are. Everything below is coordination
 
 Unused capital stays in the wallet. Mandate does not force deployment.
 
+### Signed initial allocation commitment
+
+Every accepted FIXED, DYNAMIC or HYBRID plan has one canonical
+`PORTFOLIO_INITIAL_ALLOCATION.V1` object. It binds the canonical portfolio
+mandate digest, deployable capital, allocation intent, reallocation permission,
+one FIXED/PLANNED entry for every enabled agent (including zero allocations),
+and the capital kept unallocated. Entries are ordered by canonical agent
+encoding; amounts are unsigned fixed-width atoms; duplicates, disabled agents,
+incoherent totals, non-canonical integers and trailing bytes are refused. Its
+identity is Keccak-256 of the tagged canonical encoding. Model rationale,
+presentation copy and UI labels are deliberately excluded.
+
 ---
 
 ## 1. Current behaviour (audit of the local code at `8fd923a`)
