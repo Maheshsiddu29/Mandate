@@ -1018,6 +1018,7 @@ export class LiveSession {
     const pool = rawPool - (rawPool % 1_000_000n);
     const skip = (reason: string) => {
       this.events.emit('REALLOCATION_SKIPPED', { data: { reason, released: released.map((u) => ({ role: u.role, budget: v(u.budget) })), ledgerAvailable: v(available), effect: 'Unused capital stays in your wallet.' } });
+      if (totalUnused > 0n) this.events.emit('CAPITAL_UNUSED', { data: { agents: unused.filter((u) => u.unused > 0n).map((u) => ({ role: u.role, budget: v(u.budget), reserved: v(u.reserved), unused: v(u.unused) })), total: v(totalUnused), reallocation: 'AUTHORIZED_NOTHING_REASSIGNED', effect: 'Stays in your wallet. Mandate does not force deployment.' } });
       return result;
     };
     if (pool === 0n) return skip(releasedAtoms === 0n ? 'NOTHING_RELEASED' : 'NOTHING_AVAILABLE_IN_LEDGER');
