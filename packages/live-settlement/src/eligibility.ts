@@ -61,7 +61,8 @@ export function checkEligibility(view: LiveAuthorityView, x: AuthorizedExecution
   // 1–2: a closed-set choice, built by trusted local code.
   const trusted = DOMAIN_AGENTS.stock.candidates.find((c) => c.id === x.candidateId);
   if (trusted === undefined || r.role !== 'stock') return no(1, 'CANDIDATE_ID_NOT_IN_CLOSED_SET');
-  const built = validateActionCandidate(trusted.build(1n, 0n));
+  // Probed at the candidate's own minimum: identity does not depend on size, and a fee-aware build has no 1-atom quantity.
+  const built = validateActionCandidate(trusted.build(trusted.minAtoms, 0n));
   if (!built.ok || built.value.kind !== 'STOCK_BUY' || p.candidate.kind !== 'STOCK_BUY') return no(2, 'CANDIDATE_NOT_A_TRUSTED_STOCK_BUY');
   if (p.candidate.representation !== built.value.representation || p.candidate.account !== built.value.account) return no(2, 'CANDIDATE_NOT_TRUSTED_BUILD');
 

@@ -53,7 +53,7 @@ export const CATALOG: { readonly [S in CatalogSet]: readonly CatalogEntry[] } = 
     ['genesis-collection', 'Genesis collection contract'],
     ['alpha-vault', 'Alpha USD vault (ERC-4626)'],
     ['btc-perp', 'BTC perpetual on Lighter testnet'],
-    ['nvda-backed-note-c', 'Fully backed NVDA note Series C, open redemption (fixture; no deployed testnet market)'],
+    ['nvda-backed-note-c', 'Fully backed NVDA note Series C, open redemption (fixture; settles through the valueless testnet MDEMO fixture)'],
     ['beta-vault', 'Beta USD vault (ERC-4626)'],
   ]),
   venues: entries(PORTFOLIO_SCOPE.venues, [

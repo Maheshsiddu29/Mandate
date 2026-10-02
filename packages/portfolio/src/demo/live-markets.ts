@@ -18,10 +18,11 @@
  * | yield | the Alpha vault | a Beta vault from a second reviewed issuer, on its own protocol | a higher advertised APY with a smaller deposit capacity |
  *
  * Prices, fees and quotes are constants, not market data. The stock gate
- * here is the offline reviewed configuration; only the V1 note has a
- * deployed Robinhood Chain testnet market (`@mandate/live-settlement`), so
- * only it can be settled there — any other stock reservation is refused at
- * settlement, unchanged and fail-closed.
+ * here is the offline reviewed configuration. On Robinhood Chain testnet
+ * both notes are exercised through the one deployed fixture market — a
+ * quantity-preserving BUY of the valueless MDEMO for MDUSD — each bound to
+ * its own exact candidate (`@mandate/live-settlement`, fixture-mapping.ts);
+ * any other stock reservation is refused at settlement, fail-closed.
  */
 
 import type { CanonicalAssetId, Identifier } from '@mandate/kernel';

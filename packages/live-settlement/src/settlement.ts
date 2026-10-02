@@ -294,7 +294,7 @@ export class LiveSettlement {
     const fault = (f: FaultPoint) => o.fault?.(f);
     const authorization = session.versions.records.find((r) => r.version === x.version)?.authorization;
     let principals = principalBinding(authorization, d);
-    let ids = { proposal: x.proposal, candidate: x.candidateDigest, child: x.child, reservation: x.reservation, receiptDigest: x.receiptDigest, bindingDigest: s.bindingDigest, fixture: TESTNET_SETTLEMENT_FIXTURE.id, mode: o.mode, sessionId: session.id, principals };
+    let ids = { proposal: x.proposal, candidate: x.candidateDigest, candidateId: x.candidateId, semanticCandidate: s.semantic.semantic, child: x.child, reservation: x.reservation, receiptDigest: x.receiptDigest, bindingDigest: s.bindingDigest, fixture: TESTNET_SETTLEMENT_FIXTURE.id, mode: o.mode, sessionId: session.id, principals };
     const ineligible = (stage: string, reason: string): SettlementOutcome => {
       this.#emit('DOMAIN_EXECUTION_INELIGIBLE', { ...ids, stage, reason, transactions: 0 });
       return { status: 'INELIGIBLE', stage, reason, signatures: 0, broadcasts: 0 };
