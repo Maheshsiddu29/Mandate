@@ -100,10 +100,19 @@ export function SmoothScroll({ children }: { children: ReactNode }): ReactNode {
     const initialFrame = requestAnimationFrame(scrollToHash);
     document.addEventListener("click", handleAnchorClick);
     window.addEventListener("hashchange", scrollToHash);
+    // A modal sheet owns the wheel. Lenis otherwise scrolls the page behind it.
+    const syncSheetLock = (): void => {
+      const locked = document.documentElement.hasAttribute("data-sheet-open") || document.querySelector("dialog[open]") !== null;
+      if (locked) lenis.stop();
+      else lenis.start();
+    };
+    const sheetLock = new MutationObserver(syncSheetLock);
+    sheetLock.observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ["open", "data-sheet-open"] });
 
     return () => {
       document.removeEventListener("click", handleAnchorClick);
       window.removeEventListener("hashchange", scrollToHash);
+      sheetLock.disconnect();
       cancelAnimationFrame(animationFrame);
       cancelAnimationFrame(initialFrame);
       lenisRef.current = null;
