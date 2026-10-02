@@ -184,19 +184,25 @@ const ZERO_TEXT: { readonly [k: string]: string } = {
 
 /** Why this split, in a sentence or two — from the allocator's own numbers, never from model prose. */
 export function explainPlan(allocations: readonly AgentAllocation[], cards: readonly OpportunityCard[], unallocated: bigint): string {
-  const funded = allocations.filter((a) => a.atoms > 0n).sort((x, y) => (y.weight > x.weight ? 1 : y.weight < x.weight ? -1 : 0));
+  const name = (r: Role) => ROLE_LABELS[r].replace(' Agent', '');
+  const join = (xs: readonly string[]) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs.at(-1) as string}`);
+  const funded = allocations.filter((a) => a.atoms > 0n);
   const parts: string[] = [];
   if (funded.length === 0) parts.push('No agent made a strong enough case: nothing is allocated, and the whole pool stays in your wallet.');
   else {
-    const top = funded.filter((a) => a.weight === funded[0]?.weight).map((a) => ROLE_LABELS[a.role].replace(' Agent', ''));
-    if (funded.length > 1 && top.length < funded.length) parts.push(`${top.join(' and ')} received more capital because ${top.length > 1 ? 'their' : 'its'} opportunity and execution ratings were strongest under your objective.`);
-    else if (funded.length > 1) parts.push('The funded agents made equally strong cases and share the pool by weight.');
-    const capped = funded.filter((a) => a.capped).map((a) => ROLE_LABELS[a.role].replace(' Agent', ''));
-    if (capped.length > 0) parts.push(`${capped.join(' and ')} ${capped.length > 1 ? 'are' : 'is'} at the most ${capped.length > 1 ? 'they' : 'it'} can usefully take.`);
+    const capped = funded.filter((a) => a.capped);
+    const shared = funded.filter((a) => !a.capped);
+    if (capped.length > 0) parts.push(`${join(capped.map((a) => name(a.role)))} ${capped.length > 1 ? 'each received' : 'received'} the most ${capped.length > 1 ? 'they' : 'it'} said ${capped.length > 1 ? 'they' : 'it'} can usefully take.`);
+    if (shared.length > 1) {
+      const top = shared.reduce((m, a) => (a.weight > m ? a.weight : m), 0n);
+      const strongest = shared.filter((a) => a.weight === top).map((a) => name(a.role));
+      if (strongest.length < shared.length) parts.push(`Of the rest, ${join(strongest)} received more because ${strongest.length > 1 ? 'their' : 'its'} opportunity and execution ratings were strongest under your objective.`);
+      else parts.push(`${join(shared.map((a) => name(a.role)))} made equally strong cases and share the rest evenly.`);
+    } else if (shared.length === 1 && capped.length > 0) parts.push(`${name((shared[0] as AgentAllocation).role)} received the rest of what could be used.`);
   }
   for (const a of allocations.filter((x) => x.zero !== null)) {
     const regime = cards.find((c) => c.role === a.role)?.marketRegime;
-    parts.push(`${ROLE_LABELS[a.role].replace(' Agent', '')}: ${ZERO_TEXT[a.zero as string] ?? 'nothing allocated'}${regime === 'STRESSED' ? ' (stressed conditions)' : ''}.`);
+    parts.push(`${name(a.role)}: ${ZERO_TEXT[a.zero as string] ?? 'nothing allocated'}${regime === 'STRESSED' ? ' (stressed conditions)' : ''}.`);
   }
   if (unallocated > 0n && funded.length > 0) parts.push(`${usdcText(unallocated)} USDC stays unallocated in your wallet.`);
   return parts.join(' ');

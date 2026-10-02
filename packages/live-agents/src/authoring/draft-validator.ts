@@ -282,7 +282,8 @@ export function validateDraft(d: MandateDraft, ctx: ValidationContext): DraftVal
   const blocking = () => issues.some((i) => i.severity === 'BLOCKING');
   const guardrails: GuardrailRow[] = [];
   const cap = cap0;
-  if (cap === null || issues.some((i) => i.code === 'MISSING_VALUE' || i.code === 'INVALID_VALUE')) return { ok: false, issues, mandate: null, guardrails, allocation: plan };
+  // A warning (an agent enabled with a maximum of 0, e.g. one that abstained in planning) never stops the build.
+  if (cap === null || issues.some((i) => i.severity === 'BLOCKING' && (i.code === 'MISSING_VALUE' || i.code === 'INVALID_VALUE'))) return { ok: false, issues, mandate: null, guardrails, allocation: plan };
 
   // Build the mandate input exactly as it would be signed.
   const limits: ResourceAmountInput[] = [

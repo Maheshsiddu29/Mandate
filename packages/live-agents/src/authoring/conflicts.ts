@@ -92,5 +92,5 @@ export function portfolioConflicts(p: PortfolioNumbers): readonly ValidationIssu
 
 export function agentConflicts(enabled: readonly AgentNumbers[]): readonly ValidationIssue[] {
   if (enabled.length === 0) return [issue('NO_AGENT_ENABLED', null, 'No agent is enabled: the mandate would authorize nothing.')];
-  return enabled.filter((a) => a.maxAllocation === 0n).map((a) => issue('INVALID_VALUE', `agents.${a.role}.maxAllocation`, `The ${a.role} agent is enabled with a maximum allocation of 0.`, null, 'WARNING'));
+  return enabled.filter((a) => a.maxAllocation === 0n).map((a) => issue('INVALID_VALUE', `agents.${a.role}.maxAllocation`, `The ${a.role} agent is enabled with a signed maximum of 0: it will not act.`, null, 'WARNING'));
 }

@@ -102,6 +102,24 @@ describe('allocation intent', () => {
     assert.equal(swap, USDC(500)); // ceiling 500, budget 400
   });
 
+  it('Fill never deploys more than the capital the principal stated', () => {
+    // As a live interpreter may read it: a total, and no maximum deployed.
+    let d = withField(withField(presetDraft('balanced'), 'portfolio.maxDeployed', null, 'USER'), 'portfolio.totalCapital', '2000', 'INTERPRETED');
+    d = applyPreset(d, 'balanced', true).draft;
+    assert.equal(d.portfolio.maxDeployed, '2000');
+    let c = withField(withField(withField(presetDraft('conservative'), 'portfolio.maxDeployed', null, 'USER'), 'portfolio.totalCapital', '2000', 'INTERPRETED'), 'portfolio.minUnallocated', '500', 'USER');
+    c = applyPreset(c, 'conservative', true).draft;
+    assert.equal(c.portfolio.maxDeployed, '1500');
+  });
+
+  it('a plan in which an agent abstains (budget 0) can still be signed: the agent simply cannot act', () => {
+    let d = fromPrompt('$2,000 across Stock, Swap, Yield and Perps.');
+    for (const [r, b] of [['stock', '600'], ['swap', '250'], ['yield', '400'], ['perps', '0']] as const) d = withField(d, `agents.${r}.budget`, b, 'PLANNED');
+    const r = validate(d);
+    assert.equal(r.ok, true, JSON.stringify(r.issues.map((i) => i.code)));
+    assert.ok(r.issues.some((i) => i.severity === 'WARNING' && /will not act/.test(i.message)));
+  });
+
   it('an explicit preset is a live-coordination envelope: nothing to plan before signing', () => {
     const v = classifyAllocation(presetDraft('balanced'));
     assert.equal(v.intent, 'DYNAMIC');

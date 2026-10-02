@@ -11,7 +11,7 @@
  */
 
 import { CATALOG, catalogIds } from './catalog.ts';
-import { ROLES, type Role } from '../types.ts';
+import { ROLES, parseUsdc, usdcText, type Role } from '../types.ts';
 
 export interface PortfolioDraft {
   readonly totalCapital: string | null;
@@ -214,11 +214,25 @@ export function applyPreset(d: MandateDraft, p: Preset, onlyUnset: boolean): { r
   const filled: string[] = [];
   for (const [path, value] of Object.entries(presetFields(p))) {
     if (onlyUnset && (fieldAt(out, path) !== null || AUTHORITY_CHOICES.includes(path))) continue;
-    out = withField(out, path, value, 'PRESET');
+    out = withField(out, path, onlyUnset ? withinStatedCapital(out, path, value) : value, 'PRESET');
     filled.push(path);
   }
   // An agent the preset enables but whose exposure it leaves open stays open: that is a choice, recorded as such.
   return { draft: out, filled };
+}
+
+/**
+ * A filled maximum deployed never exceeds what the principal said they have:
+ * "$2,000 across …" with a preset of 2,500 deploys at most the 2,000, less
+ * any reserve. Every other value is the preset's own.
+ */
+function withinStatedCapital(d: MandateDraft, path: string, value: string | boolean | readonly string[]): string | boolean | readonly string[] {
+  if (path !== 'portfolio.maxDeployed' || typeof value !== 'string' || d.portfolio.deployAll === true) return value;
+  const total = d.portfolio.totalCapital === null ? null : parseUsdc(d.portfolio.totalCapital);
+  const reserve = d.portfolio.minUnallocated === null ? 0n : parseUsdc(d.portfolio.minUnallocated);
+  const preset = parseUsdc(value);
+  if (total === null || reserve === null || preset === null || reserve > total) return value;
+  return preset > total - reserve ? usdcText(total - reserve) : value;
 }
 
 export function presetDraft(p: Preset): MandateDraft {

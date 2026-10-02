@@ -653,7 +653,9 @@ export class LiveSession {
     const base = withoutPoolBudgets(draft);
     const v = classifyAllocation(base);
     const purpose = planningPurpose(v);
-    if (purpose === null || v.pool.length === 0 || v.poolAtoms === null) return { ok: false, code: 'NOTHING_TO_PLAN', message: v.intent === 'NEEDS_AGENT_SELECTION' ? 'Choose which agents may use this capital first.' : 'You set every budget yourself: there is no split to propose.', issues: [] };
+    if (v.intent === 'NEEDS_AGENT_SELECTION') return { ok: false, code: 'NOTHING_TO_PLAN', message: 'Choose which agents may use this capital first.', issues: [] };
+    if (purpose === null || v.pool.length === 0) return { ok: false, code: 'NOTHING_TO_PLAN', message: 'You set every budget yourself: there is no split to propose.', issues: [] };
+    if (v.poolAtoms === null) return { ok: false, code: 'DRAFT_INVALID', message: 'Set the capital to deploy (consistent with any reserve) before asking the agents for a split.', issues: [] };
     const provisional = this.versions.provisional(base, this.protocolNow());
     if (!provisional.ok) return { ok: false, code: 'DRAFT_INVALID', message: provisional.message, issues: provisional.issues };
     this.#running = true;

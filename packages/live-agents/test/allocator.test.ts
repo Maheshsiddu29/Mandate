@@ -148,3 +148,17 @@ describe('Jev scoring is advisory only', () => {
     }
   });
 });
+
+describe('the plan explanation comes from the allocator, and never credits the wrong agent', () => {
+  it('names capped agents as capped, the strongest uncapped one by weight, and the leftover', async () => {
+    const { explainPlan } = await import('../src/allocation/planning.ts');
+    const r = ok(allocate(U(2000), [entry(card('stock', { max: 600 })), entry(card('swap', { max: 250, q: 4 })), entry(card('yield', { max: 400 })), entry(card('perps', { action: 'ABSTAIN' }))]));
+    const text = explainPlan(r.allocations, [], r.unallocatedAtoms);
+    assert.match(text, /Stock, Swap and Yield each received the most they said they can usefully take/);
+    assert.doesNotMatch(text, /Swap received more/);
+    assert.match(text, /Perps: abstained/);
+    assert.match(text, /750 USDC stays unallocated in your wallet/);
+    const s = ok(allocate(U(1000), [entry(card('stock', { max: 900, q: 4 })), entry(card('yield', { max: 900, q: 2 }))]));
+    assert.match(explainPlan(s.allocations, [], s.unallocatedAtoms), /Of the rest, Stock received more/);
+  });
+});
