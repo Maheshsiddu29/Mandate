@@ -2,9 +2,9 @@
 
 import { LatticeLoader } from "@/components/react-bits/lattice-loader";
 import { useState, type ReactNode } from "react";
-import { code, rec, str, type JsonRecord, type LiveEvent } from "./live-client";
-import { formatDuration, groupEventsByElapsed, reasonLabel, ROLE_TITLES, usd, type AgentCard, type RoleName, type SettlementView, type StressAttempt, type TradeReview } from "./live-model";
-import { mandateVerdict } from "./stage-agents";
+import { rec, str, type JsonRecord, type LiveEvent } from "./live-client";
+import { explainReasons, formatDuration, groupEventsByElapsed, ROLE_TITLES, usd, type AgentCard, type RoleName, type SettlementView, type StressAttempt, type TradeReview } from "./live-model";
+import { MandateReasons, mandateVerdict } from "./stage-agents";
 import { AgentGlyph, Pill } from "./workspace-ui";
 
 const TABS = ["Summary", "Decisions", "Evidence"] as const;
@@ -60,7 +60,7 @@ export function ReviewBody(props: {
                   <div className="mw-layer mw-layer--mandate" data-tone={verdict?.tone ?? "neutral"}>
                     <span className="mw-layer__tag">Mandate decided</span>
                     <p className="mw-layer__main"><strong>{verdict?.line ?? (agent.phase === "ABSTAINED" ? "Nothing to decide" : agent.phase.toLowerCase())}</strong></p>
-                    {agent.reasons.length > 0 ? <p className="mw-codes">{agent.reasons.map((reason) => <code key={reason}>{code(reason)}</code>)}</p> : null}
+                    <MandateReasons reasons={agent.reasons} />
                   </div>
                 </li>
               );
@@ -82,12 +82,48 @@ export function ReviewBody(props: {
             <div><dt>Events</dt><dd>{props.eventCount} · <button type="button" className="mw-text-button" onClick={props.onEvents}>Open event log</button></dd></div>
           </dl>
         ) : null}
+        {tab === "Evidence" ? <CandidateEvidence agents={props.agents} /> : null}
       </div>
     </div>
   );
 }
 
+/**
+ * Developer evidence: what each agent discovered, what eligibility let it
+ * choose from, and why the rest stayed discovery only. Eligibility is
+ * advisory; Mandate still screened every proposal in full.
+ */
+function CandidateEvidence({ agents }: { readonly agents: readonly AgentCard[] }): ReactNode {
+  const evaluated = agents.filter((agent) => agent.eligibility !== null);
+  if (evaluated.length === 0) return null;
+  return (
+    <section className="mw-candidates" aria-label="Candidate eligibility">
+      <h3 className="mw-review__h">Candidates</h3>
+      <p className="mw-fine">Discovery is broad; each model chose only among actionable candidates. Eligibility is advisory — every proposal was still checked by Mandate.</p>
+      <ul>
+        {evaluated.map((agent) => (
+          <li key={agent.role}>
+            <p className="mw-decisions__name"><span className="mw-glyph mw-glyph--sm"><AgentGlyph role={agent.role} size={16} /></span>{agent.title}</p>
+            <ul className="mw-candidates__list">
+              {agent.eligibility?.actionable.map((id) => <li key={id}><code>{id}</code><Pill tone="good">ACTIONABLE</Pill></li>)}
+              {agent.eligibility?.excluded.map((row) => (
+                <li key={row.candidateId}>
+                  <code>{row.candidateId}</code><Pill>DISCOVERY ONLY</Pill>
+                  <span>{explainReasons(row.codes).headline}</span>
+                  <MandateReasons reasons={row.codes} />
+                </li>
+              ))}
+              {agent.eligibility?.actionable.length === 0 ? <li className="mw-fine">No eligible opportunities under this mandate.</li> : null}
+            </ul>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 const READABLE: Readonly<Record<string, string>> = {
+  AGENT_CANDIDATES_EVALUATED: "Candidate eligibility evaluated",
   AGENT_REQUEST_STARTED: "Agent request started",
   AGENT_FIRST_RESPONSE: "First response received",
   AGENT_DECISION_COMPLETED: "Model decision completed",
@@ -159,9 +195,9 @@ export function StressBody(props: { readonly attempts: readonly StressAttempt[];
                 <span className="mw-attempts__n">{String(index + 1).padStart(2, "0")}</span>
                 <div>
                   <p className="mw-attempts__case">{caseTitle(attempt.caseId)}</p>
-                  <p className="mw-fine">{attempt.reasons.length > 0 ? reasonLabel(attempt.reasons[0] ?? "REFUSED") : attempt.outcome === "AUTHORIZED" ? "Compliant control" : attempt.outcome === "PENDING" ? "Evaluating…" : "Not submitted"}</p>
+                  <p className="mw-fine">{attempt.reasons.length > 0 ? explainReasons(attempt.reasons).headline || "Refused" : attempt.outcome === "AUTHORIZED" ? "Compliant control" : attempt.outcome === "PENDING" ? "Evaluating…" : "Not submitted"}</p>
                   {attempt.rationale === "" ? null : <details className="mw-disclosure mw-disclosure--inline"><summary>Declared rationale</summary><p>{attempt.rationale}</p></details>}
-                  {attempt.reasons.length > 0 ? <p className="mw-codes">{attempt.reasons.map((reason) => <code key={reason}>{code(reason)}</code>)}</p> : null}
+                  <MandateReasons reasons={attempt.reasons} />
                 </div>
                 {attempt.outcome === "PENDING" ? <LatticeLoader label="Evaluating" status="working" pattern="ripple" showTimer={false} /> : <Pill tone={attempt.outcome === "AUTHORIZED" ? "good" : attempt.outcome === "REFUSED" ? "bad" : "neutral"}>{attempt.outcome}</Pill>}
               </li>

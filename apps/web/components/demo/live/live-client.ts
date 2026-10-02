@@ -90,8 +90,16 @@ export const amount = (v: Json | undefined): string => {
   return typeof r.amount === "string" ? `${r.amount} USDC` : "—";
 };
 export const ms = (v: Json | undefined): string => (typeof v === "number" ? `${v} ms` : "—");
-/** A reason code without its subject, e.g. `RECIPIENT_NOT_ALLOWED`. */
-export const code = (v: Json): string => str(v).split(":")[0] ?? str(v);
+/**
+ * A reason code without its subject: `RECIPIENT_NOT_ALLOWED:recipients:0x…` → `RECIPIENT_NOT_ALLOWED`.
+ * A registry or ledger code keeps the component that decided, which is part of the code itself:
+ * `REGISTRY:ISSUER_NOT_ALLOWED:eip155:46630/erc20:0x…` → `REGISTRY:ISSUER_NOT_ALLOWED`, never bare `REGISTRY`.
+ */
+export const code = (v: Json): string => {
+  const parts = str(v).split(":");
+  const head = parts[0] ?? "";
+  return (head === "REGISTRY" || head === "LEDGER") && parts.length > 1 && parts[1] !== "" ? `${head}:${parts[1]}` : head;
+};
 /**
  * An event's typed-resource conflicts, one per resource and never summed, e.g.
  * `derivative-notional 600 USDC > 400 USDC (reduce 200 USDC)`, or once the Room

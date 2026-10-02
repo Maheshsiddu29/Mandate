@@ -2,7 +2,6 @@
 
 import { LatticeLoader } from "@/components/react-bits/lattice-loader";
 import { useState, type ReactNode } from "react";
-import { code } from "./live-client";
 import type { Failure } from "./live-flow";
 import { ROLE_TITLES, usd, type AgentCard, type RoleName, type SettlementView, type TradeReview } from "./live-model";
 import { shortAddress } from "./wallet";
@@ -296,7 +295,7 @@ export function ReceiptStage(props: {
         {review.blockedItems.length === 0 ? null : (
           <section aria-label="Blocked">
             <h3>Blocked</h3>
-            <ul className="mw-rows mw-rows--bad">{review.blockedItems.map((item) => <Row key={item.role} role={item.role}><span title={item.codes.map(code).join(", ")}>{item.reason}</span></Row>)}</ul>
+            <ul className="mw-rows mw-rows--bad">{review.blockedItems.map((item) => <Row key={item.role} role={item.role}><span title={item.codes.join(", ")}>{item.reason}</span></Row>)}</ul>
           </section>
         )}
         {review.negotiated.length === 0 ? null : (

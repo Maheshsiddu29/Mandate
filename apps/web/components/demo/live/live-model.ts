@@ -28,18 +28,40 @@ export const ACTIVITY: Record<RoleName, string> = {
   perps: "Evaluating bounded exposure…",
 };
 
+/** Web-only words for protocol reason codes. A `REGISTRY:` or `LEDGER:` code is read through its inner code. */
 const REASON_LABELS: Readonly<Record<string, string>> = {
   VENUE_NOT_ALLOWED: "Venue not allowed",
-  RECIPIENT_NOT_ALLOWED: "Recipient not approved",
+  ROUTE_NOT_ALLOWED: "Route not allowed",
+  RECIPIENT_NOT_ALLOWED: "Recipient not allowed",
   ASSET_NOT_ALLOWED: "Asset not approved",
   REPRESENTATION_NOT_ALLOWED: "Representation not approved",
+  REPRESENTATION_UNKNOWN: "Unknown representation",
   ISSUER_NOT_ALLOWED: "Issuer not approved",
   INSTRUMENT_UNKNOWN: "Unknown instrument",
-  SYNTHETIC_NOT_ALLOWED: "Synthetic exposure not allowed",
+  SYNTHETIC_NOT_ALLOWED: "Synthetic representation not approved",
+  LEVERAGE_NOT_ALLOWED: "Leverage not allowed",
   PORTFOLIO_LIMIT_EXCEEDED: "Portfolio limit exceeded",
   AGENT_LIMIT_EXCEEDED: "Agent limit exceeded",
-  ALLOCATION_INSUFFICIENT: "Insufficient authority",
+  ALLOCATION_INSUFFICIENT: "Insufficient portfolio authority",
 };
+
+/** Identity and market-set codes, most specific first: the order a single headline is chosen in. */
+const IDENTITY_PRIORITY = [
+  "SYNTHETIC_NOT_ALLOWED",
+  "REPRESENTATION_UNKNOWN",
+  "REPRESENTATION_NOT_ALLOWED",
+  "ISSUER_NOT_ALLOWED",
+  "ASSET_NOT_ALLOWED",
+  "INSTRUMENT_UNKNOWN",
+  "VENUE_NOT_ALLOWED",
+  "ROUTE_NOT_ALLOWED",
+  "RECIPIENT_NOT_ALLOWED",
+] as const;
+
+/** The headline when an action fails several independent market-set checks at once. */
+export const OUTSIDE_MARKET_SET = "This opportunity is outside the approved market set.";
+
+const innerCode = (reasonCode: string): string => reasonCode.replace(/^(REGISTRY|LEDGER):/, "");
 
 const RESOURCE_LABELS: Readonly<Record<string, string>> = {
   "portfolio-notional": "Portfolio capital",
@@ -49,10 +71,38 @@ const RESOURCE_LABELS: Readonly<Record<string, string>> = {
   "perp-margin": "Perpetual margin",
 };
 
-/** Web-only copy. Protocol reason codes remain unchanged and available in details. */
+/** Web-only copy for one reason (raw or code). Protocol reason codes remain unchanged and available in details. */
 export function reasonLabel(reason: string): string {
-  const exact = reason.split(":")[0] ?? reason;
-  return REASON_LABELS[exact] ?? exact.toLowerCase().replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());
+  const exact = code(reason);
+  const inner = innerCode(exact);
+  if (inner === "REGISTRY" || inner === "") return "Not approved by the asset registry";
+  if (inner === "LEDGER") return "Refused by the authority ledger";
+  return REASON_LABELS[exact] ?? REASON_LABELS[inner] ?? inner.toLowerCase().replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());
+}
+
+/** Distinct reason codes, in the order first seen: subjects dropped, registry and ledger prefixes kept. */
+export function reasonCodes(reasons: readonly Json[]): string[] {
+  return [...new Set(reasons.map((reason) => code(reason)).filter((reasonCode) => reasonCode !== ""))];
+}
+
+export interface ReasonExplanation {
+  /** One line for the verdict: the most specific reason, or the market-set summary when several identity checks fail. */
+  readonly headline: string;
+  /** Every distinct human reason, in code order. */
+  readonly labels: readonly string[];
+  /** Every distinct protocol code, for Technical details. */
+  readonly codes: readonly string[];
+}
+
+/** Words first, codes kept: how a refusal is explained. Never joins codes; never shows a bare subsystem name when a specific code exists. */
+export function explainReasons(reasons: readonly string[]): ReasonExplanation {
+  const codes = reasonCodes(reasons);
+  const labels = [...new Set(codes.map(reasonLabel))];
+  const inner = codes.map(innerCode);
+  const identity = IDENTITY_PRIORITY.filter((c) => inner.includes(c));
+  const allIdentity = inner.length > 0 && inner.every((c) => (IDENTITY_PRIORITY as readonly string[]).includes(c));
+  const headline = labels.length >= 3 && allIdentity ? OUTSIDE_MARKET_SET : identity[0] !== undefined ? (REASON_LABELS[identity[0]] as string) : labels[0] ?? "";
+  return { headline, labels, codes };
 }
 
 /** Web-only label for one typed resource. Typed resources are never combined. */
@@ -94,6 +144,30 @@ export interface AgentCard {
   readonly finalOutcome: string;
   readonly finalAmount: string;
   readonly startedAt: string | null;
+  /** Discovered → actionable, as the runtime's advisory eligibility reported it; null before it does (or in older runs). */
+  readonly eligibility: CandidateEligibility | null;
+}
+
+/** One excluded candidate: discovery only, never offered to the model. */
+export interface ExcludedCandidate {
+  readonly candidateId: string;
+  readonly candidate: string;
+  readonly codes: readonly string[];
+}
+
+export interface CandidateEligibility {
+  readonly discovered: readonly string[];
+  readonly actionable: readonly string[];
+  readonly excluded: readonly ExcludedCandidate[];
+}
+
+function eligibilityOf(data: JsonRecord): CandidateEligibility {
+  const ids = (v: Json | undefined) => arr(v).map((item) => str(item));
+  return {
+    discovered: ids(data.discovered),
+    actionable: ids(data.actionable),
+    excluded: arr(data.excluded).map(rec).map((row) => ({ candidateId: str(row.candidateId), candidate: str(row.candidate), codes: reasonCodes(arr(row.reasons)) })),
+  };
 }
 
 export interface ResourceLine {
@@ -238,6 +312,7 @@ function blank(role: RoleName): AgentCard {
     finalOutcome: "",
     finalAmount: "",
     startedAt: null,
+    eligibility: null,
   };
 }
 
@@ -246,11 +321,11 @@ function num(v: Json | undefined): number | null {
 }
 
 function reasonsOf(v: Json | undefined): string[] {
-  return arr(v).map((item) => code(item));
+  return reasonCodes(arr(v));
 }
 
 function hard(reasons: readonly string[]): boolean {
-  return reasons.some((reason) => HARD_BLOCK.has(reason));
+  return reasons.some((reason) => HARD_BLOCK.has(innerCode(reason)));
 }
 
 /** Preserve millisecond precision so distinct event times never collapse to one displayed time. */
@@ -379,8 +454,12 @@ export function deriveAgents(events: readonly LiveEvent[], timing: readonly Json
     const role = event.agent as RoleName;
     const card = cards.get(role) ?? blank(role);
     switch (event.kind) {
+      case "AGENT_CANDIDATES_EVALUATED":
+        cards.set(role, { ...blank(role), phase: "PENDING", startedAt: event.at, eligibility: eligibilityOf(data) });
+        break;
       case "AGENT_REQUEST_STARTED":
-        cards.set(role, { ...blank(role), phase: "PENDING", startedAt: event.at });
+        // The eligibility just evaluated for this same request is kept; anything older is reset.
+        cards.set(role, { ...blank(role), phase: "PENDING", startedAt: event.at, eligibility: card.phase === "PENDING" ? card.eligibility : null });
         break;
       case "AGENT_FIRST_RESPONSE":
         cards.set(role, { ...card, phase: "RESPONDING", firstResponseMs: num(data.timeToFirstResponseMs) ?? card.firstResponseMs });
@@ -942,7 +1021,8 @@ export function deriveReview(events: readonly LiveEvent[]): TradeReview {
   const settlement = deriveSettlement(events);
   const authorizedEvent = [...events].reverse().find((event) => event.kind === "PORTFOLIO_AUTHORIZED");
   const proposal = [...events].reverse().find((event) => event.kind === "ROOM_PROPOSAL_CREATED");
-  const started = new Set(events.filter((event) => event.kind === "AGENT_REQUEST_STARTED" && event.agent !== null).map((event) => event.agent));
+  // An agent whose eligibility left nothing to choose from abstains without a model request; it was still evaluated.
+  const started = new Set(events.filter((event) => (event.kind === "AGENT_REQUEST_STARTED" || event.kind === "AGENT_CANDIDATES_EVALUATED") && event.agent !== null).map((event) => event.agent));
   const blockedRoles = new Set(events.filter((event) => event.kind === "PROPOSAL_BLOCKED" && event.agent !== null).map((event) => event.agent));
   const negotiated = proposal === undefined
     ? []
@@ -959,7 +1039,7 @@ export function deriveReview(events: readonly LiveEvent[]): TradeReview {
     authorizedCount: agents.filter((agent) => agent.finalOutcome === "RESERVED").length,
     settlementsConfirmed: settlement.settled ? 1 : 0,
     authorized: agents.filter((agent) => agent.finalOutcome === "RESERVED").map((agent) => ({ role: agent.role, amount: agent.finalAmount.replace(/ USDC$/, ""), from: null, reason: "", codes: [] })),
-    blockedItems: agents.filter((agent) => agent.phase === "BLOCKED").map((agent) => ({ role: agent.role, amount: agent.requested.replace(/ USDC$/, ""), from: null, reason: reasonLabel(agent.reasons[0] ?? "BLOCKED"), codes: agent.reasons })),
+    blockedItems: agents.filter((agent) => agent.phase === "BLOCKED").map((agent) => ({ role: agent.role, amount: agent.requested.replace(/ USDC$/, ""), from: null, reason: explainReasons(agent.reasons).headline || "Blocked", codes: agent.reasons })),
     negotiated,
     quiet: agents.filter((agent) => ["ABSTAINED", "TIMED OUT", "FAILED", "INVALID RESPONSE"].includes(agent.phase)).map((agent) => ({ role: agent.role, amount: "—", from: null, reason: agent.phase === "ABSTAINED" ? "No proposal" : agent.phase === "TIMED OUT" ? "Timed out" : "Couldn't respond", codes: [] })),
     reserved: authorizedEvent === undefined ? null : amountOf(authorizedEvent.data.reserved),

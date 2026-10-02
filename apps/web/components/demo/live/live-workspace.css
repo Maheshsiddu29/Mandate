@@ -785,7 +785,14 @@
 .mw-layer--mandate[data-tone="bad"] .mw-layer__main strong { color: #f6b8c2; }
 .mw-layer--mandate[data-tone="warn"] { box-shadow: inset 3px 0 0 var(--mw-warn); }
 .mw-layer--mandate[data-tone="good"] .mw-layer__main strong { color: #a8ecd0; }
-.mw-codes { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0; }
+.mw-codes { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0; padding: 0; list-style: none; }
+.mw-reasons { display: grid; gap: 0.15rem; margin: 0.3rem 0 0; padding-left: 1.1rem; color: var(--mw-text-2); font-size: 0.8rem; line-height: 1.4; }
+.mw-candidates { margin-top: 1rem; }
+.mw-candidates > ul { display: grid; gap: 0.75rem; margin: 0; padding: 0; list-style: none; }
+.mw-candidates__list { display: grid; gap: 0.4rem; margin: 0.35rem 0 0; padding: 0; list-style: none; }
+.mw-candidates__list > li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.6rem; color: var(--mw-text-2); font-size: 0.82rem; overflow-wrap: anywhere; }
+.mw-candidates__list code { padding: 0.08rem 0.35rem; border-radius: 6px; background: rgba(0, 0, 0, 0.32); color: var(--mw-indigo-4); font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 0.78rem; }
+.mw-candidates__list .mw-disclosure { flex-basis: 100%; }
 
 .mw-verdicts { display: grid; gap: 0.35rem; margin-bottom: 0.5rem; }
 .mw-verdicts li { display: grid; grid-template-columns: 1.2rem 4.5rem minmax(0, 1fr); align-items: baseline; gap: 0.5rem; color: var(--mw-text-2); font-size: 0.88rem; }

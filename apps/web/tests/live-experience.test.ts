@@ -212,8 +212,8 @@ test('the model proposal and the Mandate verdict stay separate layers, words fir
   assert.match(agentsUi, /Technical detail/);
   for (const [raw, words] of [
     ['VENUE_NOT_ALLOWED:venues:x', 'Venue not allowed'], ['ASSET_NOT_ALLOWED', 'Asset not approved'], ['ISSUER_NOT_ALLOWED', 'Issuer not approved'],
-    ['REPRESENTATION_NOT_ALLOWED', 'Representation not approved'], ['RECIPIENT_NOT_ALLOWED', 'Recipient not approved'], ['INSTRUMENT_UNKNOWN', 'Unknown instrument'],
-    ['PORTFOLIO_LIMIT_EXCEEDED', 'Portfolio limit exceeded'], ['AGENT_LIMIT_EXCEEDED', 'Agent limit exceeded'], ['ALLOCATION_INSUFFICIENT', 'Insufficient authority'],
+    ['REPRESENTATION_NOT_ALLOWED', 'Representation not approved'], ['RECIPIENT_NOT_ALLOWED', 'Recipient not allowed'], ['INSTRUMENT_UNKNOWN', 'Unknown instrument'],
+    ['PORTFOLIO_LIMIT_EXCEEDED', 'Portfolio limit exceeded'], ['AGENT_LIMIT_EXCEEDED', 'Agent limit exceeded'], ['ALLOCATION_INSUFFICIENT', 'Insufficient portfolio authority'],
   ] as const) assert.equal(reasonLabel(raw), words);
   const swap = derivePresentation(run).agents.find((agent) => agent.role === 'swap');
   assert.deepEqual(swap?.reasons, ['VENUE_NOT_ALLOWED']);

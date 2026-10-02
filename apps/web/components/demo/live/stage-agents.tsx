@@ -3,8 +3,7 @@
 import { LatticeLoader, type LatticePatternName } from "@/components/react-bits/lattice-loader";
 import { AnimatePresence, motion } from "motion/react";
 import type { ReactNode } from "react";
-import { code } from "./live-client";
-import { reasonLabel, ROLE_TITLES, usd, type AgentCard, type RoleName } from "./live-model";
+import { explainReasons, ROLE_TITLES, usd, type AgentCard, type RoleName } from "./live-model";
 import { AgentGlyph, Pill } from "./workspace-ui";
 
 const PATTERNS: Record<RoleName, LatticePatternName> = { stock: "orbit", swap: "ripple", nft: "snake", yield: "sweep", perps: "orbit" };
@@ -18,11 +17,34 @@ export function elapsedSince(at: string | null, now: number): number | null {
 /** What Mandate concluded about one agent, in words first. The raw reason codes stay in details. */
 export function mandateVerdict(agent: AgentCard): { readonly tone: "good" | "warn" | "bad" | "neutral"; readonly label: string; readonly line: string } | null {
   if (agent.finalOutcome === "RESERVED") return { tone: "good", label: "AUTHORIZED", line: `${usd(agent.finalAmount)} reserved` };
-  if (agent.phase === "BLOCKED") return { tone: "bad", label: "BLOCKED", line: reasonLabel(agent.reasons[0] ?? "BLOCKED") };
+  if (agent.phase === "BLOCKED") return { tone: "bad", label: "BLOCKED", line: explainReasons(agent.reasons).headline || "Blocked" };
   if (agent.portfolioConflict) return { tone: "warn", label: "PORTFOLIO CONFLICT", line: "Valid action, but the portfolio is over a shared limit" };
   if (agent.phase === "ADMISSIBLE") return { tone: "good", label: "ALLOWED", line: "Inside your mandate" };
   if (agent.phase === "STALE") return { tone: "warn", label: "STALE QUOTE", line: "Quote expired; a fresh decision is required" };
   return null;
+}
+
+/**
+ * Why Mandate refused, after the one-line verdict: every distinct reason in
+ * words when there is more than one, then the exact protocol codes — one per
+ * line, never joined — under Technical details, closed by default.
+ */
+export function MandateReasons({ reasons, summary = "Technical details" }: { readonly reasons: readonly string[]; readonly summary?: string }): ReactNode {
+  const { labels, codes } = explainReasons(reasons);
+  if (codes.length === 0) return null;
+  return (
+    <>
+      {labels.length > 1 ? (
+        <ul className="mw-reasons" aria-label="Reasons">
+          {labels.map((label) => <li key={label}>{label}</li>)}
+        </ul>
+      ) : null}
+      <details className="mw-disclosure mw-disclosure--inline">
+        <summary>{summary}</summary>
+        <ul className="mw-codes">{codes.map((reasonCode) => <li key={reasonCode}><code>{reasonCode}</code></li>)}</ul>
+      </details>
+    </>
+  );
 }
 
 function quiet(agent: AgentCard): string | null {
@@ -76,12 +98,7 @@ function AgentActivity({ agent, now, enabled, reduced }: { readonly agent: Agent
                 ) : (
                   <p className="mw-layer__main"><strong>{verdict?.line ?? "Checked"}</strong></p>
                 )}
-                {agent.reasons.length > 0 ? (
-                  <details className="mw-disclosure mw-disclosure--inline">
-                    <summary>Technical detail</summary>
-                    <p>{agent.reasons.map((reason) => <code key={reason}>{code(reason)}</code>)}</p>
-                  </details>
-                ) : null}
+                <MandateReasons reasons={agent.reasons} />
               </div>
             </motion.div>
           ) : null}
