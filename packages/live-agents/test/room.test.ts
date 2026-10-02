@@ -8,6 +8,7 @@ import type { NegotiationRequest } from '../src/runtime/provider.ts';
 import type { JsonObject } from '../src/runtime/strict-json.ts';
 import { renderEvent } from '../src/telemetry/render.ts';
 import { CONFLICTING, keep, propose, reduce, release, scriptedSession, type Negotiation } from './support/session.ts';
+import { everyCandidate } from './support/world.ts';
 
 /** perps −200 (to 400), yield −200 (to 500), NFT releases 300, stock and swap keep: offers 700 against a need of 500. */
 const cooperative: Negotiation = (r) => ({ text: r.role === 'perps' ? reduce(400) : r.role === 'yield' ? reduce(500) : r.role === 'nft' ? release : keep });
@@ -36,8 +37,8 @@ describe('the autonomous Mandate Room', () => {
     assert.equal(auth?.data['transactions'], 0);
   });
 
-  it('test 19: a security-invalid proposal stays outside the Room', async () => {
-    const t = await scriptedSession({ ...CONFLICTING, swap: { text: propose('route-b', 300) } }, cooperative);
+  it('test 19: a security-invalid proposal stays outside the Room (eligibility bypassed, so it reaches Mandate)', async () => {
+    const t = await scriptedSession({ ...CONFLICTING, swap: { text: propose('route-b', 300) } }, cooperative, { eligibility: everyCandidate });
     await t.session.run();
     assert.equal(t.of('PROPOSAL_BLOCKED')[0]?.agent, 'swap');
     const participants = (t.of('ROOM_OPENED')[0]?.data['participants'] as { role: string }[]).map((p) => p.role);

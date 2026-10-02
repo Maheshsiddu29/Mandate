@@ -13,16 +13,21 @@ import { interpretLocallyAsText } from '../authoring/prompt-to-draft.ts';
 import type { Role } from '../types.ts';
 import type { AgentModelProvider, CallOptions, DecisionRequest, DraftRequest, ModelResponse, NegotiationRequest, PolicyStressRequest } from './provider.ts';
 
-type Pick = readonly [candidateId: string | null, wholeUsdc: bigint];
+/** Candidate ids in order of preference — the first one offered is chosen; none offered (or none listed) abstains — and a size. */
+type Pick = readonly [preference: readonly string[], wholeUsdc: bigint];
 
-/** Behaviours by seed: what each agent reaches for first. */
+/**
+ * Behaviours by seed: what each agent reaches for. The stub is offered only
+ * actionable candidates, like a model, so a preference that eligibility
+ * excluded is simply not available to it.
+ */
 const BEHAVIOURS: readonly { readonly [R in Role]: Pick }[] = [
-  // 0: mostly the reviewed instruments; the swap agent chases the better quote.
-  { stock: ['nvda-note-a', 600n], swap: ['route-b', 300n], nft: [null, 0n], yield: ['alpha-usd-vault', 700n], perps: ['btc-long-2x', 600n] },
-  // 1: every agent reaches for the highest headline number.
-  { stock: ['nvda-token-b', 600n], swap: ['route-b', 400n], nft: ['genesis-7', 240n], yield: ['high-yield-usd', 800n], perps: ['btc-long-5x', 600n] },
+  // 0: the swap agent chases the better quote when it is offered; the NFT agent sits out.
+  { stock: [['nvda-note-a'], 600n], swap: [['route-b', 'route-a'], 300n], nft: [[], 0n], yield: [['alpha-usd-vault'], 700n], perps: [['btc-long-2x'], 600n] },
+  // 1: every agent reaches for the highest headline number among what it is offered.
+  { stock: [['nvda-token-b', 'nvda-note-a'], 600n], swap: [['route-b', 'route-a'], 400n], nft: [['genesis-7', 'genesis-11'], 240n], yield: [['high-yield-usd', 'alpha-usd-vault'], 800n], perps: [['btc-long-5x', 'btc-long-2x'], 600n] },
   // 2: reviewed instruments, at full size: a large conflict.
-  { stock: ['nvda-note-a', 800n], swap: ['route-a', 500n], nft: ['genesis-11', 300n], yield: ['alpha-usd-vault', 800n], perps: ['btc-long-2x', 600n] },
+  { stock: [['nvda-note-a'], 800n], swap: [['route-a'], 500n], nft: [['genesis-11'], 300n], yield: [['alpha-usd-vault'], 800n], perps: [['btc-long-2x'], 600n] },
 ];
 
 const USDC = 1_000_000n;
@@ -46,7 +51,8 @@ export class StubProvider implements AgentModelProvider {
   }
 
   decide(r: DecisionRequest, o: CallOptions): Promise<ModelResponse> {
-    const [id, whole] = this.#behaviour[r.role];
+    const [preference, whole] = this.#behaviour[r.role];
+    const id = preference.find((p) => r.candidates.some((x) => x.id === p));
     const c = r.candidates.find((x) => x.id === id);
     if (c === undefined) return this.#answer(o, { action: 'ABSTAIN', candidateId: null, requestedAtoms: null, rationale: 'STUB: no candidate matches this behaviour.' });
     const atoms = clamp(whole * USDC, BigInt(c.minAtoms), BigInt(c.maxAtoms));

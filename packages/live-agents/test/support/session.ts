@@ -3,6 +3,7 @@
  * and generation, protocol time under the test's control.
  */
 
+import type { EligibilityFilter } from '../../src/agents/eligibility.ts';
 import { presetDraft, type MandateDraft } from '../../src/authoring/draft-types.ts';
 import type { NegotiationRequest } from '../../src/runtime/provider.ts';
 import { LiveSession } from '../../src/session.ts';
@@ -29,7 +30,7 @@ export interface Scripted_ {
   readonly of: (kind: LiveEventKind) => readonly LiveEvent[];
 }
 
-export async function scriptedSession(decisions: Decisions | ((role: Role, call: number) => Scripted), negotiation: Negotiation = () => ({ text: keep }), o: { readonly draft?: MandateDraft; readonly agentTimeoutMs?: number; readonly roomRoundTimeoutMs?: number; readonly maxGenerations?: number } = {}): Promise<Scripted_> {
+export async function scriptedSession(decisions: Decisions | ((role: Role, call: number) => Scripted), negotiation: Negotiation = () => ({ text: keep }), o: { readonly draft?: MandateDraft; readonly agentTimeoutMs?: number; readonly roomRoundTimeoutMs?: number; readonly maxGenerations?: number; readonly eligibility?: EligibilityFilter } = {}): Promise<Scripted_> {
   const time = new TestTime();
   const calls = new Map<Role, number>();
   const provider = new ScriptedProvider({
@@ -40,7 +41,7 @@ export async function scriptedSession(decisions: Decisions | ((role: Role, call:
     },
     negotiate: (r) => negotiation(r),
   });
-  const session = new LiveSession({ provider, sessionId: 'test', agentTimeoutMs: o.agentTimeoutMs ?? 1_000, roomRoundTimeoutMs: o.roomRoundTimeoutMs ?? 1_000, maxGenerations: o.maxGenerations ?? 3, protocolNow: time.read });
+  const session = new LiveSession({ provider, sessionId: 'test', agentTimeoutMs: o.agentTimeoutMs ?? 1_000, roomRoundTimeoutMs: o.roomRoundTimeoutMs ?? 1_000, maxGenerations: o.maxGenerations ?? 3, protocolNow: time.read, ...(o.eligibility === undefined ? {} : { eligibility: o.eligibility }) });
   const r = await session.authorize(o.draft ?? presetDraft('balanced'), 'AUTHORIZE MANDATE V1');
   if (!r.ok) throw new Error(`test mandate refused: ${r.code}`);
   return {

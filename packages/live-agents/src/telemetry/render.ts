@@ -45,6 +45,10 @@ function detail(e: LiveEvent): string {
       return `V${str(d['version'])} superseded by V${str(d['supersededBy'])}: ${str(d['effect'])}`;
     case 'MANDATE_AMENDMENT_REFUSED':
       return `${str(d['code'])}: ${str(d['message'])}`;
+    case 'AGENT_CANDIDATES_EVALUATED': {
+      const excluded = (Array.isArray(d['excluded']) ? d['excluded'] : []).map((x) => (x !== null && typeof x === 'object' && !Array.isArray(x) ? `${str(x['candidateId'])} (${list(x['reasons'])})` : str(x)));
+      return `actionable ${list(d['actionable'])}${excluded.length === 0 ? '' : ` · discovery only: ${excluded.join(', ')}`}`;
+    }
     case 'AGENT_REQUEST_STARTED':
       return `asked ${str(d['model'])} · candidates ${list(d['candidates'])}`;
     case 'AGENT_FIRST_RESPONSE':
@@ -52,7 +56,7 @@ function detail(e: LiveEvent): string {
     case 'AGENT_DECISION_COMPLETED':
       return `${str(d['candidateId'])} · ${amount(d['requested'])} · provider ${ms(d['providerLatencyMs'])}${d['injectedLatencyMs'] === 0 ? '' : ` (+${ms(d['injectedLatencyMs'])} injected)`} ${quote(d['rationale'])}`;
     case 'AGENT_ABSTAINED':
-      return `abstained · provider ${ms(d['providerLatencyMs'])} ${quote(d['rationale'])}`;
+      return d['modelCalled'] === false ? `abstained · no model call ${quote(d['rationale'])}` : `abstained · provider ${ms(d['providerLatencyMs'])} ${quote(d['rationale'])}`;
     case 'AGENT_TIMED_OUT':
       return `no answer within ${ms(d['timeoutMs'])}: runtime state, not a refusal`;
     case 'AGENT_FAILED':

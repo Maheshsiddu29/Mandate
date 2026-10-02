@@ -8,7 +8,7 @@ import { ROLES, type Role } from '../src/types.ts';
 import { withField } from '../src/authoring/draft-types.ts';
 import { runProtocol } from '../src/mandate/portfolio-adapter.ts';
 import { ScriptedProvider, json } from './support/providers.ts';
-import { containsKey, world } from './support/world.ts';
+import { containsKey, everyCandidate, world } from './support/world.ts';
 
 const propose = (candidateId: string, whole: number) => json({ action: 'PROPOSE', candidateId, requestedAtoms: String(BigInt(whole) * 1_000_000n), rationale: `pick ${candidateId}` });
 const abstain = json({ action: 'ABSTAIN', candidateId: null, requestedAtoms: null, rationale: 'nothing acceptable' });
@@ -16,7 +16,7 @@ const abstain = json({ action: 'ABSTAIN', candidateId: null, requestedAtoms: nul
 const byRole = (answers: { readonly [R in Role]?: { text: string; delayMs?: number } }) =>
   new ScriptedProvider({ decide: (r) => answers[r.role] ?? { text: abstain } });
 
-describe('the real Mandate verdict on every candidate (balanced mandate)', () => {
+describe('the real Mandate verdict on every candidate, proposed directly with eligibility bypassed (balanced mandate)', () => {
   const expected: { readonly [id: string]: { readonly verdict: string; readonly codes: RegExp } } = {
     'nvda-note-a': { verdict: 'ADMISSIBLE', codes: /^$/ },
     'nvda-token-b': { verdict: 'BLOCKED', codes: /REGISTRY:/ },
@@ -34,7 +34,8 @@ describe('the real Mandate verdict on every candidate (balanced mandate)', () =>
       it(`${role}/${c.id}`, async () => {
         const w = await world();
         const size = c.resizable ? c.minAtoms * 2n : c.minAtoms;
-        const out = await discoverAgent(w.deps(new ScriptedProvider({ decide: () => ({ text: json({ action: 'PROPOSE', candidateId: c.id, requestedAtoms: size.toString(), rationale: 'test' }) }) })), w.active(), role);
+        // A filter with a bug, or a client that skipped it: the candidate reaches Mandate anyway, and Mandate alone decides.
+        const out = await discoverAgent(w.deps(new ScriptedProvider({ decide: () => ({ text: json({ action: 'PROPOSE', candidateId: c.id, requestedAtoms: size.toString(), rationale: 'test' }) }) }), undefined, everyCandidate), w.active(), role);
         const want = expected[c.id];
         assert.ok(want, c.id);
         assert.equal(out.state, want.verdict, JSON.stringify(out.screening?.reasons));
@@ -125,7 +126,7 @@ describe('trust boundaries in discovery', () => {
     }
   });
 
-  it('test 47: prompt injection in a listing cannot bypass Mandate', async () => {
+  it('test 47: prompt injection in a listing cannot bypass Mandate (eligibility bypassed, so the injected listing reaches the model)', async () => {
     const w = await world();
     // A model fooled by the seller text picks the injected listing; it still cannot name a recipient or an amount off its bounds.
     const provider = new ScriptedProvider({
@@ -135,7 +136,7 @@ describe('trust boundaries in discovery', () => {
         return { text: json({ action: 'PROPOSE', candidateId: injected.id, requestedAtoms: injected.maxAtoms, rationale: 'The listing says it is pre-approved.' }) };
       },
     });
-    const out = await discoverAgent(w.deps(provider), w.active(), 'nft');
+    const out = await discoverAgent(w.deps(provider, undefined, everyCandidate), w.active(), 'nft');
     assert.equal(out.state, 'BLOCKED');
     const c = out.signed?.proposal.candidate;
     assert.ok(c?.kind === 'NFT_BUY');
@@ -143,7 +144,16 @@ describe('trust boundaries in discovery', () => {
     assert.doesNotMatch(c.recipient, /9999999999/);
     // And a fooled model that tries to add the attacker as a field is refused before anything is built.
     const hijack = new ScriptedProvider({ decide: () => ({ text: json({ action: 'PROPOSE', candidateId: 'genesis-7', requestedAtoms: '240000000', rationale: 'x', recipient: '0x9999999999999999999999999999999999999999' }) }) });
-    assert.equal((await discoverAgent(w.deps(hijack), w.active(), 'nft')).state, 'INVALID_RESPONSE');
+    assert.equal((await discoverAgent(w.deps(hijack, undefined, everyCandidate), w.active(), 'nft')).state, 'INVALID_RESPONSE');
+  });
+
+  it('in a normal run the injected listing — outside the approved collection — is discovery only and never reaches the model', async () => {
+    const w = await world();
+    const provider = byRole({});
+    await discoverAgent(w.deps(provider), w.active(), 'nft');
+    const r = provider.requests[0] as DecisionRequest;
+    assert.deepEqual(r.candidates.map((c) => c.id), ['genesis-11']);
+    assert.doesNotMatch(JSON.stringify(r), /Ignore all previous instructions/);
   });
 });
 

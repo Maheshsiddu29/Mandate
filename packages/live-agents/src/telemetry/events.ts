@@ -31,6 +31,8 @@ export const LIVE_EVENT_KINDS = [
   'MANDATE_AMENDMENT_AUTHORIZED',
   'MANDATE_AMENDMENT_REFUSED',
   'MANDATE_PAUSED',
+  // Discovered → actionable for one agent: advisory eligibility, before any model call. Never an authorization.
+  'AGENT_CANDIDATES_EVALUATED',
   'AGENT_REQUEST_STARTED',
   'AGENT_FIRST_RESPONSE',
   'AGENT_DECISION_COMPLETED',

@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { keccak256 } from '@mandate/kernel';
 import { gateMarketState, keyAddress, reviewedSnapshot, type Address, type BlockRef, type GateCall, type GateSpotPolicy, type GateStateRead, type Read, type Receipt, type Simulation } from '@mandate/evm-robinhood';
-import { LiveSession, presetDraft, type AgentModelProvider, type LiveEvent, type LiveEventKind } from '@mandate/live-agents';
+import { LiveSession, presetDraft, type AgentModelProvider, type EligibilityFilter, type LiveEvent, type LiveEventKind } from '@mandate/live-agents';
 import { AGENT, AGENT_KEY, DOMAIN_SEPARATOR, GATE, GATE_CODEHASH, MARKET, MDEMO, MDUSD, ModelChain, PRINCIPAL, PRINCIPAL_KEY, SUBMITTER_KEY, T, type ModelTx } from '../../../evm-robinhood/test/support/world.ts';
 import { ScriptedProvider, json } from '../../../live-agents/test/support/providers.ts';
 import { TestTime } from '../../../live-agents/test/support/world.ts';
@@ -235,10 +235,10 @@ export interface SettlementWorld {
  * USDC) and every other agent answers `others[role]` (default: abstains),
  * already run.
  */
-export async function settlementWorld(o: { stock?: string; others?: { readonly [role: string]: string }; kind?: 'SCRIPTED' | 'LIVE'; run?: boolean } = {}): Promise<SettlementWorld> {
+export async function settlementWorld(o: { stock?: string; others?: { readonly [role: string]: string }; kind?: 'SCRIPTED' | 'LIVE'; run?: boolean; eligibility?: EligibilityFilter } = {}): Promise<SettlementWorld> {
   const time = new TestTime();
   const decide = (role: string) => (role === 'stock' ? (o.stock ?? propose('nvda-note-a', 400)) : (o.others?.[role] ?? abstain));
-  const session = new LiveSession({ provider: provider(decide, o.kind ?? 'SCRIPTED'), sessionId: 'settlement-test', agentTimeoutMs: 1_000, roomRoundTimeoutMs: 1_000, protocolNow: time.read });
+  const session = new LiveSession({ provider: provider(decide, o.kind ?? 'SCRIPTED'), sessionId: 'settlement-test', agentTimeoutMs: 1_000, roomRoundTimeoutMs: 1_000, protocolNow: time.read, ...(o.eligibility === undefined ? {} : { eligibility: o.eligibility }) });
   const auth = await session.authorize(presetDraft('balanced'), 'AUTHORIZE MANDATE V1');
   if (!auth.ok) throw new Error(`mandate refused: ${auth.code}`);
   if (o.run !== false) await session.run();

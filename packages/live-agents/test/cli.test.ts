@@ -23,7 +23,9 @@ describe('the command-line runner', () => {
     assert.ok(events.every((e) => e.schema === LIVE_SCHEMA && (LIVE_EVENT_KINDS as readonly string[]).includes(e.kind)));
     assert.equal(events[0]?.kind, 'SESSION_STARTED');
     assert.equal(events.at(-1)?.kind, 'SESSION_COMPLETED');
-    for (const k of ['PROPOSAL_BLOCKED', 'ROOM_FINALIZED', 'PORTFOLIO_AUTHORIZED', 'POLICY_STRESS_PROPOSAL_BLOCKED', 'POLICY_STRESS_PROPOSAL_AUTHORIZED']) assert.ok(events.some((e) => e.kind === k), k);
+    for (const k of ['AGENT_CANDIDATES_EVALUATED', 'ROOM_FINALIZED', 'PORTFOLIO_AUTHORIZED', 'POLICY_STRESS_PROPOSAL_BLOCKED', 'POLICY_STRESS_PROPOSAL_AUTHORIZED']) assert.ok(events.some((e) => e.kind === k), k);
+    // The normal run offers agents only actionable candidates; hard violations are exercised by the policy-stress run.
+    assert.ok(events.filter((e) => e.kind === 'AGENT_CANDIDATES_EVALUATED').every((e) => Array.isArray(e.data['excluded']) && e.data['excluded'].length > 0));
     assert.equal(containsKey(r.stdout), false);
     // B.5.2: the default runs are offchain. No settlement event, and every Mandate verdict reports 0 transactions.
     assert.ok(events.every((e) => !/^(TESTNET_|DOMAIN_EXECUTION_)/.test(e.kind)));

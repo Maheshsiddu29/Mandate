@@ -8,7 +8,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { PAUSE_CONFIRMATION, type LiveEvent } from '@mandate/live-agents';
-import { containsKey } from '../../live-agents/test/support/world.ts';
+import { containsKey, everyCandidate } from '../../live-agents/test/support/world.ts';
 import { ASSET_QUALIFICATION } from '../src/evidence.ts';
 import { SEND_AUTHORIZATION_PHRASE, SendGate } from '../src/send-gate.ts';
 import type { Prepared, SettlementOutcome } from '../src/settlement.ts';
@@ -129,12 +129,24 @@ describe('nothing reaches a key or the chain unless the Live AI authorization is
     }, { stock: abstain });
   });
 
-  it('a Stock proposal Mandate blocked (the look-alike token) is never reserved, so never settled', async () => {
+  it('a Stock proposal Mandate blocked (the look-alike token, eligibility bypassed) is never reserved, so never settled', async () => {
     await withWorld(async (w) => {
       assert.ok(w.kinds().includes('PROPOSAL_BLOCKED'));
+      assert.equal(w.session.reservedExecutions.length, 0);
       const p = await w.settlement.prepare();
       assert.ok('ineligible' in p && p.ineligible === 'NO_STOCK_RESERVATION');
-      assert.equal(w.rpc.broadcasts, 0);
+      assert.equal(w.rpc.simulations + w.rpc.prepared + w.rpc.broadcasts, 0);
+    }, { stock: propose('nvda-token-b', 400), eligibility: everyCandidate });
+  });
+
+  it('the look-alike is not offered in a normal run: an answer naming it is an invalid response, and there is still nothing to settle', async () => {
+    await withWorld(async (w) => {
+      assert.deepEqual(w.of('AGENT_CANDIDATES_EVALUATED').find((e) => e.agent === 'stock')?.data['actionable'], ['nvda-note-a']);
+      assert.ok(w.kinds().includes('AGENT_INVALID_RESPONSE'));
+      assert.ok(!w.kinds().includes('PROPOSAL_SIGNED'));
+      const p = await w.settlement.prepare();
+      assert.ok('ineligible' in p && p.ineligible === 'NO_STOCK_RESERVATION');
+      assert.equal(w.rpc.simulations + w.rpc.prepared + w.rpc.broadcasts, 0);
     }, { stock: propose('nvda-token-b', 400) });
   });
 

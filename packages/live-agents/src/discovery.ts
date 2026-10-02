@@ -5,7 +5,10 @@
  * Per agent:
  *
  * ```text
- * observe candidates (quote time = now) ─▶ model call (bounded, streamed, validated)
+ * observe candidates (quote time = now)
+ *   ─▶ eligibility: discovered ─▶ actionable (agents/eligibility.ts; advisory, deterministic)
+ *        none actionable  ABSTAINED without a model call
+ *   ─▶ model call over the actionable candidates only (bounded, streamed, validated)
  *   ─▶ PROPOSE: exact lookup ─▶ build under the version it was asked under ─▶ local signature
  *   ─▶ screen under the version active *now* (the frozen screenProposal)
  *        BLOCKED     security invalid; never enters the Room
@@ -15,11 +18,16 @@
  *
  * A runtime failure (timeout, provider failure, invalid answer) is recorded
  * as such and produces no proposal; it is never a Mandate refusal.
+ *
+ * Eligibility narrows what the model optimizes over; it authorizes nothing.
+ * The model's choice is looked up exactly — never replaced by another
+ * candidate — and its proposal is screened in full whatever the filter said.
  */
 
 import { candidateDigest, proposalDigest, validateActionCandidate, type SignedProposal } from '@mandate/portfolio';
 import type { ActiveMandate } from './authoring/mandate-versioning.ts';
 import { DOMAIN_AGENTS } from './agents/index.ts';
+import { actionableCandidates, type EligibilityFilter } from './agents/eligibility.ts';
 import { candidateById, viewOf, type TrustedCandidate } from './agents/spec.ts';
 import { amountViews, authorityView, portfolioView } from './context.ts';
 import { applyAdvice, type JevAdvisor } from './jev/advisor.ts';
@@ -45,7 +53,12 @@ export interface DiscoveryDeps {
   readonly timeoutMs: number;
   /** The version active at this moment, or null when paused. */
   readonly current: () => ActiveMandate | null;
+  /** Discovered → actionable. Defaults to the deterministic filter; adversarial tests replace it to show screening stands alone. */
+  readonly eligibility?: EligibilityFilter;
 }
+
+/** The declared reason when eligibility leaves nothing to choose from. */
+export const NO_ELIGIBLE_OPPORTUNITIES = 'No eligible opportunities under this mandate.';
 
 export interface AgentOutcome {
   readonly role: Role;
@@ -71,10 +84,24 @@ export interface DiscoveryOptions {
 export async function discoverAgent(deps: DiscoveryDeps, active: ActiveMandate, role: Role, o: DiscoveryOptions = {}): Promise<AgentOutcome> {
   const { clock, events } = deps;
   const spec = DOMAIN_AGENTS[role];
-  const candidates = o.candidates ?? spec.candidates;
   const observedAt = deps.protocolNow();
   const emit = (kind: Parameters<EventLog['emit']>[0], data: { readonly [k: string]: unknown }) => events.emit(kind, { agent: role, mandateVersion: active.version, data });
   const base = { role, version: active.version, observedAt } as const;
+
+  // Discovery is broad; the model is offered only what could be authorized. The excluded remain evidence.
+  const universe = (deps.eligibility ?? actionableCandidates)(active, role, o.candidates ?? spec.candidates, observedAt);
+  const candidates = universe.actionable;
+  emit('AGENT_CANDIDATES_EVALUATED', {
+    basis: 'ADVISORY',
+    discovered: universe.discovered.map((c) => c.id),
+    actionable: candidates.map((c) => c.id),
+    excluded: universe.excluded.map((x) => ({ candidateId: x.candidate.id, candidate: x.candidate.title, reasons: reasonCodes(x.reasons) })),
+  });
+  if (candidates.length === 0) {
+    // Nothing to choose from: no model call, no placeholder candidate, no proposal.
+    emit('AGENT_ABSTAINED', { rationale: NO_ELIGIBLE_OPPORTUNITIES, cause: 'NO_ACTIONABLE_CANDIDATES', modelCalled: false });
+    return { ...base, state: 'ABSTAINED', decision: null, candidate: null, sizeAtoms: 0n, signed: null, screening: null, error: null, timing: null };
+  }
 
   const advice = await deps.jev.rank(role, candidates.map((c) => viewOf(c)));
   const views = applyAdvice(candidates.map((c) => viewOf(c)), advice);
@@ -114,6 +141,7 @@ export async function discoverAgent(deps: DiscoveryDeps, active: ActiveMandate, 
     return end('ABSTAINED', { decision });
   }
 
+  // Exact lookup among the candidates offered: the proposal is for the candidate the model chose, or nothing.
   const candidate = candidateById({ ...spec, candidates }, decision.candidateId ?? '');
   const size = decision.requestedAtoms ?? 0n;
   if (candidate === null) return end('INVALID_RESPONSE', { decision, error: 'candidate lookup failed' });

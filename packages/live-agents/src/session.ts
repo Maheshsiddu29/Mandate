@@ -24,6 +24,7 @@ import type { DraftValidation } from './authoring/draft-validator.ts';
 import { MandateVersions, SPINE_AUTHORIZATION_LABEL, WALLET_AUTHORIZATION_LABEL, type ActiveMandate, type AuthorizeResult, type PrincipalAuthorization, type RefusalCode } from './authoring/mandate-versioning.ts';
 import { interpretPrompt } from './authoring/prompt-to-draft.ts';
 import { amountViews, enabledRoles } from './context.ts';
+import { actionableCandidates, type EligibilityFilter } from './agents/eligibility.ts';
 import { discover, discoverAgent, type AgentOutcome, type DiscoveryDeps } from './discovery.ts';
 import type { JevAdvisor } from './jev/advisor.ts';
 import { NoopJevAdvisor } from './jev/noop-advisor.ts';
@@ -68,6 +69,12 @@ export interface SessionOptions {
   readonly entropy?: Entropy;
   /** Make the session durable under this state directory (persistence/session-store.ts). */
   readonly stateDir?: string;
+  /**
+   * Tests only: replace the advisory candidate filter (agents/eligibility.ts),
+   * to simulate one that is broken or bypassed. Mandate's screening never
+   * depends on it; the default is the deterministic filter.
+   */
+  readonly eligibility?: EligibilityFilter;
   /** Internal: `LiveSession.restore` builds a restored session through this. */
   readonly restoredFrom?: { readonly store: SessionStore; readonly state: RestoredState; readonly by: string };
 }
@@ -560,7 +567,7 @@ export class LiveSession {
   }
 
   #deps(): DiscoveryDeps {
-    return { provider: this.provider, jev: this.#jev, clock: this.clock, events: this.events, signers: this.signers, sequences: this.#sequences, protocolNow: this.protocolNow, timeoutMs: this.#o.agentTimeoutMs, current: () => this.versions.active };
+    return { provider: this.provider, jev: this.#jev, clock: this.clock, events: this.events, signers: this.signers, sequences: this.#sequences, protocolNow: this.protocolNow, timeoutMs: this.#o.agentTimeoutMs, current: () => this.versions.active, eligibility: this.#o.eligibility ?? actionableCandidates };
   }
 
   /** Everything superseded is re-screened under the version now in force: Mandate refuses the old digest. */
