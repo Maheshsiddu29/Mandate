@@ -45,8 +45,11 @@ function detail(e: LiveEvent): string {
       return `V${str(d['version'])} superseded by V${str(d['supersededBy'])}: ${str(d['effect'])}`;
     case 'MANDATE_AMENDMENT_REFUSED':
       return `${str(d['code'])}: ${str(d['message'])}`;
-    case 'AGENT_REQUEST_STARTED':
-      return `asked ${str(d['model'])} · candidates ${list(d['candidates'])}`;
+    case 'AGENT_REQUEST_STARTED': {
+      const offered = list(d['candidates']);
+      const seen = list(d['discovered']);
+      return `asked ${str(d['model'])} · candidates ${offered}${seen === offered ? '' : ` · discovered ${seen}`}`;
+    }
     case 'AGENT_FIRST_RESPONSE':
       return 'first streamed chunk';
     case 'AGENT_DECISION_COMPLETED':

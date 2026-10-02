@@ -1,8 +1,10 @@
 /**
- * The stock agent: useful NVDA exposure. Two candidates with the same
- * ticker — the reviewed backed note, and a cheaper token from another
- * issuer whose registry record says it is a synthetic exposure. The model
- * is told the facts, not which one Mandate allows; the registry decides.
+ * The stock agent: useful NVDA exposure. Broad discovery holds two
+ * candidates with the same ticker — the reviewed backed note, and a
+ * cheaper token from another issuer whose registry record says it is a
+ * synthetic exposure. `stockEligibility` admits only the representations
+ * the active mandate's stock binding resolves; the model ranks among that
+ * set. The registry is unchanged for anything submitted directly.
  */
 
 import { LOOKALIKE_QUOTE_ATOMS, NVDA, PRINCIPAL_ON_ROBINHOOD, STOCK_APPROVED, STOCK_LOOKALIKE, STOCK_PRICE_ATOMS } from '@mandate/portfolio/demo';

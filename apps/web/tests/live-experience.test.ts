@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import test from 'node:test';
-import type { JsonRecord, LiveEvent } from '../components/demo/live/live-client.ts';
+import { code, type JsonRecord, type LiveEvent } from '../components/demo/live/live-client.ts';
 import { deriveFlow, eventsAfter, type FlowInput } from '../components/demo/live/live-flow.ts';
 import {
   actionText,
@@ -193,7 +193,21 @@ test('the model proposal and the Mandate verdict stay separate layers, words fir
     ['VENUE_NOT_ALLOWED:venues:x', 'Venue not allowed'], ['ASSET_NOT_ALLOWED', 'Asset not approved'], ['ISSUER_NOT_ALLOWED', 'Issuer not approved'],
     ['REPRESENTATION_NOT_ALLOWED', 'Representation not approved'], ['RECIPIENT_NOT_ALLOWED', 'Recipient not approved'], ['INSTRUMENT_UNKNOWN', 'Unknown instrument'],
     ['PORTFOLIO_LIMIT_EXCEEDED', 'Portfolio limit exceeded'], ['AGENT_LIMIT_EXCEEDED', 'Agent limit exceeded'], ['ALLOCATION_INSUFFICIENT', 'Insufficient authority'],
+    ['REGISTRY:ISSUER_NOT_ALLOWED:eip155:46630/erc20:0xa7', 'Issuer not approved'],
+    ['REGISTRY:SYNTHETIC_NOT_ALLOWED:eip155:46630/erc20:0xa7', 'Synthetic representation not approved'],
+    ['REGISTRY:REPRESENTATION_NOT_ALLOWED', 'Representation not approved'],
+    ['REGISTRY:ASSET_NOT_ALLOWED', 'Asset not approved'],
   ] as const) assert.equal(reasonLabel(raw), words);
+  assert.equal(code('REGISTRY:ISSUER_NOT_ALLOWED:eip155:46630/erc20:0xa7'), 'REGISTRY:ISSUER_NOT_ALLOWED');
+  assert.equal(code('VENUE_NOT_ALLOWED:venues:x'), 'VENUE_NOT_ALLOWED');
+  const registryBlocked = derivePresentation([
+    event(1, 'AGENT_DECISION_COMPLETED', { candidate: 'NVIDIA Stock Token', candidateId: 'nvda-token-b', requested: usdc('400'), rationale: 'cheaper' }, 'stock'),
+    event(2, 'PROPOSAL_BLOCKED', { reasons: ['REGISTRY:ISSUER_NOT_ALLOWED:eip155:46630/erc20:0xa7', 'REGISTRY:SYNTHETIC_NOT_ALLOWED:eip155:46630/erc20:0xa7'] }, 'stock'),
+  ]).agents.find((agent) => agent.role === 'stock');
+  assert.deepEqual(registryBlocked?.reasons, ['REGISTRY:ISSUER_NOT_ALLOWED', 'REGISTRY:SYNTHETIC_NOT_ALLOWED']);
+  assert.equal(new Set(registryBlocked?.reasons).size, registryBlocked?.reasons.length);
+  assert.equal(reasonLabel(registryBlocked?.reasons[0] ?? ''), 'Issuer not approved');
+  assert.equal(registryBlocked?.hardBlock, true);
   const swap = derivePresentation(run).agents.find((agent) => agent.role === 'swap');
   assert.deepEqual(swap?.reasons, ['VENUE_NOT_ALLOWED']);
   assert.equal(swap?.inRoom, false);

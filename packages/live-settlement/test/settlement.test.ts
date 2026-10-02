@@ -129,9 +129,11 @@ describe('nothing reaches a key or the chain unless the Live AI authorization is
     }, { stock: abstain });
   });
 
-  it('a Stock proposal Mandate blocked (the look-alike token) is never reserved, so never settled', async () => {
+  it('a model selection of the look-alike is not an executable stock action, so nothing is reserved or settled', async () => {
     await withWorld(async (w) => {
-      assert.ok(w.kinds().includes('PROPOSAL_BLOCKED'));
+      assert.ok(w.kinds().includes('AGENT_INVALID_RESPONSE'));
+      assert.equal(w.of('AGENT_DECISION_COMPLETED').some((e) => e.data['candidateId'] === 'nvda-note-a'), false);
+      assert.equal(w.session.reservedExecutions.length, 0);
       const p = await w.settlement.prepare();
       assert.ok('ineligible' in p && p.ineligible === 'NO_STOCK_RESERVATION');
       assert.equal(w.rpc.broadcasts, 0);
