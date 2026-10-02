@@ -17,10 +17,12 @@
  */
 
 import type { AuthorizationRecord } from '@mandate/control';
-import { agentPolicyOf, amountOf, encodePortfolioMandate, portfolioMandateV2Hash, proposalDigest, verificationTranscript, type PortfolioAuthorityV2, type PortfolioMandate, type Reason, type SignedProposal, type VerificationTranscript, type VerifiedChild } from '@mandate/portfolio';
+import { agentPolicyOf, amountOf, encodePortfolioMandate, headroom, portfolioMandateV2Hash, proposalDigest, verificationTranscript, type PortfolioAuthorityV2, type PortfolioMandate, type Reason, type SignedProposal, type VerificationTranscript, type VerifiedChild } from '@mandate/portfolio';
 import { demoParty } from '@mandate/portfolio/demo';
 import { classifyAllocation, planningPurpose } from './allocation/intent.ts';
-import { runPlanning, type AllocationPlan } from './allocation/planning.ts';
+import { analyzeOpportunity, runPlanning, scoreCard, type AllocationPlan } from './allocation/planning.ts';
+import { allocate } from './allocation/allocator.ts';
+import { scoreBps } from './jev/scorer.ts';
 import { FIXTURE_RESEARCH, type MarketResearchProvider } from './allocation/research.ts';
 import { EXPOSURE_RESOURCE } from './authoring/catalog.ts';
 import { NoScorer, type OpportunityScorer } from './jev/scorer.ts';
@@ -33,6 +35,7 @@ import { amountViews, enabledRoles } from './context.ts';
 import { actionableCandidates, type EligibilityFilter } from './agents/eligibility.ts';
 import { LIVE_LAB_SETTLEMENT_PROFILE, type SettlementProfile } from './agents/capability.ts';
 import { discover, discoverAgent, type AgentOutcome, type DiscoveryDeps } from './discovery.ts';
+import { DOMAIN_AGENTS } from './agents/index.ts';
 import type { JevAdvisor } from './jev/advisor.ts';
 import { NoopJevAdvisor } from './jev/noop-advisor.ts';
 import { runPolicyStress, type PolicyStressResult, type Submission } from './policy-stress/runner.ts';
@@ -825,7 +828,8 @@ export class LiveSession {
           this.#markSuperseded(admissible);
           continue;
         }
-        return await this.#authorizeFinal(active, epoch, outcomes, room, participants, requests);
+        const result = await this.#authorizeFinal(active, epoch, outcomes, room, participants, requests);
+        return await this.#afterAuthorization(active, outcomes, participants, result);
       }
       return this.#result('SUPERSEDED_TOO_OFTEN', this.versions.active?.version ?? null, MAX_EPOCHS, [], null);
     } finally {
@@ -976,6 +980,120 @@ export class LiveSession {
     const reservedCount = [...first.proposals, ...refreshed].filter((p) => p.outcome === 'RESERVED').length;
     const status: RunStatus = reservedCount === 0 ? 'REFUSED' : reservedCount === items.length ? 'AUTHORIZED' : 'PARTIALLY_AUTHORIZED';
     return this.#result(status, active.version, epoch, outcomes, room, { final: first.proposals, refreshed, receipts, reservedAtoms: reserved, executorCalls, transactions: 0 });
+  }
+
+  /**
+   * After the first authorization (docs/v2/mandate-room-v2.md §8.3). Capital
+   * an agent left unused is reported; it moves to another agent only if the
+   * signed mandate authorized reallocation, only from what the ledger says
+   * is available (never RESERVED, SUBMITTED or SETTLED capital), only to
+   * agents already holding a reservation, below their signed ceiling — and
+   * every increment is a new proposal re-verified by the frozen path.
+   */
+  async #afterAuthorization(active: ActiveMandate, outcomes: readonly AgentOutcome[], participants: readonly Participant[], result: RunResult): Promise<RunResult> {
+    const budgeted = enabledRoles(active).filter((r) => budgetOf(active.draft, r) !== null);
+    if (budgeted.length === 0 || result.version !== active.version || this.versions.active?.version !== active.version) return result;
+    const reservedBy = new Map<Role, bigint>();
+    for (const p of [...result.final, ...result.refreshed]) if (p.outcome === 'RESERVED') reservedBy.set(p.role, (reservedBy.get(p.role) ?? 0n) + p.requested);
+    const unused = budgeted.map((r) => {
+      const budget = budgetOf(active.draft, r) as bigint;
+      const reserved = reservedBy.get(r) ?? 0n;
+      return { role: r, budget, reserved, unused: budget > reserved ? budget - reserved : 0n, released: reserved === 0n && budget > 0n };
+    });
+    const v = (atoms: bigint) => ({ atoms, amount: usdcText(atoms) });
+    const coordination = active.draft.portfolio.autoReallocate === true;
+    const totalUnused = unused.reduce((s, u) => s + u.unused, 0n);
+    if (!coordination) {
+      if (totalUnused > 0n) this.events.emit('CAPITAL_UNUSED', { data: { agents: unused.filter((u) => u.unused > 0n).map((u) => ({ role: u.role, budget: v(u.budget), reserved: v(u.reserved), unused: v(u.unused) })), total: v(totalUnused), reallocation: 'NOT_AUTHORIZED', effect: 'Stays in your wallet. Mandate does not force deployment, and nothing was taken, so nothing is refunded.' } });
+      return result;
+    }
+    const released = unused.filter((u) => u.released);
+    const releasedAtoms = released.reduce((s, u) => s + u.budget, 0n);
+    const av = await availabilityAt(active.core, this.protocolNow());
+    // Only what the ledger itself says is free: reservations (including submitted and settled ones) are already subtracted.
+    const available = amountOf(av.portfolio, 'portfolio-notional');
+    const rawPool = releasedAtoms < available ? releasedAtoms : available;
+    const pool = rawPool - (rawPool % 1_000_000n);
+    const skip = (reason: string) => {
+      this.events.emit('REALLOCATION_SKIPPED', { data: { reason, released: released.map((u) => ({ role: u.role, budget: v(u.budget) })), ledgerAvailable: v(available), effect: 'Unused capital stays in your wallet.' } });
+      return result;
+    };
+    if (pool === 0n) return skip(releasedAtoms === 0n ? 'NOTHING_RELEASED' : 'NOTHING_AVAILABLE_IN_LEDGER');
+    const demandAt = (p: Participant, atoms: bigint) => (atoms === 0n ? [] : demandOf(active.mandate, active.compiled.bindings, p.agent, p.candidate.build(atoms, p.observedAt), atoms, this.protocolNow()).demand);
+    const holders = participants.filter((p) => (reservedBy.get(p.role) ?? 0n) > 0n);
+    const recipients: { readonly p: Participant; readonly cap: bigint }[] = [];
+    for (const held of holders) {
+      // The candidate as discovered, not as bounded by the budget: its market depth is what remains to be used.
+      const base = DOMAIN_AGENTS[held.role].candidates.find((c) => c.id === held.candidate.id);
+      if (base === undefined) continue;
+      const p: Participant = { ...held, candidate: base };
+      const reserved = reservedBy.get(p.role) ?? 0n;
+      const depth = p.candidate.maxAtoms > reserved ? p.candidate.maxAtoms - reserved : 0n;
+      const own = headroom(av, p.agent.value, 'portfolio-notional');
+      const upTo = [depth, own, pool].reduce((m, x) => (x < m ? x : m));
+      if (upTo < p.candidate.minAtoms) continue;
+      // The increment alone, everyone else's reservations already in the ledger: the largest size inside every limit.
+      const solo = { ...p, originalAtoms: upTo };
+      const cap = largestFittingAtoms(solo, [solo], new Map([[p.role, upTo]]), av, demandAt, upTo);
+      if (cap !== null) recipients.push({ p, cap });
+    }
+    if (recipients.length === 0) return skip('NO_AGENT_CAN_USE_IT');
+
+    this.#rooms += 1;
+    const roomId = `realloc-v${active.version}-${this.#rooms}`;
+    const emit = (kind: Parameters<EventLog['emit']>[0], data: { readonly [k: string]: unknown }) => this.events.emit(kind, { roomId, data });
+    emit('ROOM_OPENED', {
+      roomPurpose: 'REALLOCATION',
+      stage: 'POST_AUTHORIZATION',
+      autonomous: true,
+      reason: 'An agent released capital it did not use, and your signed mandate allows reallocation inside its limits.',
+      released: released.map((u) => ({ role: u.role, budget: v(u.budget) })),
+      pool: v(pool),
+      participants: recipients.map((x) => ({ role: x.p.role, reserved: v(reservedBy.get(x.p.role) ?? 0n), canUseUpTo: v(x.cap) })),
+      authority: 'NONE — every increment is re-verified by Mandate and reserved by the ledger, or nothing happens',
+    });
+    const deps = this.#planningDeps();
+    const analyzed = await Promise.all(recipients.map((x) => analyzeOpportunity(deps, { roomId, purpose: 'REALLOCATION', mandate: active, role: x.p.role, candidates: [{ ...x.p.candidate, minAtoms: x.p.candidate.minAtoms < x.cap ? x.p.candidate.minAtoms : x.cap, maxAtoms: x.cap }], cap: x.cap, poolAtoms: pool, participants: recipients.map((y) => y.p.role) })));
+    const scores = await Promise.all(analyzed.map((x) => scoreCard(deps, roomId, x.card, x.offered)));
+    const r = allocate(
+      pool,
+      analyzed.map((x, i) => ({ card: x.card, jevBps: scoreBps(scores[i] ?? null), hardCapAtoms: recipients[i]?.cap ?? 0n })),
+    );
+    const increments = r.ok ? r.allocations.filter((a) => a.atoms > 0n) : [];
+    const assigned = increments.reduce((s, a) => s + a.atoms, 0n);
+    emit('ALLOCATION_PLAN_PROPOSED', {
+      roomPurpose: 'REALLOCATION',
+      stage: 'POST_AUTHORIZATION',
+      pool: v(pool),
+      budgets: (r.ok ? r.allocations : []).map((a) => ({ role: a.role, increment: v(a.atoms), zero: a.zero, capped: a.capped, rationale: analyzed.find((x) => x.card.role === a.role)?.card.rationale ?? null })),
+      allocated: v(assigned),
+      unallocated: v(pool - assigned),
+      allocator: r.ok ? 'DETERMINISTIC' : `REFUSED:${r.reason}`,
+      authority: 'NONE — each increment is re-verified and reserved, or not executed',
+    });
+    const items: { role: Role; candidateId: string; signed: SignedProposal }[] = [];
+    for (const a of increments) {
+      const x = recipients.find((y) => y.p.role === a.role) as { readonly p: Participant; readonly cap: bigint };
+      const card = analyzed.find((y) => y.card.role === a.role)?.card;
+      if (card === undefined || card.candidateId !== x.p.candidate.id) continue;
+      const signer = this.signers.get(a.role) as LocalAgentSigner;
+      const now = this.protocolNow();
+      // A fresh observation, the same candidate identity, the Room's increment: a new proposal, never an edit of the reserved one.
+      const built = buildProposal({ mandate: active.mandate, bindings: active.compiled.bindings, agent: signer.party, candidate: x.p.candidate.build(a.atoms, card.observedAt), sizeAtoms: a.atoms, minimumAtoms: a.atoms, sequence: this.#sequences.next(signer.party), now });
+      if (!built.ok) continue;
+      const signed = signer.sign(built.proposal);
+      this.events.emit('PROPOSAL_SIGNED', { agent: a.role, roomId, data: { phase: 'REALLOCATION', proposal: proposalDigest(signed.proposal), signer: signer.party.value, sequence: signed.proposal.sequence, requested: amountViews(built.demand), quoteObservedAt: card.observedAt } });
+      items.push({ role: a.role, candidateId: x.p.candidate.id, signed });
+    }
+    const second = items.length === 0 ? null : await this.#reverify(active, 'REALLOCATION', items);
+    emit('ROOM_FINALIZED', { roomPurpose: 'REALLOCATION', result: second === null ? 'NOTHING_ASSIGNED' : second.reserved > 0n ? 'REVERIFIED' : 'REFUSED_BY_MANDATE', reserved: v(second?.reserved ?? 0n) });
+    const leftover = totalUnused - (second?.reserved ?? 0n);
+    if (leftover > 0n) this.events.emit('CAPITAL_UNUSED', { data: { total: v(leftover), reallocation: 'AUTHORIZED', effect: 'What no agent could justify stays in your wallet.' } });
+    if (second === null) return result;
+    const reallocated = second.proposals;
+    const receipts = second.run === null ? result.receipts : [...result.receipts, second.run.run.digest as string];
+    const status: RunStatus = result.status === 'REFUSED' && second.reserved > 0n ? 'PARTIALLY_AUTHORIZED' : result.status;
+    return { ...result, status, reallocated, receipts, reservedAtoms: result.reservedAtoms + second.reserved, executorCalls: result.executorCalls + (second.run?.executorCalls ?? 0) };
   }
 
   // --- Policy stress ------------------------------------------------------------------------
