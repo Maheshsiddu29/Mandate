@@ -10,19 +10,19 @@
  * data a wallet displays and the authority object the room is given.
  */
 
-import { portfolioMandateV2Message, PORTFOLIO_AUTHORITY_V2, type PortfolioAuthorityV2, type PortfolioMandate } from '@mandate/portfolio';
+import { portfolioMandateAuthorizationV2Message, PORTFOLIO_AUTHORITY_V2_PLAN, type PortfolioAuthorityV2Plan, type PortfolioMandate } from '@mandate/portfolio';
 import { APPROVAL_CHAIN_ID, sessionDigest } from './approval.ts';
 
 export { APPROVAL_CHAIN_ID as SPINE_CHAIN_ID };
 
 /** What the room and the verifier must be told for a V2 version. Absent means V1. */
-export function spineAuthority(sessionId: string): PortfolioAuthorityV2 {
-  return { scheme: PORTFOLIO_AUTHORITY_V2, chainId: APPROVAL_CHAIN_ID, sessionDigest: sessionDigest(sessionId) };
+export function spineAuthority(sessionId: string, initialAllocationDigest: string): PortfolioAuthorityV2Plan {
+  return { scheme: PORTFOLIO_AUTHORITY_V2_PLAN, chainId: APPROVAL_CHAIN_ID, sessionDigest: sessionDigest(sessionId), initialAllocationDigest };
 }
 
 /** What the browser hands the wallet for `eth_signTypedData_v4`. */
-export function spineTypedData(m: PortfolioMandate, sessionId: string): { readonly [k: string]: unknown } {
-  const message = portfolioMandateV2Message(m, sessionDigest(sessionId));
+export function spineTypedData(m: PortfolioMandate, sessionId: string, initialAllocationDigest: string): { readonly [k: string]: unknown } {
+  const message = portfolioMandateAuthorizationV2Message(m, sessionDigest(sessionId), initialAllocationDigest);
   return {
     types: {
       EIP712Domain: [
@@ -30,14 +30,15 @@ export function spineTypedData(m: PortfolioMandate, sessionId: string): { readon
         { name: 'version', type: 'string' },
         { name: 'chainId', type: 'uint256' },
       ],
-      PortfolioMandateV2: [
+      PortfolioMandateAuthorizationV2: [
         { name: 'statement', type: 'string' },
         { name: 'mandateDigest', type: 'bytes32' },
         { name: 'principal', type: 'address' },
         { name: 'sessionDigest', type: 'bytes32' },
+        { name: 'initialAllocationDigest', type: 'bytes32' },
       ],
     },
-    primaryType: 'PortfolioMandateV2',
+    primaryType: 'PortfolioMandateAuthorizationV2',
     domain: { name: 'Mandate', version: '2', chainId: Number(APPROVAL_CHAIN_ID) },
     message,
   };

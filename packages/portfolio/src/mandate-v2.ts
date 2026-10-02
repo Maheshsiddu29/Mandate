@@ -33,10 +33,12 @@ import { portfolioMandateDigest, type PortfolioMandate } from './mandate.ts';
 export const PORTFOLIO_MANDATE_V2_NAME = 'Mandate';
 export const PORTFOLIO_MANDATE_V2_VERSION = '2';
 export const PORTFOLIO_MANDATE_V2_TYPE = 'PortfolioMandateV2(string statement,bytes32 mandateDigest,address principal,bytes32 sessionDigest)';
+export const PORTFOLIO_MANDATE_AUTHORIZATION_V2_TYPE = 'PortfolioMandateAuthorizationV2(string statement,bytes32 mandateDigest,address principal,bytes32 sessionDigest,bytes32 initialAllocationDigest)';
 const DOMAIN_TYPE = 'EIP712Domain(string name,string version,uint256 chainId)';
 
 export const PORTFOLIO_AUTHORITY_V1 = 'V1_PREHASH' as const;
 export const PORTFOLIO_AUTHORITY_V2 = 'V2_EIP712' as const;
+export const PORTFOLIO_AUTHORITY_V2_PLAN = 'V2_PLAN_EIP712' as const;
 
 /** Named by a caller that still wants the V1 prehash check. Omitting authority means the same thing. */
 export interface PortfolioAuthorityV1 {
@@ -54,13 +56,25 @@ export interface PortfolioAuthorityV2 {
   readonly sessionDigest: string;
 }
 
-export type PortfolioAuthority = PortfolioAuthorityV1 | PortfolioAuthorityV2;
+/** The plan-bound V2 authorization. The legacy `V2_EIP712` schema remains distinct. */
+export interface PortfolioAuthorityV2Plan {
+  readonly scheme: typeof PORTFOLIO_AUTHORITY_V2_PLAN;
+  readonly chainId: bigint;
+  readonly sessionDigest: string;
+  readonly initialAllocationDigest: string;
+}
+
+export type PortfolioAuthority = PortfolioAuthorityV1 | PortfolioAuthorityV2 | PortfolioAuthorityV2Plan;
 
 export interface PortfolioMandateV2Message {
   readonly statement: string;
   readonly mandateDigest: string;
   readonly principal: string;
   readonly sessionDigest: string;
+}
+
+export interface PortfolioMandateAuthorizationV2Message extends PortfolioMandateV2Message {
+  readonly initialAllocationDigest: string;
 }
 
 const utf8 = new TextEncoder();
@@ -120,6 +134,11 @@ export function portfolioMandateV2Message(m: PortfolioMandate, sessionDigest: st
   };
 }
 
+/** The new primary type: the same authority plus the exact accepted starting plan. */
+export function portfolioMandateAuthorizationV2Message(m: PortfolioMandate, sessionDigest: string, initialAllocationDigest: string): PortfolioMandateAuthorizationV2Message {
+  return { ...portfolioMandateV2Message(m, sessionDigest), initialAllocationDigest };
+}
+
 function domainSeparator(chainId: bigint): Uint8Array {
   return keccak_256(concat([keccak_256(utf8.encode(DOMAIN_TYPE)), keccak_256(utf8.encode(PORTFOLIO_MANDATE_V2_NAME)), keccak_256(utf8.encode(PORTFOLIO_MANDATE_V2_VERSION)), word(chainId)]));
 }
@@ -132,6 +151,19 @@ function structHash(message: PortfolioMandateV2Message): Uint8Array {
       bytesOf(message.mandateDigest),
       word(BigInt(message.principal)),
       bytesOf(message.sessionDigest),
+    ]),
+  );
+}
+
+function authorizationStructHash(message: PortfolioMandateAuthorizationV2Message): Uint8Array {
+  return keccak_256(
+    concat([
+      keccak_256(utf8.encode(PORTFOLIO_MANDATE_AUTHORIZATION_V2_TYPE)),
+      keccak_256(utf8.encode(message.statement)),
+      bytesOf(message.mandateDigest),
+      word(BigInt(message.principal)),
+      bytesOf(message.sessionDigest),
+      bytesOf(message.initialAllocationDigest),
     ]),
   );
 }
@@ -149,6 +181,18 @@ export function portfolioMandateV2Hash(m: PortfolioMandate, o: { readonly chainI
   if (!BYTES32.test(digest)) throw new Error('mandate digest is not 32 lowercase bytes');
   const message = portfolioMandateV2Message(m, o.sessionDigest);
   return keccak_256(concat([new Uint8Array([0x19, 0x01]), domainSeparator(o.chainId), structHash(message)]));
+}
+
+/** The plan-bound V2 signing hash. It is not the legacy `PortfolioMandateV2` hash. */
+export function portfolioMandateAuthorizationV2Hash(m: PortfolioMandate, o: { readonly chainId: bigint; readonly sessionDigest: string; readonly initialAllocationDigest: string }): Uint8Array {
+  if (m.principal.kind !== 'eip155-address' || !ADDRESS.test(m.principal.value)) throw new Error('V2 principal must be a lowercase eip155 address');
+  if (typeof o.chainId !== 'bigint' || o.chainId < 0n || o.chainId > MAX_CHAIN) throw new Error('V2 chain id out of range');
+  if (!BYTES32.test(o.sessionDigest)) throw new Error('V2 session digest must be 32 lowercase bytes');
+  if (!BYTES32.test(o.initialAllocationDigest)) throw new Error('V2 initial allocation digest must be 32 lowercase bytes');
+  const digest = portfolioMandateDigest(m);
+  if (!BYTES32.test(digest)) throw new Error('mandate digest is not 32 lowercase bytes');
+  const message = portfolioMandateAuthorizationV2Message(m, o.sessionDigest, o.initialAllocationDigest);
+  return keccak_256(concat([new Uint8Array([0x19, 0x01]), domainSeparator(o.chainId), authorizationStructHash(message)]));
 }
 
 /** `v` of 0 or 1 (some wallets) becomes 27 or 28. Anything else is refused. */
@@ -174,6 +218,20 @@ export function mandateSignedByPrincipalV2(m: PortfolioMandate, signature: strin
   let hash: Uint8Array;
   try {
     hash = portfolioMandateV2Hash(m, o);
+  } catch {
+    return false;
+  }
+  return recoverSigner(hash, sig) === m.principal.value;
+}
+
+/** Whether a signature binds both this mandate and this exact initial allocation. */
+export function mandateSignedByPrincipalV2Plan(m: PortfolioMandate, signature: string, o: { readonly chainId: bigint; readonly sessionDigest: string; readonly initialAllocationDigest: string }): boolean {
+  if (m.principal.kind !== 'eip155-address') return false;
+  const sig = normalizeSignature(signature);
+  if (sig === null) return false;
+  let hash: Uint8Array;
+  try {
+    hash = portfolioMandateAuthorizationV2Hash(m, o);
   } catch {
     return false;
   }

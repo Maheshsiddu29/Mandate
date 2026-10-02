@@ -22,7 +22,7 @@
  */
 
 import { authorityId } from '@mandate/core';
-import { createPortfolioCore, decodePortfolioMandate, mandateSignedByPrincipal, mandateSignedByPrincipalV2, portfolioMandateDigest, type DomainBinding, type PortfolioCore, type PortfolioMandate } from '@mandate/portfolio';
+import { createPortfolioCore, decodePortfolioMandate, mandateSignedByPrincipal, mandateSignedByPrincipalV2, mandateSignedByPrincipalV2Plan, portfolioMandateDigest, type DomainBinding, type PortfolioCore, type PortfolioMandate } from '@mandate/portfolio';
 import { normalizeDraft, type MandateDraft } from '../authoring/draft-types.ts';
 import type { RestoredVersion, VersionRecord } from '../authoring/mandate-versioning.ts';
 import { compile } from '../mandate/portfolio-adapter.ts';
@@ -62,12 +62,16 @@ function decoded<T>(text: string, what: string): T {
 
 /** V1: the raw prehash. V2: the wallet EIP-712 signature, and only that, for this session. */
 function protocolSignatureHolds(sessionId: string, mandate: PortfolioMandate, record: VersionRecord, signature: string): boolean {
-  if (record.authorization.method !== 'WALLET_PRINCIPAL_V2') return mandateSignedByPrincipal(mandate, signature);
+  if (record.authorization.method !== 'WALLET_PRINCIPAL_V2' && record.authorization.method !== 'WALLET_PRINCIPAL_V2_PLAN') return mandateSignedByPrincipal(mandate, signature);
   const a = record.authorization;
   const bound = sessionDigest(sessionId);
   if (a.domainDelegation !== 'SAME_PRINCIPAL' || a.protocolSigner !== a.principal) return false;
   if (mandate.principal.kind !== 'eip155-address' || mandate.principal.value !== a.principal) return false;
   if (a.wallet?.chainId !== APPROVAL_CHAIN_ID.toString() || a.wallet.sessionDigest !== bound) return false;
+  if (record.authorization.method === 'WALLET_PRINCIPAL_V2_PLAN') {
+    const initialAllocationDigest = a.wallet?.initialAllocationDigest;
+    return initialAllocationDigest !== undefined && mandateSignedByPrincipalV2Plan(mandate, signature, { chainId: APPROVAL_CHAIN_ID, sessionDigest: bound, initialAllocationDigest });
+  }
   return mandateSignedByPrincipalV2(mandate, signature, { chainId: APPROVAL_CHAIN_ID, sessionDigest: bound });
 }
 

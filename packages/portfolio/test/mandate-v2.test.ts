@@ -8,12 +8,14 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { addressOfKey, demoKey, demoMandate, signPrehash } from '../src/demo/index.ts';
 import { mandateSignedByPrincipal, mandateSigningHash, portfolioMandateDigest } from '../src/mandate.ts';
-import { mandateSignedByPrincipalV2, portfolioMandateV2Hash, portfolioMandateV2Statement, PORTFOLIO_AUTHORITY_V2, type PortfolioAuthorityV2 } from '../src/mandate-v2.ts';
+import { mandateSignedByPrincipalV2, mandateSignedByPrincipalV2Plan, portfolioMandateAuthorizationV2Hash, portfolioMandateV2Hash, portfolioMandateV2Statement, PORTFOLIO_AUTHORITY_V2, PORTFOLIO_AUTHORITY_V2_PLAN, type PortfolioAuthorityV2 } from '../src/mandate-v2.ts';
 import { mandateReasons } from '../src/room.ts';
 
 const CHAIN = 46_630n;
 const SESSION = `0x${'ab'.repeat(32)}`;
 const OTHER_SESSION = `0x${'cd'.repeat(32)}`;
+const PLAN = `0x${'12'.repeat(32)}`;
+const OTHER_PLAN = `0x${'34'.repeat(32)}`;
 const WALLET_KEY = `0x${'11'.repeat(32)}`;
 const NOW = demoMandate().notBefore;
 
@@ -77,5 +79,19 @@ describe('EIP-712 portfolio mandate V2', () => {
     assert.deepEqual(mandateReasons(m, v2, NOW, authority()).map((r) => r.code), []);
     assert.deepEqual(mandateReasons(m, v1, NOW, authority()).map((r) => r.code), ['PORTFOLIO_MANDATE_SIGNATURE_INVALID']);
     assert.deepEqual(mandateReasons(m, v2, NOW, { scheme: 'V1_PREHASH' }).map((r) => r.code), ['PORTFOLIO_MANDATE_SIGNATURE_INVALID']);
+  });
+
+  it('the plan-bound primary type commits the allocation and cannot be read as legacy V2', () => {
+    const m = demoMandate();
+    const key = demoKey('principal');
+    const signature = signPrehash(portfolioMandateAuthorizationV2Hash(m, { chainId: CHAIN, sessionDigest: SESSION, initialAllocationDigest: PLAN }), key);
+    assert.equal(mandateSignedByPrincipalV2Plan(m, signature, { chainId: CHAIN, sessionDigest: SESSION, initialAllocationDigest: PLAN }), true);
+    assert.equal(mandateSignedByPrincipalV2Plan(m, signature, { chainId: CHAIN, sessionDigest: SESSION, initialAllocationDigest: OTHER_PLAN }), false);
+    assert.equal(mandateSignedByPrincipalV2Plan(m, signature, { chainId: CHAIN, sessionDigest: OTHER_SESSION, initialAllocationDigest: PLAN }), false);
+    assert.equal(mandateSignedByPrincipalV2(demoMandate(), signature, { chainId: CHAIN, sessionDigest: SESSION }), false);
+    const legacy = signPrehash(portfolioMandateV2Hash(m, { chainId: CHAIN, sessionDigest: SESSION }), key);
+    assert.equal(mandateSignedByPrincipalV2Plan(m, legacy, { chainId: CHAIN, sessionDigest: SESSION, initialAllocationDigest: PLAN }), false);
+    assert.deepEqual(mandateReasons(m, signature, NOW, { scheme: PORTFOLIO_AUTHORITY_V2_PLAN, chainId: CHAIN, sessionDigest: SESSION, initialAllocationDigest: PLAN }).map((r) => r.code), []);
+    assert.deepEqual(mandateReasons(m, signature, NOW, authority()).map((r) => r.code), ['PORTFOLIO_MANDATE_SIGNATURE_INVALID']);
   });
 });

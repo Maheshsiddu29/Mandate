@@ -11,6 +11,7 @@
  */
 
 import type { MandateDraft } from '../authoring/draft-types.ts';
+import type { InitialAllocationPlan } from '@mandate/portfolio';
 import type { PreparedVersion } from '../authoring/mandate-versioning.ts';
 import type { ApprovalMessage } from './approval.ts';
 
@@ -28,6 +29,9 @@ export interface WalletChallenge {
    */
   readonly spine: 'V1' | 'V2';
   readonly message: ApprovalMessage | null;
+  /** Present only for the plan-bound V2 primary type. */
+  readonly initialAllocation: InitialAllocationPlan | null;
+  readonly initialAllocationDigest: string | null;
   /** Wall-clock unix seconds. The challenge may be submitted in `[issuedAt, deadline)`. */
   readonly issuedAt: bigint;
   readonly deadline: bigint;

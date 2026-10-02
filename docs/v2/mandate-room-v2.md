@@ -31,6 +31,12 @@ incoherent totals, non-canonical integers and trailing bytes are refused. Its
 identity is Keccak-256 of the tagged canonical encoding. Model rationale,
 presentation copy and UI labels are deliberately excluded.
 
+The wallet path uses the distinct EIP-712 primary type
+`PortfolioMandateAuthorizationV2`, which adds `initialAllocationDigest` to the
+existing statement, mandate digest, principal and session digest. The legacy
+`PortfolioMandateV2` type remains valid only when explicitly selected as that
+older scheme: neither signature can be interpreted as the other.
+
 ---
 
 ## 1. Current behaviour (audit of the local code at `8fd923a`)

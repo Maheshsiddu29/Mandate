@@ -17,9 +17,10 @@
  */
 
 import type { AuthorizationRecord } from '@mandate/control';
-import { agentPolicyOf, amountOf, encodePortfolioMandate, headroom, portfolioMandateV2Hash, proposalDigest, verificationTranscript, type PortfolioAuthorityV2, type PortfolioMandate, type Reason, type SignedProposal, type VerificationTranscript, type VerifiedChild } from '@mandate/portfolio';
+import { agentPolicyOf, amountOf, encodePortfolioMandate, headroom, portfolioMandateAuthorizationV2Hash, proposalDigest, verificationTranscript, type PortfolioAuthority, type PortfolioMandate, type Reason, type SignedProposal, type VerificationTranscript, type VerifiedChild } from '@mandate/portfolio';
 import { demoParty } from '@mandate/portfolio/demo';
 import { classifyAllocation, planningPurpose } from './allocation/intent.ts';
+import { initialAllocationOf } from './allocation/commitment.ts';
 import { analyzeOpportunity, runPlanning, scoreCard, type AllocationPlan } from './allocation/planning.ts';
 import { allocate } from './allocation/allocator.ts';
 import { scoreBps } from './jev/scorer.ts';
@@ -119,7 +120,7 @@ export interface RestoreOptions {
 }
 
 export type WalletChallengeResult =
-  | { readonly ok: true; readonly challenge: string; readonly version: number; readonly digest: string; readonly principal: string; readonly validUntil: string; readonly typedData: { readonly [k: string]: unknown } }
+  | { readonly ok: true; readonly challenge: string; readonly version: number; readonly digest: string; readonly initialAllocationDigest: string | null; readonly principal: string; readonly validUntil: string; readonly typedData: { readonly [k: string]: unknown } }
   | { readonly ok: false; readonly code: RefusalCode; readonly message: string };
 
 export type PlanResult =
@@ -432,11 +433,11 @@ export class LiveSession {
     if (!p.ok) return { ok: false, code: p.code, message: p.message };
     const id = this.#entropy.bytes32();
     const message = approvalMessage({ mandate: p.prepared.mandate, version: p.prepared.version, principal: address.toLowerCase(), protocolSigner: this.versions.protocolSigner, validAfter: BigInt(Math.floor(this.clock.wallMs() / 1000)), sessionId: this.id, challenge: id });
-    this.challenges.issue({ id, sessionId: this.id, prepared: p.prepared, spine: 'V1', message, issuedAt: message.validAfter, deadline: message.validUntil, draftKey: draftKey(draft), failures: 0, consumed: false });
+    this.challenges.issue({ id, sessionId: this.id, prepared: p.prepared, spine: 'V1', message, initialAllocation: null, initialAllocationDigest: null, issuedAt: message.validAfter, deadline: message.validUntil, draftKey: draftKey(draft), failures: 0, consumed: false });
     this.events.emit('MANDATE_WALLET_CHALLENGE_ISSUED', {
       data: { version: p.prepared.version, digest: p.prepared.digest, principal: message.principal, method: 'WALLET_EIP712', chainId: APPROVAL_CHAIN_ID, validUntil: message.validUntil, authority: 'NONE until the wallet signature verifies', note: 'An offchain EIP-712 signature: not a blockchain transaction.' },
     });
-    return { ok: true, challenge: id, version: p.prepared.version, digest: p.prepared.digest, principal: message.principal, validUntil: message.validUntil.toString(), typedData: approvalTypedData(message) };
+    return { ok: true, challenge: id, version: p.prepared.version, digest: p.prepared.digest, initialAllocationDigest: null, principal: message.principal, validUntil: message.validUntil.toString(), typedData: approvalTypedData(message) };
   }
 
   /**
@@ -450,24 +451,27 @@ export class LiveSession {
     const principal = address.toLowerCase();
     const p = this.versions.prepare(draft, this.protocolNow(), { kind: 'eip155-address', value: principal });
     if (!p.ok) return { ok: false, code: p.code, message: p.message };
+    const allocation = initialAllocationOf(draft, p.prepared.mandate);
+    if (!allocation.ok) return { ok: false, code: 'DRAFT_INVALID', message: `The initial allocation cannot be signed: ${allocation.reason}.` };
     if (p.prepared.mandate.principal.value !== principal) return { ok: false, code: 'WALLET_ADDRESS_INVALID', message: 'The mandate principal is not the wallet address.' };
     const id = this.#entropy.bytes32();
     const issuedAt = BigInt(Math.floor(this.clock.wallMs() / 1000));
     const deadline = issuedAt + CHALLENGE_LIFETIME_SECONDS;
-    this.challenges.issue({ id, sessionId: this.id, prepared: p.prepared, spine: 'V2', message: null, issuedAt, deadline, draftKey: draftKey(draft), failures: 0, consumed: false });
+    this.challenges.issue({ id, sessionId: this.id, prepared: p.prepared, spine: 'V2', message: null, initialAllocation: allocation.plan, initialAllocationDigest: allocation.digest, issuedAt, deadline, draftKey: draftKey(draft), failures: 0, consumed: false });
     this.events.emit('MANDATE_WALLET_CHALLENGE_ISSUED', {
       data: {
         version: p.prepared.version,
         digest: p.prepared.digest,
         principal,
-        method: 'WALLET_PRINCIPAL_V2',
+        method: 'WALLET_PRINCIPAL_V2_PLAN',
         chainId: APPROVAL_CHAIN_ID,
         validUntil: deadline,
         authority: 'NONE until the wallet signature verifies',
-        note: 'EIP-712 PortfolioMandateV2. The wallet is the protocol principal. Not a blockchain transaction. Each gate execution still needs a separate signature by this same address.',
+        initialAllocationDigest: allocation.digest,
+        note: 'EIP-712 PortfolioMandateAuthorizationV2. The wallet commits the authority envelope and accepted initial allocation. Not a blockchain transaction. Each gate execution still needs a separate signature by this same address.',
       },
     });
-    return { ok: true, challenge: id, version: p.prepared.version, digest: p.prepared.digest, principal, validUntil: deadline.toString(), typedData: spineTypedData(p.prepared.mandate, this.id) };
+    return { ok: true, challenge: id, version: p.prepared.version, digest: p.prepared.digest, initialAllocationDigest: allocation.digest, principal, validUntil: deadline.toString(), typedData: spineTypedData(p.prepared.mandate, this.id, allocation.digest) };
   }
 
   /**
@@ -529,10 +533,11 @@ export class LiveSession {
   /** V2: the wallet signature is checked again, the challenge is consumed, and the demonstration key does not sign. */
   async #authorizeSpine(c: WalletChallenge, signature: string, refuse: (code: RefusalCode, message: string) => AuthorizeResult): Promise<AuthorizeResult> {
     const principal = c.prepared.mandate.principal.value;
-    const bound = spineAuthority(this.id);
+    if (c.initialAllocationDigest === null || c.initialAllocation === null) return refuse('SPINE_SIGNATURE_INVALID', 'This V2 challenge has no accepted initial allocation commitment.');
+    const bound = spineAuthority(this.id, c.initialAllocationDigest);
     let hash: Uint8Array;
     try {
-      hash = portfolioMandateV2Hash(c.prepared.mandate, bound);
+      hash = portfolioMandateAuthorizationV2Hash(c.prepared.mandate, bound);
     } catch {
       return refuse('SPINE_SIGNATURE_INVALID', 'This mandate cannot be signed as a V2 principal authorization.');
     }
@@ -547,7 +552,7 @@ export class LiveSession {
     }
     this.challenges.consume(c.id);
     const authorization: PrincipalAuthorization = {
-      method: 'WALLET_PRINCIPAL_V2',
+      method: 'WALLET_PRINCIPAL_V2_PLAN',
       principal,
       protocolSigner: principal,
       label: SPINE_AUTHORIZATION_LABEL,
@@ -555,8 +560,9 @@ export class LiveSession {
         chainId: APPROVAL_CHAIN_ID.toString(),
         environment: APPROVAL_ENVIRONMENT,
         domain: { name: 'Mandate', version: '2', chainId: APPROVAL_CHAIN_ID.toString() },
-        primaryType: 'PortfolioMandateV2',
+        primaryType: 'PortfolioMandateAuthorizationV2',
         sessionDigest: bound.sessionDigest,
+        initialAllocationDigest: bound.initialAllocationDigest,
         challengeDigest: keccakHex(c.id),
         signatureDigest: keccakHex(recovered.normalized),
         validAfter: c.issuedAt.toString(),
@@ -570,10 +576,14 @@ export class LiveSession {
   }
 
   /** The authority the room must use for this version. Omitted means the V1 prehash check. */
-  #authority(version: number): PortfolioAuthorityV2 | undefined {
+  #authority(version: number): PortfolioAuthority | undefined {
     const record = this.versions.records.find((r) => r.version === version);
-    if (record?.authorization.method !== 'WALLET_PRINCIPAL_V2') return undefined;
-    return spineAuthority(this.id);
+    if (record?.authorization.method === 'WALLET_PRINCIPAL_V2_PLAN') {
+      const digest = record.authorization.wallet?.initialAllocationDigest;
+      return digest === undefined ? undefined : spineAuthority(this.id, digest);
+    }
+    if (record?.authorization.method === 'WALLET_PRINCIPAL_V2') return { scheme: 'V2_EIP712', chainId: APPROVAL_CHAIN_ID, sessionDigest: sessionDigest(this.id) };
+    return undefined;
   }
 
   /**

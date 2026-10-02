@@ -14,7 +14,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { bytesToHex, eip712SigningHash, type Bytes32 } from '@mandate/kernel';
-import { portfolioMandateV2Hash, type PortfolioMandate } from '@mandate/portfolio';
+import { portfolioMandateAuthorizationV2Hash, type PortfolioMandate } from '@mandate/portfolio';
 import { addressOfKey, signPrehash } from '@mandate/portfolio/demo';
 import { LiveSession, sessionDigest, sessionDir } from '@mandate/live-agents';
 import { APPROVAL_CHAIN_ID } from '../../live-agents/src/wallet/approval.ts';
@@ -44,7 +44,8 @@ async function v2Session(dir: string, key: string, id: string): Promise<void> {
   if (!c.ok) return;
   const mandate = s.challenges.get(c.challenge)?.prepared.mandate;
   assert.ok(mandate);
-  const signature = signPrehash(portfolioMandateV2Hash(mandate, { chainId: APPROVAL_CHAIN_ID, sessionDigest: sessionDigest(s.id) }), key);
+  assert.ok(c.initialAllocationDigest);
+  const signature = signPrehash(portfolioMandateAuthorizationV2Hash(mandate, { chainId: APPROVAL_CHAIN_ID, sessionDigest: sessionDigest(s.id), initialAllocationDigest: c.initialAllocationDigest }), key);
   assert.equal((await s.authorizeWithWallet(draft, c.challenge, signature)).ok, true);
   assert.equal((await s.run()).status, 'AUTHORIZED');
   s.close();

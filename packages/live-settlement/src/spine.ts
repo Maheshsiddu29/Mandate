@@ -15,7 +15,7 @@
  * still be signed by that key, because the key is that address.
  */
 
-import { mandateSignedByPrincipalV2, type PortfolioMandate } from '@mandate/portfolio';
+import { mandateSignedByPrincipalV2, mandateSignedByPrincipalV2Plan, type PortfolioMandate } from '@mandate/portfolio';
 import { sessionDigest, type PrincipalAuthorization } from '@mandate/live-agents';
 
 /** Robinhood Chain testnet. A V2 settlement on any other chain is refused. */
@@ -45,7 +45,7 @@ function sameAddress(a: string, b: string): boolean {
  */
 export function reverifySpine(f: SpineFacts): SpineCheck {
   const a = f.authorization;
-  if (a.method !== 'WALLET_PRINCIPAL_V2') return fail('SPINE_METHOD_REQUIRED');
+  if (a.method !== 'WALLET_PRINCIPAL_V2' && a.method !== 'WALLET_PRINCIPAL_V2_PLAN') return fail('SPINE_METHOD_REQUIRED');
   if (f.chainId !== SPINE_CHAIN_ID) return fail('SPINE_CHAIN_MISMATCH');
   if (!sameAddress(a.protocolSigner, a.principal)) return fail('SPINE_SIGNER_SPLIT');
   if (a.domainDelegation !== 'SAME_PRINCIPAL') return fail('SPINE_DELEGATION_MISSTATED');
@@ -53,7 +53,10 @@ export function reverifySpine(f: SpineFacts): SpineCheck {
   const bound = sessionDigest(f.sessionId);
   const wallet = a.wallet;
   if (wallet === null || wallet.chainId !== SPINE_CHAIN_ID.toString() || wallet.sessionDigest !== bound) return fail('SPINE_SIGNATURE_INVALID');
-  if (!mandateSignedByPrincipalV2(f.mandate, f.signature, { chainId: SPINE_CHAIN_ID, sessionDigest: bound })) return fail('SPINE_SIGNATURE_INVALID');
+  const valid = a.method === 'WALLET_PRINCIPAL_V2_PLAN'
+    ? wallet.initialAllocationDigest !== undefined && mandateSignedByPrincipalV2Plan(f.mandate, f.signature, { chainId: SPINE_CHAIN_ID, sessionDigest: bound, initialAllocationDigest: wallet.initialAllocationDigest })
+    : mandateSignedByPrincipalV2(f.mandate, f.signature, { chainId: SPINE_CHAIN_ID, sessionDigest: bound });
+  if (!valid) return fail('SPINE_SIGNATURE_INVALID');
   if (f.now >= f.mandate.expiresAt) return fail('SPINE_EXPIRED');
   return { ok: true, principal: a.principal };
 }

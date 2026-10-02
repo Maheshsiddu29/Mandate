@@ -81,7 +81,7 @@ export interface LabOptions {
  * discovery-only candidates (docs/v2/mandate-room-v2.md §1.5).
  */
 export const CANDIDATE_PIPELINE = 'DISCOVERED>ACTIONABLE>EXECUTABLE>MODEL';
-export const ROOM_SEMANTICS = 'MANDATE_ROOM_V2';
+export const ROOM_SEMANTICS = 'MANDATE_ROOM_V2_PLAN_BOUND';
 
 /** A plan as the browser sees it: budgets, what stays unallocated, why, and each agent's declared rationale. */
 export function summarizePlan(p: AllocationPlan): { readonly [k: string]: unknown } {
@@ -280,9 +280,9 @@ export class LiveLab {
       presets: PRESETS,
       pauseConfirmation: PAUSE_CONFIRMATION,
       principalAuthorization: {
-        methods: ['WALLET_EIP712', 'DEMO_PRINCIPAL_KEY', 'WALLET_PRINCIPAL_V2'],
+        methods: ['WALLET_EIP712', 'DEMO_PRINCIPAL_KEY', 'WALLET_PRINCIPAL_V2', 'WALLET_PRINCIPAL_V2_PLAN'],
         wallet: { chainId: APPROVAL_CHAIN_ID, environment: APPROVAL_ENVIRONMENT, domain: { name: APPROVAL_DOMAIN.name, version: APPROVAL_DOMAIN.version }, delegatesDomainExecution: false },
-        spine: { method: 'WALLET_PRINCIPAL_V2', request: { spine: 'V2' }, domain: { name: 'Mandate', version: '2', chainId: APPROVAL_CHAIN_ID }, principalIsWallet: true, domainExecution: 'PER_EXECUTION_GATE_EIP712' },
+        spine: { method: 'WALLET_PRINCIPAL_V2_PLAN', request: { spine: 'V2' }, domain: { name: 'Mandate', version: '2', chainId: APPROVAL_CHAIN_ID }, primaryType: 'PortfolioMandateAuthorizationV2', principalIsWallet: true, initialAllocationBound: true, domainExecution: 'PER_EXECUTION_GATE_EIP712' },
       },
       roles: ROLES.map((r) => ({ role: r, label: ROLE_LABELS[r], domain: AGENT_DOMAINS[r], objective: DOMAIN_AGENTS[r].objective, candidates: DOMAIN_AGENTS[r].candidates.map((c) => ({ id: c.id, title: c.title })) })),
       catalog: Object.fromEntries(CATALOG_SETS.map((s) => [s, CATALOG[s].map((e) => ({ id: e.id, label: e.label }))])),
@@ -438,7 +438,7 @@ export class LiveLab {
     if (spine !== undefined && spine !== 'V2') return refuse(400, 'BAD_REQUEST', 'spine must be "V2" or omitted. Omitted is the B.5.3 wallet approval.');
     const r = spine === 'V2' ? entry.session.spineChallenge(entry.draft, address) : entry.session.walletChallenge(entry.draft, address);
     if (!r.ok) return { status: 409, body: safe({ error: r.code, message: r.message, ...this.#view(entry) }) };
-    return ok({ challenge: r.challenge, version: r.version, digest: r.digest, principal: r.principal, validUntil: r.validUntil, typedData: r.typedData, spine: spine === 'V2' ? 'V2' : 'V1', ...this.#view(entry) });
+    return ok({ challenge: r.challenge, version: r.version, digest: r.digest, initialAllocationDigest: r.initialAllocationDigest, principal: r.principal, validUntil: r.validUntil, typedData: r.typedData, spine: spine === 'V2' ? 'V2' : 'V1', ...this.#view(entry) });
   }
 
   async #walletAuthorize(entry: Entry, body: JsonObject): Promise<ApiResponse> {

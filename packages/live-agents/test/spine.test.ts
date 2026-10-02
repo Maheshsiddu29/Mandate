@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { mandateSignedByPrincipal, mandateSignedByPrincipalV2, portfolioMandateDigest, portfolioMandateV2Hash } from '@mandate/portfolio';
+import { mandateSignedByPrincipal, mandateSignedByPrincipalV2, mandateSignedByPrincipalV2Plan, portfolioMandateAuthorizationV2Hash, portfolioMandateDigest, portfolioMandateV2Hash } from '@mandate/portfolio';
 import { addressOfKey, signPrehash } from '@mandate/portfolio/demo';
 import { presetDraft } from '../src/authoring/draft-types.ts';
 import { LiveSession } from '../src/session.ts';
@@ -28,6 +28,7 @@ const FIELDS: readonly TypedField[] = [
   { name: 'mandateDigest', type: 'bytes32' },
   { name: 'principal', type: 'address' },
   { name: 'sessionDigest', type: 'bytes32' },
+  { name: 'initialAllocationDigest', type: 'bytes32' },
 ];
 
 function session(o: { id?: string; stateDir?: string } = {}): LiveSession {
@@ -55,14 +56,15 @@ describe('wallet principal V2', () => {
     assert.ok(prepared);
     assert.equal(c.digest, portfolioMandateDigest(prepared));
     const typed = c.typedData as { primaryType: string; domain: { version: string; chainId: number }; message: { [k: string]: string } };
-    assert.equal(typed.primaryType, 'PortfolioMandateV2');
+    assert.equal(typed.primaryType, 'PortfolioMandateAuthorizationV2');
     assert.equal(typed.domain.version, '2');
     assert.equal(typed.domain.chainId, Number(APPROVAL_CHAIN_ID));
     const message = typed.message;
-    const fromWallet = typedDataHash({ name: 'Mandate', version: '2', chainId: APPROVAL_CHAIN_ID }, 'PortfolioMandateV2', FIELDS, message);
+    const fromWallet = typedDataHash({ name: 'Mandate', version: '2', chainId: APPROVAL_CHAIN_ID }, 'PortfolioMandateAuthorizationV2', FIELDS, message);
     const activeMandate = prepared;
-    assert.equal(hex(fromWallet), hex(portfolioMandateV2Hash(activeMandate, { chainId: APPROVAL_CHAIN_ID, sessionDigest: sessionDigest(s.id) })));
-    assert.equal(hex(fromWallet), hex(portfolioMandateV2Hash(activeMandate, { chainId: APPROVAL_CHAIN_ID, sessionDigest: message['sessionDigest'] as string })));
+    assert.equal(c.initialAllocationDigest, message['initialAllocationDigest']);
+    assert.equal(hex(fromWallet), hex(portfolioMandateAuthorizationV2Hash(activeMandate, { chainId: APPROVAL_CHAIN_ID, sessionDigest: sessionDigest(s.id), initialAllocationDigest: c.initialAllocationDigest as string })));
+    assert.notEqual(hex(fromWallet), hex(portfolioMandateV2Hash(activeMandate, { chainId: APPROVAL_CHAIN_ID, sessionDigest: message['sessionDigest'] as string })));
 
     const signature = signPrehash(fromWallet, WALLET_KEY);
     const wrong = await s.authorizeWithWallet(draft, c.challenge, signPrehash(fromWallet, OTHER_KEY));
@@ -76,12 +78,14 @@ describe('wallet principal V2', () => {
     const active = s.versions.active;
     assert.ok(active);
     assert.equal(active.mandate.principal.value, WALLET);
-    assert.equal(ok.record.authorization.method, 'WALLET_PRINCIPAL_V2');
+    assert.equal(ok.record.authorization.method, 'WALLET_PRINCIPAL_V2_PLAN');
+    assert.equal(ok.record.authorization.wallet?.initialAllocationDigest, c.initialAllocationDigest);
     assert.equal(ok.record.authorization.principal, WALLET);
     assert.equal(ok.record.authorization.protocolSigner, WALLET);
     assert.equal(ok.record.authorization.domainDelegation, 'SAME_PRINCIPAL');
     assert.equal(mandateSignedByPrincipal(active.mandate, active.signature), false);
-    assert.equal(mandateSignedByPrincipalV2(active.mandate, active.signature, { chainId: APPROVAL_CHAIN_ID, sessionDigest: sessionDigest(s.id) }), true);
+    assert.equal(mandateSignedByPrincipalV2(active.mandate, active.signature, { chainId: APPROVAL_CHAIN_ID, sessionDigest: sessionDigest(s.id) }), false);
+    assert.equal(mandateSignedByPrincipalV2Plan(active.mandate, active.signature, { chainId: APPROVAL_CHAIN_ID, sessionDigest: sessionDigest(s.id), initialAllocationDigest: c.initialAllocationDigest as string }), true);
     assert.equal(s.versions.protocolSigner === WALLET, false);
     const replay = await s.authorizeWithWallet(draft, c.challenge, signature);
     assert.equal(replay.ok, false);
@@ -99,7 +103,8 @@ describe('wallet principal V2', () => {
       if (!c.ok) return;
       const mandate = s.challenges.get(c.challenge)?.prepared.mandate;
       assert.ok(mandate);
-      const signature = signPrehash(portfolioMandateV2Hash(mandate, { chainId: APPROVAL_CHAIN_ID, sessionDigest: sessionDigest(s.id) }), WALLET_KEY);
+      assert.ok(c.initialAllocationDigest);
+      const signature = signPrehash(portfolioMandateAuthorizationV2Hash(mandate, { chainId: APPROVAL_CHAIN_ID, sessionDigest: sessionDigest(s.id), initialAllocationDigest: c.initialAllocationDigest }), WALLET_KEY);
       assert.equal((await s.authorizeWithWallet(draft, c.challenge, signature)).ok, true);
       const run = await s.run();
       assert.equal(run.status, 'AUTHORIZED');
@@ -111,8 +116,8 @@ describe('wallet principal V2', () => {
       const active = restored.versions.active;
       assert.ok(active);
       assert.equal(active.mandate.principal.value, WALLET);
-      assert.equal(mandateSignedByPrincipalV2(active.mandate, active.signature, { chainId: APPROVAL_CHAIN_ID, sessionDigest: sessionDigest(id) }), true);
-      assert.equal(restored.versions.records[0]?.authorization.method, 'WALLET_PRINCIPAL_V2');
+      assert.equal(mandateSignedByPrincipalV2Plan(active.mandate, active.signature, { chainId: APPROVAL_CHAIN_ID, sessionDigest: sessionDigest(id), initialAllocationDigest: c.initialAllocationDigest }), true);
+      assert.equal(restored.versions.records[0]?.authorization.method, 'WALLET_PRINCIPAL_V2_PLAN');
       restored.close();
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -126,6 +131,20 @@ describe('wallet principal V2', () => {
     if (!c.ok) return;
     const mandate = s.challenges.get(c.challenge)?.prepared.mandate;
     assert.ok(mandate);
-    assert.deepEqual(c.typedData, spineTypedData(mandate, s.id));
+    assert.ok(c.initialAllocationDigest);
+    assert.deepEqual(c.typedData, spineTypedData(mandate, s.id, c.initialAllocationDigest));
+  });
+
+  it('a signature cannot be reused after the accepted allocation changes', async () => {
+    const s = session({ id: 'lab-spine-allocation-mutation' });
+    const draft = presetDraft('balanced');
+    const c = s.spineChallenge(draft, WALLET);
+    assert.equal(c.ok, true);
+    if (!c.ok || c.initialAllocationDigest === null) return;
+    const mandate = s.challenges.get(c.challenge)?.prepared.mandate;
+    assert.ok(mandate);
+    const signature = signPrehash(portfolioMandateAuthorizationV2Hash(mandate, { chainId: APPROVAL_CHAIN_ID, sessionDigest: sessionDigest(s.id), initialAllocationDigest: c.initialAllocationDigest }), WALLET_KEY);
+    const other = `0x${'44'.repeat(32)}`;
+    assert.equal(mandateSignedByPrincipalV2Plan(mandate, signature, { chainId: APPROVAL_CHAIN_ID, sessionDigest: sessionDigest(s.id), initialAllocationDigest: other }), false);
   });
 });

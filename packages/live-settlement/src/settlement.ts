@@ -184,7 +184,7 @@ export interface PrincipalBinding {
 export function principalBinding(a: PrincipalAuthorization | undefined, d: TestnetDeployment, gateExecution?: 'WALLET_EIP712'): PrincipalBinding {
   const portfolio = { method: a?.method ?? 'UNKNOWN', address: a?.principal ?? 'UNKNOWN' };
   const protocolSigner = a?.protocolSigner ?? 'UNKNOWN';
-  if (a?.method === 'WALLET_PRINCIPAL_V2' && a.domainDelegation === 'SAME_PRINCIPAL' && a.protocolSigner.toLowerCase() === a.principal.toLowerCase()) {
+  if ((a?.method === 'WALLET_PRINCIPAL_V2' || a?.method === 'WALLET_PRINCIPAL_V2_PLAN') && a.domainDelegation === 'SAME_PRINCIPAL' && a.protocolSigner.toLowerCase() === a.principal.toLowerCase()) {
     if (a.principal.toLowerCase() === d.principal.toLowerCase()) return { portfolio, protocolSigner, domainSettlement: { kind: 'SAME_PRINCIPAL', address: d.principal }, delegation: 'SAME_PRINCIPAL' };
     if (gateExecution === 'WALLET_EIP712') return { portfolio, protocolSigner, domainSettlement: { kind: 'WALLET_GATE_EIP712', address: a.principal }, delegation: 'GATE_EIP712_PER_EXECUTION' };
   }
@@ -303,7 +303,7 @@ export class LiveSettlement {
       if (this.#submitted) return ineligible('SEND_GATE', 'ALREADY_SUBMITTED_IN_THIS_SESSION');
       if (j === null) return ineligible('JOURNAL', 'DURABLE_JOURNAL_REQUIRED_FOR_SEND');
       // B.5.3 wallet approvals do not delegate domain execution. V2 may send only after reverifySpine, below. A wallet that is not the manifest principal must also present a gate signature.
-      if (authorization?.method !== 'DEMO_PRINCIPAL_KEY' && authorization?.method !== 'WALLET_PRINCIPAL_V2') return ineligible('PRINCIPAL', 'WALLET_PRINCIPAL_NOT_DELEGATED_TO_DOMAIN');
+      if (authorization?.method !== 'DEMO_PRINCIPAL_KEY' && authorization?.method !== 'WALLET_PRINCIPAL_V2' && authorization?.method !== 'WALLET_PRINCIPAL_V2_PLAN') return ineligible('PRINCIPAL', 'WALLET_PRINCIPAL_NOT_DELEGATED_TO_DOMAIN');
       if (o.gate.state !== 'AUTHORIZED') {
         this.#emit('TESTNET_SEND_AUTHORIZATION_REFUSED', { ...ids, required: SEND_AUTHORIZATION_PHRASE, transactions: 0 });
         return ineligible('SEND_GATE', SEND_NOT_AUTHORIZED);
@@ -332,7 +332,7 @@ export class LiveSettlement {
     // V2 is re-checked before the journal is written and before any key is used. A failure never falls through to the demonstration signer.
     let boundPrincipal: string | undefined;
     let presented = false;
-    if (authorization?.method === 'WALLET_PRINCIPAL_V2') {
+    if (authorization?.method === 'WALLET_PRINCIPAL_V2' || authorization?.method === 'WALLET_PRINCIPAL_V2_PLAN') {
       const held = session.versions.coreOf(x.version);
       if (held === null) return ineligible('PRINCIPAL', 'VERSION_UNKNOWN');
       const check = reverifySpine({ mandate: held.mandate, signature: held.signature, authorization, sessionId: session.id, chainId: d.chainId, now: session.protocolNow() });

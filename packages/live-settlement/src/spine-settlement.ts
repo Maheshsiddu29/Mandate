@@ -76,7 +76,7 @@ export async function settleSpine(i: SpineSettlementInput): Promise<SpineSettlem
   });
   session.events.emit('MANDATE_REVERIFY_STARTED', {
     agent: 'stock',
-    data: { phase: 'SETTLEMENT', scheme: 'V2_EIP712', ok: check.ok, reason: check.ok ? null : check.reason, sessionId: session.id, path: 'EIP-712 PortfolioMandateV2 re-verified, then settlement', transactions: 0 },
+    data: { phase: 'SETTLEMENT', scheme: record.authorization.method === 'WALLET_PRINCIPAL_V2_PLAN' ? 'V2_PLAN_EIP712' : 'V2_EIP712', ok: check.ok, reason: check.ok ? null : check.reason, sessionId: session.id, path: 'EIP-712 portfolio mandate authorization re-verified, then settlement', transactions: 0 },
   });
   if (!check.ok) return refuse('PRINCIPAL', check.reason);
   const presented = check.principal.toLowerCase() !== d.principal.toLowerCase();

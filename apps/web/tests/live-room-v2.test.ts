@@ -91,7 +91,7 @@ test('41. a discovery-only candidate is never shown as the agent\'s choice, and 
   ];
   const stock = deriveAgents(events).find((a) => a.role === 'stock');
   assert.equal(stock?.candidate, 'NVDA · Fixture Backed NVIDIA Note');
-  assert.equal(serverCompatible({ candidatePipeline: 'DISCOVERED>ACTIONABLE>EXECUTABLE>MODEL', roomSemantics: 'MANDATE_ROOM_V2' }), true);
+  assert.equal(serverCompatible({ candidatePipeline: 'DISCOVERED>ACTIONABLE>EXECUTABLE>MODEL', roomSemantics: 'MANDATE_ROOM_V2_PLAN_BOUND' }), true);
   assert.equal(serverCompatible({}), false);
   assert.match(lab, /if \(!compatible\) \{\s*setError\(STALE_SERVER\);/);
 });

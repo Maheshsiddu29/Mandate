@@ -6,7 +6,7 @@
  * to Robinhood Chain testnet, and sign EIP-712 typed data the local server
  * built. That is all: every request goes through one allowlist, and it has
  * no way to send, sign a transaction or sign raw bytes. Both signatures it
- * collects are typed data: PortfolioMandateV2 for the portfolio, and
+ * collects are typed data: PortfolioMandateAuthorizationV2 for the portfolio, and
  * MandateAuthorization for one stock execution. Neither broadcasts. The
  * deployer pays gas. A wallet signature never delegates onchain execution
  * authority.

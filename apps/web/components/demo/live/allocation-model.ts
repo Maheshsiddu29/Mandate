@@ -219,10 +219,10 @@ export function authorizedStockTrade(events: readonly LiveEvent[], reservations:
 
 /** The candidate pipeline and Room semantics a server must advertise before this page runs agents against it. */
 export const REQUIRED_PIPELINE = "DISCOVERED>ACTIONABLE>EXECUTABLE>MODEL";
-export const REQUIRED_ROOM_SEMANTICS = "MANDATE_ROOM_V2";
+export const REQUIRED_ROOM_SEMANTICS = "MANDATE_ROOM_V2_PLAN_BOUND";
 
 export function serverCompatible(status: JsonRecord | null): boolean {
   return status !== null && status.candidatePipeline === REQUIRED_PIPELINE && status.roomSemantics === REQUIRED_ROOM_SEMANTICS;
 }
 
-export const STALE_SERVER = "This local server was started from older code: it does not filter discovery-only candidates before the model, and it predates Mandate Room V2. Restart it (npm run agents:lab) and reload.";
+export const STALE_SERVER = "This local server was started from older code: it does not provide the plan-bound Mandate Room V2 authorization contract. Restart it (npm run agents:lab) and reload.";
