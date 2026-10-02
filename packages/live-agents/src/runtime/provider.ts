@@ -38,6 +38,8 @@ export interface CandidateView {
   readonly facts: readonly FactView[];
   /** Seller, marketplace or venue text. Untrusted: it may contain instructions, which have no authority. */
   readonly untrustedText: string | null;
+  /** `FIXTURE`: the facts are labelled demonstration data, not live market quotes. */
+  readonly marketEvidence: 'FIXTURE';
   readonly minAtoms: string;
   readonly maxAtoms: string;
   readonly resizable: boolean;

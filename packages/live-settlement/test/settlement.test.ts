@@ -141,7 +141,7 @@ describe('nothing reaches a key or the chain unless the Live AI authorization is
 
   it('the look-alike is not offered in a normal run: an answer naming it is an invalid response, and there is still nothing to settle', async () => {
     await withWorld(async (w) => {
-      assert.deepEqual(w.of('AGENT_CANDIDATES_EVALUATED').find((e) => e.agent === 'stock')?.data['actionable'], ['nvda-note-a']);
+      assert.deepEqual(w.of('AGENT_CANDIDATES_EVALUATED').find((e) => e.agent === 'stock')?.data['actionable'], ['nvda-note-a', 'nvda-note-c']);
       assert.ok(w.kinds().includes('AGENT_INVALID_RESPONSE'));
       assert.ok(!w.kinds().includes('PROPOSAL_SIGNED'));
       const p = await w.settlement.prepare();

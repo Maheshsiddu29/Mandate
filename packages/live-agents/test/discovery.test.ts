@@ -19,12 +19,15 @@ const byRole = (answers: { readonly [R in Role]?: { text: string; delayMs?: numb
 describe('the real Mandate verdict on every candidate, proposed directly with eligibility bypassed (balanced mandate)', () => {
   const expected: { readonly [id: string]: { readonly verdict: string; readonly codes: RegExp } } = {
     'nvda-note-a': { verdict: 'ADMISSIBLE', codes: /^$/ },
+    'nvda-note-c': { verdict: 'ADMISSIBLE', codes: /^$/ },
     'nvda-token-b': { verdict: 'BLOCKED', codes: /REGISTRY:/ },
     'route-a': { verdict: 'ADMISSIBLE', codes: /^$/ },
+    'route-c': { verdict: 'ADMISSIBLE', codes: /^$/ },
     'route-b': { verdict: 'BLOCKED', codes: /VENUE_NOT_ALLOWED/ },
     'genesis-11': { verdict: 'ADMISSIBLE', codes: /^$/ },
     'genesis-7': { verdict: 'BLOCKED', codes: /ASSET_NOT_ALLOWED|REPRESENTATION_NOT_ALLOWED/ },
     'alpha-usd-vault': { verdict: 'ADMISSIBLE', codes: /^$/ },
+    'beta-usd-vault': { verdict: 'ADMISSIBLE', codes: /^$/ },
     'high-yield-usd': { verdict: 'BLOCKED', codes: /ISSUER_NOT_ALLOWED/ },
     'btc-long-2x': { verdict: 'ADMISSIBLE', codes: /^$/ },
     'btc-long-5x': { verdict: 'BLOCKED', codes: /LEVERAGE_NOT_ALLOWED/ },

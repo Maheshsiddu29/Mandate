@@ -40,11 +40,15 @@ import {
   type VerificationTranscript,
   type VerifiedChild,
 } from '@mandate/portfolio';
-import { demoBindings } from '@mandate/portfolio/demo';
+import { liveLabBindings } from '@mandate/portfolio/demo';
 
-/** The five reviewed domain bindings. One set per session, shared by every version, so every version compiles the same modules. */
+/**
+ * The five reviewed domain bindings over the Live Lab market set V2 (labelled fixtures: the Phase 7F
+ * demonstration plus one more reviewed alternative in stock, swap and yield). One set per session,
+ * shared by every version, so every version compiles the same modules.
+ */
 export function sessionBindings(): readonly DomainBinding[] {
-  return demoBindings();
+  return liveLabBindings();
 }
 
 export type Registered = { readonly ok: true; readonly core: PortfolioCore; readonly ledgerVersion: bigint } | { readonly ok: false; readonly reasons: readonly Reason[] };

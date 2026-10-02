@@ -25,6 +25,8 @@ export interface TrustedCandidate {
   readonly facts: readonly FactView[];
   /** Third-party text shown to the model as untrusted data. Never read by trusted code. */
   readonly untrustedText: string | null;
+  /** Where the candidate's economics come from. Every demonstration candidate is a labelled fixture, never a live quote. */
+  readonly marketEvidence: 'FIXTURE';
   readonly minAtoms: bigint;
   readonly maxAtoms: bigint;
   readonly resizable: boolean;
@@ -42,7 +44,7 @@ export const NO_CLAIMS = { ticker: null, displayName: null, issuer: null, asset:
 export const USDC = (whole: bigint): bigint => whole * 1_000_000n;
 
 export function viewOf(c: TrustedCandidate, advisoryRank: number | null = null): CandidateView {
-  return { id: c.id, title: c.title, facts: c.facts, untrustedText: c.untrustedText, minAtoms: c.minAtoms.toString(), maxAtoms: c.maxAtoms.toString(), resizable: c.resizable, advisoryRank };
+  return { id: c.id, title: c.title, facts: c.facts, untrustedText: c.untrustedText, marketEvidence: c.marketEvidence, minAtoms: c.minAtoms.toString(), maxAtoms: c.maxAtoms.toString(), resizable: c.resizable, advisoryRank };
 }
 
 /** Exact lookup: the only way a returned id becomes a candidate. */

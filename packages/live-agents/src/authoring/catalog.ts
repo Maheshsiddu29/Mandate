@@ -1,8 +1,10 @@
 /**
  * The reviewed catalog: every identity a Live AI Lab mandate may name.
  *
- * It is exactly the Phase 7F demonstration's portfolio scope (labelled
- * fixtures, `@mandate/portfolio/demo`). The principal may narrow it — pick a
+ * It is exactly the Live Lab market set V2's portfolio scope (labelled
+ * fixtures, `@mandate/portfolio/demo` live-markets.ts): the Phase 7F
+ * demonstration's scope plus one more reviewed alternative in stock, swap
+ * and yield. The principal may narrow it — pick a
  * subset, lower a bound — and never extend it: the domain bindings only
  * recognise reviewed instruments, so an identity outside this list could not
  * be authorized anyway, and a model has no way to add one. Every member has
@@ -11,7 +13,7 @@
  */
 
 import type { AuthorityScopeInput, CanonicalAssetInput } from '@mandate/portfolio';
-import { AGENT_SCOPES, PORTFOLIO_SCOPE } from '@mandate/portfolio/demo';
+import { LIVE_AGENT_SCOPES as AGENT_SCOPES, LIVE_PORTFOLIO_SCOPE as PORTFOLIO_SCOPE } from '@mandate/portfolio/demo';
 import type { Role } from '../types.ts';
 
 export interface CatalogEntry {
@@ -38,10 +40,12 @@ export const CATALOG: { readonly [S in CatalogSet]: readonly CatalogEntry[] } = 
     ['mandate-genesis', 'Mandate Genesis NFT collection'],
     ['alpha-usd-vault', 'Alpha USD vault shares'],
     ['btc', 'Bitcoin'],
+    ['beta-usd-vault', 'Beta USD vault shares'],
   ]),
   issuers: entries(PORTFOLIO_SCOPE.issuers, [
     ['note-issuer-alpha', 'Backed-note issuer (reviewed fixture)'],
     ['vault-issuer-alpha', 'Alpha vault issuer (reviewed fixture)'],
+    ['vault-issuer-beta', 'Beta vault issuer (reviewed fixture)'],
   ]),
   representations: entries(PORTFOLIO_SCOPE.representations, [
     ['nvda-backed-note', 'Fully backed NVDA note on Robinhood Chain testnet'],
@@ -49,6 +53,8 @@ export const CATALOG: { readonly [S in CatalogSet]: readonly CatalogEntry[] } = 
     ['genesis-collection', 'Genesis collection contract'],
     ['alpha-vault', 'Alpha USD vault (ERC-4626)'],
     ['btc-perp', 'BTC perpetual on Lighter testnet'],
+    ['nvda-backed-note-c', 'Fully backed NVDA note Series C, open redemption (fixture; no deployed testnet market)'],
+    ['beta-vault', 'Beta USD vault (ERC-4626)'],
   ]),
   venues: entries(PORTFOLIO_SCOPE.venues, [
     ['robinhood-gate', 'Mandate gate (Robinhood Chain, offline configuration)'],
@@ -57,6 +63,8 @@ export const CATALOG: { readonly [S in CatalogSet]: readonly CatalogEntry[] } = 
     ['nft-marketplace', 'Reviewed NFT marketplace'],
     ['alpha-vault-protocol', 'Alpha vault protocol'],
     ['lighter-exchange', 'Lighter exchange'],
+    ['swap-pool-c', 'Reviewed USDC/WETH pool, lower fee tier'],
+    ['beta-vault-protocol', 'Beta vault protocol'],
   ]),
   chains: entries(PORTFOLIO_SCOPE.chains, [
     ['robinhood-testnet', 'Robinhood Chain testnet (46630)'],

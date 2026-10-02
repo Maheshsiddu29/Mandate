@@ -60,7 +60,7 @@ describe('JEV is advisory only', () => {
     const views = DOMAIN_AGENTS.swap.candidates.map((c) => viewOf(c));
     const out = applyAdvice(views, { ranking: ['route-z', 'route-b', 'route-b', 'route-a'], source: 'test' });
     assert.deepEqual(out.map((v) => v.id), views.map((v) => v.id));
-    assert.deepEqual(out.map((v) => v.advisoryRank), [2, 1]);
+    assert.deepEqual(out.map((v) => v.advisoryRank), [2, null, 1]);
     assert.deepEqual(out.map((v) => ({ ...v, advisoryRank: null })), views);
   });
 });

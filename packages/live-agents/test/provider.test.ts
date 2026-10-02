@@ -21,8 +21,8 @@ const decision: DecisionRequest = {
   authority: { role: 'swap', mandateVersion: 1, domain: 'swap-fixture', maxAllocationAtoms: '500000000', exposure: null, maxLeverage: null, maxSlippageBps: 50, maxQuoteAgeSeconds: '60' },
   portfolio: { deployableAtoms: '2000000000', availableAtoms: '2000000000', enabledAgents: ['swap'] },
   candidates: [
-    { id: 'route-a', title: 'USDC→WETH via router 5a01', facts: [], untrustedText: null, minAtoms: '100000000', maxAtoms: '500000000', resizable: true, advisoryRank: null },
-    { id: 'route-b', title: 'USDC→WETH via router bad0', facts: [], untrustedText: null, minAtoms: '100000000', maxAtoms: '500000000', resizable: true, advisoryRank: null },
+    { id: 'route-a', title: 'USDC→WETH via router 5a01', facts: [], untrustedText: null, marketEvidence: 'FIXTURE', minAtoms: '100000000', maxAtoms: '500000000', resizable: true, advisoryRank: null },
+    { id: 'route-b', title: 'USDC→WETH via router bad0', facts: [], untrustedText: null, marketEvidence: 'FIXTURE', minAtoms: '100000000', maxAtoms: '500000000', resizable: true, advisoryRank: null },
   ],
 };
 

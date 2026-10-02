@@ -4,6 +4,12 @@
  * **portfolio invalid**, because the portfolio's derivative exposure limit
  * is shared; that is what the Mandate Room negotiates. The 5x is decided by
  * the leverage bound.
+ *
+ * There is deliberately no second approved strategy here. The fixture
+ * sub-account is configured isolated at 2x (an initial margin fraction of
+ * 50 %), and Core re-derives the margin demand from that admitted setting: a
+ * 3x order passes scope but its reservation is refused
+ * (`RESERVATION_DEMAND_MISMATCH`). The agent's real choice is its size.
  */
 
 import { BTC_PERP, BTC_PRICE_LIGHTER, PERP_ACCOUNT } from '@mandate/portfolio/demo';
@@ -19,10 +25,12 @@ function long(id: string, leverage: number, initialMarginFraction: number): Trus
       { label: 'Market', value: 'BTC perpetual (Lighter testnet)' },
       { label: 'Side', value: 'LONG' },
       { label: 'Leverage', value: `${leverage}x` },
+      { label: 'Initial margin', value: `${(initialMarginFraction / 100).toFixed(2)} % of notional` },
       { label: 'Mark', value: '100,000 USD per BTC (fixture)' },
       { label: 'Size', value: 'requested USDC notional' },
     ],
     untrustedText: null,
+    marketEvidence: 'FIXTURE',
     minAtoms: USDC(100n),
     maxAtoms: USDC(1_000n),
     resizable: true,
