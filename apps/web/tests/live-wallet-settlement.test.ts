@@ -83,6 +83,33 @@ test('a V2 principal is labelled as the wallet, and same-address settlement is n
   assert.match(read(`${LIVE}sheets.tsx`), /Wallet gate signature, per execution/);
 });
 
+test('a V2 dry run ends READY · NOT SENT, and the gate signature is a step before simulation', () => {
+  const typed = { primaryType: 'MandateAuthorization', domain: { chainId: 46630 }, message: {} };
+  const waiting = after(['GATE_EXECUTION_SIGNATURE_REQUIRED', { mode: 'DRY_RUN', note: 'sign this execution', typedData: typed }]);
+  const waitingView = derivePresentation(waiting).settlement;
+  assert.equal(waitingView.stage, 'SIGN_GATE');
+  assert.equal(waitingView.settled, false);
+  assert.equal(waitingView.gateSign?.mode, 'DRY_RUN');
+  assert.equal(deriveFlow(done(waiting)).phase, 'SETTLING');
+  const simulating = after(['TESTNET_SIMULATION_PASSED', { gasEstimate: '1' }]);
+  assert.equal(derivePresentation(simulating).settlement.stage, 'SIMULATION');
+  assert.equal(deriveFlow(done(simulating)).phase, 'SETTLING');
+  const ready = after(['SPINE_DRY_RUN_READY', { broadcast: 'NOT_SENT', network: 'Robinhood Chain Testnet', chainId: '46630', note: 'Re-verified. Dry run READY. Nothing was broadcast. The deployer pays gas.', tokenIn: { symbol: 'MDUSD', amount: '32' }, tokenOut: { symbol: 'MDEMO', amount: '3.2' }, principals }]);
+  const readyView = derivePresentation(ready).settlement;
+  assert.equal(readyView.stage, 'SPINE_READY');
+  assert.equal(readyView.settled, false);
+  assert.equal(readyView.evidence, 'DRY_RUN');
+  assert.equal(readyView.fixtureIn, '32 MDUSD');
+  assert.equal(readyView.gateSign, null);
+  assert.equal(deriveFlow(done(ready)).phase, 'COMPLETE');
+  const refused = after(['DOMAIN_EXECUTION_INELIGIBLE', { reason: 'GATE_EXECUTION_AUTHORITY_REQUIRED' }]);
+  assert.equal(derivePresentation(refused).settlement.stage, 'FAILED');
+  assert.equal(derivePresentation(refused).settlement.detail, 'GATE_EXECUTION_AUTHORITY_REQUIRED');
+  assert.match(outcome, /Sign stock authorization/);
+  assert.match(outcome, /Phantom signs MandateAuthorization/);
+  assert.match(outcome, /The deployer pays gas\. Your wallet does not\./);
+});
+
 test('a session-bound dry run ends READY · NOT SENT: complete, never settled, both principals shown', () => {
   const events = after(['TESTNET_PREFLIGHT_STARTED', { network: 'Robinhood Chain Testnet' }], ['TESTNET_SIMULATION_PASSED', { gasEstimate: '321000', principals }], ['TESTNET_READY_FOR_SEND', { broadcast: 'DISABLED_IN_B.5.3', principals, rpcProvider: 'public' }]);
   const s = derivePresentation(events).settlement;

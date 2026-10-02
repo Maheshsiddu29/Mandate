@@ -72,11 +72,11 @@ labelled fallback.
 
 | | Wallet path | Demo principal key (fallback) |
 | --- | --- | --- |
-| What authorizes a version | the principal's wallet signs an EIP-712 `PortfolioMandateApproval` of the exact mandate digest, for this session, chain 46630, a 300 s server challenge, once; the server rebuilds and verifies it (`POST …/wallet/challenge`, `POST …/wallet/authorize`) | `POST …/authorize` with the exact text `AUTHORIZE MANDATE V<n>` |
-| Principal identity | the recovered wallet address | the demonstration key's address |
-| Signature the frozen Portfolio Verifier checks | the demonstration key's prehash signature, made only after the wallet approval verified (a wallet cannot sign that raw prehash) | the same |
+| What authorizes a version | the page sends `spine: "V2"`. The wallet signs EIP-712 `PortfolioMandateV2` of the exact mandate digest, for this session, chain 46630, a 300 s server challenge, once; the server rebuilds and verifies it (`POST …/wallet/challenge`, `POST …/wallet/authorize`). Omitting `spine` on the API is still the B.5.3 `PortfolioMandateApproval` | `POST …/authorize` with the exact text `AUTHORIZE MANDATE V<n>` |
+| Principal identity | the recovered wallet address, and on V2 that address is the protocol principal | the demonstration key's address |
+| Signature the frozen Portfolio Verifier checks | V2: the wallet's `PortfolioMandateV2` signature, checked again by `reverifySpine` at settlement. B.5.3 (spine omitted): the demonstration key's prehash, made only after the wallet approval verified | the demonstration key's prehash |
 | Browser wallet calls | `eth_requestAccounts`, `eth_accounts`, `eth_chainId`, `wallet_switchEthereumChain`, `wallet_addEthereumChain`, `eth_signTypedData_v4` — never a transaction | none |
-| Domain execution | **not delegated**: testnet settlement is signed by separate 7E.3 custody; a wallet-approved version never sends | not delegated |
+| Domain execution | V2: a wallet that is not the manifest principal signs `MandateAuthorization` once per execution; the deployer pays gas and broadcasts. The portfolio signature is not that signature. B.5.3 does not delegate, and that version never sends | not delegated |
 
 The UI says *wallet-signed mandate*, never that the wallet delegated
 execution authority onchain. Copy before signing: "Your wallet will sign
@@ -90,12 +90,15 @@ belong to: the operator runs `npm run agents:settle:testnet -- --session
 <id>`, whose events land in that session's log. In B.5.3 that command is a
 dry run ending at *Ready for testnet send · nothing was sent*.
 
-V2 ([authority-spine-v2.md](authority-spine-v2.md)) is opt-in on
-`POST …/wallet/challenge` with `{ "spine": "V2" }`. The wallet is then the
-protocol principal, and `npm run agents:settle:v2 -- --session <id>`
-re-verifies that signature and dry-runs; `--send` broadcasts once after the
-existing operator phrase, and only when the wallet is the manifest
-principal. The UI does not offer V2. B.5.2 and B.5.3 are unchanged.
+V2 ([authority-spine-v2.md](authority-spine-v2.md)) is what **Approve in
+wallet** asks for: `POST …/wallet/challenge` with `{ "address", "spine": "V2" }`.
+The wallet becomes the protocol principal. After the run, the receipt can
+dry-run and send through `POST …/settle` when the server is
+`npm run agents:lab`. That is the same `settleSpine` and the same re-verify
+as `npm run agents:settle:v2`. The wallet signs typed data only. The deployer
+pays gas and broadcasts. The demo principal key remains a labelled fallback
+and cannot settle on V2. `npm run agents:serve` does not settle. B.5.2 and
+B.5.3 are unchanged.
 
 ## 1. The trust model in one table
 
@@ -415,7 +418,9 @@ The server (`packages/live-agents/src/server/`):
 | `GET /api/live/sessions/:id` | draft, validation, guardrails, versions (with how each was authorized), last run and policy-stress summaries, each reservation's ledger status, `durable`, `restored` |
 | `POST …/draft` | `{ preset }`, `{ prompt }` or `{ from: "active" }` (to amend) |
 | `POST …/draft/fill`, `…/draft/field`, `…/draft/resolve` | fill unset fields from a preset; set one field; resolve one interpretation issue |
-| `POST …/wallet/challenge` | `{ address }` → a one-time EIP-712 approval of the exact mandate the draft compiles to (B.5.3) |
+| `POST …/wallet/challenge` | `{ address, spine?: "V2" }` → a one-time EIP-712 approval. Omitted spine is the B.5.3 `PortfolioMandateApproval`. `"V2"` is `PortfolioMandateV2` |
+| `GET /api/live/settlement` | on `agents:lab` only: spine V2 is available, the operator phrase, gas payer `DEPLOYER`. `agents:serve` answers 404. A missing manifest or key answers 503 |
+| `POST …/settle` | on `agents:lab` only: `{ mode: "DRY_RUN" \| "SEND", gateSignature?, sendAuthorization?, cancel? }` — the same spine as `agents:settle:v2`. The wallet does not broadcast |
 | `POST …/wallet/authorize` | `{ challenge, signature }` — the server rebuilds the message and verifies the recovered signer (B.5.3) |
 | `POST …/authorize`, `…/pause` | need the exact confirmation text (the demo key path; pause) |
 | `POST …/run`, `…/policy-stress` | start in the background; progress is the event stream |
@@ -427,7 +432,8 @@ The server (`packages/live-agents/src/server/`):
 npm run agents:stub        # offline: deterministic stub provider, text output
 npm run agents:live        # OpenAI: requires OPENAI_API_KEY (and optionally OPENAI_MODEL)
 npm run agents:live:json   # OpenAI: MANDATE_LIVE_AI.V1 events as JSON lines
-npm run agents:serve       # local API for /demo/live on 127.0.0.1:8787 (OpenAI when a key is set; the stub always)
+npm run agents:serve       # local API for /demo/live on 127.0.0.1:8787 (OpenAI when a key is set; the stub always). Does not settle.
+npm run agents:lab         # the same API, plus V2 dry-run and send for /demo/live. The deployer key broadcasts. Explicit only.
 ```
 
 These are offchain: every one of them reports 0 transactions. The testnet

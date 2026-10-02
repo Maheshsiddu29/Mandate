@@ -63,7 +63,8 @@ static page that talks only to a local server started from the repository
 root:
 
 ```sh
-npm run agents:serve
+npm run agents:serve   # the lab, without settlement
+npm run agents:lab     # the same lab, plus in-page V2 dry-run and send
 ```
 
 That server binds to `127.0.0.1:8787`, holds `OPENAI_API_KEY` when one is set
@@ -73,8 +74,9 @@ bundle contains no key and no provider endpoint. `NEXT_PUBLIC_LIVE_AGENTS_URL`
 may point the page at another loopback port; any non-loopback URL is refused.
 The Cloudflare Pages build needs no variable or secret for this route; without
 a local server the page says the server is unreachable. The page does not send
-transactions and does not import the settlement package. Nothing is deployed
-for the Live AI Lab in this milestone.
+transactions and does not import the settlement package. `agents:lab` is the
+server that does: the wallet signs typed data, and the deployer key pays gas.
+Nothing is deployed for the Live AI Lab in this milestone.
 
 ### B.6.2 workspace
 
@@ -87,10 +89,17 @@ demo (policy stress), the event log and pause open as side sheets. The phase
 is presentation state derived from real events (`live-flow.ts`); nothing
 advances on a timer. Equal authoritative event timestamps stay grouped.
 
-Wallet signing is not wired: the review step shows it as not connected, and
-the local server's demonstration principal key still needs the exact
-`AUTHORIZE MANDATE V<n>` phrase. See docs/demo/live-ai-lab.md §0 for what a
-real one-time wallet approval would need.
+**Approve in wallet** signs `PortfolioMandateV2` (spine V2) with the injected
+wallet. The demo principal key remains, and it still needs the exact
+`AUTHORIZE MANDATE V<n>` phrase. That key cannot settle on V2.
+
+Dry-run from the page, after a wallet-authorized run, when `npm run agents:lab`
+is the server: **Dry-run testnet settlement**. If the wallet is not the
+manifest principal, **Sign stock authorization** asks Phantom for
+`MandateAuthorization` before simulation. The receipt shows the session id
+and READY · NOT SENT. Sending requires typing the operator phrase the server
+advertised. The deployer broadcasts. A hash is not CONFIRMED until the
+receipt says so. See docs/demo/authority-spine-v2.md.
 
 The landing hero renders React Bits
 [Pattern Waves](https://www.reactbits.dev/backgrounds/pattern-waves) with
