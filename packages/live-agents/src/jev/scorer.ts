@@ -25,6 +25,7 @@ export type JevScore =
       /** The probability-weighted level, 0–4, exactly as the scorer returned it. */
       readonly score: number;
       readonly confidence: number;
+      readonly probabilities: { readonly [level: string]: number };
       /** The score as integer basis points of the top level, 0–10,000: what the allocator may use. */
       readonly bps: number;
       readonly model: string;
@@ -73,7 +74,17 @@ export function validateScore(raw: RawScore, latencyMs: number): JevScore {
     if (typeof p !== 'number' || !Number.isFinite(p) || p < 0 || p > 1) return unavailable('PROBABILITY_OUT_OF_RANGE');
   }
   if (typeof model !== 'string' || model.length === 0 || model.length > 64) return unavailable('MODEL_MISSING');
-  return { status: 'SCORED', score, confidence, bps: Math.round((score / TOP) * 10_000), model, latencyMs };
+  return { status: 'SCORED', score, confidence, probabilities: probabilities as { readonly [level: string]: number }, bps: Math.round((score / TOP) * 10_000), model, latencyMs };
+}
+
+/**
+ * Re-validate what a scorer returned: a SCORED result is accepted only if its
+ * own fields pass `validateScore` again, and its basis points are recomputed
+ * here, never taken from the scorer.
+ */
+export function revalidate(s: JevScore): JevScore {
+  if (s.status !== 'SCORED') return s;
+  return validateScore({ score: s.score, confidence: s.confidence, probabilities: s.probabilities, model: s.model }, s.latencyMs);
 }
 
 /** The basis points an allocator may use, or null: only a SCORED result, only an integer 0–10,000. */

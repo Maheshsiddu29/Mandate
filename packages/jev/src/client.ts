@@ -24,6 +24,7 @@
 
 import { BodyReadError, readJsonBounded } from './body.ts';
 import { parseJevModels, type ParseOutcome } from './parse.ts';
+import type { JevScorePayload } from './score.ts';
 import {
   DEFAULT_BASE_URL,
   JevFallbackReason,
@@ -118,7 +119,8 @@ export class TypeSafeJevClient implements JevTransport {
     this.#now = options.now ?? (() => performance.now());
   }
 
-  async send(payload: JevRequestPayload, timeoutMs: number): Promise<JevTransportOutcome> {
+  /** POST /v1/systemone: a routing `choice` question, or an opportunity `score` question (score.ts). */
+  async send(payload: JevRequestPayload | JevScorePayload, timeoutMs: number): Promise<JevTransportOutcome> {
     const started = this.#now();
     const elapsed = (): number => Math.max(0, Math.round(this.#now() - started));
     const key = readApiKey(this.#env);

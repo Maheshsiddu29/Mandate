@@ -23,3 +23,4 @@ export * from './body.ts';
 export * from './client.ts';
 export * from './decide.ts';
 export * from './explain.ts';
+export * from './score.ts';
