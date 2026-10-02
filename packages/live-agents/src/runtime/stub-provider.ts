@@ -17,15 +17,19 @@ import type { AgentModelProvider, CallOptions, DecisionRequest, DraftRequest, Mo
 type Pick = readonly [preference: readonly string[], wholeUsdc: bigint];
 
 /**
- * Behaviours by seed: what each agent reaches for. The stub is offered only
+ * Behaviours by seed: what each agent reaches for. The rule is exactly this:
+ * the first id in a fixed preference list that is among the candidates
+ * offered, at a fixed size clamped to that candidate's bounds. The stub never
+ * reads a fact, a quote or the principal's intent, so its picks are test
+ * infrastructure, never evidence of economic reasoning. It is offered only
  * actionable candidates, like a model, so a preference that eligibility
  * excluded is simply not available to it.
  */
 const BEHAVIOURS: readonly { readonly [R in Role]: Pick }[] = [
   // 0: the swap agent chases the better quote when it is offered; the NFT agent sits out.
   { stock: [['nvda-note-a'], 600n], swap: [['route-b', 'route-a'], 300n], nft: [[], 0n], yield: [['alpha-usd-vault'], 700n], perps: [['btc-long-2x'], 600n] },
-  // 1: every agent reaches for the highest headline number among what it is offered.
-  { stock: [['nvda-token-b', 'nvda-note-a'], 600n], swap: [['route-b', 'route-a'], 400n], nft: [['genesis-7', 'genesis-11'], 240n], yield: [['high-yield-usd', 'alpha-usd-vault'], 800n], perps: [['btc-long-5x', 'btc-long-2x'], 600n] },
+  // 1: every agent reaches for the best headline number (lowest quoted price, highest quote or APY) among what it is offered.
+  { stock: [['nvda-token-b', 'nvda-note-c', 'nvda-note-a'], 600n], swap: [['route-b', 'route-c', 'route-a'], 400n], nft: [['genesis-7', 'genesis-11'], 240n], yield: [['high-yield-usd', 'beta-usd-vault', 'alpha-usd-vault'], 800n], perps: [['btc-long-5x', 'btc-long-2x'], 600n] },
   // 2: reviewed instruments, at full size: a large conflict.
   { stock: [['nvda-note-a'], 800n], swap: [['route-a'], 500n], nft: [['genesis-11'], 300n], yield: [['alpha-usd-vault'], 800n], perps: [['btc-long-2x'], 600n] },
 ];

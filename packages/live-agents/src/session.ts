@@ -70,6 +70,12 @@ export interface SessionOptions {
   /** Make the session durable under this state directory (persistence/session-store.ts). */
   readonly stateDir?: string;
   /**
+   * The principal's economic preference for this session ("prefer liquidity
+   * over yield"), passed to every agent as ranking guidance. Interpreting a
+   * prompt replaces it with that prompt. It authorizes nothing.
+   */
+  readonly intent?: string;
+  /**
    * Tests only: replace the advisory candidate filter (agents/eligibility.ts),
    * to simulate one that is broken or bypassed. Mandate's screening never
    * depends on it; the default is the deterministic filter.
@@ -172,6 +178,7 @@ export class LiveSession {
   #onApproval: ((version: number, message: ReturnType<typeof approvalMessage>, signature: string) => void) | null = null;
   #epoch = new AbortController();
   #running = false;
+  #intent: string | null = null;
   #rooms = 0;
 
   constructor(o: SessionOptions) {
@@ -311,6 +318,8 @@ export class LiveSession {
   }
 
   async interpret(prompt: string): Promise<{ readonly draft: MandateDraft | null; readonly validation: DraftValidation | null; readonly error: string | null }> {
+    // The principal's own words are also their preference for how agents rank what the mandate allows.
+    this.#intent = prompt;
     const interpreter = this.#o.interpreter ?? this.provider;
     this.events.emit('MANDATE_DRAFT_REQUESTED', { data: { prompt: prompt.slice(0, 600), interpreter: interpreter.name, interpreterKind: interpreter.kind, model: interpreter.model } });
     const r = await interpretPrompt(prompt, interpreter, this.clock, this.#o.agentTimeoutMs);
@@ -567,7 +576,7 @@ export class LiveSession {
   }
 
   #deps(): DiscoveryDeps {
-    return { provider: this.provider, jev: this.#jev, clock: this.clock, events: this.events, signers: this.signers, sequences: this.#sequences, protocolNow: this.protocolNow, timeoutMs: this.#o.agentTimeoutMs, current: () => this.versions.active, eligibility: this.#o.eligibility ?? actionableCandidates };
+    return { provider: this.provider, jev: this.#jev, clock: this.clock, events: this.events, signers: this.signers, sequences: this.#sequences, protocolNow: this.protocolNow, timeoutMs: this.#o.agentTimeoutMs, current: () => this.versions.active, eligibility: this.#o.eligibility ?? actionableCandidates, intent: this.#intent ?? this.#o.intent ?? null };
   }
 
   /** Everything superseded is re-screened under the version now in force: Mandate refuses the old digest. */

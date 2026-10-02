@@ -7,6 +7,7 @@
  *
  * Options: --provider=openai|stub  --seed=N (stub)  --preset=balanced|conservative|aggressive
  *          --prompt="…" [--fill=<preset>]  --chaos=<spec> (development only)
+ *          --intent="…" (the principal's ranking preference; no authority)
  *          --policy-attempts=N  --no-policy-stress  --json
  *
  * The principal's confirmation "AUTHORIZE MANDATE V1" is supplied by this
@@ -42,6 +43,7 @@ const { values } = parseArgs({
     seed: { type: 'string', default: '0' },
     preset: { type: 'string', default: 'balanced' },
     prompt: { type: 'string' },
+    intent: { type: 'string' },
     fill: { type: 'string' },
     chaos: { type: 'string' },
     'policy-attempts': { type: 'string', default: String(DEFAULT_POLICY_STRESS_ATTEMPTS) },
@@ -88,7 +90,7 @@ if (values.chaos !== undefined) {
   else provider = new LatencyChaosProvider(provider, plan, realClock);
 }
 
-const session = new LiveSession({ provider, agentTimeoutMs: config.agentTimeoutMs, roomRoundTimeoutMs: config.roomRoundTimeoutMs, chaos: values.chaos ?? null });
+const session = new LiveSession({ provider, agentTimeoutMs: config.agentTimeoutMs, roomRoundTimeoutMs: config.roomRoundTimeoutMs, chaos: values.chaos ?? null, ...(values.intent === undefined ? {} : { intent: values.intent }) });
 const print = (e: LiveEvent) => (json ? out(JSON.stringify(e)) : out(renderEvent(e)));
 // SESSION_STARTED is emitted by the constructor, before anyone can subscribe.
 for (const e of session.events.events) print(e);

@@ -18,6 +18,7 @@ const decision: DecisionRequest = {
   kind: 'DECISION',
   role: 'swap',
   objective: 'Maximize execution quality.',
+  principalIntent: null,
   authority: { role: 'swap', mandateVersion: 1, domain: 'swap-fixture', maxAllocationAtoms: '500000000', exposure: null, maxLeverage: null, maxSlippageBps: 50, maxQuoteAgeSeconds: '60' },
   portfolio: { deployableAtoms: '2000000000', availableAtoms: '2000000000', enabledAgents: ['swap'] },
   candidates: [

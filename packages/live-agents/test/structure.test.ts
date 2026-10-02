@@ -116,7 +116,7 @@ describe('live-agents structural boundary', () => {
     const agent = DOMAIN_AGENTS.swap;
     const authority = { role: 'swap' as const, mandateVersion: 1, domain: 'swap', maxAllocationAtoms: '1', exposure: null, maxLeverage: null, maxSlippageBps: null, maxQuoteAgeSeconds: null };
     const schemas = [
-      decisionSchema({ kind: 'DECISION', role: 'swap', objective: '', authority, portfolio: { deployableAtoms: '0', availableAtoms: '0', enabledAgents: [] }, candidates: agent.candidates.map((c) => viewOf(c)) }),
+      decisionSchema({ kind: 'DECISION', role: 'swap', objective: '', principalIntent: null, authority, portfolio: { deployableAtoms: '0', availableAtoms: '0', enabledAgents: [] }, candidates: agent.candidates.map((c) => viewOf(c)) }),
       negotiationSchema({ kind: 'NEGOTIATION', role: 'swap', objective: '', roomId: 'r', generation: 1, portfolioAuthorityAtoms: '0', admissibleDemandAtoms: '0', requiredReductionAtoms: '0', constraints: [], candidateTitle: '', yourCurrentAtoms: '1', yourMinimumAtoms: '1', yourOwnLimitAtoms: '1', permittedActions: ['KEEP', 'REDUCE', 'RELEASE', 'ABSTAIN'], participants: [] }),
       policyStressSchema({ kind: 'POLICY_STRESS', role: 'swap', task: '', authority, cases: caseViews(['COMPLIANT_CONTROL', 'ABSTAIN']), history: [], attempt: 1, maxAttempts: 5 }),
     ];

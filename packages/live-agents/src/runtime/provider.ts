@@ -66,10 +66,27 @@ export interface PortfolioView {
   readonly enabledAgents: readonly Role[];
 }
 
+/** What kind of inference made a decision: a real model, the deterministic stub, or a test script. */
+export type ModelEvidence = 'LIVE_MODEL' | 'STUB' | 'SCRIPTED';
+
+export function modelEvidenceOf(kind: ProviderKind): ModelEvidence {
+  return kind === 'LIVE' ? 'LIVE_MODEL' : kind;
+}
+
+/** The longest principal preference passed to an agent, in characters. */
+export const MAX_PRINCIPAL_INTENT = 600;
+
 export interface DecisionRequest {
   readonly kind: 'DECISION';
   readonly role: Role;
   readonly objective: string;
+  /**
+   * The principal's own words about what they want (the prompt they drafted
+   * the mandate from, or an explicit preference), or null. Guidance for
+   * ranking the candidates only: it carries no authority, and every limit in
+   * it is already enforced through the mandate.
+   */
+  readonly principalIntent: string | null;
   readonly authority: AuthorityView;
   readonly portfolio: PortfolioView;
   readonly candidates: readonly CandidateView[];

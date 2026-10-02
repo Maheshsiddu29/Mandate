@@ -36,7 +36,7 @@ import type { LocalAgentSigner } from './mandate/signer.ts';
 import { reasonCodes, screen, type ScreenResult } from './mandate/verifier-adapter.ts';
 import { callModel } from './runtime/agent-runtime.ts';
 import type { Clock } from './runtime/clock.ts';
-import type { AgentModelProvider, DecisionRequest } from './runtime/provider.ts';
+import { MAX_PRINCIPAL_INTENT, modelEvidenceOf, type AgentModelProvider, type DecisionRequest } from './runtime/provider.ts';
 import { parseDecision, type AgentDecision } from './runtime/schemas.ts';
 import type { EventLog } from './telemetry/events.ts';
 import { agentTiming, type AgentTiming } from './telemetry/latency.ts';
@@ -55,6 +55,8 @@ export interface DiscoveryDeps {
   readonly current: () => ActiveMandate | null;
   /** Discovered → actionable. Defaults to the deterministic filter; adversarial tests replace it to show screening stands alone. */
   readonly eligibility?: EligibilityFilter;
+  /** The principal's stated preference for this session, passed to the models as ranking guidance; null for none. */
+  readonly intent?: string | null;
 }
 
 /** The declared reason when eligibility leaves nothing to choose from. */
@@ -93,6 +95,7 @@ export async function discoverAgent(deps: DiscoveryDeps, active: ActiveMandate, 
   const candidates = universe.actionable;
   emit('AGENT_CANDIDATES_EVALUATED', {
     basis: 'ADVISORY',
+    marketEvidence: [...new Set(universe.discovered.map((c) => c.marketEvidence))],
     discovered: universe.discovered.map((c) => c.id),
     actionable: candidates.map((c) => c.id),
     excluded: universe.excluded.map((x) => ({ candidateId: x.candidate.id, candidate: x.candidate.title, reasons: reasonCodes(x.reasons) })),
@@ -105,8 +108,10 @@ export async function discoverAgent(deps: DiscoveryDeps, active: ActiveMandate, 
 
   const advice = await deps.jev.rank(role, candidates.map((c) => viewOf(c)));
   const views = applyAdvice(candidates.map((c) => viewOf(c)), advice);
-  const request: DecisionRequest = { kind: 'DECISION', role, objective: spec.objective, authority: authorityView(active, role), portfolio: await portfolioView(active, observedAt), candidates: views };
-  emit('AGENT_REQUEST_STARTED', { provider: deps.provider.name, providerKind: deps.provider.kind, model: deps.provider.model, candidates: views.map((v) => v.id), quoteObservedAt: observedAt, jev: advice === null ? null : advice.source });
+  const principalIntent = deps.intent === undefined || deps.intent === null || deps.intent.trim() === '' ? null : deps.intent.trim().slice(0, MAX_PRINCIPAL_INTENT);
+  const request: DecisionRequest = { kind: 'DECISION', role, objective: spec.objective, principalIntent, authority: authorityView(active, role), portfolio: await portfolioView(active, observedAt), candidates: views };
+  const modelEvidence = modelEvidenceOf(deps.provider.kind);
+  emit('AGENT_REQUEST_STARTED', { provider: deps.provider.name, providerKind: deps.provider.kind, model: deps.provider.model, modelEvidence, candidates: views.map((v) => v.id), principalIntent, quoteObservedAt: observedAt, jev: advice === null ? null : advice.source });
 
   const call = await callModel({
     provider: deps.provider,
@@ -145,7 +150,7 @@ export async function discoverAgent(deps: DiscoveryDeps, active: ActiveMandate, 
   const candidate = candidateById({ ...spec, candidates }, decision.candidateId ?? '');
   const size = decision.requestedAtoms ?? 0n;
   if (candidate === null) return end('INVALID_RESPONSE', { decision, error: 'candidate lookup failed' });
-  emit('AGENT_DECISION_COMPLETED', { candidateId: candidate.id, candidate: candidate.title, requested: { atoms: size, amount: usdcText(size) }, rationale: decision.rationale, ...latency });
+  emit('AGENT_DECISION_COMPLETED', { candidateId: candidate.id, candidate: candidate.title, requested: { atoms: size, amount: usdcText(size) }, rationale: decision.rationale, alternatives: candidates.filter((c) => c !== candidate).map((c) => c.id), modelEvidence, marketEvidence: candidate.marketEvidence, ...latency });
 
   // Build under the version the agent was asked under; sign locally.
   const signer = deps.signers.get(role);
