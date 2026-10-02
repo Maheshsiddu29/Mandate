@@ -33,6 +33,7 @@ import { DOMAIN_AGENTS } from './agents/index.ts';
 import { actionableCandidates, type EligibilityFilter } from './agents/eligibility.ts';
 import { LIVE_LAB_SETTLEMENT_PROFILE, executableCandidates, type SettlementProfile } from './agents/capability.ts';
 import { candidateById, viewOf, type TrustedCandidate } from './agents/spec.ts';
+import { boundedTo } from './allocation/planning.ts';
 import { amountViews, authorityView, portfolioView } from './context.ts';
 import { applyAdvice, type JevAdvisor } from './jev/advisor.ts';
 import { buildProposal, type SequenceBook } from './mandate/proposal-builder.ts';
@@ -67,6 +68,8 @@ export interface DiscoveryDeps {
    * that must reach Mandate's screening with a candidate no connector settles.
    */
   readonly settlement?: SettlementProfile | null;
+  /** The agent's budget under the signed plan (allocation/intent.ts), or null: its candidates are bounded to it. */
+  readonly budgetOf?: (role: Role) => bigint | null;
 }
 
 /** The declared reason when eligibility leaves nothing to choose from. */
@@ -93,6 +96,8 @@ export interface AgentOutcome {
 export interface DiscoveryOptions {
   /** Replace the candidate set (a refresh offers the same candidate, bounded by what the Room agreed). */
   readonly candidates?: readonly TrustedCandidate[];
+  /** A local re-plan: the agent's own limit, shown to the model (room/classify.ts). */
+  readonly localConstraint?: DecisionRequest['localConstraint'];
 }
 
 export async function discoverAgent(deps: DiscoveryDeps, active: ActiveMandate, role: Role, o: DiscoveryOptions = {}): Promise<AgentOutcome> {
@@ -106,7 +111,9 @@ export async function discoverAgent(deps: DiscoveryDeps, active: ActiveMandate, 
   const universe = (deps.eligibility ?? actionableCandidates)(active, role, o.candidates ?? spec.candidates, observedAt);
   const profile = deps.settlement === undefined ? LIVE_LAB_SETTLEMENT_PROFILE : deps.settlement;
   const live = executableCandidates(profile, role, universe.actionable, observedAt);
-  const candidates = live.executable;
+  // A budget bounds what the agent is offered: never a candidate it could not afford, never more than its budget.
+  const budget = deps.budgetOf?.(role) ?? null;
+  const candidates = budget === null ? live.executable : boundedTo(live.executable, budget);
   emit('AGENT_CANDIDATES_EVALUATED', {
     basis: 'ADVISORY',
     marketEvidence: [...new Set(universe.discovered.map((c) => c.marketEvidence))],
@@ -116,10 +123,17 @@ export async function discoverAgent(deps: DiscoveryDeps, active: ActiveMandate, 
     settlementProfile: profile?.id ?? null,
     executable: candidates.map((c) => c.id),
     capability: live.capability.map((c) => ({ candidateId: c.candidateId, status: c.status, connector: c.connector, reason: c.reason })),
+    budget: budget === null ? null : { atoms: budget, amount: usdcText(budget) },
+    localConstraint: o.localConstraint ?? null,
   });
   if (universe.actionable.length === 0) {
     // Nothing to choose from: no model call, no placeholder candidate, no proposal.
     emit('AGENT_ABSTAINED', { rationale: NO_ELIGIBLE_OPPORTUNITIES, cause: 'NO_ACTIONABLE_CANDIDATES', modelCalled: false });
+    return { ...base, state: 'ABSTAINED', decision: null, candidate: null, sizeAtoms: 0n, signed: null, screening: null, error: null, timing: null };
+  }
+  if (candidates.length === 0 && live.executable.length > 0) {
+    // Settleable, but nothing fits within the budget the principal signed: nothing to choose.
+    emit('AGENT_ABSTAINED', { rationale: 'No opportunity fits within this agent\'s budget.', cause: 'NO_CANDIDATE_WITHIN_BUDGET', modelCalled: false });
     return { ...base, state: 'ABSTAINED', decision: null, candidate: null, sizeAtoms: 0n, signed: null, screening: null, error: null, timing: null };
   }
   if (candidates.length === 0) {
@@ -131,7 +145,7 @@ export async function discoverAgent(deps: DiscoveryDeps, active: ActiveMandate, 
   const advice = await deps.jev.rank(role, candidates.map((c) => viewOf(c)));
   const views = applyAdvice(candidates.map((c) => viewOf(c)), advice);
   const principalIntent = deps.intent === undefined || deps.intent === null || deps.intent.trim() === '' ? null : deps.intent.trim().slice(0, MAX_PRINCIPAL_INTENT);
-  const request: DecisionRequest = { kind: 'DECISION', role, objective: spec.objective, principalIntent, authority: authorityView(active, role), portfolio: await portfolioView(active, observedAt), candidates: views };
+  const request: DecisionRequest = { kind: 'DECISION', role, objective: spec.objective, principalIntent, authority: authorityView(active, role), portfolio: await portfolioView(active, observedAt), candidates: views, ...(budget === null ? {} : { budgetAtoms: budget.toString() }), ...(o.localConstraint === undefined ? {} : { localConstraint: o.localConstraint }) };
   const modelEvidence = modelEvidenceOf(deps.provider.kind);
   emit('AGENT_REQUEST_STARTED', { provider: deps.provider.name, providerKind: deps.provider.kind, model: deps.provider.model, modelEvidence, candidates: views.map((v) => v.id), principalIntent, quoteObservedAt: observedAt, jev: advice === null ? null : advice.source });
 

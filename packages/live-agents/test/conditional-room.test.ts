@@ -17,6 +17,7 @@ import assert from 'node:assert/strict';
 import { ledgerView } from '../src/mandate/portfolio-adapter.ts';
 import type { JsonObject } from '../src/runtime/strict-json.ts';
 import { keep, propose, reduce, scriptedSession, type Decisions } from './support/session.ts';
+import { json } from './support/providers.ts';
 import { everyCandidate } from './support/world.ts';
 
 const ROOM_KINDS = ['PORTFOLIO_CONFLICT', 'ROOM_OPENED', 'ROOM_GENERATION_STARTED', 'ROOM_AGENT_RESPONSE', 'ROOM_PROPOSAL_CREATED', 'ROOM_FINALIZED', 'ROOM_NO_FEASIBLE_PORTFOLIO'] as const;
@@ -48,7 +49,6 @@ const AT_THE_LIMIT: Decisions = {
 const CAPITAL_OVER: Decisions = { ...AT_THE_LIMIT, yield: { text: propose('alpha-usd-vault', 800) } };
 
 /** Stock 300 and perps 600: 900 of 2,500 capital, but 600 of 400 derivative notional. */
-const DERIVATIVE_OVER: Decisions = { stock: { text: propose('nvda-note-a', 300) }, perps: { text: propose('btc-long-2x', 600) } };
 
 describe('direct authorization: a portfolio that fits never meets the Room', () => {
   for (const [name, decisions, total] of [
@@ -106,16 +106,20 @@ describe('a real shared-resource conflict opens the Room', () => {
     assert.equal(result.final.find((f) => f.role === 'yield')?.requested, 500_000_000n);
   });
 
-  it('derivative: a perps request above the derivative limit is a real conflict, never clamped before the Room', async () => {
-    const t = await scriptedSession(DERIVATIVE_OVER, (r) => ({ text: r.role === 'perps' ? reduce(400) : keep }));
+  it('derivative: a perps request above the derivative limit is a local excess — screened as asked, never clamped, re-planned without a Room', async () => {
+    const t = await scriptedSession(
+      (role, call) => (role === 'stock' ? { text: propose('nvda-note-a', 300) } : role === 'perps' ? { text: propose('btc-long-2x', call === 0 ? 600 : 400) } : { text: json({ action: 'ABSTAIN', candidateId: null, requestedAtoms: null, rationale: 'n/a' }) }),
+      () => {
+        throw new Error('no negotiation may be asked for');
+      },
+    );
     const result = await t.session.run();
     const admissible = t.of('PROPOSAL_ADMISSIBLE').find((e) => e.agent === 'perps');
-    // The proposal Mandate screened is the model's 600, not a pre-clamped 400.
+    // The proposal Mandate screened first is the model's 600, not a pre-clamped 400.
     assert.equal((admissible?.data['demand'] as { resource: string; amount: string }[]).find((d) => d.resource === 'derivative-notional')?.amount, '600');
-    const conflict = t.of('PORTFOLIO_CONFLICT')[0];
-    assert.ok(conflict);
-    assert.deepEqual(conflicts(conflict.data), [['derivative-notional', '200']]);
-    assert.equal(t.of('ROOM_OPENED').length, 1);
+    // Only perps uses derivative notional: nobody to negotiate with.
+    for (const kind of ROOM_KINDS) assert.equal(t.of(kind).length, 0, kind);
+    assert.equal(t.of('AGENT_LOCAL_REPLAN_REQUESTED')[0]?.agent, 'perps');
     assert.equal(result.status, 'AUTHORIZED');
     const reserved = (await ledgerView(t.session.versions.active!.core)).reservations;
     assert.equal(reserved.length, 2);

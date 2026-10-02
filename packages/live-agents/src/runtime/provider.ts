@@ -90,6 +90,14 @@ export interface DecisionRequest {
   readonly authority: AuthorityView;
   readonly portfolio: PortfolioView;
   readonly candidates: readonly CandidateView[];
+  /**
+   * Set only on a local re-plan (room/classify.ts): the agent's previous
+   * request was over its own limit, and the candidate below is bounded to the
+   * most that fits. Nobody else is involved; there is no Room.
+   */
+  readonly localConstraint?: { readonly resource: string; readonly previousAtoms: string; readonly limitAtoms: string; readonly largestFittingAtoms: string };
+  /** The agent's budget under the signed plan, when it has one: the most it may use here, never an obligation. */
+  readonly budgetAtoms?: string;
 }
 
 export interface ResourceLine {

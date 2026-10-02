@@ -40,7 +40,12 @@ export interface RoomDeps {
 export interface RoomInput {
   readonly roomId: string;
   readonly version: number;
+  /** Why this Room exists (room/classify.ts). Operational Rooms are only ever SHARED_RESOURCE_COORDINATION. */
+  readonly roomPurpose: 'SHARED_RESOURCE_COORDINATION';
+  /** Every admissible participant: their demand counts toward each limit. */
   readonly participants: readonly Participant[];
+  /** Those asked to negotiate: the agents competing for a shared resource. The rest are unchanged. */
+  readonly askable: ReadonlySet<Role>;
   readonly availability: ResourceAvailability;
   readonly demandAt: DemandAt;
 }
@@ -91,6 +96,10 @@ export async function runLiveRoom(deps: RoomDeps, input: RoomInput): Promise<Roo
   };
 
   emit('ROOM_OPENED', null, {
+    roomPurpose: input.roomPurpose,
+    stage: 'POST_AUTHORIZATION',
+    reason: 'Valid proposals are competing for shared authority, and you authorized the agents to coordinate within your signed limits.',
+    askable: participants.filter((p) => input.askable.has(p.role)).map((p) => p.role),
     autonomous: true,
     participants: participants.map((p) => ({ role: p.role, candidate: p.candidate.id, request: text(p.originalAtoms), minimum: text(p.minimumAtoms) })),
     authority: text(initial.authorityAtoms),
@@ -105,6 +114,7 @@ export async function runLiveRoom(deps: RoomDeps, input: RoomInput): Promise<Roo
     gate.finalize();
     if (status === 'PROPOSED') {
       emit('ROOM_PROPOSAL_CREATED', gate.generation, {
+        roomPurpose: input.roomPurpose,
         requests: participants.map((p) => ({ role: p.role, from: text(p.originalAtoms), to: text(requests.get(p.role) ?? 0n) })),
         portfolioNotionalRequiredReduction: text(initial.requiredAtoms),
         conflicts: resolutionOf(initial, fit),
@@ -118,7 +128,7 @@ export async function runLiveRoom(deps: RoomDeps, input: RoomInput): Promise<Roo
       emit('ROOM_NO_FEASIBLE_PORTFOLIO', gate.generation, { portfolioNotionalRequiredReduction: text(initial.requiredAtoms), conflicts: resolutionOf(initial, fit), offeredReduction: text(stats().offeredAtoms), remaining: fit.lines.filter((l) => l.requiredReductionAtoms !== '0'), agentExcess: fit.agentExcess.map((x) => ({ role: x.role, resource: x.resource })), execution: 'NONE' });
     }
     const s = stats();
-    emit('ROOM_FINALIZED', gate.generation, { result: status, generations: s.generations, durationMs: s.durationMs, replies: s.replies.length, timeouts: s.replies.filter((r) => r.status === 'TIMED_OUT').length, failures: s.replies.filter((r) => r.status === 'FAILED' || r.status === 'INVALID_RESPONSE').length });
+    emit('ROOM_FINALIZED', gate.generation, { roomPurpose: input.roomPurpose, result: status, generations: s.generations, durationMs: s.durationMs, replies: s.replies.length, timeouts: s.replies.filter((r) => r.status === 'TIMED_OUT').length, failures: s.replies.filter((r) => r.status === 'FAILED' || r.status === 'INVALID_RESPONSE').length });
     return { status, requests, fit, stats: s, drain };
   };
 
@@ -126,7 +136,7 @@ export async function runLiveRoom(deps: RoomDeps, input: RoomInput): Promise<Roo
     if (deps.superseded.aborted) return finish('SUPERSEDED', assess(participants, requests, av, demandAt));
     const generation = gate.open();
     const before = assess(participants, requests, av, demandAt);
-    const active = participants.filter((p) => (requests.get(p.role) ?? 0n) > 0n);
+    const active = participants.filter((p) => (requests.get(p.role) ?? 0n) > 0n && input.askable.has(p.role));
     emit('ROOM_GENERATION_STARTED', generation, { participants: active.map((p) => p.role), admissibleDemand: text(before.demandAtoms), portfolioNotionalRequiredReduction: text(before.requiredAtoms), conflicts: conflictsOf(before), constraints: before.lines, roundTimeoutMs: deps.roundTimeoutMs });
 
     const answers = new Map<Role, NegotiationDecision>();

@@ -7,11 +7,15 @@ import { runProtocol, ledgerView } from '../src/mandate/portfolio-adapter.ts';
 import type { NegotiationRequest } from '../src/runtime/provider.ts';
 import type { JsonObject } from '../src/runtime/strict-json.ts';
 import { renderEvent } from '../src/telemetry/render.ts';
-import { CONFLICTING, keep, propose, reduce, release, scriptedSession, type Negotiation } from './support/session.ts';
+import { CONFLICTING, abstain, keep, propose, reduce, release, scriptedSession, type Negotiation } from './support/session.ts';
 import { WIDE_PERPS, everyCandidate } from './support/world.ts';
+import { presetDraft, withField } from '../src/authoring/draft-types.ts';
 
-/** perps −200 (to 400), yield −200 (to 600), NFT releases 300, stock and swap keep: offers 700 against a need of 500. */
-const cooperative: Negotiation = (r) => ({ text: r.role === 'perps' ? reduce(400) : r.role === 'yield' ? reduce(600) : r.role === 'nft' ? release : keep });
+/** yield −200 (to 600) and perps −100 (to 300): together exactly the 300 needed; stock, swap and NFT keep. */
+const cooperative: Negotiation = (r) => ({ text: r.role === 'yield' ? reduce(600) : r.role === 'perps' ? reduce(300) : keep });
+/** The balanced preset with 2,000 deployable: four valid agents still compete for capital when a fifth is blocked. */
+const TIGHT = withField(presetDraft('balanced'), 'portfolio.maxDeployed', '2000', 'USER');
+const ROOM_KINDS = ['ROOM_OPENED', 'ROOM_GENERATION_STARTED', 'ROOM_AGENT_RESPONSE', 'ROOM_PROPOSAL_CREATED', 'ROOM_FINALIZED', 'ROOM_NO_FEASIBLE_PORTFOLIO'] as const;
 
 describe('the autonomous Mandate Room', () => {
   it('tests 20–23, 31: a resource conflict enters the Room; KEEP, REDUCE and RELEASE; the result is re-verified and reserved', async () => {
@@ -19,26 +23,36 @@ describe('the autonomous Mandate Room', () => {
     const result = await t.session.run();
     const conflict = t.of('PORTFOLIO_CONFLICT')[0];
     assert.ok(conflict);
-    assert.equal((conflict.data['portfolioNotionalRequiredReduction'] as { amount: string }).amount, '500');
+    assert.equal((conflict.data['portfolioNotionalRequiredReduction'] as { amount: string }).amount, '300');
+    assert.equal(conflict.data['classification'], 'SHARED_CONFLICT');
+    assert.equal(conflict.data['roomPurpose'], 'SHARED_RESOURCE_COORDINATION');
     assert.equal(t.of('ROOM_OPENED').length, 1);
     assert.equal(t.of('ROOM_OPENED')[0]?.data['autonomous'], true);
+    assert.equal(t.of('ROOM_OPENED')[0]?.data['roomPurpose'], 'SHARED_RESOURCE_COORDINATION');
     assert.deepEqual(t.of('ROOM_REDUCTION').map((e) => e.agent).sort(), ['perps', 'yield']);
-    assert.deepEqual(t.of('ROOM_RELEASE').map((e) => e.agent), ['nft']);
     assert.ok(t.of('ROOM_KEEP').length >= 1);
     assert.equal(t.of('ROOM_PROPOSAL_CREATED').length, 1);
     // Test 31: the Room's output goes through the real Mandate path.
     const reverify = t.kinds().indexOf('MANDATE_REVERIFY_STARTED');
     assert.ok(reverify > t.kinds().indexOf('ROOM_FINALIZED'));
     assert.equal(result.status, 'AUTHORIZED');
-    assert.equal(result.reservedAtoms, 2_300_000_000n);
-    assert.deepEqual(result.final.map((f) => [f.role, f.outcome]).sort(), [['perps', 'RESERVED'], ['stock', 'RESERVED'], ['swap', 'RESERVED'], ['yield', 'RESERVED']]);
+    assert.equal(result.reservedAtoms, 2_500_000_000n);
+    assert.deepEqual(result.final.map((f) => [f.role, f.outcome]).sort(), [['nft', 'RESERVED'], ['perps', 'RESERVED'], ['stock', 'RESERVED'], ['swap', 'RESERVED'], ['yield', 'RESERVED']]);
     const auth = t.of('PORTFOLIO_AUTHORIZED')[0];
     assert.equal(auth?.data['verification'], 'VERIFIED');
     assert.equal(auth?.data['transactions'], 0);
   });
 
-  it('test 19: a security-invalid proposal stays outside the Room (eligibility bypassed, so it reaches Mandate)', async () => {
-    const t = await scriptedSession({ ...CONFLICTING, swap: { text: propose('route-b', 300) } }, cooperative, { eligibility: everyCandidate, settlement: null });
+  it('RELEASE: an agent may withdraw its whole request, and that alone can resolve the conflict', async () => {
+    const t = await scriptedSession(CONFLICTING, (r) => ({ text: r.role === 'nft' ? release : keep }));
+    const result = await t.session.run();
+    assert.deepEqual(t.of('ROOM_RELEASE').map((e) => e.agent), ['nft']);
+    assert.equal(result.reservedAtoms, 2_500_000_000n);
+    assert.equal(result.final.some((f) => f.role === 'nft'), false);
+  });
+
+  it('test 12 / 19: a security-invalid proposal is blocked and stays outside the Room (eligibility bypassed, so it reaches Mandate)', async () => {
+    const t = await scriptedSession({ ...CONFLICTING, swap: { text: propose('route-b', 300) } }, cooperative, { eligibility: everyCandidate, settlement: null, draft: TIGHT });
     await t.session.run();
     assert.equal(t.of('PROPOSAL_BLOCKED')[0]?.agent, 'swap');
     const participants = (t.of('ROOM_OPENED')[0]?.data['participants'] as { role: string }[]).map((p) => p.role);
@@ -56,7 +70,7 @@ describe('the autonomous Mandate Room', () => {
   });
 
   it('test 24: when the offers do not cover the need, there is no feasible portfolio and nothing executes', async () => {
-    // Agents collectively release only 100 against a need of 500.
+    // Agents collectively release only 100 against a need of 300.
     const t = await scriptedSession(CONFLICTING, (r) => ({ text: r.role === 'yield' ? reduce(700) : keep }), { maxGenerations: 2 });
     const before = await ledgerView(t.session.versions.active!.core);
     const result = await t.session.run();
@@ -84,7 +98,7 @@ describe('the autonomous Mandate Room', () => {
     assert.equal(late[0]?.data['effect'], 'IGNORED');
     assert.ok(t.kinds().indexOf('ROOM_AGENT_STALE_RESPONSE') > t.kinds().indexOf('PORTFOLIO_AUTHORIZED'));
     // Its 100 never reached anything.
-    assert.equal(result.reservedAtoms, 2_300_000_000n);
+    assert.equal(result.reservedAtoms, 2_500_000_000n);
   });
 
   it('test 32: model unanimity cannot exceed authority', async () => {
@@ -105,7 +119,7 @@ describe('the autonomous Mandate Room', () => {
   });
 
   it('a negotiation answer that is malformed or speaks for another agent changes nothing', async () => {
-    const t = await scriptedSession(CONFLICTING, (r: NegotiationRequest) => ({ text: r.role === 'perps' ? '{"action":"REDUCE","newRequestedAtoms":"400000000","rationale":"x","for":"stock"}' : r.role === 'yield' ? reduce(900) : keep }), { maxGenerations: 1 });
+    const t = await scriptedSession(CONFLICTING, (r: NegotiationRequest) => ({ text: r.role === 'perps' ? '{"action":"REDUCE","newRequestedAtoms":"300000000","rationale":"x","for":"stock"}' : r.role === 'yield' ? reduce(900) : keep }), { maxGenerations: 1 });
     const result = await t.session.run();
     assert.equal(result.status, 'NO_FEASIBLE_PORTFOLIO');
     const statuses = t.of('ROOM_AGENT_RESPONSE').filter((e) => e.data['status'] === 'INVALID_RESPONSE').map((e) => e.agent).sort();
@@ -115,78 +129,87 @@ describe('the autonomous Mandate Room', () => {
 
 /**
  * Stock 600 and Perps 600 under WIDE_PERPS (perps may take 600 itself): 1,200
- * of 2,500 portfolio notional, but 600 of 400 derivative notional.
+ * of 2,500 portfolio notional, but 600 of 400 derivative notional — a limit
+ * only the perps agent's request uses. Nobody to negotiate with: a local
+ * excess, never a Room (docs/v2/mandate-room-v2.md §8.1).
  */
-const DERIVATIVE_ONLY = { stock: { text: propose('nvda-note-a', 600) }, perps: { text: propose('btc-long-2x', 600) } };
 const wide = { draft: WIDE_PERPS } as const;
-const perpsTo400: Negotiation = (r) => ({ text: r.role === 'perps' ? reduce(400) : keep });
+const perpsReplans = (second: string) => (role: string, call: number) => (role === 'stock' ? { text: propose('nvda-note-a', 600) } : role === 'perps' ? { text: call === 0 ? propose('btc-long-2x', 600) : second } : { text: abstain });
+const noRoom = () => {
+  throw new Error('no negotiation may be asked for');
+};
 const conflictsIn = (data: JsonObject) => (data['conflicts'] as JsonObject[]).map((c) => ({ ...c }));
 const amt = (v: unknown) => (v as { amount: string }).amount;
 
-describe('B.5.1: typed-resource conflicts in MANDATE_LIVE_AI.V1', () => {
-  it('total capital under its limit, derivative notional over: consumers see a 200 USDC derivative conflict, not $0', async () => {
-    const t = await scriptedSession(DERIVATIVE_ONLY, perpsTo400, wide);
-    await t.session.run();
-    for (const kind of ['PORTFOLIO_CONFLICT', 'ROOM_OPENED', 'ROOM_GENERATION_STARTED'] as const) {
-      const data = t.of(kind)[0]?.data;
-      assert.ok(data, kind);
-      // Portfolio notional is under its limit, and says so under its own name.
-      assert.equal(amt(data['admissibleDemand']), '1200', kind);
-      assert.equal(amt(data['authority'] ?? { amount: '2500' }), '2500', kind);
-      assert.equal(amt(data['portfolioNotionalRequiredReduction']), '0', kind);
-      // No generic scalar that would read as "required reduction: 0".
-      assert.equal(data['requiredReduction'], undefined, kind);
-      const cs = conflictsIn(data);
-      assert.equal(cs.length, 1, kind);
-      assert.equal(cs[0]?.['resource'], 'derivative-notional', kind);
-      assert.deepEqual([amt(cs[0]?.['demand']), amt(cs[0]?.['authority']), amt(cs[0]?.['requiredReduction'])], ['600', '400', '200'], kind);
-      // Taken from the constraint list, not recomputed.
-      const line = (data['constraints'] as JsonObject[]).find((l) => l['resource'] === 'derivative-notional');
-      assert.equal((cs[0]?.['requiredReduction'] as JsonObject)['atoms'], line?.['requiredReductionAtoms'], kind);
-      assert.match(renderEvent(t.of(kind)[0]!), /derivative-notional 600 > 400 USDC \(reduce 200\)/, kind);
-    }
-  });
-
-  it('after Perps reduces 600 → 400 the derivative conflict is SATISFIED in ROOM_PROPOSAL_CREATED', async () => {
-    const t = await scriptedSession(DERIVATIVE_ONLY, perpsTo400, wide);
+describe('Room V2: a single agent over its own limit is a local re-plan, never a Room', () => {
+  it('test 7: one Perps request over the derivative limit: no Room, one bounded re-plan, re-screened, reserved', async () => {
+    const t = await scriptedSession(perpsReplans(propose('btc-long-2x', 400)), noRoom, wide);
     const result = await t.session.run();
+    for (const kind of [...ROOM_KINDS, 'PORTFOLIO_CONFLICT'] as const) assert.equal(t.of(kind).length, 0, kind);
+    const replan = t.of('AGENT_LOCAL_REPLAN_REQUESTED');
+    assert.equal(replan.length, 1);
+    assert.equal(replan[0]?.agent, 'perps');
+    const excess = (replan[0]?.data['excess'] as JsonObject[])[0];
+    assert.equal(excess?.['resource'], 'derivative-notional');
+    assert.ok(['OWN_LIMIT', 'SOLE_DEMANDER'].includes(String(excess?.['cause'])));
+    assert.deepEqual([amt(excess?.['demand']), amt(excess?.['limit']), amt(replan[0]?.data['largestFitting'])], ['600', '400', '400']);
+    assert.match(String(replan[0]?.data['room']), /NONE/);
+    // The second decision saw its own constraint and a candidate bounded to what fits.
+    const second = t.provider.requests.filter((r) => r.kind === 'DECISION' && r.role === 'perps')[1];
+    assert.ok(second?.kind === 'DECISION' && second.localConstraint?.resource === 'derivative-notional');
+    assert.ok(second?.kind === 'DECISION' && second.candidates.every((c) => BigInt(c.maxAtoms) <= 400_000_000n));
+    assert.equal(t.of('PROPOSAL_ADMISSIBLE').filter((e) => e.agent === 'perps').length, 2, 'screened in full again');
     assert.equal(result.status, 'AUTHORIZED');
-    const created = t.of('ROOM_PROPOSAL_CREATED')[0];
-    assert.ok(created);
-    assert.equal(created.data['requiredReduction'], undefined);
-    const perps = (created.data['requests'] as JsonObject[]).find((r) => r['role'] === 'perps');
-    assert.deepEqual([amt(perps?.['from']), amt(perps?.['to'])], ['600', '400']);
-    const cs = conflictsIn(created.data);
-    assert.equal(cs.length, 1);
-    assert.equal(cs[0]?.['resource'], 'derivative-notional');
-    assert.deepEqual([amt(cs[0]?.['demand']), amt(cs[0]?.['requiredReduction']), amt(cs[0]?.['demandAfter']), amt(cs[0]?.['remainingReduction'])], ['600', '200', '400', '0']);
-    assert.equal(cs[0]?.['status'], 'SATISFIED');
-    assert.match(renderEvent(created), /perps 600 USDC→400 USDC.*derivative-notional 600 → 400 ≤ 400 USDC SATISFIED/);
+    assert.deepEqual(result.final.map((f) => [f.role, f.requested]).sort(), [['perps', 400_000_000n], ['stock', 600_000_000n]]);
   });
 
-  it('conflicts in incomparable resources are listed separately, never summed', async () => {
-    // CONFLICTING: portfolio notional 3,000 of 2,500 (reduce 500) and derivative notional 600 of 400 (reduce 200).
+  it('a re-plan that abstains is refused locally; the others proceed; no Room', async () => {
+    const t = await scriptedSession(perpsReplans(abstain), noRoom, wide);
+    const result = await t.session.run();
+    for (const kind of ROOM_KINDS) assert.equal(t.of(kind).length, 0, kind);
+    assert.equal(t.of('AGENT_LOCAL_REFUSED')[0]?.data['reason'], 'ABSTAINED_ON_REPLAN');
+    assert.deepEqual(result.final.map((f) => f.role), ['stock']);
+  });
+
+  it('a re-plan answered outside its bound is invalid and refused: never clamped, never a Room', async () => {
+    const t = await scriptedSession(perpsReplans(propose('btc-long-2x', 600)), noRoom, wide);
+    const result = await t.session.run();
+    for (const kind of ROOM_KINDS) assert.equal(t.of(kind).length, 0, kind);
+    assert.equal(t.of('AGENT_LOCAL_REFUSED')[0]?.data['reason'], 'REPLAN_INVALID_RESPONSE');
+    assert.deepEqual(result.final.map((f) => f.role), ['stock']);
+  });
+
+  it('test 8: one valid agent alone never opens a coordination Room, whatever it asks', async () => {
+    const t = await scriptedSession((role, call) => (role === 'perps' ? { text: propose('btc-long-2x', call === 0 ? 600 : 300) } : { text: abstain }), noRoom, wide);
+    const result = await t.session.run();
+    for (const kind of ROOM_KINDS) assert.equal(t.of(kind).length, 0, kind);
+    assert.equal(result.status, 'AUTHORIZED');
+  });
+});
+
+describe('B.5.1: typed-resource conflicts in MANDATE_LIVE_AI.V1', () => {
+  it('conflicts are listed per resource, never summed, with no generic required reduction', async () => {
     const t = await scriptedSession(CONFLICTING, cooperative);
     await t.session.run();
     for (const kind of ['PORTFOLIO_CONFLICT', 'ROOM_OPENED', 'ROOM_GENERATION_STARTED', 'ROOM_PROPOSAL_CREATED'] as const) {
       const data = t.of(kind)[0]!.data;
       const cs = conflictsIn(data);
-      assert.deepEqual(cs.map((c) => [c['resource'], amt(c['requiredReduction'])]).sort(), [['derivative-notional', '200'], ['portfolio-notional', '500']], kind);
-      assert.equal(amt(data['portfolioNotionalRequiredReduction']), '500', kind);
+      assert.deepEqual(cs.map((c) => [c['resource'], amt(c['requiredReduction'])]), [['portfolio-notional', '300']], kind);
+      assert.equal(amt(data['portfolioNotionalRequiredReduction']), '300', kind);
       assert.equal(data['requiredReduction'], undefined, kind);
-      // The only top-level required reduction is portfolio notional's, by name; there is no 700 aggregate.
       assert.deepEqual(Object.keys(data).filter((k) => /required/i.test(k)), ['portfolioNotionalRequiredReduction'], kind);
     }
+    assert.match(renderEvent(t.of('PORTFOLIO_CONFLICT')[0]!), /portfolio-notional 2800 > 2500 USDC \(reduce 300\)/);
     assert.ok(conflictsIn(t.of('ROOM_PROPOSAL_CREATED')[0]!.data).every((c) => c['status'] === 'SATISFIED'));
   });
 
   it('a Room that cannot resolve a conflict reports it UNRESOLVED, by resource', async () => {
-    const t = await scriptedSession(DERIVATIVE_ONLY, () => ({ text: keep }), { ...wide, maxGenerations: 1 });
+    const t = await scriptedSession(CONFLICTING, () => ({ text: keep }), { maxGenerations: 1 });
     const result = await t.session.run();
     assert.equal(result.status, 'NO_FEASIBLE_PORTFOLIO');
     const nf = t.of('ROOM_NO_FEASIBLE_PORTFOLIO')[0]!;
     const cs = conflictsIn(nf.data);
-    assert.deepEqual(cs.map((c) => [c['resource'], amt(c['remainingReduction']), c['status']]), [['derivative-notional', '200', 'UNRESOLVED']]);
-    assert.match(renderEvent(nf), /still over: derivative-notional 600 > 400 USDC \(reduce 200\)/);
+    assert.deepEqual(cs.map((c) => [c['resource'], amt(c['remainingReduction']), c['status']]), [['portfolio-notional', '300', 'UNRESOLVED']]);
+    assert.match(renderEvent(nf), /still over: portfolio-notional 2800 > 2500 USDC \(reduce 300\)/);
   });
 });

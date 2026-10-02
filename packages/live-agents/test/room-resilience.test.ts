@@ -8,26 +8,25 @@ import { CONFLICTING, keep, propose, reduce, release, scriptedSession, type Nego
 
 describe('timeouts, failures and late replies in the Room', () => {
   it('test 26: a reply to an earlier generation, arriving after the next began, is ignored', async () => {
-    // Stock, yield and perps only: 1,900 notional fits, but perps' 600 derivative exceeds 400. Only perps can fix it.
-    const { swap: _swap, nft: _nft, ...decisions } = CONFLICTING;
+    // 2,800 of 2,500: only yield offers anything (reduce 300 to 500).
     const n: Negotiation = (r) => {
-      if (r.role !== 'perps') return { text: keep };
-      // Generation 1: perps answers far too late, and ignores the abort. Generation 2: promptly.
-      return r.generation === 1 ? { text: reduce(100), delayMs: 250, ignoreAbort: true } : { text: reduce(400) };
+      if (r.role !== 'yield') return { text: keep };
+      // Generation 1: yield answers far too late, and ignores the abort. Generation 2: promptly.
+      return r.generation === 1 ? { text: reduce(100), delayMs: 250, ignoreAbort: true } : { text: reduce(500) };
     };
-    const t = await scriptedSession(decisions, n, { roomRoundTimeoutMs: 60 });
+    const t = await scriptedSession(CONFLICTING, n, { roomRoundTimeoutMs: 60 });
     const result = await t.session.run();
     await t.session.complete();
     assert.equal(result.status, 'AUTHORIZED');
-    assert.equal(t.of('ROOM_AGENT_TIMEOUT')[0]?.agent, 'perps');
+    assert.equal(t.of('ROOM_AGENT_TIMEOUT')[0]?.agent, 'yield');
     assert.equal(t.of('ROOM_AGENT_TIMEOUT')[0]?.generation, 1);
-    const stale = t.of('ROOM_AGENT_STALE_RESPONSE');
+    const stale = t.of('ROOM_AGENT_STALE_RESPONSE').filter((e) => e.agent === 'yield');
     assert.equal(stale.length, 1);
     assert.equal(stale[0]?.data['answeredGeneration'], 1);
     assert.equal(stale[0]?.data['reason'], 'ANSWERED_AFTER_TIMEOUT');
     assert.equal(stale[0]?.data['effect'], 'IGNORED');
-    // The late "reduce to 100" never mattered: generation 2's 400 is what was reserved.
-    assert.equal(result.final.find((f) => f.role === 'perps')?.requested, 400_000_000n);
+    // The late "reduce to 100" never mattered: generation 2's 500 is what was reserved.
+    assert.equal(result.final.find((f) => f.role === 'yield')?.requested, 500_000_000n);
   });
 
   it('a timed-out agent is unchanged and does not block others from finding a solution', async () => {
@@ -115,8 +114,9 @@ describe('test 30: the principal may amend during the Room, and only authority c
       }
       return { text: r.role === 'perps' ? reduce(250) : r.role === 'yield' ? reduce(500) : r.role === 'nft' ? release : keep, delayMs: 20 };
     };
-    // Under V2 the perps agent still asks for 350: over its new 250 limit. Mandate, not the lab, says so.
-    const t = await scriptedSession((role, call) => (call === 0 ? CONFLICTING[role] ?? { text: '' } : role === 'perps' ? { text: propose('btc-long-2x', 350) } : CONFLICTING[role] ?? { text: '' }), n);
+    // Under V2 the perps agent still asks for 350: over its new 250 limit. Mandate, not the lab, says so; its own
+    // bounded re-plan (no Room: nobody else is involved) then asks for 250.
+    const t = await scriptedSession((role, call) => (role !== 'perps' || call === 0 ? CONFLICTING[role] ?? { text: '' } : { text: propose('btc-long-2x', call === 1 ? 350 : 250) }), n);
     const result = await t.session.run();
     assert.ok(amendment !== null);
     assert.ok((await (amendment as Promise<AuthorizeResult>)).ok);
@@ -130,7 +130,8 @@ describe('test 30: the principal may amend during the Room, and only authority c
     const reauth = t.of('PROPOSAL_STALE').filter((e) => e.data['next'] === 'REAUTHORIZE_REQUIRED');
     assert.ok(reauth.length >= 4);
     assert.ok(reauth.every((e) => (e.data['reasons'] as string[]).includes('PORTFOLIO_MANDATE_DIGEST_MISMATCH')));
-    // The perps agent's 350 under V2 is refused by its own limit and renegotiated in a V2 Room.
+    // The perps agent's 350 under V2 is over its own limit and re-planned locally, never sent to a Room as a conflict.
+    assert.equal(t.of('AGENT_LOCAL_REPLAN_REQUESTED').filter((e) => e.agent === 'perps' && e.mandateVersion === 2).length, 1);
     const v2Perps = t.of('PROPOSAL_ADMISSIBLE').find((e) => e.agent === 'perps' && e.mandateVersion === 2);
     assert.ok((v2Perps?.data['reasons'] as string[]).some((x) => x.startsWith('AGENT_LIMIT_EXCEEDED') || x.startsWith('PORTFOLIO_LIMIT_EXCEEDED')));
     assert.equal(result.version, 2);

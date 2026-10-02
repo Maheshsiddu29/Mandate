@@ -41,7 +41,8 @@ import { buildProposal, demandOf, SequenceBook } from './mandate/proposal-builde
 import { LocalPrincipalSigner, createAgentSigners, type LocalAgentSigner } from './mandate/signer.ts';
 import { reasonCodes, screen } from './mandate/verifier-adapter.ts';
 import { DEFAULT_MAX_GENERATIONS, runLiveRoom, type RoomResult } from './room/coordinator.ts';
-import { assess, conflictsOf, type Participant } from './room/negotiation.ts';
+import { assess, conflictsOf, type DemandAt, type Participant } from './room/negotiation.ts';
+import { classifyConflict, largestFittingAtoms, type LocalExcess } from './room/classify.ts';
 import { encodeRecord } from './persistence/codec.ts';
 import { restoreState, type RestoredState } from './persistence/restore.ts';
 import { SessionStore } from './persistence/session-store.ts';
@@ -50,7 +51,7 @@ import { RecordedProvider } from './runtime/recorded-provider.ts';
 import type { AgentModelProvider } from './runtime/provider.ts';
 import { realEntropy, type Entropy } from './runtime/entropy.ts';
 import { EventLog } from './telemetry/events.ts';
-import { ROLE_LABELS, usdcText, type Role } from './types.ts';
+import { ROLE_LABELS, parseUsdc, usdcText, type Role } from './types.ts';
 import { APPROVAL_CHAIN_ID, APPROVAL_DOMAIN, APPROVAL_ENVIRONMENT, APPROVAL_PRIMARY_TYPE, CHALLENGE_LIFETIME_SECONDS, approvalMessage, approvalTypedData, checkApproval, sessionDigest } from './wallet/approval.ts';
 import { ChallengeBook, MAX_SIGNATURE_FAILURES, draftKey, type WalletChallenge } from './wallet/challenges.ts';
 import { keccakHex, recoverAddress } from './wallet/eip712.ts';
@@ -176,7 +177,7 @@ export interface ReservedExecution {
   readonly role: Role;
   /** The mandate version it was reserved under. */
   readonly version: number;
-  readonly phase: 'FINAL' | 'REFRESH';
+  readonly phase: 'FINAL' | 'REFRESH' | 'REALLOCATION';
   /** The trusted candidate id the model chose (a closed-set id, never a value). */
   readonly candidateId: string;
   readonly signed: SignedProposal;
@@ -196,6 +197,8 @@ export interface RunResult {
   readonly room: RoomResult | null;
   readonly final: readonly FinalProposal[];
   readonly refreshed: readonly FinalProposal[];
+  /** Increments a Reallocation Room assigned from released capital, re-verified and reserved like any proposal. */
+  readonly reallocated: readonly FinalProposal[];
   readonly receipts: readonly string[];
   readonly reservedAtoms: bigint;
   readonly executorCalls: number;
@@ -203,6 +206,14 @@ export interface RunResult {
 }
 
 const MAX_EPOCHS = 3;
+
+const localView = (l: LocalExcess) => ({ resource: l.resource, cause: l.cause, demand: { atoms: l.demandAtoms, amount: usdcText(l.demandAtoms) }, limit: { atoms: l.limitAtoms, amount: usdcText(l.limitAtoms) } });
+
+/** An agent's budget under a signed plan, from the version's own draft; null when it has none. */
+export function budgetOf(draft: MandateDraft, role: Role): bigint | null {
+  const b = draft.agents[role].budget;
+  return b === null ? null : parseUsdc(b);
+}
 
 /** Bytes as 0x-prefixed lowercase hex. */
 const hexOf = (b: Uint8Array): string => `0x${Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')}`;
@@ -715,7 +726,7 @@ export class LiveSession {
   }
 
   #deps(): DiscoveryDeps {
-    return { provider: this.provider, jev: this.#jev, clock: this.clock, events: this.events, signers: this.signers, sequences: this.#sequences, protocolNow: this.protocolNow, timeoutMs: this.#o.agentTimeoutMs, current: () => this.versions.active, eligibility: this.#o.eligibility ?? actionableCandidates, settlement: this.#o.settlement === undefined ? LIVE_LAB_SETTLEMENT_PROFILE : this.#o.settlement, intent: this.#intent ?? this.#o.intent ?? null };
+    return { provider: this.provider, jev: this.#jev, clock: this.clock, events: this.events, signers: this.signers, sequences: this.#sequences, protocolNow: this.protocolNow, timeoutMs: this.#o.agentTimeoutMs, current: () => this.versions.active, eligibility: this.#o.eligibility ?? actionableCandidates, settlement: this.#o.settlement === undefined ? LIVE_LAB_SETTLEMENT_PROFILE : this.#o.settlement, intent: this.#intent ?? this.#o.intent ?? null, budgetOf: (role) => (this.versions.active === null ? null : budgetOf(this.versions.active.draft, role)) };
   }
 
   /** Everything superseded is re-screened under the version now in force: Mandate refuses the old digest. */
@@ -746,19 +757,42 @@ export class LiveSession {
         const admissible = outcomes.filter((o) => o.state === 'ADMISSIBLE' && o.candidate !== null && o.signed !== null);
         if (admissible.length === 0) return this.#result('NOTHING_TO_AUTHORIZE', active.version, epoch, outcomes, null);
 
-        const participants: Participant[] = admissible.map((o) => {
-          const c = o.candidate as TrustedCandidate;
-          return { role: o.role, agent: (this.signers.get(o.role) as LocalAgentSigner).party, candidate: c, observedAt: o.observedAt, originalAtoms: o.sizeAtoms, minimumAtoms: c.resizable ? c.minAtoms : o.sizeAtoms };
-        });
+        const coordination = active.draft.portfolio.autoReallocate === true;
+        let participants: Participant[] = admissible.map((o) => this.#participant(o));
         const av = await availabilityAt(active.core, this.protocolNow());
         const demandAt = (p: Participant, atoms: bigint) => (atoms === 0n ? [] : demandOf(active.mandate, active.compiled.bindings, p.agent, p.candidate.build(atoms, p.observedAt), atoms, this.protocolNow()).demand);
-        const fit = assess(participants, new Map(participants.map((p) => [p.role, p.originalAtoms])), av, demandAt);
+        let requests: ReadonlyMap<Role, bigint> = new Map(participants.map((p) => [p.role, p.originalAtoms]));
+        let fit = assess(participants, requests, av, demandAt);
+        let cls = classifyConflict(fit, participants, requests, demandAt, coordination);
+
+        // An agent alone over its own limit is its own problem: one bounded re-plan, never a Room (docs/v2/mandate-room-v2.md §8.1).
+        if (cls.kind === 'AGENT_LOCAL_EXCESS') {
+          participants = await this.#localReplans(active, participants, requests, cls.local, av, demandAt);
+          if (signal.aborted) {
+            this.#markSuperseded(admissible);
+            continue;
+          }
+          for (let pass = 0; pass < 2; pass += 1) {
+            requests = new Map(participants.map((p) => [p.role, p.originalAtoms]));
+            fit = assess(participants, requests, av, demandAt);
+            cls = classifyConflict(fit, participants, requests, demandAt, coordination);
+            if (cls.kind !== 'AGENT_LOCAL_EXCESS') break;
+            const still = new Set(cls.local.map((l) => l.role));
+            for (const role of still) this.events.emit('AGENT_LOCAL_REFUSED', { agent: role, data: { reason: 'STILL_OVER_ITS_OWN_LIMIT', excess: cls.local.filter((l) => l.role === role).map(localView), room: 'NONE — nobody to negotiate with', execution: 'NONE' } });
+            participants = participants.filter((p) => !still.has(p.role));
+          }
+          if (participants.length === 0) return this.#result('NOTHING_TO_AUTHORIZE', active.version, epoch, outcomes, null);
+        }
 
         let room: RoomResult | null = null;
-        let requests: ReadonlyMap<Role, bigint> = new Map(participants.map((p) => [p.role, p.originalAtoms]));
         if (!fit.feasible) {
           this.events.emit('PORTFOLIO_CONFLICT', {
             data: {
+              classification: cls.kind,
+              handling: cls.handling,
+              roomPurpose: cls.roomPurpose,
+              coordinationAuthorized: coordination,
+              shared: cls.shared.map((x) => ({ resource: x.resource, demanders: x.demanders, demand: { atoms: x.demandAtoms, amount: usdcText(x.demandAtoms) }, authority: { atoms: x.authorityAtoms, amount: usdcText(x.authorityAtoms) }, requiredReduction: { atoms: x.requiredReductionAtoms, amount: usdcText(x.requiredReductionAtoms) } })),
               authority: { atoms: fit.authorityAtoms, amount: usdcText(fit.authorityAtoms) },
               admissibleDemand: { atoms: fit.demandAtoms, amount: usdcText(fit.demandAtoms) },
               portfolioNotionalRequiredReduction: { atoms: fit.requiredAtoms, amount: usdcText(fit.requiredAtoms) },
@@ -766,20 +800,26 @@ export class LiveSession {
               constraints: fit.lines,
               agentExcess: fit.agentExcess.map((x) => ({ role: x.role, resource: x.resource, requested: usdcText(x.requestedAtoms), limit: usdcText(x.limitAtoms) })),
               excludedAtScreening: outcomes.filter((o) => o.state === 'BLOCKED').map((o) => o.role),
+              note:
+                cls.handling === 'ROOM'
+                  ? 'Valid proposals are competing for shared authority; you authorized the agents to coordinate inside your signed limits.'
+                  : 'You did not authorize agents to re-divide capital between themselves: no Room. The proposals go to the verifier as they are, and it refuses deterministically what does not fit.',
             },
           });
-          this.#rooms += 1;
-          room = await runLiveRoom(
-            { provider: this.provider, clock: this.clock, events: this.events, roundTimeoutMs: this.#o.roomRoundTimeoutMs, maxGenerations: this.#o.maxGenerations ?? DEFAULT_MAX_GENERATIONS, superseded: signal },
-            { roomId: `room-v${active.version}-${this.#rooms}`, version: active.version, participants, availability: av, demandAt },
-          );
-          this.#drains.push(room.drain);
-          if (room.status === 'SUPERSEDED') {
-            this.#markSuperseded(admissible);
-            continue;
+          if (cls.roomPurpose === 'SHARED_RESOURCE_COORDINATION') {
+            this.#rooms += 1;
+            room = await runLiveRoom(
+              { provider: this.provider, clock: this.clock, events: this.events, roundTimeoutMs: this.#o.roomRoundTimeoutMs, maxGenerations: this.#o.maxGenerations ?? DEFAULT_MAX_GENERATIONS, superseded: signal },
+              { roomId: `room-v${active.version}-${this.#rooms}`, version: active.version, roomPurpose: 'SHARED_RESOURCE_COORDINATION', participants, askable: new Set(cls.shared.flatMap((x) => x.demanders)), availability: av, demandAt },
+            );
+            this.#drains.push(room.drain);
+            if (room.status === 'SUPERSEDED') {
+              this.#markSuperseded(admissible);
+              continue;
+            }
+            if (room.status === 'NO_FEASIBLE_PORTFOLIO') return this.#result('NO_FEASIBLE_PORTFOLIO', active.version, epoch, outcomes, room);
+            requests = room.requests;
           }
-          if (room.status === 'NO_FEASIBLE_PORTFOLIO') return this.#result('NO_FEASIBLE_PORTFOLIO', active.version, epoch, outcomes, room);
-          requests = room.requests;
         }
         if (signal.aborted) {
           this.#markSuperseded(admissible);
@@ -793,12 +833,50 @@ export class LiveSession {
     }
   }
 
+  #participant(o: AgentOutcome): Participant {
+    const c = o.candidate as TrustedCandidate;
+    return { role: o.role, agent: (this.signers.get(o.role) as LocalAgentSigner).party, candidate: c, observedAt: o.observedAt, originalAtoms: o.sizeAtoms, minimumAtoms: c.resizable ? c.minAtoms : o.sizeAtoms };
+  }
+
+  /**
+   * One bounded re-plan per agent that is over its own limit (or the only
+   * agent demanding a resource that is over): offered its own candidate
+   * bounded to the largest size that fits, it proposes again or abstains,
+   * and is screened in full again. No Room, no other participant. An agent
+   * for which not even the candidate minimum fits is refused without a call.
+   */
+  async #localReplans(active: ActiveMandate, participants: readonly Participant[], requests: ReadonlyMap<Role, bigint>, local: readonly LocalExcess[], av: Awaited<ReturnType<typeof availabilityAt>>, demandAt: DemandAt): Promise<Participant[]> {
+    const roles = [...new Set(local.map((l) => l.role))];
+    const replanned = await Promise.all(
+      participants.map(async (p): Promise<Participant | null> => {
+        if (!roles.includes(p.role)) return p;
+        const excess = local.filter((l) => l.role === p.role);
+        const first = excess[0] as LocalExcess;
+        const fitting = largestFittingAtoms(p, participants, requests, av, demandAt, p.originalAtoms);
+        if (fitting === null || fitting >= p.originalAtoms) {
+          this.events.emit('AGENT_LOCAL_REFUSED', { agent: p.role, data: { reason: 'NO_SIZE_FITS_ITS_OWN_LIMIT', excess: excess.map(localView), minimum: usdcText(p.candidate.minAtoms), room: 'NONE — nobody to negotiate with', execution: 'NONE' } });
+          return null;
+        }
+        this.events.emit('AGENT_LOCAL_REPLAN_REQUESTED', {
+          agent: p.role,
+          data: { excess: excess.map(localView), previous: { atoms: p.originalAtoms, amount: usdcText(p.originalAtoms) }, largestFitting: { atoms: fitting, amount: usdcText(fitting) }, room: 'NONE — only this agent is involved', next: 'ONE_BOUNDED_REPLAN_THEN_FULL_SCREENING' },
+        });
+        const bounded: TrustedCandidate = { ...p.candidate, minAtoms: p.candidate.minAtoms < fitting ? p.candidate.minAtoms : fitting, maxAtoms: fitting };
+        const o = await discoverAgent(this.#deps(), active, p.role, { candidates: [bounded], localConstraint: { resource: first.resource, previousAtoms: p.originalAtoms.toString(), limitAtoms: first.limitAtoms.toString(), largestFittingAtoms: fitting.toString() } });
+        if (o.state === 'ADMISSIBLE' && o.candidate !== null && o.signed !== null) return this.#participant(o);
+        this.events.emit('AGENT_LOCAL_REFUSED', { agent: p.role, data: { reason: o.state === 'ABSTAINED' ? 'ABSTAINED_ON_REPLAN' : `REPLAN_${o.state}`, excess: excess.map(localView), room: 'NONE', execution: 'NONE' } });
+        return null;
+      }),
+    );
+    return replanned.filter((p): p is Participant => p !== null);
+  }
+
   #result(status: RunStatus, version: number | null, epochs: number, discovery: readonly AgentOutcome[], room: RoomResult | null, extra: Partial<RunResult> = {}): RunResult {
-    return { status, version, epochs, discovery, room, final: [], refreshed: [], receipts: [], reservedAtoms: 0n, executorCalls: 0, transactions: 0, ...extra };
+    return { status, version, epochs, discovery, room, final: [], refreshed: [], reallocated: [], receipts: [], reservedAtoms: 0n, executorCalls: 0, transactions: 0, ...extra };
   }
 
   /** Sign what the Room agreed, hand it to the real Mandate path, and account for every proposal. */
-  async #reverify(active: ActiveMandate, phase: 'FINAL' | 'REFRESH', items: readonly { readonly role: Role; readonly candidateId: string; readonly signed: SignedProposal }[]): Promise<{ readonly run: ProtocolRun | null; readonly proposals: readonly FinalProposal[]; readonly reserved: bigint }> {
+  async #reverify(active: ActiveMandate, phase: 'FINAL' | 'REFRESH' | 'REALLOCATION', items: readonly { readonly role: Role; readonly candidateId: string; readonly signed: SignedProposal }[]): Promise<{ readonly run: ProtocolRun | null; readonly proposals: readonly FinalProposal[]; readonly reserved: bigint }> {
     if (!this.versions.beginReservation()) {
       return { run: null, proposals: items.map((i) => ({ role: i.role, proposal: proposalDigest(i.signed.proposal), requested: 0n, outcome: 'REFUSED', reasons: ['SESSION:AUTHORIZATION_IN_PROGRESS'] })), reserved: 0n };
     }
