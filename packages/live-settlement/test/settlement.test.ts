@@ -150,6 +150,15 @@ describe('nothing reaches a key or the chain unless the Live AI authorization is
     }, { stock: propose('nvda-token-b', 400) });
   });
 
+  it('an approved Stock alternative with no deployed testnet market (note C) is reserved offchain, but settlement refuses it before any RPC call', async () => {
+    await withWorld(async (w) => {
+      assert.deepEqual(w.session.reservedExecutions.map((x) => [x.role, x.candidateId]), [['stock', 'nvda-note-c']]);
+      const p = await w.settlement.prepare();
+      assert.ok('ineligible' in p && p.ineligible === 'FIXTURE_UNDEFINED_FOR_CANDIDATE');
+      assert.equal(w.rpc.simulations + w.rpc.prepared + w.rpc.broadcasts, 0);
+    }, { stock: propose('nvda-note-c', 400) });
+  });
+
   it('a stale proposal: past its lifetime, nothing is signed', async () => {
     await withWorld(async (w) => {
       const p = await prepared(w);
