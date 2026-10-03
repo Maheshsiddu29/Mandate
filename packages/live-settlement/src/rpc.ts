@@ -34,7 +34,7 @@
  * hash. There is no resend.
  */
 
-import { ChainClient, JsonRpcClient, TxSender, readGateMarkets, type Address, type BlockRef, type GateCall, type GateSpotPolicy, type GateStateRead, type Read, type Receipt, type Simulation } from '@mandate/evm-robinhood';
+import { ChainClient, JsonRpcClient, TxSender, encodeBlockTag, pause, readGateMarkets, type Address, type BlockRef, type GateCall, type GateSpotPolicy, type GateStateRead, type Read, type Receipt, type Simulation } from '@mandate/evm-robinhood';
 import { ROBINHOOD_TESTNET } from './deployment.ts';
 import type { Transport } from './evidence.ts';
 
@@ -275,6 +275,109 @@ export class RobinhoodTestnetReader implements ChainReader {
     const n = await this.#request<string>('eth_getTransactionCount', [address, tag]);
     return n.ok ? { ok: true, value: big(n.value) } : n;
   }
+}
+
+/** What one probe found: served, served by a node behind the pinned block, refused by the endpoint, or no answer. */
+export type ProbeStatus = 'SUPPORTED' | 'NODE_BEHIND' | 'UNSUPPORTED' | 'UNREADABLE';
+
+export interface ProbeCheck {
+  readonly name: string;
+  readonly method: string;
+  /** The block parameter as sent: a named tag or a hex quantity. */
+  readonly block: string;
+  readonly status: ProbeStatus;
+  readonly detail: string | null;
+}
+
+export interface RpcCapabilityReport {
+  readonly provenance: RpcProvenance;
+  readonly head: bigint | null;
+  readonly checks: readonly ProbeCheck[];
+  readonly explicitBlockEthCall: 'supported' | 'unsupported' | 'unknown';
+  readonly explicitBlockGetCode: 'supported' | 'unsupported' | 'unknown';
+  /** Repeated `latest` → exact-block `eth_call` pairs: how often the serving node had not reached the reported head. */
+  readonly pinnedSamples: { readonly total: number; readonly served: number; readonly nodeBehind: number; readonly other: number };
+  /** The settlement path's own read: the gate-market snapshot at one block, and how many same-block waits it took. */
+  readonly gateSnapshot: { readonly status: 'OK' | 'UNKNOWN'; readonly block: bigint | null; readonly waits: number; readonly reason: string | null };
+}
+
+export interface CapabilityProbe {
+  readonly gate: Address;
+  readonly token: Address;
+  readonly owner: Address;
+  readonly policy: GateSpotPolicy;
+  readonly samples: number;
+  readonly pause?: (ms: number) => Promise<void>;
+}
+
+function probeStatus(error: string): ProbeStatus {
+  if (isTransportFailure(error) || /^(WRONG_CHAIN|MAINNET_REFUSED)_/.test(error)) return 'UNREADABLE';
+  return error.startsWith('BLOCK_AHEAD_OF_NODE.') ? 'NODE_BEHIND' : 'UNSUPPORTED';
+}
+
+function verdict(...statuses: readonly ProbeStatus[]): 'supported' | 'unsupported' | 'unknown' {
+  if (statuses.some((s) => s === 'SUPPORTED')) return 'supported';
+  return statuses.length > 0 && statuses.every((s) => s === 'UNSUPPORTED') ? 'unsupported' : 'unknown';
+}
+
+/**
+ * Read-only characterization of the reader's primary endpoint: which block
+ * parameters it serves for `eth_call`, `eth_getCode` and an ERC-20 read, and
+ * how often a pinned read meets a node behind the head another node reported.
+ * Nothing is signed or sent; errors carry the endpoint's answer, never a URL.
+ */
+export async function characterizeRpc(reader: RobinhoodTestnetReader, p: CapabilityProbe): Promise<RpcCapabilityReport> {
+  const c = reader.primary;
+  const checks: ProbeCheck[] = [];
+  const check = (name: string, method: string, block: string, r: { readonly ok: true } | { readonly ok: false; readonly error: string }): ProbeStatus => {
+    const status = r.ok ? 'SUPPORTED' : probeStatus(r.error);
+    checks.push({ name, method, block, status, detail: r.ok ? null : r.error.slice(0, 120) });
+    return status;
+  };
+  const asRead = (s: Simulation) => (s.ok ? { ok: true as const } : { ok: false as const, error: s.revert });
+  const DOMAIN_SEPARATOR = '0xf698da25';
+
+  const id = await c.ensureChain();
+  check('chain id is 46630', 'eth_chainId', '-', id);
+  const number = await c.rpc.request<string>('eth_blockNumber', []);
+  check('head', 'eth_blockNumber', '-', number);
+  const head = await c.block('latest');
+  check('head block', 'eth_getBlockByNumber', 'latest', head);
+  const n = head.ok ? head.value.number : null;
+  const tag = n === null ? null : encodeBlockTag(n);
+  const at = tag !== null && tag.ok ? tag.value : '-';
+
+  check('gate code', 'eth_getCode', 'latest', await c.code(p.gate, 'latest'));
+  const codeAt = n === null ? 'UNREADABLE' : check('gate code at head', 'eth_getCode', at, await c.code(p.gate, n));
+  check('gate domainSeparator()', 'eth_call', 'latest', asRead(await c.call(p.gate, DOMAIN_SEPARATOR, 'latest')));
+  const callAt = n === null ? 'UNREADABLE' : check('gate domainSeparator() at head', 'eth_call', at, await c.domainSeparator(p.gate, n));
+  const erc20At = n === null ? 'UNREADABLE' : check('ERC-20 balanceOf at head', 'eth_call', at, await c.erc20Balance(p.token, p.owner, n));
+
+  let served = 0;
+  let nodeBehind = 0;
+  let other = 0;
+  const samples = Math.max(0, Math.min(50, Math.trunc(p.samples)));
+  for (let i = 0; i < samples; i += 1) {
+    const h = await c.block('latest');
+    const r = h.ok ? await c.domainSeparator(p.gate, h.value.number) : h;
+    if (r.ok) served += 1;
+    else if (r.error.startsWith('BLOCK_AHEAD_OF_NODE.')) nodeBehind += 1;
+    else other += 1;
+  }
+
+  let waits = 0;
+  const wait = p.pause ?? pause;
+  const snapshot = await readGateMarkets(c, p.policy, { pause: async (ms) => { waits += 1; await wait(ms); } });
+
+  return {
+    provenance: reader.provenance(),
+    head: n,
+    checks,
+    explicitBlockEthCall: verdict(callAt, erc20At, ...(served > 0 ? ['SUPPORTED' as const] : [])),
+    explicitBlockGetCode: verdict(codeAt),
+    pinnedSamples: { total: samples, served, nodeBehind, other },
+    gateSnapshot: snapshot.status === 'OK' ? { status: 'OK', block: snapshot.block.number, waits, reason: null } : { status: 'UNKNOWN', block: null, waits, reason: snapshot.reason.slice(0, 120) },
+  };
 }
 
 export class RobinhoodTestnetRpc extends RobinhoodTestnetReader implements TestnetRpc {

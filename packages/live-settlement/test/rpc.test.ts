@@ -14,9 +14,10 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { readFileSync } from 'node:fs';
 import { ChainClient, JsonRpcClient } from '@mandate/evm-robinhood';
-import { RobinhoodTestnetReader, RobinhoodTestnetRpc, isTransportFailure, type Endpoint, type PreparedTx } from '../src/rpc.ts';
+import { RobinhoodTestnetReader, RobinhoodTestnetRpc, characterizeRpc, isTransportFailure, type Endpoint, type PreparedTx } from '../src/rpc.ts';
+import { domainPolicy } from '../src/domain-leg.ts';
 import { readRpcConfig } from '../scripts/rpc-config.ts';
-import { GATE, SUBMITTER_KEY } from './support/world.ts';
+import { GATE, SUBMITTER_KEY, testDeployment } from './support/world.ts';
 
 type Handler = (method: string, params: readonly unknown[]) => { result?: unknown; error?: { code: number; message: string } } | 'HTTP_503';
 
@@ -128,6 +129,73 @@ describe('ChainReader', () => {
   it('classifies transport failures narrowly', () => {
     for (const e of ['NETWORK.TimeoutError', 'HTTP_502', 'HTTP_429', 'NOT_JSON', 'BLOCK.NETWORK.TypeError', 'MARKET.HTTP_503']) assert.equal(isTransportFailure(e), true, e);
     for (const e of ['WRONG_CHAIN_1', 'MAINNET_REFUSED_4663', 'RPC_-32000:execution reverted', 'HTTP_400', 'TARGET_NOT_THE_GATE']) assert.equal(isTransportFailure(e), false, e);
+  });
+});
+
+describe('characterizeRpc (C1.4): read-only exact-block capability', () => {
+  const policy = domainPolicy(testDeployment());
+  const probe = { gate: GATE, token: `0x${'f0'.repeat(20)}`, owner: `0x${'0a'.repeat(20)}`, policy, samples: 4, pause: async () => {} };
+  const HEAD_BLOCK = { number: '0x7a53fc9', hash: `0x${'4b'.repeat(32)}`, timestamp: '0x6a5b0000' };
+  const WORDS = `0x${'0'.repeat(63)}1`.padEnd(2 + 64 * 14, `${'0'.repeat(63)}1`);
+  const READ_METHODS = ['eth_chainId', 'eth_blockNumber', 'eth_getBlockByNumber', 'eth_getCode', 'eth_call'];
+  /** `pinned(block)` answers a read at an explicit block; `latest` reads are always served. */
+  const chainNode = (pinned: (block: string) => { error: { code: number; message: string } } | null): Handler => (method, params) => {
+    if (method === 'eth_chainId') return { result: '0xb626' };
+    if (method === 'eth_blockNumber') return { result: HEAD_BLOCK.number };
+    if (method === 'eth_getBlockByNumber') return { result: HEAD_BLOCK };
+    if (method !== 'eth_getCode' && method !== 'eth_call') return { error: { code: -32601, message: 'not here' } };
+    const block = params[1] as string;
+    const refused = block === 'latest' ? null : pinned(block);
+    if (refused !== null) return refused;
+    return { result: method === 'eth_getCode' ? '0x6080' : WORDS };
+  };
+
+  it('reports explicit-block eth_call, eth_getCode and ERC-20 reads as supported, each sent as a hex quantity, and sends nothing', async () => {
+    const n = await node(chainNode(() => null));
+    try {
+      const report = await characterizeRpc(new RobinhoodTestnetReader(GATE, { primary: endpoint(n.url, 'public'), fallback: null }), probe);
+      assert.equal(report.explicitBlockEthCall, 'supported');
+      assert.equal(report.explicitBlockGetCode, 'supported');
+      assert.ok(report.checks.every((c) => c.status === 'SUPPORTED'), JSON.stringify(report.checks));
+      assert.deepEqual(report.checks.filter((c) => c.block !== 'latest' && c.block !== '-').map((c) => c.block), ['0x7a53fc9', '0x7a53fc9', '0x7a53fc9']);
+      assert.deepEqual(report.pinnedSamples, { total: 4, served: 4, nodeBehind: 0, other: 0 });
+      assert.deepEqual(report.gateSnapshot, { status: 'OK', block: 0x7a53fc9n, waits: 0, reason: null });
+      assert.ok(n.calls.every((m) => READ_METHODS.includes(m)), n.calls.join(','));
+    } finally {
+      await n.close();
+    }
+  });
+
+  it('reports an endpoint that refuses every explicit block as unsupported, and the settlement snapshot as UNKNOWN without waiting', async () => {
+    const n = await node(chainNode(() => ({ error: { code: -32602, message: 'invalid argument 1: only latest is served' } })));
+    try {
+      const report = await characterizeRpc(new RobinhoodTestnetReader(GATE, { primary: endpoint(n.url, 'public'), fallback: null }), probe);
+      assert.equal(report.explicitBlockEthCall, 'unsupported');
+      assert.equal(report.explicitBlockGetCode, 'unsupported');
+      assert.equal(report.checks.find((c) => c.name === 'gate domainSeparator()')?.status, 'SUPPORTED');
+      assert.equal(report.gateSnapshot.status, 'UNKNOWN');
+      assert.equal(report.gateSnapshot.waits, 0);
+      assert.match(report.gateSnapshot.reason ?? '', /^MARKET\.CALL_REVERTED\.RPC_-32602:/);
+    } finally {
+      await n.close();
+    }
+  });
+
+  it('tells a node behind the reported head apart from an unsupported block parameter', async () => {
+    let behind = 6;
+    const n = await node(chainNode((block) => (behind-- > 0 ? { error: { code: -32000, message: `unsupported block number ${BigInt(block)}` } } : null)));
+    try {
+      const report = await characterizeRpc(new RobinhoodTestnetReader(GATE, { primary: endpoint(n.url, 'public'), fallback: null }), probe);
+      assert.equal(report.checks.find((c) => c.name === 'gate code at head')?.status, 'NODE_BEHIND');
+      assert.equal(report.checks.find((c) => c.name === 'gate domainSeparator() at head')?.status, 'NODE_BEHIND');
+      assert.equal(report.pinnedSamples.nodeBehind, 3);
+      assert.equal(report.pinnedSamples.served, 1);
+      // Served at the same pinned block once the node caught up.
+      assert.equal(report.explicitBlockEthCall, 'supported');
+      assert.deepEqual(report.gateSnapshot, { status: 'OK', block: 0x7a53fc9n, waits: 0, reason: null });
+    } finally {
+      await n.close();
+    }
   });
 });
 

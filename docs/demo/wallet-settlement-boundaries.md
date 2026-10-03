@@ -464,9 +464,18 @@ nothing sent. A non-archive node's `historical state … is not available` is
 answers, never what Mandate authorized, the portfolio limits, the
 reservation identity or which key may sign.
 
-**Smoke check.** `npm run agents:rpc:smoke [-- --tx 0x…]` is read-only:
-`eth_chainId`, `eth_blockNumber`, the gate's code hash against the
-manifest, and optionally one historical receipt. No key is loaded.
+**Smoke check.** `npm run agents:rpc:smoke [-- --tx 0x…] [-- --samples N]`
+is read-only: `eth_chainId`, `eth_blockNumber`, the gate's code hash
+against the manifest, and optionally one historical receipt. No key is
+loaded. C1.4 adds a capability characterization of the primary endpoint
+(`characterizeRpc`): `eth_getCode` and `eth_call` at `latest` and at the
+explicit current block, an MDUSD `balanceOf` at that block, N repeated
+`latest` → pinned `eth_call` pairs (how often the serving node is behind the
+head another node reported), and the settlement path's own gate-market
+snapshot with its same-block wait count. It reports
+`explicitBlockEthCall` / `explicitBlockGetCode` as `supported`,
+`unsupported` or `unknown`; a node behind the head is `NODE_BEHIND`, not
+`UNSUPPORTED`.
 
 ## 7. The browser evidence bridge
 
@@ -544,6 +553,21 @@ network: **no testnet transaction was sent in B.5.3.**
 | QuickNode endpoint | **not configured in this shell** (`ROBINHOOD_TESTNET_RPC_URL` absent, no `.env`): the QuickNode path is implemented and tested against mock nodes only |
 | `npm run agents:rpc:smoke -- --tx 0x87a5…c0fa` over the public RPC | `eth_chainId` 46630; gate code hash matches the manifest; the B.5.2 transaction's receipt: `SUCCESS`, block 126,872,635, gas 272,190 |
 | Broadcasts | **none** |
+
+| C1.4 characterization, 2026-10-03, public RPC (read-only) | Result |
+| --- | --- |
+| `eth_call` / `eth_getCode` at `latest`, the head, head − 1, head − 100 | served |
+| `eth_call` at head − 10,000 and at block 127,958,756 | `-32000 historical state … is not available` (non-archive) |
+| `eth_call` / `eth_getCode` at head + 5 and head + 1,000 | `-32000 unsupported block number N` — the same answer the live refusal carried |
+| `eth_call` with a decimal string block | `-32602 hex string without 0x prefix` |
+| `eth_call` with EIP-1898 `{ blockHash }` | served |
+| `agents:rpc:smoke -- --tx 0x6f0f…d5f6 --samples 30` | `explicitBlockEthCall: supported`, `explicitBlockGetCode: supported`; 30/30 pinned pairs served; gate-market snapshot OK, 0 waits; the earlier CLI send's receipt `SUCCESS` in block 127,958,756, gas 269,605 |
+| Behind the endpoint | Cloudflare + Envoy; consecutive `eth_blockNumber` answers moved by several blocks within a second |
+
+The node-behind condition did not recur during characterization (70 pinned
+pairs, 0 behind); it is intermittent. The earlier CLI send used the same
+gate-market reader (unchanged since Phase 7E.3), so the browser path did not
+change block handling: it met a lagging node the CLI run did not.
 
 The B.5.2 send (`0x87a5aa1bd4414ba7548fae408ee52fbe5a1f221b09da8f0f1a4fbf87ee67c0fa`)
 predates B.5.3; it ran before durable sessions existed, so its in-memory

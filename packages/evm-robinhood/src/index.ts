@@ -24,7 +24,7 @@ export { EVALUATION_STATE_ID, buildGateArtifact, checkGateArtifact, gateMandateI
 export { EXECUTE_SIGNATURE, executeCalldata, calldata, encodeArguments, type AbiType, type AbiValue } from './abi.ts';
 export { LocalAgentSigner, LocalGateCustody, keyAddress, verifyAdmitted, type AgentSigner, type CustodyBinding, type CustodyResult, type CustodyView, type GateClaim, type GateKeyCustody } from './custody.ts';
 export { TxSender, createAddress, type Eip1559Tx } from './transaction.ts';
-export { ChainClient, JsonRpcClient, REFUSED_CHAIN_IDS, ROBINHOOD_TESTNET_CHAIN_ID, RpcHostRefused, TESTNET_RPC_HOSTS, isQuickNodeHost, type RpcEndpointKind, type RpcOptions, type BlockRef, type Read, type Receipt, type Simulation, type Submission } from './chain.ts';
+export { ChainClient, JsonRpcClient, REFUSED_CHAIN_IDS, pause, ROBINHOOD_TESTNET_CHAIN_ID, RpcHostRefused, TESTNET_RPC_HOSTS, isQuickNodeHost, type RpcEndpointKind, type RpcOptions, type BlockRef, type Read, type Receipt, type Simulation, type Submission } from './chain.ts';
 export { MAX_BLOCK_NUMBER, encodeBlockTag, pinnedBlockUnavailable, type BlockTag, type BlockTagName, type EncodedBlockTag } from './block-tag.ts';
 export { LiveGateChain } from './live.ts';
 export { PINNED_REREADS, PINNED_REREAD_PAUSE_MS, gateMarketState, readGateMarkets, type GateStateRead, type PinnedReadOptions } from './state-reader.ts';

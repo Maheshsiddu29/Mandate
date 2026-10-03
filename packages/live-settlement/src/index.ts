@@ -24,12 +24,12 @@ export { parseDeployment, explorerTxUrl, ROBINHOOD_TESTNET, type TestnetDeployme
 export { mapToFixture, TESTNET_SETTLEMENT_FIXTURE, FIXTURE_MAX_DEBIT_ATOMS, type FixtureSettlement } from './fixture-mapping.ts';
 export { SendGate, SEND_AUTHORIZATION_PHRASE, isSendAuthorization, type SendGateState } from './send-gate.ts';
 export { settlementEvidence, ASSET_QUALIFICATION, SETTLEMENT_EVIDENCE, type SettlementEvidence } from './evidence.ts';
-export { RobinhoodTestnetRpc, RobinhoodTestnetReader, PUBLIC_TESTNET_RPC, PUBLIC_ONLY, isTransportFailure, type TestnetRpc, type ChainReader, type TransactionBroadcaster, type RpcEndpoints, type RpcProvenance, type Endpoint, type TxLookup } from './rpc.ts';
+export { RobinhoodTestnetRpc, RobinhoodTestnetReader, PUBLIC_TESTNET_RPC, PUBLIC_ONLY, characterizeRpc, isTransportFailure, type CapabilityProbe, type ProbeCheck, type ProbeStatus, type RpcCapabilityReport, type TestnetRpc, type ChainReader, type TransactionBroadcaster, type RpcEndpoints, type RpcProvenance, type Endpoint, type TxLookup } from './rpc.ts';
 export { preflight, MIN_SUBMITTER_WEI, type PreflightReport } from './preflight.ts';
 export { LiveSettlement, safeReason, checkPostconditions, principalBinding, lifecycleDedupe, FAULT_POINTS, type SettlementOutcome, type SettlementRecord, type WouldSend, type Prepared, type RunOptions, type FaultPoint, type PrincipalBinding } from './settlement.ts';
 export { SettlementJournal, JournalRefusal, ATTEMPT_STATES, QUARANTINES, JOURNAL_SCHEMA, isTerminal, type AttemptRecord, type AttemptState, type AttemptBinding, type ArtifactRecord, type Quarantine } from './journal.ts';
 export { reservationStatus, SETTLEMENT_ARTIFACT_KIND, type ReservationStatus } from './portfolio-ledger.ts';
 export { reconcileAttempts, judge, gatherEvidence, RECONCILE_OUTCOMES, type ReconcileOutcome, type ReconcileReport, type ChainEvidence } from './reconcile.ts';
-export type { DomainKeys } from './domain-leg.ts';
+export { domainPolicy, type DomainKeys } from './domain-leg.ts';
 export { reverifySpine, SPINE_CHAIN_ID, type SpineCheck, type SpineFacts } from './spine.ts';
 export { settleSpine, type SpineSettlementInput, type SpineSettlementResult } from './spine-settlement.ts';
