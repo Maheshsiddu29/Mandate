@@ -145,19 +145,20 @@ test('Trade is the one dominant action on the agent team', () => {
 
 test('the review step signs with a real wallet, or with the labelled demo key — never a faked approval', () => {
   assert.equal(deriveFlow({ ...idle, draftPresent: true, reviewing: true }).phase, 'APPROVE');
-  assert.match(configure, /Review your mandate/);
+  assert.match(configure, /Mandate review/);
   assert.match(configure, /Approve in wallet/);
   assert.match(configure, /Your wallet will sign this Mandate\. This does not submit a blockchain transaction\./);
-  assert.match(configure, />Authorize mandate</);
+  assert.match(configure, /Authorize mandate/);
   assert.match(configure, /No browser wallet detected/);
   assert.match(configure, /your signature does not delegate onchain execution authority/);
   // The demo key stays, labelled as what it is.
   assert.match(configure, /Demo principal key/);
   assert.match(configure, /it secures nothing and is not a wallet signature/);
   assert.match(configure, /const matches = confirmation === props\.expected/);
-  assert.match(configure, /disabled=\{!matches \|\| props\.authorizing\}/);
-  // The wallet's CTA needs a connected wallet on the approval chain; nothing pretends to be connected.
-  assert.match(configure, /const walletReady = method === "wallet" && connected && rightChain;/);
+  assert.match(configure, /const reviewClean = props\.review\.canAuthorize/);
+  assert.match(configure, /disabled=\{!demoReady \|\| props\.authorizing\}/);
+  // The wallet's CTA needs a connected wallet on the approval chain and a clean Review; nothing pretends to be connected.
+  assert.match(configure, /const walletReady = method === "wallet" && connected && rightChain && reviewClean;/);
   assert.match(configure, /disabled=\{!walletReady \|\| props\.authorizing\}/);
   assert.doesNotMatch(browserSources, /Wallet approved|setConfirmation\(props\.expected\)|confirmation: expected/i);
   // Signing a mandate is not a transaction: the review step shows no gas estimate or limit.

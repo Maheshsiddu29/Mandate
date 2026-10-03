@@ -66,7 +66,9 @@ test('37. an edited allocation is validated immediately', () => {
 test('38. the signed review shows the budgets the draft holds after editing, with who set them', () => {
   const draft: JsonRecord = { agents: { stock: { budget: '650' }, swap: { budget: '350' }, yield: { budget: '750' }, perps: { budget: '250' } }, provenance: { 'agents.stock.budget': 'USER', 'agents.swap.budget': 'PLANNED', 'agents.yield.budget': 'USER', 'agents.perps.budget': 'PLANNED' } };
   assert.deepEqual(budgetRows(draft, ['stock', 'swap', 'yield', 'perps']).map((r) => [r.role, r.amount, r.source]), [['stock', '650', 'YOU'], ['swap', '350', 'AGENTS'], ['yield', '750', 'YOU'], ['perps', '250', 'AGENTS']]);
-  assert.match(lab, /budgets=\{budgetRows\(draft, enabledRoles\)\}/);
+  // C2.1 Review derives agent authority from buildAuthorityReview (not a separate budgets prop).
+  assert.match(lab, /buildAuthorityReview/);
+  assert.match(lab, /review=\{authorityReview\}/);
 });
 
 test('39 / 40. a blocked Stock proposal is never a trade decision, and offers no settlement control', () => {
