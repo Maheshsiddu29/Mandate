@@ -75,11 +75,15 @@ test('39 / 40. a blocked Stock proposal is never a trade decision, and offers no
     event('PROPOSAL_BLOCKED', { reasons: ['REGISTRY:ISSUER_NOT_ALLOWED:x'] }, 'stock'),
     event('PORTFOLIO_AUTHORIZED', { proposals: [{ role: 'swap', outcome: 'RESERVED', requested: '350' }] }),
   ];
-  assert.deepEqual(authorizedStockTrade(blocked), { authorized: false, candidate: null, amount: null });
+  assert.deepEqual(authorizedStockTrade(blocked), { authorized: false, candidate: null, candidateId: null, amount: null, settlementCapable: false, hold: 'BLOCKED' });
   const abstained = [event('AGENT_DECISION_COMPLETED', { action: 'ABSTAIN', candidateId: null }, 'stock'), event('PORTFOLIO_AUTHORIZED', { proposals: [{ role: 'swap', outcome: 'RESERVED', requested: '350' }] })];
-  assert.deepEqual(authorizedStockTrade(abstained), { authorized: false, candidate: null, amount: null }, 'an abstaining Stock agent has no trade to settle');
+  assert.deepEqual(authorizedStockTrade(abstained), { authorized: false, candidate: null, candidateId: null, amount: null, settlementCapable: false, hold: 'ABSTAINED' }, 'an abstaining Stock agent has no trade to settle');
   const reserved = [event('AGENT_DECISION_COMPLETED', { candidateId: 'nvda-note-a', candidate: 'NVDA · Fixture Backed NVIDIA Note' }, 'stock'), event('PORTFOLIO_AUTHORIZED', { proposals: [{ role: 'stock', outcome: 'RESERVED', requested: '700' }] })];
-  assert.deepEqual(authorizedStockTrade(reserved), { authorized: true, candidate: 'NVDA · Fixture Backed NVIDIA Note', amount: '700' });
+  assert.deepEqual(authorizedStockTrade(reserved), { authorized: true, candidate: 'NVDA · Fixture Backed NVIDIA Note', candidateId: 'nvda-note-a', amount: '700', settlementCapable: true, hold: 'NONE' });
+  const unsupported = [...reserved, event('AGENT_CANDIDATES_EVALUATED', { executable: ['nvda-note-c'], capability: [{ candidateId: 'nvda-note-a', status: 'SETTLEMENT_UNSUPPORTED' }] }, 'stock')];
+  assert.equal(authorizedStockTrade(unsupported).settlementCapable, false);
+  assert.equal(authorizedStockTrade(unsupported).hold, 'UNSUPPORTED');
+  assert.match(outcome, /this testnet connector cannot execute this candidate/);
   // The proof panel returns before any settlement control when there is no Stock reservation.
   assert.match(outcome, /if \(!stockTrade\.authorized && !settlement\.present\) \{[\s\S]*?No authorized Stock trade[\s\S]*?did not receive execution authority[\s\S]*?\n  \}/);
   const guard = outcome.indexOf('if (!stockTrade.authorized && !settlement.present)');

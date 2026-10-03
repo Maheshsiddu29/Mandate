@@ -95,11 +95,10 @@ wallet. The demo principal key remains, and it still needs the exact
 
 Dry-run from the page, after a wallet-authorized run, when `npm run agents:lab`
 is the server: **Dry-run testnet settlement**. If the wallet is not the
-manifest principal, **Sign stock authorization** asks Phantom for
-`MandateAuthorization` before simulation. The receipt shows the session id
-and READY · NOT SENT. Sending requires typing the operator phrase the server
-advertised. The deployer broadcasts. A hash is not CONFIRMED until the
-receipt says so. See docs/demo/authority-spine-v2.md.
+manifest principal, **Sign execution authorization** asks the wallet for
+`MandateAuthorization` before simulation. That signature is not a
+transaction. The receipt shows the session id and READY · NOT SENT. This
+page does not broadcast. See docs/v2/real-browser-execution-spine.md.
 
 The landing hero renders React Bits
 [Pattern Waves](https://www.reactbits.dev/backgrounds/pattern-waves) with

@@ -283,6 +283,15 @@ export interface SettlementView {
   readonly rpcProvider: string | null;
   /** The MandateAuthorization typed data the wallet still has to sign, when the spine is waiting. */
   readonly gateSign: { readonly mode: "DRY_RUN" | "SEND"; readonly typedData: Json; readonly note: string } | null;
+  /** Dry-run proof. Empty until SPINE_DRY_RUN_READY. A deadline is chain unix seconds. */
+  readonly candidateId: string | null;
+  readonly mandateDigest: string | null;
+  readonly gasEstimate: string | null;
+  readonly simulationDeadline: string | null;
+  readonly reservationId: string | null;
+  readonly initialAllocationDigest: string | null;
+  readonly currentPlanDigest: string | null;
+  readonly walletPrincipal: string | null;
 }
 
 export interface LivePresentation {
@@ -715,6 +724,14 @@ export function deriveSettlement(events: readonly LiveEvent[]): SettlementView {
     principals: null,
     rpcProvider: null,
     gateSign: null,
+    candidateId: null,
+    mandateDigest: null,
+    gasEstimate: null,
+    simulationDeadline: null,
+    reservationId: null,
+    initialAllocationDigest: null,
+    currentPlanDigest: null,
+    walletPrincipal: null,
   };
   let view = base;
   for (const event of events) {
@@ -767,6 +784,15 @@ export function deriveSettlement(events: readonly LiveEvent[]): SettlementView {
         detail: str(data.note),
         fixtureIn: tokenLabel(rec(data.tokenIn)) ?? view.fixtureIn,
         fixtureOut: tokenLabel(rec(data.tokenOut)) ?? view.fixtureOut,
+        gate: textField(data, "gate") ?? view.gate,
+        candidateId: textField(data, "candidateId") ?? view.candidateId,
+        mandateDigest: textField(data, "mandateDigest") ?? view.mandateDigest,
+        gasEstimate: textField(data, "gasEstimate") ?? view.gasEstimate,
+        simulationDeadline: textField(data, "simulationDeadline") ?? view.simulationDeadline,
+        reservationId: textField(data, "reservation") ?? view.reservationId,
+        initialAllocationDigest: textField(data, "initialAllocationDigest") ?? view.initialAllocationDigest,
+        currentPlanDigest: textField(data, "currentPlanDigest") ?? view.currentPlanDigest,
+        walletPrincipal: textField(data, "principal") ?? view.walletPrincipal,
         gateSign: null,
       });
     }

@@ -106,8 +106,22 @@ test('a V2 dry run ends READY · NOT SENT, and the gate signature is a step befo
   assert.equal(derivePresentation(refused).settlement.stage, 'FAILED');
   assert.equal(derivePresentation(refused).settlement.detail, 'GATE_EXECUTION_AUTHORITY_REQUIRED');
   assert.match(outcome, /Sign stock authorization/);
-  assert.match(outcome, /Phantom signs MandateAuthorization/);
-  assert.match(outcome, /The deployer pays gas\. Your wallet does not\./);
+  assert.match(outcome, /Sign execution authorization/);
+  assert.match(outcome, /This signs execution authority\. It is not a transaction\./);
+  assert.match(outcome, /Broadcast is unavailable in this milestone\. Nothing was broadcast\./);
+  assert.match(outcome, /This simulation has expired/);
+  assert.match(outcome, /Technical details/);
+  assert.doesNotMatch(outcome, /Send testnet transaction/);
+  const proved = after(['SPINE_DRY_RUN_READY', { broadcast: false, evidenceClass: 'DRY_RUN', candidateId: 'nvda-note-a', mandateDigest: '0xabc', gasEstimate: '21000', simulationDeadline: '90', reservation: '0xres', initialAllocationDigest: '0xalloc', principal: '0xwallet', gate: '0xgate' }]);
+  const proof = derivePresentation(proved).settlement;
+  assert.equal(proof.candidateId, 'nvda-note-a');
+  assert.equal(proof.mandateDigest, '0xabc');
+  assert.equal(proof.gasEstimate, '21000');
+  assert.equal(proof.simulationDeadline, '90');
+  assert.equal(proof.reservationId, '0xres');
+  assert.equal(proof.initialAllocationDigest, '0xalloc');
+  assert.equal(proof.walletPrincipal, '0xwallet');
+  assert.equal(proof.settled, false);
 });
 
 test('a session-bound dry run ends READY · NOT SENT: complete, never settled, both principals shown', () => {

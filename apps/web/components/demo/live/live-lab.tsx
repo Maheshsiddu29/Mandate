@@ -133,8 +133,11 @@ export function LiveLab(): ReactNode {
           setSettlementOffer({ kind: "unavailable", message: message(settlement.body) });
           return;
         }
-        const phrase = str(settlement.body.sendAuthorization);
-        setSettlementOffer(phrase === "—" ? { kind: "unavailable", message: "This server did not advertise the operator phrase. Nothing will be sent." } : { kind: "ready", phrase });
+        if (str(settlement.body.spine) !== "V2") {
+          setSettlementOffer({ kind: "unavailable", message: "This server is not the V2 settlement spine. Nothing will be sent." });
+          return;
+        }
+        setSettlementOffer({ kind: "ready" });
       });
       // A reload (or a server restart) returns to the same durable session; its events replay from the start.
       const id = rememberedSession();
@@ -445,6 +448,10 @@ export function LiveLab(): ReactNode {
       setError("Connect the wallet that signed this mandate. Nothing was broadcast.");
       return;
     }
+    if (gate.mode !== "DRY_RUN") {
+      setError("This page does not broadcast. Nothing was sent.");
+      return;
+    }
     const chain = await w.getChainId();
     if (!chain.ok || chain.value !== APPROVAL_CHAIN.chainId) {
       setError("Switch your wallet to Robinhood Chain testnet to sign. Nothing was broadcast.");
@@ -460,13 +467,6 @@ export function LiveLab(): ReactNode {
       return;
     }
     await postSettle({ mode: gate.mode, gateSignature: signed.value });
-    setSigning(false);
-  }
-
-  async function sendTestnet(phrase: string): Promise<void> {
-    setSigning(true);
-    setError("");
-    await postSettle({ mode: "SEND", sendAuthorization: phrase });
     setSigning(false);
   }
 
@@ -625,9 +625,9 @@ export function LiveLab(): ReactNode {
           stockTrade={stockTrade}
           sessionId={sessionId}
           offer={settlementOffer}
+          now={now}
           busy={task !== null || signing}
           onDryRun={() => void dryRun()}
-          onSend={(phrase) => void sendTestnet(phrase)}
           onDetails={() => setSheet("review")}
           onRoom={roomSeen ? () => setSheet("room") : null}
           onStress={() => setSheet("stress")}

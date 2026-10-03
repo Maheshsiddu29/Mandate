@@ -296,7 +296,7 @@ export function ApproveStage(props: {
             {connected && !rightChain ? <button type="button" className="mw-soft-button" disabled={props.authorizing} onClick={props.onSwitchChain}>Switch to Robinhood Chain testnet</button> : null}
             <details className="mw-disclosure mw-disclosure--inline">
               <summary>What this signature does</summary>
-              <p className="mw-fine">An offchain EIP-712 PortfolioMandateAuthorizationV2 approval of this exact mandate and the initial allocation shown above, for this session, once. Your wallet becomes the protocol principal. No gas, no transaction. Stock settlement asks for a separate MandateAuthorization. The deployer pays gas, and your signature does not delegate onchain execution authority.</p>
+              <p className="mw-fine">An offchain EIP-712 PortfolioMandateAuthorizationV2 approval of this exact mandate and the initial allocation shown above, for this session, once. Your wallet becomes the protocol principal. No gas, no transaction. Stock settlement asks for a separate MandateAuthorization. This page does not broadcast, and your signature does not delegate onchain execution authority.</p>
             </details>
           </div>
         ) : null}

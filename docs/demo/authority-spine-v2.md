@@ -200,16 +200,16 @@ Dry-run from the page:
    cancels the parked run. The wait is 180 seconds; after that the run stops
    and nothing is broadcast.
 5. The receipt then shows the session id and **READY · NOT SENT**. Nothing
-   was broadcast.
+   was broadcast. The page does not collect the operator phrase and does not
+   post `SEND`. Broadcast from this page is unavailable. See
+   [the browser execution spine](../v2/real-browser-execution-spine.md).
 
-To send, type the phrase from that GET (`AUTHORIZE ROBINHOOD TESTNET SEND`)
-into the receipt and choose **Send testnet transaction**. The page posts
-`{ "mode": "SEND", "sendAuthorization": "<phrase>" }`. The same `SendGate`
-checks it before `settleSpine` runs. `--send` still builds a new mandate
-digest, so a different-address wallet is asked to sign `MandateAuthorization`
-again. The deployer pays gas. A stub session cannot live-send. A transaction
-hash is not CONFIRMED; only `LIVE_TESTNET` evidence is. The wallet must hold
-the MDUSD debit and have approved the gate.
+`npm run agents:settle:v2 -- --send` still exists for a later, explicit
+broadcast decision. It is not wired to the page. `--send` still builds a new
+mandate digest, so a different-address wallet is asked to sign
+`MandateAuthorization` again. The deployer would pay gas. A stub session
+cannot live-send. A transaction hash is not CONFIRMED; only `LIVE_TESTNET`
+evidence is. The wallet must hold the MDUSD debit and have approved the gate.
 
 If the receipt says to start `npm run agents:lab`, the page is talking to
 `agents:serve`. Settlement routes are absent there on purpose.

@@ -168,10 +168,15 @@ test('the review step signs with a real wallet, or with the labelled demo key â€
   assert.match(lab, /mode: "DRY_RUN"/);
   assert.match(lab, /gateSignature: signed\.value/);
   assert.match(lab, /cancel: true/);
-  assert.match(lab, /sendAuthorization: phrase/);
+  assert.match(lab, /gate\.mode !== "DRY_RUN"/);
+  assert.doesNotMatch(lab, /sendAuthorization|mode: "SEND"/);
   assert.match(lab, /npm run agents:lab/);
   assert.match(outcome, /Sign stock authorization/);
+  assert.match(outcome, /Sign execution authorization/);
   assert.match(outcome, /Nothing is broadcast\./);
+  assert.match(outcome, /Nothing was broadcast\./);
+  assert.match(outcome, /Broadcast is unavailable in this milestone/);
+  assert.doesNotMatch(outcome, /Send testnet transaction/);
   assert.match(outcome, /Dry-run testnet settlement/);
   assert.doesNotMatch(browserSources, /live-settlement|eth_sendTransaction|sendTransaction/);
   assert.match(lab, /w\.signTypedData\(address, challenge\.typedData\)/);

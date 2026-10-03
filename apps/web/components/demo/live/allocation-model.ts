@@ -197,7 +197,38 @@ export interface AuthorizedStockTrade {
   readonly authorized: boolean;
   /** The candidate the model chose, shown only when that choice was reserved. */
   readonly candidate: string | null;
+  readonly candidateId: string | null;
   readonly amount: string | null;
+  /**
+   * Whether the active connector can execute this reserved candidate.
+   * False when the discovery event says so. Absence of that event does not
+   * invent a capability; settlement still refuses an unmapped candidate.
+   */
+  readonly settlementCapable: boolean;
+  readonly hold: "NONE" | "BLOCKED" | "ABSTAINED" | "RELEASED" | "UNSUPPORTED";
+}
+
+function stockHold(events: readonly LiveEvent[]): AuthorizedStockTrade["hold"] {
+  let hold: AuthorizedStockTrade["hold"] = "NONE";
+  for (const event of events) {
+    if (event.kind === "RESERVATION_RELEASED" && event.agent === "stock") hold = "RELEASED";
+    if (event.agent !== "stock") continue;
+    if (event.kind === "PROPOSAL_BLOCKED") hold = "BLOCKED";
+    if (event.kind === "AGENT_ABSTAINED") hold = "ABSTAINED";
+    if (event.kind === "AGENT_DECISION_COMPLETED" && event.data.action === "ABSTAIN") hold = "ABSTAINED";
+  }
+  return hold;
+}
+
+/** Explicit connector evidence only. No capability event means this view does not deny one. */
+function connectorCanSettle(events: readonly LiveEvent[], candidateId: string | null): boolean {
+  if (candidateId === null) return true;
+  const evaluated = [...events].reverse().find((event) => event.kind === "AGENT_CANDIDATES_EVALUATED" && event.agent === "stock");
+  if (evaluated === undefined) return true;
+  const stated = arr(evaluated.data.capability).map(rec).find((row) => row.candidateId === candidateId);
+  if (stated?.status === "SETTLEMENT_UNSUPPORTED") return false;
+  const executable = arr(evaluated.data.executable).filter((id): id is string => typeof id === "string");
+  return executable.length === 0 || executable.includes(candidateId);
 }
 
 /**
@@ -213,9 +244,18 @@ export function authorizedStockTrade(events: readonly LiveEvent[], reservations:
     for (const p of arr(e.data.proposals).map(rec)) if (p.role === "stock" && p.outcome === "RESERVED" && typeof p.requested === "string") amount = p.requested;
   }
   const reserved = amount !== null || reservations.some((r) => r.role === "stock");
-  if (!reserved) return { authorized: false, candidate: null, amount: null };
+  if (!reserved) return { authorized: false, candidate: null, candidateId: null, amount: null, settlementCapable: false, hold: stockHold(events) };
   const decision = [...events].reverse().find((e) => e.kind === "AGENT_DECISION_COMPLETED" && e.agent === "stock");
-  return { authorized: true, candidate: decision === undefined ? null : str(decision.data.candidate), amount };
+  const candidateId = decision === undefined || typeof decision.data.candidateId !== "string" ? null : decision.data.candidateId;
+  const settlementCapable = connectorCanSettle(events, candidateId);
+  return {
+    authorized: true,
+    candidate: decision === undefined ? null : str(decision.data.candidate),
+    candidateId,
+    amount,
+    settlementCapable,
+    hold: settlementCapable ? "NONE" : "UNSUPPORTED",
+  };
 }
 
 /** The candidate pipeline and Room semantics a server must advertise before this page runs agents against it. */
