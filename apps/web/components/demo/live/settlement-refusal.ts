@@ -9,6 +9,10 @@ export interface SettlementRefusalInput {
   readonly stage: string | null;
   readonly transactions: number | null;
   readonly txHash: string | null;
+  /** The server holds the attempt for reconciliation: it is never resent, so Execute is not offered. */
+  readonly held?: boolean;
+  /** Unix seconds after which the held attempt is released, as the server reported it. */
+  readonly heldUntil?: string | null;
 }
 
 export interface SettlementRefusal {
@@ -18,7 +22,13 @@ export interface SettlementRefusal {
   readonly stage: string | null;
   readonly transactions: number | null;
   readonly txHash: string | null;
+  readonly held: boolean;
+  readonly heldUntil: string | null;
 }
+
+/** Chain reads that could not establish the gate's state or the chain time. Nothing about the trade was decided. */
+const STATE_UNVERIFIED = /^(GATE_STATE_UNKNOWN|CHAIN_TIME_UNREADABLE)\./;
+const STATE_UNVERIFIED_SUMMARY = "Robinhood Chain testnet state could not be verified. Nothing was sent.";
 
 const SUMMARY: Readonly<Record<string, string>> = {
   SEND_NOT_AUTHORIZED: "Execution was not accepted. Nothing was sent.",
@@ -45,8 +55,9 @@ const NO_RETRY = new Set([
 
 export function settlementRefusal(input: SettlementRefusalInput): SettlementRefusal {
   const code = input.code;
-  const known = SUMMARY[code];
+  const known = SUMMARY[code] ?? (STATE_UNVERIFIED.test(code) ? STATE_UNVERIFIED_SUMMARY : undefined);
   const summary = known ?? (input.message === "" ? "Execution was refused. Nothing was sent." : input.message);
+  const heldUntil = input.heldUntil !== undefined && input.heldUntil !== null && /^\d+$/.test(input.heldUntil) ? input.heldUntil : null;
   return {
     summary,
     code,
@@ -54,11 +65,21 @@ export function settlementRefusal(input: SettlementRefusalInput): SettlementRefu
     stage: input.stage,
     transactions: input.transactions,
     txHash: input.txHash,
+    held: input.held === true,
+    heldUntil,
   };
 }
 
-/** A fresh Execute click is a new request. These codes must not offer one. */
-export function executionRetry(code: string | null): boolean {
+/** What a held attempt will do next. `format` renders unix milliseconds; the time is the server's. */
+export function holdNote(refusal: SettlementRefusal, format: (ms: number) => string): string | null {
+  if (!refusal.held) return null;
+  const when = refusal.heldUntil === null ? "its signed authorization expires" : format(Number(refusal.heldUntil) * 1000);
+  return `This attempt is held until ${when}, then released. It is never resent.`;
+}
+
+/** A fresh Execute click is a new request. These codes must not offer one, nor a held attempt. */
+export function executionRetry(code: string | null, held = false): boolean {
+  if (held) return false;
   if (code === null || code === "") return true;
   if (code.includes("CONSUMED")) return false;
   return !NO_RETRY.has(code);

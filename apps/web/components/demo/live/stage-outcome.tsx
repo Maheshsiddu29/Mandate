@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import type { Failure } from "./live-flow";
 import type { AuthorizedStockTrade } from "./allocation-model";
 import { ROLE_TITLES, reasonLabel, usd, type RoleName, type SettlementView, type TradeReview } from "./live-model";
-import { proofStatus, receiptHeading, type SettlementRefusal } from "./settlement-refusal";
+import { holdNote, proofStatus, receiptHeading, type SettlementRefusal } from "./settlement-refusal";
 import { shortAddress } from "./wallet";
 import { AgentGlyph, Pill } from "./workspace-ui";
 
@@ -18,9 +18,11 @@ export type SettlementOffer =
   | { readonly kind: "ready" };
 
 function RefusalNotice({ conflict }: { readonly conflict: SettlementRefusal }): ReactNode {
+  const hold = holdNote(conflict, (ms) => new Date(ms).toLocaleTimeString());
   return (
     <div className="mw-notice mw-notice--bad" role="alert">
       <p>{conflict.summary}</p>
+      {hold === null ? null : <p>{hold}</p>}
       <details className="mw-tech">
         <summary>Details</summary>
         <dl className="mw-evidence mw-evidence--compact">
@@ -29,6 +31,7 @@ function RefusalNotice({ conflict }: { readonly conflict: SettlementRefusal }): 
           <div><dt>Stage</dt><dd><code>{conflict.stage ?? "—"}</code></dd></div>
           <div><dt>Transaction</dt><dd>{conflict.txHash ?? "None"}</dd></div>
           <div><dt>Broadcasts</dt><dd>{conflict.transactions === null ? "—" : String(conflict.transactions)}</dd></div>
+          {conflict.held ? <div><dt>Attempt</dt><dd>Held for reconciliation{conflict.heldUntil === null ? "" : ` until ${conflict.heldUntil} (unix seconds)`}</dd></div> : null}
         </dl>
       </details>
     </div>

@@ -439,6 +439,8 @@ export function LiveLab(): ReactNode {
         stage: stage === "—" ? null : stage,
         transactions: typeof count === "number" ? count : typeof count === "string" && /^-?\d+$/.test(count) ? Number(count) : null,
         txHash: hash === "—" ? null : hash,
+        held: result.body.held === true,
+        heldUntil: typeof result.body.heldUntil === "string" ? result.body.heldUntil : null,
       }));
       setError(text);
       return null;
@@ -644,7 +646,7 @@ export function LiveLab(): ReactNode {
           walletOk={wallet.address !== null && wallet.chainId === APPROVAL_CHAIN.chainId && (str(authorization.principal) === "—" || wallet.address === str(authorization.principal).toLowerCase()) && (authorization.method === "WALLET_PRINCIPAL_V2" || authorization.method === "WALLET_PRINCIPAL_V2_PLAN")}
           busy={task !== null || signing}
           conflict={settleConflict}
-          retry={executionRetry(settleConflict?.code ?? null)}
+          retry={executionRetry(settleConflict?.code ?? null, settleConflict?.held ?? false)}
           onExecute={() => void execute()}
           onDetails={() => setSheet("review")}
           onRoom={roomSeen ? () => setSheet("room") : null}

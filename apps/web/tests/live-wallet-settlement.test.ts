@@ -4,7 +4,7 @@ import test from 'node:test';
 import type { JsonRecord, LiveEvent } from '../components/demo/live/live-client.ts';
 import { deriveFlow, eventsAfter, type FlowInput } from '../components/demo/live/live-flow.ts';
 import { derivePresentation } from '../components/demo/live/live-model.ts';
-import { executionRetry, proofStatus, receiptHeading, settlementRefusal } from '../components/demo/live/settlement-refusal.ts';
+import { executionRetry, holdNote, proofStatus, receiptHeading, settlementRefusal } from '../components/demo/live/settlement-refusal.ts';
 import { APPROVAL_CHAIN, WALLET_METHODS, injectedWallet } from '../components/demo/live/wallet.ts';
 
 /*
@@ -213,4 +213,59 @@ test('a reload returns to the same durable session and replays its events; dupli
   assert.match(lab, /restored after a server restart\. It is evidence only/);
   // The browser never logs, stores or displays a signature.
   assert.doesNotMatch(browserSources, /console\.(log|info|debug)|setItem\([^)]*signed/);
+});
+
+test('C1.4: an RPC state-read refusal is NOT SENT, shows the exact reason under Details, and a held attempt offers no Execute', () => {
+  const reason = 'GATE_STATE_UNKNOWN.MARKET.BLOCK_AHEAD_OF_NODE.RPC_-32000:unsupported block number 128270281';
+  const message = `Robinhood Chain testnet state could not be verified (DOMAIN: ${reason}). Nothing was sent.`;
+  const refused = settlementRefusal({ code: reason, message, stage: 'DOMAIN', transactions: 0, txHash: null, held: true, heldUntil: '1790814765' });
+  assert.equal(refused.summary, 'Robinhood Chain testnet state could not be verified. Nothing was sent.');
+  assert.doesNotMatch(refused.summary, /fail|revert/i);
+  assert.equal(refused.code, reason);
+  assert.equal(refused.message, message);
+  assert.equal(refused.stage, 'DOMAIN');
+  assert.equal(refused.transactions, 0);
+  assert.equal(refused.txHash, null);
+  assert.equal(refused.held, true);
+  assert.equal(holdNote(refused, (ms) => `t=${ms}`), 'This attempt is held until t=1790814765000, then released. It is never resent.');
+  assert.equal(executionRetry(refused.code, refused.held), false);
+  // The same read failing before anything was signed is not held: Execute stays.
+  const early = settlementRefusal({ code: reason, message, stage: 'DOMAIN', transactions: 0, txHash: null, held: false, heldUntil: null });
+  assert.equal(holdNote(early, String), null);
+  assert.equal(executionRetry(early.code, early.held), true);
+  assert.equal(settlementRefusal({ code: 'CHAIN_TIME_UNREADABLE.NETWORK.TimeoutError', message: '', stage: 'DOMAIN', transactions: 0, txHash: null }).summary, 'Robinhood Chain testnet state could not be verified. Nothing was sent.');
+  // A malformed hold time is dropped, not shown.
+  assert.equal(settlementRefusal({ code: reason, message, stage: 'DOMAIN', transactions: 0, txHash: null, held: true, heldUntil: 'soon' }).heldUntil, null);
+
+  // The refusal event leaves the receipt NOT SENT: no hash, no failed receipt, not Executing.
+  const events = after(['DOMAIN_EXECUTION_INELIGIBLE', { stage: 'DOMAIN', reason, transactions: 0 }]);
+  const view = derivePresentation(events).settlement;
+  assert.equal(view.stage, 'FAILED');
+  assert.equal(view.txHash, null);
+  assert.equal(view.gateSign, null);
+  assert.notEqual(deriveFlow(done(events)).phase, 'SETTLING');
+  assert.equal(proofStatus({ settled: false, stage: view.stage, txHash: view.txHash }), 'NOT SENT');
+  assert.equal(receiptHeading({ settled: false, txHash: null, stage: view.stage, refused: true }).title, 'Not sent');
+
+  // The page reads the hold from the server and renders it next to the exact reason.
+  assert.match(lab, /held: result\.body\.held === true/);
+  assert.match(lab, /executionRetry\(settleConflict\?\.code \?\? null, settleConflict\?\.held \?\? false\)/);
+  assert.match(outcome, /holdNote\(conflict/);
+  assert.match(outcome, /<dt>Attempt<\/dt>/);
+});
+
+test('C1.4 wallet audit: two Mandate signatures on the browser path, one execution signature per attempt, no dry-run signature before a send', () => {
+  // Exactly two typed-data signing sites: the portfolio mandate and the gate MandateAuthorization.
+  assert.equal(lab.match(/\.signTypedData\(/g)?.length, 2);
+  assert.match(lab, /signTypedData\(address, challenge\.typedData\)/);
+  assert.match(lab, /signTypedData\(address, gate\.typedData\)/);
+  // Execute posts one SEND intent. The page never posts a dry run, so no dry-run signature precedes a send.
+  assert.match(lab, /postSettle\(\{ mode: "SEND", intent: "EXECUTE_ROBINHOOD_TESTNET" \}\)/);
+  assert.doesNotMatch(lab, /mode: "DRY_RUN"/);
+  // Only typed data for the open SEND is signed; the button is disabled while a signature is open.
+  assert.match(lab, /if \(gate\.mode !== "SEND"\)/);
+  assert.match(outcome, /disabled=\{props\.signing\} onClick=\{props\.onSignStock\}/);
+  // A refusal clears the open request, so the same typed data cannot be signed twice.
+  const refused = derivePresentation(after(['GATE_EXECUTION_SIGNATURE_REQUIRED', { mode: 'SEND', typedData: { primaryType: 'MandateAuthorization' } }], ['DOMAIN_EXECUTION_INELIGIBLE', { stage: 'DOMAIN', reason: 'GATE_STATE_UNKNOWN.MARKET.X' }]));
+  assert.equal(refused.settlement.gateSign, null);
 });
