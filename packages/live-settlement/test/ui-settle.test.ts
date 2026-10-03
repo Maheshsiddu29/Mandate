@@ -168,6 +168,22 @@ describe('V2 settlement bridge', () => {
     assert.equal(h.cleaned, 0);
   });
 
+  it('a browser execute intent opens the same one-shot gate and rejects execution parameters', async () => {
+    const h = harness();
+    const extra = await post(h, { mode: 'SEND', intent: 'EXECUTE_ROBINHOOD_TESTNET', tokenIn: '0xabc', amount: '1' });
+    assert.equal(extra?.status, 400);
+    assert.match(String(body(extra as NonNullable<typeof extra>)['message']), /Unexpected field/);
+    assert.equal(h.calls.length, 0);
+    const notSend = await post(h, { mode: 'DRY_RUN', intent: 'EXECUTE_ROBINHOOD_TESTNET' });
+    assert.equal(notSend?.status, 400);
+    const sent = await post(h, { mode: 'SEND', intent: 'EXECUTE_ROBINHOOD_TESTNET' });
+    assert.equal(sent?.status, 200);
+    assert.equal(h.calls[0]?.mode, 'SEND');
+    assert.equal(h.calls[0]?.gate.state, 'AUTHORIZED');
+    assert.equal(h.calls[0]?.ledgerPath, '/tmp/durable');
+    assert.equal(h.cleaned, 0);
+  });
+
   it('refuses a signature that was not just requested, a busy session, and an unknown session', async () => {
     const h = harness();
     const stale = await post(h, { mode: 'DRY_RUN', gateSignature: SIG });

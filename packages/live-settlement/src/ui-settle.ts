@@ -71,16 +71,26 @@ function asJson(value: unknown): LabJson {
   return JSON.parse(JSON.stringify(value, (_k, x: unknown) => (typeof x === 'bigint' ? x.toString() : x))) as LabJson;
 }
 
+/** The browser's explicit execute action. It is not an asset, an amount, or a calldata field. */
+export const BROWSER_EXECUTE_INTENT = 'EXECUTE_ROBINHOOD_TESTNET';
+
+const SETTLEMENT_FIELDS = new Set(['mode', 'gateSignature', 'sendAuthorization', 'cancel', 'intent']);
+
 interface ParsedBody {
   readonly mode: 'DRY_RUN' | 'SEND';
   readonly gateSignature: string | null;
   readonly sendAuthorization: string | null;
   readonly cancel: boolean;
+  /** Present only when the browser asked to execute. The CLI uses the operator phrase instead. */
+  readonly browserExecute: boolean;
 }
 
 function parseBody(body: unknown): { readonly ok: true; readonly value: ParsedBody } | { readonly ok: false; readonly response: LabRouteResponse } {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return { ok: false, response: refuse(400, 'BAD_REQUEST', 'POST body must be a JSON object.') };
   const rec = body as { readonly [k: string]: unknown };
+  for (const key of Object.keys(rec)) {
+    if (!SETTLEMENT_FIELDS.has(key)) return { ok: false, response: refuse(400, 'BAD_REQUEST', `Unexpected field "${key}". Execution parameters are not accepted from the browser.`) };
+  }
   const mode = rec['mode'];
   if (mode !== 'DRY_RUN' && mode !== 'SEND') return { ok: false, response: refuse(400, 'BAD_REQUEST', 'mode must be "DRY_RUN" or "SEND".') };
   const gateSignature = rec['gateSignature'];
@@ -90,6 +100,9 @@ function parseBody(body: unknown): { readonly ok: true; readonly value: ParsedBo
   if (sendAuthorization !== undefined && sendAuthorization !== null && typeof sendAuthorization !== 'string') return { ok: false, response: refuse(400, 'BAD_REQUEST', 'sendAuthorization must be the operator phrase.') };
   if (typeof sendAuthorization === 'string' && sendAuthorization.length > 80) return { ok: false, response: refuse(400, 'BAD_REQUEST', 'sendAuthorization is not the operator phrase.') };
   if (rec['cancel'] !== undefined && rec['cancel'] !== true) return { ok: false, response: refuse(400, 'BAD_REQUEST', 'cancel must be true.') };
+  const intent = rec['intent'];
+  if (intent !== undefined && intent !== BROWSER_EXECUTE_INTENT) return { ok: false, response: refuse(400, 'BAD_REQUEST', 'intent is not an execution request.') };
+  if (intent === BROWSER_EXECUTE_INTENT && mode !== 'SEND') return { ok: false, response: refuse(400, 'BAD_REQUEST', 'An execution request must use mode "SEND".') };
   return {
     ok: true,
     value: {
@@ -97,6 +110,7 @@ function parseBody(body: unknown): { readonly ok: true; readonly value: ParsedBo
       gateSignature: typeof gateSignature === 'string' ? gateSignature : null,
       sendAuthorization: typeof sendAuthorization === 'string' ? sendAuthorization : null,
       cancel: rec['cancel'] === true,
+      browserExecute: intent === BROWSER_EXECUTE_INTENT,
     },
   };
 }
@@ -202,9 +216,11 @@ export class SpineUi {
     if (session === null) return refuse(404, 'SESSION_NOT_FOUND', 'No such session.');
 
     const gate = new SendGate();
-    if (body.mode === 'SEND' && !gate.authorize(body.sendAuthorization ?? '')) {
+    // The CLI phrase and the browser's explicit intent each open the same one-shot gate. The body still cannot name an asset.
+    const opened = body.mode === 'SEND' && (body.browserExecute ? gate.authorize(`${SEND_AUTHORIZATION_PHRASE}\n`) : gate.authorize(body.sendAuthorization ?? ''));
+    if (body.mode === 'SEND' && !opened) {
       session.events.emit('TESTNET_SEND_AUTHORIZATION_REFUSED', { agent: 'stock', data: { required: SEND_AUTHORIZATION_PHRASE, received: 'another text', transactions: 0 } });
-      return refuse(409, 'SEND_NOT_AUTHORIZED', `Broadcast needs the operator to type exactly "${SEND_AUTHORIZATION_PHRASE}". Nothing was sent.`);
+      return refuse(409, 'SEND_NOT_AUTHORIZED', `Broadcast needs an explicit execution request. Nothing was sent.`);
     }
 
     const journal = this.#host.journalFor(session);
@@ -336,7 +352,7 @@ export class SpineUi {
         status: 'RECONCILED_ONLY',
         sessionId: session.id,
         attemptState: result.attempt.state,
-        message: `The reservation's attempt is ${result.attempt.state}. Reconciliation only; nothing is resent.`,
+        message: result.attempt.state === 'CONSUMED' ? 'Already settled. Reconciliation only; nothing is resent.' : `The reservation's attempt is ${result.attempt.state}. Reconciliation only; nothing is resent.`,
       });
     }
     if (result.status === 'INELIGIBLE') {
