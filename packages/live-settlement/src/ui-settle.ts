@@ -16,6 +16,7 @@
  */
 
 import type { LiveSession } from '@mandate/live-agents';
+import { selectStockExecution } from './authorized-execution.ts';
 import { ASSET_QUALIFICATION } from './evidence.ts';
 import type { GateExecutionRequest } from './gate-authority.ts';
 import type { SettlementJournal } from './journal.ts';
@@ -100,12 +101,38 @@ function parseBody(body: unknown): { readonly ok: true; readonly value: ParsedBo
   };
 }
 
+/**
+ * Proof fields for READY · NOT SENT. Read off the reserved Stock child and
+ * the signed allocation. A session that has neither (a test double) adds
+ * nothing. No signature and no signed transaction.
+ */
+function stockEvidence(session: LiveSession): { readonly [k: string]: LabJson } {
+  if (!Array.isArray(session.reservedExecutions)) return {};
+  const selected = selectStockExecution(session.reservedExecutions);
+  if (!selected.ok) return {};
+  const x = selected.execution;
+  const version = session.versions?.records.find((record) => record.version === x.version);
+  const initial = version?.authorization.wallet?.initialAllocationDigest ?? null;
+  const current = session.reallocationRecords?.filter((record) => record.mandateVersion === x.version).at(-1)?.nextPlanDigest ?? initial;
+  return {
+    candidateId: x.candidateId,
+    proposalDigest: x.proposal,
+    candidateDigest: x.candidateDigest,
+    childAuthorizationDigest: x.child,
+    reservation: x.reservation,
+    authorizedNotionalAtoms: x.notionalAtoms.toString(),
+    mandateVersion: x.version,
+    initialAllocationDigest: initial,
+    currentPlanDigest: current,
+  };
+}
+
 function signResponse(sessionId: string, mode: 'DRY_RUN' | 'SEND', request: GateExecutionRequest): LabRouteResponse {
   return ok({
     status: 'GATE_SIGNATURE_REQUIRED',
     sessionId,
     mode,
-    message: 'The wallet must sign MandateAuthorization for this execution. It is not a transaction. The deployer pays gas. Nothing has been broadcast.',
+    message: 'The wallet must sign MandateAuthorization for this execution. This signs execution authority. It is not a transaction. Nothing has been broadcast.',
     gateExecution: asJson({
       kind: request.kind,
       principal: request.principal,
@@ -283,18 +310,26 @@ export class SpineUi {
         data: {
           sessionId: session.id,
           spine: 'V2',
-          broadcast: 'NOT_SENT',
+          evidenceClass: 'DRY_RUN',
+          broadcast: false,
           transactions: 0,
-          note: 'Re-verified. Dry run READY. Nothing was broadcast. The deployer pays gas.',
+          note: 'Re-verified. Dry run READY. Nothing was broadcast.',
           principals: result.principals,
           network: would.network,
           chainId: would.chainId,
+          gate: would.to ?? null,
+          principal: would.principal ?? null,
+          recipient: would.recipient ?? null,
+          mandateDigest: would.mandateDigest ?? null,
+          gasEstimate: would.gasEstimate ?? null,
+          simulationDeadline: would.deadline ?? null,
           tokenIn: would.tokenIn,
           tokenOut: would.tokenOut,
           qualification: ASSET_QUALIFICATION,
+          ...stockEvidence(session),
         },
       });
-      return ok({ status: 'READY', sessionId: session.id, transactions: 0, message: 'Re-verified. Dry run READY. Nothing was broadcast.' });
+      return ok({ status: 'READY', sessionId: session.id, transactions: 0, broadcast: false, message: 'Re-verified. Dry run READY. Nothing was broadcast.' });
     }
     if (result.status === 'RECONCILED_ONLY') {
       return ok({

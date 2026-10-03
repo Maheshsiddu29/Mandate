@@ -108,6 +108,10 @@ describe('V2 settlement bridge', () => {
     assert.equal(h.calls[0]?.gate.state, 'LOCKED');
     assert.equal(h.calls[0]?.ledgerPath, '/tmp/scratch');
     assert.equal(h.emitted.at(-1)?.kind, 'SPINE_DRY_RUN_READY');
+    const evidence = h.emitted.at(-1)?.data as { readonly broadcast: boolean; readonly evidenceClass: string; readonly transactions: number };
+    assert.equal(evidence.broadcast, false);
+    assert.equal(evidence.evidenceClass, 'DRY_RUN');
+    assert.equal(evidence.transactions, 0);
     assert.equal(h.closed, 1);
     assert.equal(h.cleaned, 1);
     assert.doesNotMatch(JSON.stringify(r), new RegExp(KEY_SENTINEL));
