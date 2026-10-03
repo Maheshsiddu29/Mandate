@@ -148,7 +148,7 @@ test('the review step signs with a real wallet, or with the labelled demo key â€
   assert.match(configure, /Review your mandate/);
   assert.match(configure, /Approve in wallet/);
   assert.match(configure, /Your wallet will sign this Mandate\. This does not submit a blockchain transaction\./);
-  assert.match(configure, />Sign Mandate</);
+  assert.match(configure, />Authorize mandate</);
   assert.match(configure, /No browser wallet detected/);
   assert.match(configure, /your signature does not delegate onchain execution authority/);
   // The demo key stays, labelled as what it is.
