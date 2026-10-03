@@ -378,6 +378,24 @@ export function interpretLocally(prompt: string): DraftInterpretation {
     notes.push('Automatic reallocation read as allowed: capital an agent leaves unused may move to other agents, inside each signed maximum.');
   }
 
+  // "Let the Stock agent manage $800": that agent's ceiling, which is the field the compose form shows.
+  const directedRoles: Role[] = [];
+  for (const r of ROLES) {
+    const word = ROLE_WORDS[r].source.replace(/\\b/g, '').replace(/^\(/, '').replace(/\)$/, '');
+    const directed = new RegExp(String.raw`\b(?:let|allow|have)\s+(?:the\s+)?(?:${word})\s+agent\s+(?:manage|deploy|invest|use|allocate)\s+(?:${MONEY})`).exec(p);
+    if (directed !== null) {
+      const amount = money(directed);
+      agent(r).enabled = true;
+      agent(r).maxAllocation = amount;
+      agent(r).budget = amount;
+      directedRoles.push(r);
+      notes.push(`"${directed[0].trim()}" read as the ${r} agent's maximum allocation.`);
+    }
+  }
+  if (directedRoles.length === 1) {
+    for (const r of ROLES) if (!directedRoles.includes(r)) agent(r).enabled = false;
+  }
+
   const mentioned = ROLES.filter((r) => ROLE_WORDS[r].test(p));
   const negated = ROLES.filter((r) => NEGATED(ROLE_WORDS[r].source.replace(/\\b/g, '')).test(p));
   for (const r of negated) agent(r).enabled = false;
@@ -454,10 +472,37 @@ export interface Interpreted {
   readonly draft: MandateDraft | null;
 }
 
+/**
+ * The prompt's own explicit amounts and agent choices win over a model draft.
+ * A model may fill what the prompt did not say. It may not replace "$800"
+ * with a preset-shaped total. Null local fields are left to the model.
+ */
+export function preferExplicitPrompt(model: DraftInterpretation, prompt: string): DraftInterpretation {
+  const local = interpretLocally(prompt);
+  const portfolio: { [K in keyof DraftInterpretation['portfolio']]: DraftInterpretation['portfolio'][K] } = { ...model.portfolio };
+  const write = portfolio as { [key: string]: string | boolean | null };
+  for (const key of PORTFOLIO_FIELDS) {
+    const value = local.portfolio[key];
+    if (value !== null) write[key] = value;
+  }
+  const byRole = new Map(model.agents.map((item) => [item.role, { ...item }] as const));
+  for (const item of local.agents) {
+    const current = byRole.get(item.role) ?? { role: item.role, enabled: null, maxAllocation: null, maxExposure: null, budget: null };
+    byRole.set(item.role, {
+      role: item.role,
+      enabled: item.enabled ?? current.enabled,
+      maxAllocation: item.maxAllocation ?? current.maxAllocation,
+      maxExposure: item.maxExposure ?? current.maxExposure,
+      budget: item.budget ?? current.budget,
+    });
+  }
+  return { ...model, portfolio, agents: ROLES.map((role) => byRole.get(role)).filter((item) => item !== undefined), notes: [...local.notes, ...model.notes].slice(0, MAX_NOTES) };
+}
+
 /** Ask a provider to interpret `prompt`. A failed or malformed answer yields no draft; nothing falls back silently. */
 export async function interpretPrompt(prompt: string, provider: AgentModelProvider, clock: Clock, timeoutMs: number): Promise<Interpreted> {
   const outcome = await callModel({ provider, request: draftRequest(prompt.slice(0, 2_000)), parse: parseDraftInterpretation, timeoutMs, clock });
-  return { outcome, draft: outcome.status === 'RESPONDED' ? draftFromInterpretation(outcome.value) : null };
+  return { outcome, draft: outcome.status === 'RESPONDED' ? draftFromInterpretation(preferExplicitPrompt(outcome.value, prompt)) : null };
 }
 
 export type { IssueKind };

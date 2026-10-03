@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { draftFromInterpretation, interpretLocally, interpretLocallyAsText, interpretPrompt, parseDraftInterpretation } from '../src/authoring/prompt-to-draft.ts';
+import { draftFromInterpretation, interpretLocally, interpretLocallyAsText, interpretPrompt, parseDraftInterpretation, preferExplicitPrompt } from '../src/authoring/prompt-to-draft.ts';
 import { applyPreset, emptyDraft } from '../src/authoring/draft-types.ts';
 import { catalogIds } from '../src/authoring/catalog.ts';
 import { realClock } from '../src/runtime/clock.ts';
@@ -114,6 +114,44 @@ describe('test 2: a draft is not authority', () => {
     const r = await interpretPrompt(CANONICAL, provider, realClock, 1_000);
     assert.equal(r.outcome.status, 'INVALID_RESPONSE');
     assert.equal(r.draft, null);
+  });
+
+  it('Let the Stock agent manage $800 populates stock and does not become the balanced total', () => {
+    const d = draftOf('Let the Stock agent manage $800.');
+    assert.equal(d.agents.stock.enabled, true);
+    assert.equal(d.agents.stock.maxAllocation, '800');
+    assert.equal(d.portfolio.totalCapital, '800');
+    assert.equal(d.portfolio.maxDeployed, '800');
+    assert.equal(d.agents.swap.enabled, false);
+    assert.equal(d.agents.nft.enabled, false);
+    assert.equal(d.agents.yield.enabled, false);
+    assert.equal(d.agents.perps.enabled, false);
+    const filled = applyPreset(d, 'balanced', true).draft;
+    assert.equal(filled.portfolio.totalCapital, '800', 'a preset must not replace the amount the prompt stated');
+    assert.equal(filled.agents.stock.maxAllocation, '800');
+    assert.equal(d.provenance['portfolio.totalCapital'], 'INTERPRETED');
+    assert.equal(Object.values(d).some((value) => typeof value === 'string' && /signature/.test(value)), false);
+  });
+
+  it('a multi-agent prompt keeps each named amount and the portfolio total apart', () => {
+    const d = draftOf('Deploy $2,000 across stocks and yield. Stock $800. Yield $400.');
+    assert.equal(d.portfolio.totalCapital, '2000');
+    assert.equal(d.agents.stock.enabled, true);
+    assert.equal(d.agents.yield.enabled, true);
+    assert.equal(d.agents.stock.budget, '800');
+    assert.equal(d.agents.yield.budget, '400');
+    assert.equal(d.agents.stock.maxAllocation, null);
+    assert.equal(d.agents.swap.enabled, false);
+  });
+
+  it('a model cannot replace an explicit prompt amount with $2,500', () => {
+    const invented = interpretLocally('Deploy $2,500 across stocks.');
+    assert.equal(invented.portfolio.totalCapital, '2500');
+    const overlaid = preferExplicitPrompt(invented, 'Let the Stock agent manage $800.');
+    const d = draftFromInterpretation(overlaid);
+    assert.equal(d.portfolio.totalCapital, '800');
+    assert.equal(d.agents.stock.maxAllocation, '800');
+    assert.notEqual(d.portfolio.totalCapital, '2500');
   });
 
   it('a well-formed model answer is still only a draft', async () => {
