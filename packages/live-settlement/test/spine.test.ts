@@ -13,14 +13,10 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { bytesToHex, eip712SigningHash, type Bytes32 } from '@mandate/kernel';
-import { portfolioMandateAuthorizationV2Hash, type PortfolioMandate } from '@mandate/portfolio';
-import { addressOfKey, signPrehash } from '@mandate/portfolio/demo';
-import { LiveSession, sessionDigest, sessionDir } from '@mandate/live-agents';
-import { APPROVAL_CHAIN_ID } from '../../live-agents/src/wallet/approval.ts';
-import { presetDraft } from '../../live-agents/src/authoring/draft-types.ts';
+import type { PortfolioMandate } from '@mandate/portfolio';
+import { addressOfKey } from '@mandate/portfolio/demo';
+import { LiveSession, sessionDir } from '@mandate/live-agents';
 import { ManualClock } from '../../live-agents/src/runtime/clock.ts';
-import { ScriptedProvider, json } from '../../live-agents/test/support/providers.ts';
 import { SettlementJournal } from '../src/journal.ts';
 import { LiveSettlement } from '../src/settlement.ts';
 import { SendGate } from '../src/send-gate.ts';
@@ -28,28 +24,7 @@ import { settleSpine } from '../src/spine-settlement.ts';
 import { acceptGateExecution, type GateExecutionRequest } from '../src/gate-authority.ts';
 import { reverifySpine, type SpineFacts } from '../src/spine.ts';
 import { ALL_TEST_KEYS, GATE, KEYS, MDUSD, PRINCIPAL, PRINCIPAL_KEY, ModelRpc, settlementWorld, testDeployment } from './support/world.ts';
-
-const TIMEOUTS = { agentTimeoutMs: 1_000, roomRoundTimeoutMs: 1_000 } as const;
-const OTHER_KEY = `0x${'44'.repeat(32)}`;
-const propose = (candidateId: string, whole: number) => json({ action: 'PROPOSE', candidateId, requestedAtoms: (BigInt(whole) * 1_000_000n).toString(), rationale: `pick ${candidateId}` });
-const abstain = json({ action: 'ABSTAIN', candidateId: null, requestedAtoms: null, rationale: 'none' });
-const provider = () => new ScriptedProvider({ decide: (r) => ({ text: r.role === 'stock' ? propose('nvda-note-a', 400) : abstain }), negotiate: () => ({ text: abstain }) });
-
-async function v2Session(dir: string, key: string, id: string): Promise<void> {
-  const s = new LiveSession({ provider: provider(), clock: new ManualClock(), sessionId: id, stateDir: dir, ...TIMEOUTS });
-  const draft = presetDraft('balanced');
-  const wallet = addressOfKey(key);
-  const c = s.spineChallenge(draft, wallet);
-  assert.equal(c.ok, true);
-  if (!c.ok) return;
-  const mandate = s.challenges.get(c.challenge)?.prepared.mandate;
-  assert.ok(mandate);
-  assert.ok(c.initialAllocationDigest);
-  const signature = signPrehash(portfolioMandateAuthorizationV2Hash(mandate, { chainId: APPROVAL_CHAIN_ID, sessionDigest: sessionDigest(s.id), initialAllocationDigest: c.initialAllocationDigest }), key);
-  assert.equal((await s.authorizeWithWallet(draft, c.challenge, signature)).ok, true);
-  assert.equal((await s.run()).status, 'AUTHORIZED');
-  s.close();
-}
+import { OTHER_KEY, SPINE_TIMEOUTS as TIMEOUTS, signGate, v2Session } from './support/spine-session.ts';
 
 async function restored(dir: string, id: string, rpc: ModelRpc) {
   const session = await LiveSession.restore(dir, id, { ...TIMEOUTS, by: 'spine-test', clock: new ManualClock() });
@@ -74,12 +49,6 @@ function factsOf(session: LiveSession): SpineFacts {
   const record = session.versions.records.find((r) => r.version === active?.version);
   if (active === null || record === undefined) throw new Error('no active version');
   return { mandate: active.mandate, signature: active.signature, authorization: record.authorization, sessionId: session.id, chainId: 46_630n, now: session.protocolNow() };
-}
-
-function signGate(req: GateExecutionRequest, key: string): string {
-  const hash = eip712SigningHash({ name: 'Mandate', version: '1', chainId: BigInt(req.chainId), verifyingContract: req.gate }, req.mandateDigest as Bytes32);
-  if (bytesToHex(hash) !== req.signingHash) throw new Error('signing hash is not the gate EIP-712 hash');
-  return signPrehash(hash, key);
 }
 
 describe('V2 authority spine settlement', () => {
