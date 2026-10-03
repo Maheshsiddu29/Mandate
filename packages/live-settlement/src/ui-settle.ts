@@ -66,6 +66,11 @@ const SIG = /^0x[0-9a-fA-F]{130}$/;
 
 const ok = (body: { readonly [k: string]: LabJson }, status = 200): LabRouteResponse => ({ status, body });
 const refuse = (status: number, error: string, message: string): LabRouteResponse => ({ status, body: { error, message } });
+/** A settle call that did not broadcast. Stage and transaction count are the server's, so the page can show them. */
+const denied = (error: string, message: string, facts: { readonly stage: string | null; readonly transactions: number; readonly txHash: string | null }): LabRouteResponse => ({
+  status: 409,
+  body: { error, message, stage: facts.stage, transactions: facts.transactions, txHash: facts.txHash },
+});
 
 function asJson(value: unknown): LabJson {
   return JSON.parse(JSON.stringify(value, (_k, x: unknown) => (typeof x === 'bigint' ? x.toString() : x))) as LabJson;
@@ -220,7 +225,7 @@ export class SpineUi {
     const opened = body.mode === 'SEND' && (body.browserExecute ? gate.authorize(`${SEND_AUTHORIZATION_PHRASE}\n`) : gate.authorize(body.sendAuthorization ?? ''));
     if (body.mode === 'SEND' && !opened) {
       session.events.emit('TESTNET_SEND_AUTHORIZATION_REFUSED', { agent: 'stock', data: { required: SEND_AUTHORIZATION_PHRASE, received: 'another text', transactions: 0 } });
-      return refuse(409, 'SEND_NOT_AUTHORIZED', `Broadcast needs an explicit execution request. Nothing was sent.`);
+      return denied('SEND_NOT_AUTHORIZED', 'Broadcast needs an explicit execution request. Nothing was sent.', { stage: 'SEND_GATE', transactions: 0, txHash: null });
     }
 
     const journal = this.#host.journalFor(session);
@@ -357,9 +362,9 @@ export class SpineUi {
     }
     if (result.status === 'INELIGIBLE') {
       const message = result.reason === 'GATE_EXECUTION_AUTHORITY_REQUIRED' ? 'No gate signature was provided. Nothing was broadcast. Dry-run again to request a new MandateAuthorization.' : `${result.stage}: ${result.reason}. Nothing was broadcast.`;
-      return refuse(409, result.reason, message);
+      return denied(result.reason, message, { stage: result.stage, transactions: 0, txHash: null });
     }
-    if (result.status === 'NOT_READY') return refuse(409, 'NOT_READY', `The dry run did not reach READY (${result.outcome.status}). Nothing was broadcast.`);
+    if (result.status === 'NOT_READY') return denied('NOT_READY', `The dry run did not reach READY (${result.outcome.status}). Nothing was broadcast.`, { stage: result.outcome.status, transactions: 0, txHash: null });
     const outcome = result.outcome;
     if (outcome.status === 'CONFIRMED') {
       return ok({
@@ -374,7 +379,7 @@ export class SpineUi {
       });
     }
     if (outcome.status === 'SUBMITTED_UNCONFIRMED') return ok({ status: 'SENT', sessionId: session.id, outcome: outcome.status, txHash: outcome.txHash, evidence: outcome.evidence, transactions: 1, message: 'Submitted. A transaction hash is not settlement.' });
-    if (outcome.status === 'FAILED') return refuse(409, outcome.reason, `${outcome.evidence}: ${outcome.reason}`);
-    return refuse(409, outcome.status, `Settlement ended ${outcome.status}. Nothing further was broadcast.`);
+    if (outcome.status === 'FAILED') return denied(outcome.reason, `${outcome.evidence}: ${outcome.reason}`, { stage: null, transactions: outcome.broadcasts, txHash: outcome.txHash });
+    return denied(outcome.status, `Settlement ended ${outcome.status}. Nothing further was broadcast.`, { stage: outcome.status, transactions: 0, txHash: null });
   }
 }
