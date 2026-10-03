@@ -2,6 +2,7 @@
 
 import { LatticeLoader } from "@/components/react-bits/lattice-loader";
 import { useState, type ReactNode } from "react";
+import { type AuthorityReviewModel } from "./authority-review";
 import { arr, rec, str, type Json, type JsonRecord } from "./live-client";
 import { allocationSummary, ROLE_DESCRIPTORS, ROLE_TITLES, ROLES, usd, type RoleName } from "./live-model";
 import { APPROVAL_CHAIN, shortAddress } from "./wallet";
@@ -241,10 +242,7 @@ export interface WalletState {
 }
 
 export function ApproveStage(props: {
-  readonly access: DraftAccess;
-  /** The budgets about to be signed, as the draft holds them now (after any edit). */
-  readonly budgets?: readonly { readonly role: RoleName; readonly amount: string | null }[];
-  readonly autoReallocate?: boolean;
+  readonly review: AuthorityReviewModel;
   readonly expected: string;
   readonly authorizing: boolean;
   readonly error: string;
@@ -254,58 +252,227 @@ export function ApproveStage(props: {
   readonly onSignWallet: () => void;
   readonly onAuthorize: (confirmation: string) => void;
   readonly onCancel: () => void;
+  readonly onEditPermissions: () => void;
+  readonly onChooseTotal: (total: string) => void;
+  readonly onAcknowledgeUnsupported: (index: number) => void;
 }): ReactNode {
   const [confirmation, setConfirmation] = useState("");
   const [method, setMethod] = useState<"wallet" | "demo">(props.wallet.available ? "wallet" : "demo");
   const version = props.expected.replace("AUTHORIZE MANDATE ", "");
-  const venues = props.access.ids("market.venues");
   const matches = confirmation === props.expected && props.expected !== "—";
   const wallet = props.wallet;
   const connected = wallet.address !== null;
   const rightChain = wallet.chainId === APPROVAL_CHAIN.chainId;
-  const walletReady = method === "wallet" && connected && rightChain;
+  const reviewClean = props.review.canAuthorize;
+  const walletReady = method === "wallet" && connected && rightChain && reviewClean;
+  const demoReady = matches && reviewClean;
+  const r = props.review;
+  const groups = [...new Set(r.advanced.map((row) => row.group))];
   return (
     <div className="mw-approve">
       <header className="mw-stage-head">
         <p className="mw-kicker">Mandate {version}</p>
-        <h2>Review your mandate</h2>
-        <p>Approve once. Agents then work inside these limits without asking again. The Room can never add to them.</p>
+        <h2>Mandate review</h2>
+        <p>This is the exact authority your wallet will sign. Edit anything that is wrong before authorizing.</p>
       </header>
+
+      {r.blockers.length > 0 ? (
+        <section className="mw-review-blockers" aria-labelledby="review-blockers-title" role="alert">
+          <h3 id="review-blockers-title">{r.blockerSummary}</h3>
+          <ul>
+            {r.blockers.map((b) => (
+              <li key={b.id}>{b.text}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {r.conflicts.length > 0 ? (
+        <section className="mw-review-needs" aria-labelledby="review-conflicts-title">
+          <h3 id="review-conflicts-title">Needs your input</h3>
+          {r.conflicts.map((c) => (
+            <div key={c.index} className="mw-review-needs__card">
+              <p className="mw-review-needs__kind">Conflict</p>
+              <p>{c.text}</p>
+              {c.capitalChoices === null ? null : (
+                <div className="mw-review-needs__actions">
+                  <span className="mw-fine">Which total should Mandate authorize?</span>
+                  {c.capitalChoices.map((choice) => (
+                    <button key={choice} type="button" className="mw-soft-button" disabled={props.authorizing} onClick={() => props.onChooseTotal(choice)}>
+                      ${choice}
+                    </button>
+                  ))}
+                  <button type="button" className="mw-text-button" disabled={props.authorizing} onClick={props.onEditPermissions}>
+                    Edit manually
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </section>
+      ) : null}
+
+      {r.ambiguities.length > 0 || r.clarifications.length > 0 ? (
+        <section className="mw-review-needs" aria-labelledby="review-ambiguity-title">
+          <h3 id="review-ambiguity-title">Clarify before signing</h3>
+          {[...r.ambiguities, ...r.clarifications].map((c) => (
+            <div key={c.index} className="mw-review-needs__card">
+              <p className="mw-review-needs__kind">{c.kind === "AMBIGUOUS" ? "Ambiguous" : "Needs clarification"}</p>
+              <p>{c.text}</p>
+              <button type="button" className="mw-soft-button" disabled={props.authorizing} onClick={props.onEditPermissions}>
+                Edit permissions
+              </button>
+            </div>
+          ))}
+        </section>
+      ) : null}
+
+      {r.unsupported.length > 0 ? (
+        <section className="mw-review-unsupported" aria-labelledby="review-unsupported-title">
+          <h3 id="review-unsupported-title">Requested but not enforceable in this mandate version</h3>
+          <ul>
+            {r.unsupported.map((u) => (
+              <li key={u.index} data-dangerous={u.dangerous ? "" : undefined}>
+                <div>
+                  <strong>{u.dangerous ? "Refused" : "Not supported"}</strong>
+                  <p>{u.text}</p>
+                  <p className="mw-fine">This restriction will NOT be included in the signed mandate.</p>
+                </div>
+                {u.dangerous ? (
+                  <p className="mw-fine">Cannot accept. Change the prompt.</p>
+                ) : (
+                  <button type="button" className="mw-soft-button" disabled={props.authorizing} onClick={() => props.onAcknowledgeUnsupported(u.index)}>
+                    I understand — continue without this
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <section className="mw-authority-review" aria-label="Authority that will be signed">
         <h3 className="mw-authority-review__title">Portfolio authority</h3>
-        <p className="mw-authority-review__capital">{usd(props.access.text("portfolio.totalCapital"))}</p>
+        <p className="mw-authority-review__capital">
+          {r.total === "" ? "—" : usd(r.total)} <span className="mw-authority-review__currency">{r.currency}</span>
+        </p>
+        {r.totalProvenance === null ? null : <p className="mw-provenance">{r.totalProvenance}</p>}
+        <dl className="mw-authority-review__meta">
+          {r.maxDeployable === null || r.maxDeployable === "" ? null : (
+            <div>
+              <dt>Maximum initially deployable</dt>
+              <dd>{usd(r.maxDeployable)}</dd>
+            </div>
+          )}
+          {r.minUnallocated === null || r.minUnallocated === "" ? null : (
+            <div>
+              <dt>Minimum kept available</dt>
+              <dd>{usd(r.minUnallocated)}</dd>
+            </div>
+          )}
+        </dl>
+
+        <h3 className="mw-authority-review__title">Agents</h3>
         <ul className="mw-authority-review__agents">
-          {ROLES.map((role) => {
-            const on = props.access.enabled(role);
-            const max = props.access.text(`agents.${role}.maxAllocation`) || props.access.text(`agents.${role}.budget`);
-            const budget = props.budgets?.find((b) => b.role === role)?.amount ?? null;
-            const source = props.access.source(`agents.${role}.maxAllocation`) ?? props.access.source(`agents.${role}.budget`) ?? props.access.source(`agents.${role}.enabled`);
-            return (
-              <li key={role} data-enabled={on === true ? "on" : on === false ? "off" : "unset"}>
-                <strong>{ROLE_TITLES[role].replace(" Agent", "")}</strong>
-                <span>{on === true ? "Enabled" : on === false ? "Disabled" : "Not set"}</span>
-                <span>{on === true ? (max === "" ? "Dynamic / ceiling unset" : `Maximum ${usd(max)}`) : "—"}</span>
-                {on === true && budget !== null && budget !== "" ? <span>Budget {usd(budget)}</span> : null}
-                {source === null ? null : <span className="mw-provenance" title="Where this value came from">{SOURCE_LABEL[source] ?? source}</span>}
-              </li>
-            );
-          })}
+          {r.agents.map((agent) => (
+            <li key={agent.role} data-enabled={agent.state === "ENABLED" ? "on" : agent.state === "DISABLED" ? "off" : "unset"}>
+              <strong>{agent.title}</strong>
+              <span>{agent.stateLabel}</span>
+              <span>{agent.authorityLabel}</span>
+              {agent.provenanceLabel === null ? null : <span className="mw-provenance">{agent.provenanceLabel}</span>}
+            </li>
+          ))}
         </ul>
+
+        <h3 className="mw-authority-review__title">Allocation</h3>
+        <p className="mw-authority-review__alloc">
+          <strong>{r.allocation.headline}</strong>
+          <span>{r.allocation.detail}</span>
+        </p>
+        {r.allocation.lines.length === 0 ? null : (
+          <ul className="mw-authority-review__alloc-lines">
+            {r.allocation.lines.map((line) => (
+              <li key={line.label}>
+                <span>{line.label}</span>
+                <strong>{line.value}</strong>
+              </li>
+            ))}
+          </ul>
+        )}
+        {r.allocation.planningNote === null ? null : <p className="mw-fine">{r.allocation.planningNote}</p>}
+
+        {r.riskPreference === null ? null : (
+          <p className="mw-authority-review__risk">
+            Risk preference <strong>{r.riskPreference.label}</strong> <span className="mw-provenance">Advisory</span>
+          </p>
+        )}
+
+        {r.changes.length === 0 ? null : (
+          <details className="mw-disclosure">
+            <summary>Changed from prompt</summary>
+            <ul className="mw-authority-review__changes">
+              {r.changes.map((c) => (
+                <li key={c.field}>
+                  <span>{c.label}</span>
+                  <strong>
+                    {c.from} → {c.to}
+                  </strong>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+
         <details className="mw-disclosure">
-          <summary>Advanced limits</summary>
-          <dl className="mw-summary">
-            <div><dt>Derivative exposure</dt><dd>{props.access.text("portfolio.maxDerivative") === "" ? "Not set" : `≤ ${usd(props.access.text("portfolio.maxDerivative"))}`}</dd></div>
-            <div><dt>Illiquid exposure</dt><dd>{props.access.text("portfolio.maxIlliquid") === "" ? "Not set" : `≤ ${usd(props.access.text("portfolio.maxIlliquid"))}`}</dd></div>
-            <div><dt>Unused capital</dt><dd>{props.access.text("portfolio.minUnallocated") === "" ? "Allowed (no minimum reserve)" : `Keep at least ${usd(props.access.text("portfolio.minUnallocated"))}`}</dd></div>
-            <div><dt>Auto reallocation</dt><dd>{props.autoReallocate === true ? "On — unused capital may move inside signed maxima" : "Off"}</dd></div>
-            <div><dt>Leverage</dt><dd>{props.access.text("market.maxLeverage") === "" ? "Not set" : `${props.access.text("market.maxLeverage")}×`}</dd></div>
-            <div><dt>Slippage</dt><dd>{props.access.text("market.maxSlippageBps") === "" ? "Not set" : `${props.access.text("market.maxSlippageBps")} bps`}</dd></div>
-            <div><dt>Quote freshness</dt><dd>{props.access.text("market.maxQuoteAgeSeconds") === "" ? "Not set" : `${props.access.text("market.maxQuoteAgeSeconds")} s`}</dd></div>
-            <div><dt>Venues</dt><dd>{venues === null ? "Not set" : `${venues.length} approved venues only`}</dd></div>
-            <div><dt>Valid for</dt><dd>{props.access.text("portfolio.validityMinutes") === "" ? "Not set" : `${props.access.text("portfolio.validityMinutes")} minutes`}</dd></div>
-          </dl>
+          <summary>Risk controls &amp; advanced permissions</summary>
+          {groups.map((group) => (
+            <div key={group} className="mw-authority-review__group">
+              <h4>{group}</h4>
+              <dl className="mw-summary">
+                {r.advanced
+                  .filter((row) => row.group === group)
+                  .map((row) => (
+                    <div key={`${row.group}:${row.label}`}>
+                      <dt>
+                        {row.label}
+                        {row.advisory === true ? <span className="mw-provenance">Advisory</span> : null}
+                      </dt>
+                      <dd>{row.value}</dd>
+                    </div>
+                  ))}
+              </dl>
+            </div>
+          ))}
+        </details>
+
+        <details className="mw-disclosure">
+          <summary>How this was interpreted</summary>
+          <ul className="mw-authority-review__provenance">
+            {r.total === "" ? null : (
+              <li>
+                <span>Portfolio total</span>
+                <strong>{usd(r.total)}</strong>
+                <span className="mw-provenance">{r.totalProvenance ?? "Unset"}</span>
+              </li>
+            )}
+            {r.agents
+              .filter((a) => a.state === "ENABLED")
+              .map((a) => (
+                <li key={a.role}>
+                  <span>{a.title}</span>
+                  <strong>{a.authorityLabel}</strong>
+                  <span className="mw-provenance">{a.provenanceLabel ?? "—"}</span>
+                </li>
+              ))}
+          </ul>
         </details>
       </section>
+
+      <div className="mw-approve__edit">
+        <button type="button" className="mw-soft-button" disabled={props.authorizing} onClick={props.onEditPermissions}>
+          Edit permissions
+        </button>
+      </div>
 
       <section className="mw-signer" aria-label="How this mandate is signed" role="radiogroup">
         <button type="button" role="radio" aria-checked={method === "wallet"} className="mw-signer__option" data-selected={method === "wallet" ? "" : undefined} data-disabled={wallet.available ? undefined : ""} disabled={!wallet.available || props.authorizing} onClick={() => setMethod("wallet")}>
@@ -338,19 +505,24 @@ export function ApproveStage(props: {
         {method === "demo" ? (
           <label className="mw-confirm">
             <span>Type <code>{props.expected}</code> to sign</span>
-            <input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" spellCheck={false} disabled={props.authorizing} aria-label="Authorization confirmation" />
+            <input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" spellCheck={false} disabled={props.authorizing || !reviewClean} aria-label="Authorization confirmation" />
           </label>
         ) : null}
       </section>
 
       {props.authorizing ? <div className="mw-inline-status" aria-live="polite"><LatticeLoader label={method === "wallet" ? "Waiting for your wallet" : `Signing mandate ${version}`} status="working" pattern="orbit" showTimer={false} /></div> : null}
       {props.error === "" ? null : <p className="mw-notice mw-notice--bad" role="alert">{props.error}</p>}
+      {!reviewClean ? <p className="mw-notice mw-notice--warn" role="status">Authorize is disabled until every item above is resolved. The wallet will not be asked to sign a blocked draft.</p> : null}
 
       <footer className="mw-stage-foot">
         {method === "wallet" ? (
-          <button type="button" className="mw-cta" disabled={!walletReady || props.authorizing} onClick={props.onSignWallet}>Sign Mandate</button>
+          <button type="button" className="mw-cta" disabled={!walletReady || props.authorizing} onClick={props.onSignWallet}>
+            Authorize mandate
+          </button>
         ) : (
-          <button type="button" className="mw-cta" disabled={!matches || props.authorizing} onClick={() => props.onAuthorize(confirmation)}>Sign &amp; start agents</button>
+          <button type="button" className="mw-cta" disabled={!demoReady || props.authorizing} onClick={() => props.onAuthorize(confirmation)}>
+            Authorize mandate
+          </button>
         )}
         <button type="button" className="mw-text-button" disabled={props.authorizing} onClick={props.onCancel}>Cancel</button>
       </footer>
@@ -456,7 +628,12 @@ export function PermissionsBody(props: {
               </div>
             ) : null}
             {section.title === "Markets" && access !== null ? SET_FIELDS.map((field) => <SetField key={field.path} field={field} access={access} catalog={props.catalog} editable={props.editable} busy={props.busy} onField={props.onField} />) : null}
-            {section.title === "Execution" && access !== null ? <SetField field={{ path: "execution.recipients", set: "recipients", label: "Recipients" }} access={access} catalog={props.catalog} editable={props.editable} busy={props.busy} onField={props.onField} /> : null}
+            {section.title === "Execution" && access !== null ? (
+              <>
+                <SetField field={{ path: "execution.recipients", set: "recipients", label: "Recipients" }} access={access} catalog={props.catalog} editable={false} busy={props.busy} onField={props.onField} />
+                <p className="mw-fine">Trusted execution details (recipients, Gate, adapter, chain, calldata) are not editable here.</p>
+              </>
+            ) : null}
             <Guardrails rows={rows} />
           </section>
         );

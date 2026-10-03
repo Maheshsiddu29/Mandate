@@ -9,11 +9,12 @@ import { api, arr, liveServerUrl, rec, str, streamEvents, type Json, type JsonRe
 import { deriveFlow, eventsAfter, type Phase } from "./live-flow";
 import { awaitingReplies, derivePresentation, deriveReview, deriveRoomChat, proposedPortfolio, ROLES } from "./live-model";
 import { RoomChat } from "./room-chat";
-import { allocationState, authorizedStockTrade, budgetRows, planningCards, planView, serverCompatible, STALE_SERVER } from "./allocation-model";
+import { allocationState, authorizedStockTrade, planningCards, planView, serverCompatible, STALE_SERVER } from "./allocation-model";
 import { AgentSelection, AllocationPanel, PlanningStage } from "./stage-planning";
 import { EventLogBody, PauseBody, ReviewBody, StressBody } from "./sheets";
 import { AgentsStage, AgentSummaryList } from "./stage-agents";
 import { DraftingStage, PromptStage } from "./stage-compose";
+import { buildAuthorityReview } from "./authority-review";
 import { ApproveStage, ConfigureStage, draftAccess, mandateSummary, PermissionsBody, type WalletState } from "./stage-configure";
 import { AuthorizedStage, FailedStage, ReceiptStage, SettlingStage, VerifyStage, type SettlementOffer } from "./stage-outcome";
 import { executionRetry, settlementRefusal, type SettlementRefusal } from "./settlement-refusal";
@@ -240,6 +241,10 @@ export function LiveLab(): ReactNode {
   const chat = useMemo(() => deriveRoomChat(runEvents), [runEvents]);
   const awaiting = useMemo(() => awaitingReplies(runEvents), [runEvents]);
   const allocation = allocationState(validation);
+  const authorityReview = useMemo(
+    () => buildAuthorityReview({ draft, allocation, validationOk: validation.ok === true, validationBlocking: blocking }),
+    [draft, allocation, validation.ok, blocking],
+  );
   const plan = useMemo(() => planView(view.lastPlan), [view.lastPlan]);
   const planCards = useMemo(() => planningCards(events, null), [events]);
   const compatible = status === null || serverCompatible(status);
@@ -271,7 +276,7 @@ export function LiveLab(): ReactNode {
 
   // Keep the one main panel in view as it changes shape; never move the page when it is already visible.
   const stageKey = STAGE_KEY[phase];
-  const stageStatus = phase === "PLANNING" && ((plan !== null && plan.purpose === null) || (plan === null && allocation?.pool.length === 1)) ? "Allocation proposal" : flow.status;
+  const stageStatus = phase === "PLANNING" && ((plan !== null && plan.purpose === null) || (plan === null && allocation?.pool.length === 1)) ? "Agent plan" : flow.status;
   useEffect(() => {
     const previous = shownStage.current;
     shownStage.current = stageKey;
@@ -532,8 +537,6 @@ export function LiveLab(): ReactNode {
   const blockedCount = presentation.agents.filter((agent) => agent.phase === "BLOCKED").length;
   const allowedCount = presentation.agents.filter((agent) => agent.phase === "ADMISSIBLE" || agent.finalOutcome === "RESERVED").length;
   const stockTrade = authorizedStockTrade(runEvents, arr(view.reservations).map(rec));
-  const enabledRoles = ROLES.filter((role) => access.enabled(role) === true);
-
   let stage: ReactNode;
   switch (phase) {
     case "PROMPT":
@@ -556,9 +559,13 @@ export function LiveLab(): ReactNode {
           notice={notice === "" ? error : notice}
           onField={field}
           onFill={() => void call("POST", "/draft/fill", { preset: "balanced" })}
-          onResolve={(index) => void call("POST", "/draft/resolve", { index })}
+          onResolve={(index) => void call("POST", "/draft/resolve", { index, acknowledgeUnsupported: true })}
           onPermissions={() => setSheet("permissions")}
           onTrade={() => {
+            if (!ready) {
+              setNotice("Resolve open choices before review.");
+              return;
+            }
             setNotice("");
             setError("");
             setReviewing(true);
@@ -611,22 +618,38 @@ export function LiveLab(): ReactNode {
     case "APPROVE":
       stage = (
         <ApproveStage
-          access={access}
-          budgets={budgetRows(draft, enabledRoles)}
-          autoReallocate={allocation?.autoReallocate ?? false}
+          review={authorityReview}
           expected={str(view.expectedConfirmation)}
           authorizing={authorizing}
           error={error}
           wallet={wallet}
           onConnect={() => void connectWallet()}
           onSwitchChain={() => void switchChain()}
-          onSignWallet={() => void authorizeWithWallet()}
-          onAuthorize={(confirmation) => void authorize(confirmation)}
+          onSignWallet={() => {
+            if (!authorityReview.canAuthorize) {
+              setError(authorityReview.blockerSummary || "Resolve open items before authorizing.");
+              return;
+            }
+            void authorizeWithWallet();
+          }}
+          onAuthorize={(confirmation) => {
+            if (!authorityReview.canAuthorize) {
+              setError(authorityReview.blockerSummary || "Resolve open items before authorizing.");
+              return;
+            }
+            void authorize(confirmation);
+          }}
           onCancel={() => {
             setReviewing(false);
             setError("");
             setNotice("Approval cancelled. No mandate was activated.");
           }}
+          onEditPermissions={() => {
+            setReviewing(false);
+            setSheet("permissions");
+          }}
+          onChooseTotal={(total) => void call("POST", "/draft/resolve", { chooseTotal: total })}
+          onAcknowledgeUnsupported={(index) => void call("POST", "/draft/resolve", { index, acknowledgeUnsupported: true })}
         />
       );
       break;
