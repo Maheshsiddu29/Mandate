@@ -18,7 +18,8 @@
  */
 
 import { CATALOG, CATALOG_SETS, catalogIds, type CatalogSet } from './catalog.ts';
-import { emptyDraft, fieldAt, ISSUE_KINDS, withField, type DraftIssue, type IssueKind, type MandateDraft } from './draft-types.ts';
+import { emptyDraft, fieldAt, ISSUE_KINDS, withField, type DraftIssue, type FieldSource, type IssueKind, type MandateDraft } from './draft-types.ts';
+import { MONEY_PATTERN, moneyTextFromMatch, parseShareLanguage, resolveShare, atomsText } from './money-language.ts';
 import { ROLES, parseCount, parseUsdc, usdcText, type Role } from '../types.ts';
 import { array, bad, boundedText, enumSchema, exactKeys, good, isObject, nullableBoolean, nullableOneOf, nullableString, nullableText, objectSchema, oneOf, parseJsonObject, type JsonObject, type JsonValue, type Parsed } from '../runtime/strict-json.ts';
 import type { AgentModelProvider, DraftRequest } from '../runtime/provider.ts';
@@ -218,12 +219,13 @@ function amountText(raw: string | null): string | null {
 /**
  * Admit what an interpretation may set. Anything outside the catalog or the
  * value grammar is dropped and reported; nothing unset is filled in.
+ * `source` tags every admitted field (C2.0 provenance).
  */
-export function draftFromInterpretation(x: DraftInterpretation): MandateDraft {
+export function draftFromInterpretation(x: DraftInterpretation, source: FieldSource = 'INTERPRETED'): MandateDraft {
   let d = emptyDraft();
   const issues: DraftIssue[] = [];
-  const set = (path: string, value: string | boolean | readonly string[] | null) => {
-    if (value !== null) d = withField(d, path, value, 'INTERPRETED');
+  const set = (path: string, value: string | boolean | readonly string[] | null, evidenceText?: string) => {
+    if (value !== null) d = withField(d, path, value, source, evidenceText);
   };
   const amount = (path: string, raw: string | null) => {
     const v = amountText(raw);
@@ -284,32 +286,29 @@ export function draftFromInterpretation(x: DraftInterpretation): MandateDraft {
 
 // --- The deterministic local interpreter ----------------------------------------------------------
 
-const MONEY = String.raw`\$\s?(\d[\d,]*(?:\.\d+)?)\s*(k\b|thousand\b)?|(\d[\d,]*(?:\.\d+)?)\s*(k\b|thousand\b)?\s*(?:usd[c]?|dollars)`;
+const MONEY = MONEY_PATTERN;
 
 function money(m: RegExpExecArray, offset = 1): string | null {
-  const digits = m[offset] ?? m[offset + 2];
-  const k = m[offset + 1] ?? m[offset + 3];
-  if (digits === undefined) return null;
-  const atoms = parseUsdc(digits);
-  if (atoms === null) return null;
-  return usdcText(k === undefined ? atoms : atoms * 1000n);
+  return moneyTextFromMatch(m, offset);
 }
 
 const ROLE_WORDS: { readonly [R in Role]: RegExp } = {
   stock: /\b(stocks?|equit(?:y|ies)|shares)\b/,
-  swap: /\b(swaps?|token swaps?|dex)\b/,
+  swap: /\b(swaps?|token swaps?|spot swaps?|dex)\b/,
   nft: /\b(nfts?|collectibles?)\b/,
-  yield: /\b(yield|vaults?|savings)\b/,
-  perps: /\b(perps?|perpetuals?|futures|derivatives?)\b/,
+  yield: /\b(yield|earn|vaults?|savings|yield strategies)\b/,
+  perps: /\b(perps?|perpetuals?|futures)\b/,
 };
 
-const NEGATED = (word: string) => new RegExp(String.raw`\b(?:no|without|exclude|excluding|avoid|skip|not)\s+(?:any\s+)?(?:${word})`);
+const NEGATED = (word: string) => new RegExp(String.raw`\b(?:no|without|exclude|excluding|avoid|skip|not|never|don'?t|do not)\s+(?:use\s+|any\s+|the\s+)?(?:${word})`);
 
-const UNSUPPORTED = /\b(tesla|tsla|apple|aapl|microsoft|msft|amazon|amzn|solana|dogecoin|doge|memecoins?|meme coins?|gold|bonds?|options)\b/g;
-const VAGUE = /\b(safe|safest|low[- ]risk|blue[- ]chips?|reputable|high[- ]quality|trustworthy)\b/g;
+const UNSUPPORTED = /\b(tesla|tsla|apple|aapl|microsoft|msft|amazon|amzn|solana|dogecoin|doge|memecoins?|meme coins?|gold|bonds?|options|prediction markets?)\b/g;
+const VAGUE = /\b(safe|safest|blue[- ]chips?|reputable|high[- ]quality|trustworthy|trade a little|use some|use best agents|be safe)\b/g;
+const RAW_ADDRESS = /\b0x[a-f0-9]{40}\b/i;
+const ADVERSARIAL_EXEC = /\b(?:send (?:funds|profits|output|money)|calldata|ignore (?:previous|all) (?:limits?|instructions?)|enable everything|use any venue|whatever leverage)\b/i;
 
 /**
- * A deterministic reading of common phrasings. It is deliberately narrow:
+ * A deterministic reading of common phrasings. It is deliberately fail-closed:
  * anything it does not recognise stays unset for the principal to fill.
  * Offline and in tests it stands in for a model; its output goes through
  * exactly the same `draftFromInterpretation`.
@@ -327,29 +326,63 @@ export function interpretLocally(prompt: string): DraftInterpretation {
   };
   const market: { [k: string]: readonly string[] | string | null } = { assets: null, issuers: null, representations: null, venues: null, chains: null, maxLeverage: null, maxSlippageBps: null, maxQuoteAgeSeconds: null, syntheticExposure: null };
 
-  const deployAll = /\b(?:deploy|invest|allocate|use|put)\s+(?:everything|it all|all of it|all\b|the whole|100 ?%)/.test(p);
+  const deployAll = /\b(?:deploy|invest|allocate|use|put)\s+(?:everything|it all|all of it|all\b|the whole|100 ?%)/.test(p) && !/\buse\s+at\s+most\b/.test(p);
   if (deployAll) {
     portfolio['deployAll'] = true;
     notes.push('"Deploy everything" read as: the maximum deployed equals total capital.');
   }
+
+  // Ownership / budget statements: "I have $5k", "my total budget is $800", "five hundred dollars".
+  const have =
+    new RegExp(String.raw`\b(?:i have|i'?ve got|my (?:total )?(?:budget|capital|portfolio)(?: is| of|:)?|total (?:capital|budget|portfolio)(?: of| is|:)?)\s*(?:${MONEY})`).exec(p) ??
+    /\b(five hundred)\s*(?:dollars?|usd[c]?)?\b/.exec(p);
   const total = new RegExp(String.raw`\btotal (?:capital|budget|portfolio)(?: of| is|:)?\s*(?:${MONEY})`).exec(p);
-  // "Deploy $2,000", "Manage $2,000", "$2,000 across …", or a prompt that opens with the amount ("$2,000. Stock $800, …").
   const upTo =
     new RegExp(String.raw`\b(?:deploy|invest|allocate|put|use|manage)\s+(?:up to|at most|no more than|a maximum of|max(?:imum)?)?\s*(?:${MONEY})`).exec(p) ??
     new RegExp(String.raw`(?:${MONEY})\s+(?:across|between|among|split (?:across|between))\b`).exec(p) ??
-    new RegExp(String.raw`^\s*(?:${MONEY})\s*(?:[.:;,]|$)`).exec(p);
+    new RegExp(String.raw`^\s*(?:${MONEY})\s*(?:[.:;,]|$)`).exec(p) ??
+    new RegExp(String.raw`\bwith\s+(?:${MONEY})\b`).exec(p);
+  if (have !== null) {
+    const amt = have[1] === 'five hundred' ? '500' : money(have);
+    portfolio['totalCapital'] = amt;
+  }
   if (total !== null) portfolio['totalCapital'] = money(total);
   if (upTo !== null) {
     portfolio['maxDeployed'] = money(upTo);
-    if (total === null) {
+    if (portfolio['totalCapital'] === null) {
       portfolio['totalCapital'] = portfolio['maxDeployed'] ?? null;
       notes.push('The amount to deploy was also read as total capital, since no other total was given.');
     }
   }
-  const keep = new RegExp(String.raw`\b(?:keep|leave|hold|reserve|set aside)\s+(?:at least\s+|a minimum of\s+|min(?:imum)?\s+)?(?:${MONEY})\s*(?:unallocated|free|in reserve|uninvested|undeployed|aside|in cash|as cash|as a buffer|untouched)`).exec(p);
-  if (keep !== null) portfolio['minUnallocated'] = money(keep);
-  if (deployAll && keep !== null) {
-    issues.push({ kind: 'CONFLICT', field: 'portfolio.minUnallocated', text: `"Deploy everything" conflicts with keeping ${money(keep) ?? 'an amount'} USDC unallocated. Choose one.` });
+  // "use at most $1,500 of my $2,000"
+  const atMostOf = new RegExp(String.raw`\b(?:use|deploy|invest)\s+at most\s+(?:${MONEY})\s+of\s+(?:my\s+)?(?:${MONEY})`).exec(p);
+  if (atMostOf !== null) {
+    portfolio['maxDeployed'] = money(atMostOf, 1);
+    portfolio['totalCapital'] = money(atMostOf, 5);
+    portfolio['deployAll'] = false;
+  }
+
+  const keepMoney = new RegExp(String.raw`\b(?:keep|leave|hold|reserve|set aside)\s+(?:at least\s+|a minimum of\s+|min(?:imum)?\s+)?(?:${MONEY})\s*(?:unallocated|free|in reserve|uninvested|undeployed|aside|in cash|as cash|as a buffer|untouched|in the wallet)`).exec(p);
+  const keepHalf = /\b(?:keep|leave|hold|reserve)\s+(?:at least\s+)?(?:half|50\s*%)\s*(?:unallocated|free|untouched|aside|undeployed)?/.exec(p);
+  if (keepMoney !== null) portfolio['minUnallocated'] = money(keepMoney);
+  else if (keepHalf !== null) {
+    const base = portfolio['totalCapital'] === null ? null : parseUsdc(portfolio['totalCapital'] as string);
+    const half = resolveShare({ kind: 'HALF' }, base);
+    if (half === null) issues.push({ kind: 'AMBIGUOUS', field: 'portfolio.minUnallocated', text: 'Half untouched needs a known total portfolio capital.' });
+    else {
+      portfolio['minUnallocated'] = atomsText(half);
+      notes.push('"Keep half untouched" derived from total capital.');
+    }
+  }
+  if (/\b(?:keep the rest available|leave unused cash alone|don'?t deploy everything)\b/.test(p)) {
+    notes.push('Unused capital may remain unused; nothing forces full deployment.');
+    if (portfolio['deployAll'] === true) {
+      portfolio['deployAll'] = false;
+      issues.push({ kind: 'CONFLICT', field: 'portfolio.deployAll', text: '"Deploy everything" conflicts with leaving unused capital alone. Choose one.' });
+    }
+  }
+  if (deployAll && keepMoney !== null) {
+    issues.push({ kind: 'CONFLICT', field: 'portfolio.minUnallocated', text: `"Deploy everything" conflicts with keeping ${money(keepMoney) ?? 'an amount'} USDC unallocated. Choose one.` });
   }
 
   const cap = String.raw`[^.;\n]*?\b(?:max(?:imum)?|at most|up to|capped at|cap(?: of)?|limit(?:ed)? to|limit of|no more than|under|below)\s*(?:${MONEY})`;
@@ -357,26 +390,70 @@ export function interpretLocally(prompt: string): DraftInterpretation {
   if (derivative !== null) portfolio['maxDerivative'] = money(derivative);
   const illiquid = new RegExp(String.raw`\b(?:nfts?|illiquid|collectibles?)\b${cap}`).exec(p);
   if (illiquid !== null) portfolio['maxIlliquid'] = money(illiquid);
-  for (const [role, word] of [['stock', String.raw`stocks?|equit(?:y|ies)`], ['swap', String.raw`swaps?`], ['yield', String.raw`yield|vaults?`]] as const) {
+  for (const [role, word] of [['stock', String.raw`stocks?|equit(?:y|ies)`], ['swap', String.raw`swaps?`], ['yield', String.raw`yield|vaults?|earn`], ['nft', String.raw`nfts?`], ['perps', String.raw`perps?|perpetuals?`]] as const) {
     const m = new RegExp(String.raw`\b(?:${word})\b${cap}`).exec(p);
-    if (m !== null) agent(role).maxAllocation = money(m);
+    if (m !== null) {
+      agent(role).maxAllocation = money(m);
+      if (role === 'perps' && portfolio['maxDerivative'] === null) portfolio['maxDerivative'] = money(m);
+      if (role === 'nft' && portfolio['maxIlliquid'] === null) portfolio['maxIlliquid'] = money(m);
+    }
+  }
+
+  // Share language against a named agent: "Give Stock half"
+  for (const r of ROLES) {
+    const word = ROLE_WORDS[r].source.replace(/\\b/g, '');
+    const shareHit = new RegExp(String.raw`\b(?:give|let|allow|have)\s+(?:the\s+)?(?:${word})(?:\s+agent)?\s+(?:half|50\s*%|\d{1,2}(?:\.\d{1,2})?\s*%)`).exec(p);
+    if (shareHit !== null) {
+      const share = parseShareLanguage(shareHit[0]);
+      const base = portfolio['totalCapital'] === null ? null : parseUsdc(portfolio['totalCapital'] as string);
+      const resolved = share === null ? null : resolveShare(share, base);
+      if (resolved === null) issues.push({ kind: 'AMBIGUOUS', field: `agents.${r}.budget`, text: `A share for ${r} needs a known total portfolio capital.` });
+      else {
+        const text = atomsText(resolved);
+        agent(r).enabled = true;
+        agent(r).budget = text;
+        agent(r).maxAllocation = text;
+        notes.push(`"${shareHit[0].trim()}" derived ${r} budget ${text} USDC from total capital.`);
+      }
+    }
   }
 
   // A role named directly with an amount is that agent's budget: "Stock $800", "swap: $400", "perps gets $300".
   for (const r of ROLES) {
     const word = ROLE_WORDS[r].source.replace(/\\b/g, '');
-    const m = new RegExp(String.raw`\b${word}\s*(?::|=|-|–|gets|budget(?: of)?|with)?\s*(?:${MONEY})`).exec(p);
+    const m = new RegExp(String.raw`\b${word}\s*(?::|=|-|–|gets|can use|budget(?: of)?|with)?\s*(?:${MONEY})`).exec(p);
     if (m !== null) {
       agent(r).budget = money(m, 2);
+      agent(r).enabled = true;
       notes.push(`"${m[0].trim()}" read as the ${r} agent's budget: the most it may use, not an amount it must spend.`);
     }
   }
-  if (/\b(?:let|allow)\b[^.;\n]*\b(?:decide|split|allocate|choose)\b[^.;\n]*\b(?:rest|remainder|remaining|the others?)\b/.test(p)) notes.push('The amount not fixed above is left to the remaining agents to split: they propose, you review before signing.');
-  if (/\b(?:no|without|never|don'?t|do not)\s+(?:automatic(?:ally)?\s+)?(?:re-?allocat|rebalanc)\w*/.test(p)) portfolio['autoReallocate'] = false;
-  else if (/\b(?:automatic(?:ally)?\s+(?:re-?allocat|rebalanc)\w*|(?:re-?allocate|rebalance)\w*\s+automatically|auto[- ]?(?:re-?allocat|rebalanc)\w*|let (?:them|the agents|agents) (?:re-?allocate|rebalance|move capital))/.test(p)) {
+  // "Give Stock $800 and Yield $400"
+  for (const r of ROLES) {
+    const word = ROLE_WORDS[r].source.replace(/\\b/g, '');
+    const give = new RegExp(String.raw`\bgive\s+(?:the\s+)?(?:${word})(?:\s+agent)?\s+(?:${MONEY})`).exec(p);
+    if (give !== null) {
+      const amount = money(give);
+      agent(r).enabled = true;
+      agent(r).budget = amount;
+      agent(r).maxAllocation = amount;
+      notes.push(`"${give[0].trim()}" read as the ${r} agent's fixed budget.`);
+    }
+  }
+  if (/\b(?:let|allow)\b[^.;\n]*\b(?:decide|split|allocate|choose)\b[^.;\n]*\b(?:rest|remainder|remaining|the others?|how to (?:use|split)|however they)\b/.test(p) || /\bdecide how to (?:use|split)\b/.test(p) || /\bhowever they think is best\b/.test(p)) {
+    notes.push('The amount not fixed above is left to the remaining agents to split: they propose, you review before signing.');
+  }
+  if (/\b(?:no|without|never|don'?t|do not)\s+(?:automatic(?:ally)?\s+)?(?:re-?allocat|rebalanc)\w*|\bkeep each agent'?s budget separate\b|\bdon'?t move unused capital\b|\bno automatic reallocation\b/.test(p)) {
+    portfolio['autoReallocate'] = false;
+  } else if (/\b(?:automatic(?:ally)?\s+(?:re-?allocat|rebalanc)\w*|(?:re-?allocate|rebalance)\w*\s+automatically|auto[- ]?(?:re-?allocat|rebalanc)\w*|let (?:them|the agents|agents|mandate) (?:re-?allocate|rebalance|move (?:unused )?capital)|reallocate unused capital automatically|agents can move unused capital)\b/.test(p)) {
     portfolio['autoReallocate'] = true;
     notes.push('Automatic reallocation read as allowed: capital an agent leaves unused may move to other agents, inside each signed maximum.');
   }
+
+  // Risk preference is advisory only — never grants leverage, perps, or venues.
+  if (/\b(?:conservative|low[- ]risk)\b/.test(p)) notes.push('Risk preference (advisory only): CONSERVATIVE — does not grant leverage, Perps, or widen venues.');
+  else if (/\b(?:moderate|balanced)\b/.test(p) && !/\bbalanced preset\b/.test(p)) notes.push('Risk preference (advisory only): MODERATE — does not grant leverage, Perps, or widen venues.');
+  else if (/\b(?:aggressive|high[- ]risk)\b/.test(p)) notes.push('Risk preference (advisory only): AGGRESSIVE — does not grant leverage, Perps, or widen venues.');
 
   // "Let the Stock agent manage $800": that agent's ceiling, which is the field the compose form shows.
   const directedRoles: Role[] = [];
@@ -389,6 +466,10 @@ export function interpretLocally(prompt: string): DraftInterpretation {
       agent(r).maxAllocation = amount;
       agent(r).budget = amount;
       directedRoles.push(r);
+      if (portfolio['totalCapital'] === null) {
+        portfolio['totalCapital'] = amount;
+        portfolio['maxDeployed'] = amount;
+      }
       notes.push(`"${directed[0].trim()}" read as the ${r} agent's maximum allocation.`);
     }
   }
@@ -396,15 +477,32 @@ export function interpretLocally(prompt: string): DraftInterpretation {
     for (const r of ROLES) if (!directedRoles.includes(r)) agent(r).enabled = false;
   }
 
+  // "every agent" / "all five agents" / "let every agent use"
+  const everyAgent = /\b(?:every|all)\s+(?:five\s+)?agents?\b|\ball five\b/.test(p);
+  if (everyAgent) {
+    for (const r of ROLES) agent(r).enabled = true;
+    notes.push('Every agent explicitly enabled because the prompt named every agent.');
+  }
+
   const mentioned = ROLES.filter((r) => ROLE_WORDS[r].test(p));
   const negated = ROLES.filter((r) => NEGATED(ROLE_WORDS[r].source.replace(/\\b/g, '')).test(p));
+  // "never use leverage" is not "no perps" by itself — leverage handled below.
   for (const r of negated) agent(r).enabled = false;
   const positive = mentioned.filter((r) => !negated.includes(r));
   for (const r of positive) agent(r).enabled = true;
-  if (positive.length >= 2) {
-    const off = ROLES.filter((r) => !mentioned.includes(r));
-    for (const r of off) agent(r).enabled = false;
+  if (!everyAgent && positive.length >= 2) {
+    const off = ROLES.filter((r) => !mentioned.includes(r) && !negated.includes(r));
+    for (const r of off) {
+      if (agent(r).enabled === null) agent(r).enabled = false;
+    }
     if (off.length > 0) notes.push(`Not named in the list of strategies, so disabled (no authority): ${off.join(', ')}.`);
+  }
+  // Explicit negation wins if both said.
+  for (const r of negated) agent(r).enabled = false;
+
+  // Capital with no agents → clarification; leave enabled null.
+  if (portfolio['totalCapital'] !== null && positive.length === 0 && directedRoles.length === 0 && !everyAgent && negated.length === 0) {
+    issues.push({ kind: 'NEEDS_CLARIFICATION', field: null, text: `Which agents may use the $${portfolio['totalCapital']}? Mandate does not enable agents that were not named.` });
   }
 
   if (/\b(?:no|without|avoid|forbid|never)\s+(?:any\s+)?synthetic/.test(p)) {
@@ -414,33 +512,103 @@ export function interpretLocally(prompt: string): DraftInterpretation {
   const approved = /\b(?:only\s+)?approved\s+([a-z ,&]+?)(?:[.;\n]|$)/.exec(p);
   if (approved !== null) {
     const list = approved[1] ?? '';
-    for (const [set, word] of [['issuers', 'issuers?'], ['venues', 'venues?'], ['assets', 'assets?'], ['chains', 'chains?'], ['representations', 'representations?|tokens?']] as const) {
+    for (const [set, word] of [['issuers', 'issuers?'], ['venues', 'venues?|routes?'], ['assets', 'assets?'], ['chains', 'chains?'], ['representations', 'representations?|tokens?']] as const) {
       if (new RegExp(String.raw`\b(?:${word})\b`).test(list)) {
         market[set] = catalogIds(set);
         notes.push(`"Approved ${set}" read as every reviewed ${set.replace(/s$/, '')} in the catalog.`);
       }
     }
   }
+  if (/\b(?:approved (?:venues?|routes?) only|only (?:use )?approved (?:venues?|routes?|robinhood))\b/.test(p)) {
+    market['venues'] = catalogIds('venues');
+    notes.push('"Approved venues only" read as every reviewed venue in the catalog.');
+  }
 
-  if (/\b(?:no leverage|unleveraged|without leverage)\b/.test(p)) market['maxLeverage'] = '1';
-  else {
-    const lev = /(?:max(?:imum)?|at most|up to|no more than)\s*(\d{1,2}(?:\.\d)?)\s*x\s*leverage|leverage\s*(?:of\s*)?(?:max(?:imum)?|at most|up to|below|under|<=|≤)?\s*(\d{1,2}(?:\.\d)?)\s*x/.exec(p);
-    if (lev !== null) market['maxLeverage'] = lev[1] ?? lev[2] ?? null;
+  // Catalog asset allow: "only NVDA" maps when the ticker is in the reviewed catalog labels/ids.
+  const onlyAssets = /\bonly\s+([a-z0-9 ,&/+-]+?)(?:[.;\n]|$)/.exec(p);
+  if (onlyAssets !== null && !/approved/.test(onlyAssets[1] ?? '')) {
+    const tokens = (onlyAssets[1] ?? '').split(/[,&\s]+/).map((t) => t.trim()).filter((t) => t.length > 0);
+    const ids: string[] = [];
+    for (const t of tokens) {
+      const hit = CATALOG.assets.find((e) => e.id === t || e.label.toLowerCase().includes(t));
+      if (hit !== undefined) ids.push(hit.id);
+      else if (!/and|or|the/.test(t)) issues.push({ kind: 'UNSUPPORTED', field: 'market.assets', text: `"${t}" is not in the reviewed catalog and cannot be authorized.` });
+    }
+    if (ids.length > 0) market['assets'] = [...new Set(ids)];
   }
-  const slip = /slippage[^.;\n]*?(\d+(?:\.\d+)?)\s*(bps|basis points|%)/.exec(p);
+  const blockAsset = /\b(?:don'?t|do not|never)\s+buy\s+([a-z0-9-]+)/.exec(p);
+  if (blockAsset !== null) {
+    issues.push({ kind: 'NEEDS_CLARIFICATION', field: 'market.assets', text: `Blocking "${blockAsset[1]}" requires choosing the allowed asset set explicitly; Mandate does not invent the complement.` });
+  }
+
+  const noLev = /\b(?:no leverage|unleveraged|without leverage|1x only|never use leverage|don'?t go above 1\s*x)\b/.test(p);
+  const lev = /(?:max(?:imum)?|at most|up to|no more than|don'?t go above|never above)\s*(\d{1,2}(?:\.\d)?)\s*x(?:\s*leverage)?|leverage\s*(?:of\s*)?(?:max(?:imum)?|at most|up to|below|under|<=|≤)?\s*(\d{1,2}(?:\.\d)?)\s*x/.exec(p);
+  if (noLev && lev !== null) {
+    issues.push({ kind: 'CONFLICT', field: 'market.maxLeverage', text: 'The prompt both forbids leverage and sets a maximum leverage. Choose one.' });
+  } else if (noLev) market['maxLeverage'] = '1';
+  else if (lev !== null) {
+    const v = lev[1] ?? lev[2] ?? null;
+    if (v === '0') issues.push({ kind: 'AMBIGUOUS', field: 'market.maxLeverage', text: '0x leverage is not a valid multiple; left unset.' });
+    else market['maxLeverage'] = v;
+  }
+  if (/\bwhatever leverage\b/.test(p)) {
+    issues.push({ kind: 'UNSUPPORTED', field: 'market.maxLeverage', text: 'Unbounded leverage is not granted from language; name an explicit maximum such as "max 2x".' });
+  }
+
+  const slip = /slippage[^.;\n]*?(\d+(?:\.\d+)?)\s*(bps|basis points|%)|(?:max(?:imum)?|under|below)\s*(\d+(?:\.\d+)?)\s*(bps|basis points|%)\s*slippage/.exec(p);
   if (slip !== null) {
-    const n = slip[1] ?? '';
-    const bps = slip[2] === '%' ? (/^\d+(\.\d{1,2})?$/.test(n) ? String(Math.round(Number(n) * 100)) : null) : /^\d+$/.test(n) ? n : null;
-    if (bps === null) issues.push({ kind: 'AMBIGUOUS', field: 'market.maxSlippageBps', text: `Could not read slippage "${n}${slip[2] ?? ''}" exactly.` });
-    market['maxSlippageBps'] = bps;
+    const n = slip[1] ?? slip[3] ?? '';
+    const unit = slip[2] ?? slip[4] ?? '';
+    const bps = unit === '%' ? (/^\d+(\.\d{1,2})?$/.test(n) ? String(Math.round(Number(n) * 100)) : null) : /^\d+$/.test(n) ? n : null;
+    if (bps === null) issues.push({ kind: 'AMBIGUOUS', field: 'market.maxSlippageBps', text: `Could not read slippage "${n}${unit}" exactly.` });
+    else if (Number(bps) < 0 || Number(bps) > 10_000) issues.push({ kind: 'AMBIGUOUS', field: 'market.maxSlippageBps', text: `Slippage ${bps} bps is out of range; left unset.` });
+    else market['maxSlippageBps'] = bps;
   }
-  const quote = /quotes?[^.;\n]*?(?:older than|fresher than|within|max(?:imum)? age(?: of)?|at most|under)\s*(\d+)\s*(seconds?|secs?|s\b|minutes?|mins?|m\b)/.exec(p);
+  const fee = /\b(?:fee|fees)\b[^.;\n]*?(\d+(?:\.\d+)?)\s*(bps|basis points|%)|(?:don'?t pay more than|fee cap)\s*(\d+(?:\.\d+)?)\s*(bps|basis points|%)/.exec(p);
+  if (fee !== null) {
+    issues.push({ kind: 'UNSUPPORTED', field: null, text: 'A fee-bps cap is not a signed Live Lab mandate field; name agent ceilings and slippage instead.' });
+  }
+  const perTrade = /\b(?:never spend more than|max(?:imum)?|no trade above|don'?t move more than)\s*(?:${MONEY})\s*(?:per trade|each trade|in one trade)?|(?:no trade above|per trade)\s*(?:${MONEY})/.exec(p);
+  if (perTrade !== null) {
+    issues.push({ kind: 'UNSUPPORTED', field: null, text: `A per-trade cap (${money(perTrade) ?? 'amount'} USDC) is not a signed Live Lab mandate field; set each agent's budget or ceiling instead.` });
+  }
+  const perTradePct = /\bno trade above\s*(\d{1,2}(?:\.\d{1,2})?)\s*%\b/.exec(p);
+  if (perTradePct !== null) {
+    const base = portfolio['totalCapital'] === null ? null : parseUsdc(portfolio['totalCapital'] as string);
+    if (base === null) issues.push({ kind: 'AMBIGUOUS', field: null, text: 'A percentage per-trade cap needs a known total portfolio capital.' });
+    else issues.push({ kind: 'UNSUPPORTED', field: null, text: 'A per-trade percentage cap is not a signed Live Lab mandate field; set each agent\'s budget instead.' });
+  }
+
+  const quote = /quotes?[^.;\n]*?(?:older than|fresher than|within|max(?:imum)? age(?: of)?|at most|under|must be under)\s*(\d+)\s*(seconds?|secs?|s\b|minutes?|mins?|m\b)/.exec(p);
   if (quote !== null) market['maxQuoteAgeSeconds'] = String(Number(quote[1]) * (/^m/.test(quote[2] ?? '') ? 60 : 1));
-  const validity = /\b(?:for|valid for|expires? in|over the next|lasting)\s+(\d+)\s*(minutes?|mins?|hours?|hrs?|days?)\b/.exec(p);
+  const validity = /\b(?:for|valid for|expires? in|over the next|lasting|expire in)\s+(\d+)\s*(minutes?|mins?|hours?|hrs?|days?)\b|\bvalid for today\b/.exec(p);
   if (validity !== null) {
-    const n = Number(validity[1]);
-    const unit = validity[2] ?? '';
-    portfolio['validityMinutes'] = String(/^d/.test(unit) ? n * 1440 : /^h/.test(unit) ? n * 60 : n);
+    if (validity[0]?.includes('today')) portfolio['validityMinutes'] = '1440';
+    else {
+      const n = Number(validity[1]);
+      const unit = validity[2] ?? '';
+      portfolio['validityMinutes'] = String(/^d/.test(unit) ? n * 1440 : /^h/.test(unit) ? n * 60 : n);
+    }
+  }
+
+  if (/\b(?:buy only|don'?t sell|do not sell|no new purchases|only reduce)\b/.test(p)) {
+    if (/\bonly reduce\b/.test(p)) issues.push({ kind: 'UNSUPPORTED', field: null, text: 'Reduce-only / sell actions are not in the Live Lab action set; agents are buy/open/deposit only.' });
+    else notes.push('Live Lab actions are already buy/open/deposit only; no sell authority exists to grant.');
+  }
+
+  if (RAW_ADDRESS.test(prompt) || /\bsend (?:funds|profits|output|money)\s+to\b/i.test(prompt)) {
+    issues.push({ kind: 'UNSUPPORTED', field: 'execution.recipients', text: 'Arbitrary recipient addresses or "send to" instructions are refused; only reviewed catalog recipients may be authorized.' });
+  }
+  if (ADVERSARIAL_EXEC.test(p) && !/\bwhatever leverage\b/.test(p)) {
+    if (/\benable everything\b/.test(p) && !everyAgent) {
+      issues.push({ kind: 'NEEDS_CLARIFICATION', field: null, text: '"Enable everything" does not name agents or venues. Which agents may act, inside which reviewed catalog?' });
+    }
+    if (/\buse any venue\b/.test(p)) {
+      issues.push({ kind: 'UNSUPPORTED', field: 'market.venues', text: '"Any venue" is refused; only reviewed catalog venues may be authorized.' });
+    }
+    if (/\bignore (?:previous|all)/.test(p)) {
+      issues.push({ kind: 'UNSUPPORTED', field: null, text: 'Instructions to ignore limits are refused; the signed mandate is the only authority.' });
+    }
   }
 
   for (const m of p.matchAll(VAGUE)) {
@@ -502,7 +670,20 @@ export function preferExplicitPrompt(model: DraftInterpretation, prompt: string)
 /** Ask a provider to interpret `prompt`. A failed or malformed answer yields no draft; nothing falls back silently. */
 export async function interpretPrompt(prompt: string, provider: AgentModelProvider, clock: Clock, timeoutMs: number): Promise<Interpreted> {
   const outcome = await callModel({ provider, request: draftRequest(prompt.slice(0, 2_000)), parse: parseDraftInterpretation, timeoutMs, clock });
-  return { outcome, draft: outcome.status === 'RESPONDED' ? draftFromInterpretation(preferExplicitPrompt(outcome.value, prompt)) : null };
+  if (outcome.status !== 'RESPONDED') return { outcome, draft: null };
+  // Local explicit language wins over the model; model-only fills keep MODEL_EXTRACTED.
+  const local = interpretLocally(prompt);
+  const merged = preferExplicitPrompt(outcome.value, prompt);
+  let draft = draftFromInterpretation(merged, 'MODEL_EXTRACTED');
+  const localDraft = draftFromInterpretation(local, 'EXPLICIT_PROMPT');
+  for (const path of Object.keys(localDraft.provenance)) {
+    const v = fieldAt(localDraft, path);
+    if (v !== null && v !== undefined) draft = withField(draft, path, v, 'EXPLICIT_PROMPT', localDraft.evidence[path]?.sourceText);
+  }
+  const issues = [...localDraft.issues, ...draft.issues];
+  const notes = [...localDraft.notes, ...draft.notes].filter((n, i, a) => a.indexOf(n) === i).slice(0, MAX_NOTES);
+  const seen = new Map(issues.map((i) => [`${i.kind}|${i.text}`, i] as const));
+  return { outcome, draft: { ...draft, issues: [...seen.values()].slice(0, MAX_ISSUES), notes, evidence: { ...draft.evidence, ...localDraft.evidence } } };
 }
 
 export type { IssueKind };

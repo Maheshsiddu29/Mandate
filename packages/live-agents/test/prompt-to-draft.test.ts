@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { draftFromInterpretation, interpretLocally, interpretLocallyAsText, interpretPrompt, parseDraftInterpretation, preferExplicitPrompt } from '../src/authoring/prompt-to-draft.ts';
+import { compileLocalPrompt } from '../src/authoring/compiler.ts';
 import { applyPreset, emptyDraft } from '../src/authoring/draft-types.ts';
 import { catalogIds } from '../src/authoring/catalog.ts';
 import { realClock } from '../src/runtime/clock.ts';
@@ -8,7 +9,7 @@ import { ScriptedProvider, json } from './support/providers.ts';
 
 const CANONICAL = 'Deploy up to $2,000 across stocks, swaps, yield and perps. Keep at least $200 unallocated. Perps exposure max $400. No synthetic stock exposure. Only approved issuers and venues.';
 
-const draftOf = (prompt: string) => draftFromInterpretation(interpretLocally(prompt));
+const draftOf = (prompt: string) => compileLocalPrompt(prompt).draft;
 
 describe('prompt → draft (test 1: a prompt produces a structured draft)', () => {
   it('reads the canonical prompt into known fields, and nothing else', () => {
@@ -23,7 +24,7 @@ describe('prompt → draft (test 1: a prompt produces a structured draft)', () =
     assert.ok(d.notes.some((n) => /disabled/.test(n)));
     assert.deepEqual(d.market.issuers, catalogIds('issuers'));
     assert.deepEqual(d.market.venues, catalogIds('venues'));
-    assert.equal(d.provenance['portfolio.totalCapital'], 'INTERPRETED');
+    assert.equal(d.provenance['portfolio.totalCapital'], 'EXPLICIT_PROMPT');
   });
 
   it('leaves every unstated field unset — no permissive default', () => {
@@ -106,7 +107,7 @@ describe('test 2: a draft is not authority', () => {
   it('a draft carries no signature, digest or version', () => {
     const d = draftOf(CANONICAL);
     for (const k of Object.keys(d)) assert.doesNotMatch(k, /signature|digest|version|signed|active/i);
-    assert.deepEqual(Object.keys(emptyDraft()).sort(), ['agents', 'execution', 'issues', 'market', 'notes', 'portfolio', 'provenance']);
+    assert.deepEqual(Object.keys(emptyDraft()).sort(), ['agents', 'evidence', 'execution', 'issues', 'market', 'notes', 'portfolio', 'provenance']);
   });
 
   it('a malformed model answer yields no draft, and nothing falls back silently', async () => {
@@ -129,7 +130,7 @@ describe('test 2: a draft is not authority', () => {
     const filled = applyPreset(d, 'balanced', true).draft;
     assert.equal(filled.portfolio.totalCapital, '800', 'a preset must not replace the amount the prompt stated');
     assert.equal(filled.agents.stock.maxAllocation, '800');
-    assert.equal(d.provenance['portfolio.totalCapital'], 'INTERPRETED');
+    assert.equal(d.provenance['portfolio.totalCapital'], 'EXPLICIT_PROMPT');
     assert.equal(Object.values(d).some((value) => typeof value === 'string' && /signature/.test(value)), false);
   });
 

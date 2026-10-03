@@ -11,7 +11,8 @@ export { ROLES, ROLE_LABELS, AGENT_RUNTIME_STATES, usdcText, parseUsdc, isRole, 
 export { readConfig, describeConfig, DEFAULTS, type LiveConfig } from './config.ts';
 export { LiveSession, type SessionOptions, type RestoreOptions, type RunResult, type RunStatus, type FinalProposal, type ReservedExecution, type WalletChallengeResult } from './session.ts';
 export { SessionStore, SessionStoreCorruption, sessionExists, sessionDir, SESSION_SCHEMA } from './persistence/session-store.ts';
-export { emptyDraft, presetDraft, applyPreset, withField, fieldAt, PRESETS, ISSUE_KINDS, type MandateDraft, type Preset, type DraftIssue } from './authoring/draft-types.ts';
+export { emptyDraft, presetDraft, applyPreset, withField, fieldAt, PRESETS, ISSUE_KINDS, HUMAN_FIELD_SOURCES, FIELD_SOURCES, type MandateDraft, type Preset, type DraftIssue, type FieldSource, type FieldEvidence } from './authoring/draft-types.ts';
+export { compileMandateDraft, compileLocalPrompt, mergeFormOntoPrompt, overAllocationIssues, type CompileInput, type CompileResult } from './authoring/compiler.ts';
 export { DRAFT_FIELD_PATHS, parseFieldValue } from './authoring/draft-fields.ts';
 export { CATALOG, CATALOG_SETS, AGENT_DOMAINS, REVIEWED_BOUNDS } from './authoring/catalog.ts';
 export { PAUSE_CONFIRMATION, AUTHORIZATION_METHODS, type VersionRecord, type AuthorizeResult, type ActiveMandate, type PrincipalAuthorization, type AuthorizationMethod } from './authoring/mandate-versioning.ts';

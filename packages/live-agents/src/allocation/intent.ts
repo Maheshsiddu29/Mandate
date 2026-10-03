@@ -11,13 +11,13 @@
  * ```
  *
  * A budget is the principal's when it came from their words or their hand
- * (`INTERPRETED`, `USER`); one accepted from a Planning Room proposal is
+ * (`HUMAN_FIELD_SOURCES`); one accepted from a Planning Room proposal is
  * `PLANNED` and its agent stays in the delegated pool. Pure: it reads a
  * draft and decides nothing — validation and the verifier do.
  */
 
 import { deployable } from '../authoring/conflicts.ts';
-import type { MandateDraft } from '../authoring/draft-types.ts';
+import { HUMAN_FIELD_SOURCES, type MandateDraft } from '../authoring/draft-types.ts';
 import { ROLES, parseCount, parseUsdc, type Role } from '../types.ts';
 
 export const ALLOCATION_INTENTS = ['FIXED', 'DYNAMIC', 'HYBRID', 'NEEDS_AGENT_SELECTION'] as const;
@@ -55,8 +55,6 @@ export interface AllocationView {
   readonly poolAtoms: bigint | null;
 }
 
-const HUMAN = new Set(['INTERPRETED', 'USER']);
-
 /** The deployable total a draft would sign, or null when its numbers are unset or inconsistent. */
 export function draftDeployable(d: MandateDraft): bigint | null {
   const p = d.portfolio;
@@ -74,7 +72,7 @@ export function classifyAllocation(d: MandateDraft): AllocationView {
   const enabled = ROLES.filter((r) => d.agents[r].enabled === true);
   const undecided = ROLES.filter((r) => d.agents[r].enabled === null);
   const budgets = Object.fromEntries(ROLES.map((r) => [r, d.agents[r].budget === null ? null : parseUsdc(d.agents[r].budget as string)])) as { [R in Role]: bigint | null };
-  const human = (r: Role) => budgets[r] !== null && HUMAN.has(d.provenance[`agents.${r}.budget`] ?? '');
+  const human = (r: Role) => budgets[r] !== null && HUMAN_FIELD_SOURCES.has(d.provenance[`agents.${r}.budget`] ?? 'PRESET');
   const fixed = enabled.filter(human);
   const pool = enabled.filter((r) => !human(r));
   const autoReallocate = d.portfolio.autoReallocate === true;

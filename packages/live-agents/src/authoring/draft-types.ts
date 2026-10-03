@@ -70,8 +70,40 @@ export interface DraftIssue {
   readonly text: string;
 }
 
-/** `PLANNED`: a budget the principal accepted from a Planning Room proposal. */
-export type FieldSource = 'PRESET' | 'INTERPRETED' | 'USER' | 'PLANNED';
+/**
+ * Where a set field came from (docs/demo/c2-natural-language-mandate-compiler.md §11).
+ *
+ * - `USER`: explicit form edit (EXPLICIT_FORM).
+ * - `EXPLICIT_PROMPT`: deterministic parse of unambiguous prompt language.
+ * - `MODEL_EXTRACTED`: model fill where the local parser left the field null.
+ * - `DETERMINISTIC_DERIVED`: computed from explicit inputs (e.g. half of a known total).
+ * - `PRESET`: safe envelope fill the principal requested.
+ * - `INTERPRETED`: legacy local/model admission; still treated as principal words for budgets.
+ * - `PLANNED`: accepted Planning Room proposal.
+ */
+export type FieldSource =
+  | 'PRESET'
+  | 'INTERPRETED'
+  | 'EXPLICIT_PROMPT'
+  | 'MODEL_EXTRACTED'
+  | 'DETERMINISTIC_DERIVED'
+  | 'USER'
+  | 'PLANNED';
+
+export const FIELD_SOURCES: readonly FieldSource[] = [
+  'PRESET',
+  'INTERPRETED',
+  'EXPLICIT_PROMPT',
+  'MODEL_EXTRACTED',
+  'DETERMINISTIC_DERIVED',
+  'USER',
+  'PLANNED',
+] as const;
+
+/** Concise source span for a field — never model chain-of-thought. */
+export interface FieldEvidence {
+  readonly sourceText: string;
+}
 
 export interface MandateDraft {
   readonly portfolio: PortfolioDraft;
@@ -83,6 +115,8 @@ export interface MandateDraft {
   readonly notes: readonly string[];
   /** Where each set field came from, by path (`portfolio.totalCapital`, `agents.perps.enabled`, …). */
   readonly provenance: { readonly [path: string]: FieldSource };
+  /** Optional extracted spans by path; omitted keys simply have no span. */
+  readonly evidence: { readonly [path: string]: FieldEvidence };
 }
 
 const UNSET_AGENT: AgentDraft = { enabled: null, maxAllocation: null, maxExposure: null, budget: null };
@@ -96,6 +130,7 @@ export function emptyDraft(): MandateDraft {
     issues: [],
     notes: [],
     provenance: {},
+    evidence: {},
   };
 }
 
@@ -182,19 +217,28 @@ export function fieldAt(d: MandateDraft, path: string): string | boolean | reado
 }
 
 /** A copy of `d` with `path` set, recorded with its source. Unknown paths are refused. */
-export function withField(d: MandateDraft, path: string, value: string | boolean | readonly string[] | null, source: FieldSource): MandateDraft {
+export function withField(d: MandateDraft, path: string, value: string | boolean | readonly string[] | null, source: FieldSource, evidenceText?: string): MandateDraft {
   if (fieldAt(d, path) === undefined) throw new Error(`unknown draft field ${path}`);
   const [section, a, b] = path.split('.') as [string, string, string | undefined];
   const provenance = { ...d.provenance };
-  if (value === null) delete provenance[path];
-  else provenance[path] = source;
+  const evidence = { ...d.evidence };
+  if (value === null) {
+    delete provenance[path];
+    delete evidence[path];
+  } else {
+    provenance[path] = source;
+    if (evidenceText !== undefined && evidenceText.trim() !== '') evidence[path] = { sourceText: evidenceText.trim().slice(0, 120) };
+  }
   if (section === 'agents' && b !== undefined) {
     const role = a as Role;
-    return { ...d, agents: { ...d.agents, [role]: { ...d.agents[role], [b]: value } }, provenance };
+    return { ...d, agents: { ...d.agents, [role]: { ...d.agents[role], [b]: value } }, provenance, evidence };
   }
   const current = (d as unknown as { readonly [k: string]: object })[section];
-  return { ...d, [section]: { ...current, [a]: value }, provenance } as MandateDraft;
+  return { ...d, [section]: { ...current, [a]: value }, provenance, evidence } as MandateDraft;
 }
+
+/** Provenance tags that count as the principal's own words for allocation budgets. */
+export const HUMAN_FIELD_SOURCES: ReadonlySet<FieldSource> = new Set(['INTERPRETED', 'EXPLICIT_PROMPT', 'DETERMINISTIC_DERIVED', 'USER']);
 
 /**
  * Fields that grant authority by choice, not by default: which agents may act
@@ -242,5 +286,10 @@ export function presetDraft(p: Preset): MandateDraft {
 /** A draft recorded before Room V2 has no budgets or reallocation choice: read them as unset. */
 export function normalizeDraft(d: MandateDraft): MandateDraft {
   const agents = Object.fromEntries(ROLES.map((r) => [r, { ...d.agents[r], budget: d.agents[r].budget ?? null }])) as unknown as MandateDraft['agents'];
-  return { ...d, portfolio: { ...d.portfolio, autoReallocate: d.portfolio.autoReallocate ?? null }, agents };
+  return {
+    ...d,
+    portfolio: { ...d.portfolio, autoReallocate: d.portfolio.autoReallocate ?? null },
+    agents,
+    evidence: d.evidence ?? {},
+  };
 }
