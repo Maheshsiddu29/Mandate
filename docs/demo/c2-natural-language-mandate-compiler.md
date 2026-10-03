@@ -439,3 +439,10 @@ Expectations never depend on live-model nondeterminism.
 Natural language and models may populate a draft.
 Only a principal-reviewed, signed structured mandate grants authority.
 Every child authority remains a subset of that signed parent.
+
+---
+
+## Validation record
+
+See [c2-validation-report.md](c2-validation-report.md) for corpus size,
+manual acceptance steps, and the as-built precedence / field limits.

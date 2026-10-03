@@ -140,6 +140,13 @@ prompt ─▶ interpreter (model or local parser) ─▶ DRAFT ─▶ determinis
       ─▶ explicit "AUTHORIZE MANDATE V<n>" ─▶ principal signature ─▶ ACTIVE VERSION
 ```
 
+C2.0 extends this path with richer provenance, form/prompt conflict
+detection, and a deterministic corpus:
+[c2-natural-language-mandate-compiler.md](c2-natural-language-mandate-compiler.md),
+[c2-validation-report.md](c2-validation-report.md). Natural language may
+author a draft; only the reviewed and signed structured mandate grants
+authority.
+
 - The draft is plain data. No code path turns a draft into a signed mandate
   except `MandateVersions.authorize(draft, confirmation)`, which refuses
   unless `confirmation` is exactly `AUTHORIZE MANDATE V<n>` for the next

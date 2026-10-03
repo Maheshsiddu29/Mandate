@@ -258,7 +258,6 @@ export function ApproveStage(props: {
   const [confirmation, setConfirmation] = useState("");
   const [method, setMethod] = useState<"wallet" | "demo">(props.wallet.available ? "wallet" : "demo");
   const version = props.expected.replace("AUTHORIZE MANDATE ", "");
-  const enabled = ROLES.filter((role) => props.access.enabled(role) === true);
   const venues = props.access.ids("market.venues");
   const matches = confirmation === props.expected && props.expected !== "—";
   const wallet = props.wallet;
