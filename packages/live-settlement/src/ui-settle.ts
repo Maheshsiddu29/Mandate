@@ -221,8 +221,8 @@ export class SpineUi {
     if (session === null) return refuse(404, 'SESSION_NOT_FOUND', 'No such session.');
 
     const gate = new SendGate();
-    // The CLI phrase and the browser's explicit intent each open the same one-shot gate. The body still cannot name an asset.
-    const opened = body.mode === 'SEND' && (body.browserExecute ? gate.authorize(`${SEND_AUTHORIZATION_PHRASE}\n`) : gate.authorize(body.sendAuthorization ?? ''));
+    // The phrase and the browser intent are different surfaces. The browser path never types the phrase.
+    const opened = body.mode === 'SEND' && (body.browserExecute ? gate.authorizeBrowserIntent() : gate.authorize(body.sendAuthorization ?? ''));
     if (body.mode === 'SEND' && !opened) {
       session.events.emit('TESTNET_SEND_AUTHORIZATION_REFUSED', { agent: 'stock', data: { required: SEND_AUTHORIZATION_PHRASE, received: 'another text', transactions: 0 } });
       return denied('SEND_NOT_AUTHORIZED', 'Broadcast needs an explicit execution request. Nothing was sent.', { stage: 'SEND_GATE', transactions: 0, txHash: null });

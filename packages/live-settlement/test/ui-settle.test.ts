@@ -164,6 +164,8 @@ describe('V2 settlement bridge', () => {
     assert.equal(sent?.status, 200);
     assert.equal(h.calls[0]?.mode, 'SEND');
     assert.equal(h.calls[0]?.gate.state, 'AUTHORIZED');
+    assert.equal(h.calls[0]?.gate.source, 'OPERATOR_PHRASE');
+    assert.equal(body(refused as NonNullable<typeof refused>)['transactions'], 0);
     assert.equal(h.calls[0]?.ledgerPath, '/tmp/durable');
     assert.equal(h.cleaned, 0);
   });
@@ -180,8 +182,37 @@ describe('V2 settlement bridge', () => {
     assert.equal(sent?.status, 200);
     assert.equal(h.calls[0]?.mode, 'SEND');
     assert.equal(h.calls[0]?.gate.state, 'AUTHORIZED');
+    assert.equal(h.calls[0]?.gate.source, 'BROWSER_INTENT');
     assert.equal(h.calls[0]?.ledgerPath, '/tmp/durable');
     assert.equal(h.cleaned, 0);
+    const bare = await post(h, { mode: 'SEND' });
+    assert.equal(bare?.status, 409);
+    assert.equal(body(bare as NonNullable<typeof bare>)['error'], 'SEND_NOT_AUTHORIZED');
+    assert.equal(body(bare as NonNullable<typeof bare>)['transactions'], 0);
+    const wrong = await post(h, { mode: 'SEND', intent: 'SEND_IT' });
+    assert.equal(wrong?.status, 400);
+    for (const field of ['tokenIn', 'tokenOut', 'venue', 'adapter', 'recipient', 'calldata', 'candidate', 'gate', 'chainId', 'mandateDigest', 'executionCommitment', 'amount']) {
+      const hostile = await post(h, { mode: 'SEND', intent: 'EXECUTE_ROBINHOOD_TESTNET', [field]: '0xabc' });
+      assert.equal(hostile?.status, 400, field);
+      assert.match(String(body(hostile as NonNullable<typeof hostile>)['message']), /Unexpected field/);
+    }
+  });
+
+  it('a second browser execute while one is open does not start another settlement, and a restart does not keep the gate open', async () => {
+    const h = harness();
+    h.ask = true;
+    const first = await post(h, { mode: 'SEND', intent: 'EXECUTE_ROBINHOOD_TESTNET' });
+    assert.equal(body(first as NonNullable<typeof first>)['status'], 'GATE_SIGNATURE_REQUIRED');
+    assert.equal(h.calls.length, 1);
+    assert.equal(h.calls[0]?.gate.source, 'BROWSER_INTENT');
+    const again = await post(h, { mode: 'SEND', intent: 'EXECUTE_ROBINHOOD_TESTNET' });
+    assert.equal(body(again as NonNullable<typeof again>)['status'], 'GATE_SIGNATURE_REQUIRED');
+    assert.equal(h.calls.length, 1);
+    const restarted = harness();
+    const stale = await post(restarted, { mode: 'SEND' });
+    assert.equal(body(stale as NonNullable<typeof stale>)['error'], 'SEND_NOT_AUTHORIZED');
+    assert.equal(restarted.calls.length, 0);
+    assert.equal(restarted.calls[0]?.gate.source, undefined);
   });
 
   it('refuses a signature that was not just requested, a busy session, and an unknown session', async () => {

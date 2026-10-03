@@ -210,10 +210,18 @@ describe('the send gate', () => {
     assert.equal(g.consume(), false);
     assert.equal(g.authorize('AUTHORIZE ROBINHOOD MAINNET SEND'), false);
     assert.equal(g.authorize(`${SEND_AUTHORIZATION_PHRASE}\n`), true);
+    assert.equal(g.source, 'OPERATOR_PHRASE');
     assert.equal(g.authorize(SEND_AUTHORIZATION_PHRASE), false);
+    assert.equal(g.authorizeBrowserIntent(), false);
     assert.equal(g.consume(), true);
     assert.equal(g.consume(), false);
     assert.equal(g.state, 'CONSUMED');
+    const browser = new SendGate();
+    assert.equal(browser.authorizeBrowserIntent(), true);
+    assert.equal(browser.source, 'BROWSER_INTENT');
+    assert.equal(browser.authorize(SEND_AUTHORIZATION_PHRASE), false);
+    assert.equal(browser.consume(), true);
+    assert.equal(browser.authorizeBrowserIntent(), false);
   });
 });
 
