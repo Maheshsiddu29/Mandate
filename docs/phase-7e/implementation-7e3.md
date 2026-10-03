@@ -105,7 +105,9 @@ market, for the principal's own account.
   observed fill (`VALUATION_SOURCE_INVALID` otherwise — found while building).
 - **State**: one `evm.gate-market` snapshot per market — the gate's
   `marketOf` entry, its `fixtureVenueOf` venue and that venue's `FEE_BPS`, all
-  read at one block — pinned by digest (`VERSION` freshness) to the reviewed
+  read at one block (C1.4: sent as a canonical hex quantity by
+  `block-tag.ts`; a node behind that block is waited for at the same block,
+  at most `PINNED_REREADS` times, then `UNKNOWN`) — pinned by digest (`VERSION` freshness) to the reviewed
   record; age ≤ 60 s by default; minimum finality `LATEST` (the table is
   written once, by the constructor); `atIssue: RECHECK`; `atExecution:
   ENFORCED_BY_ARTIFACT` (the gate derives token, adapter, price and units from

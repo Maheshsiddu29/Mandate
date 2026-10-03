@@ -17,6 +17,7 @@
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import { addressAt, bytes32At, calldata, hexBytes, toHex, wordAt, address as abiAddress, bytes32 as abiBytes32 } from './abi.ts';
 import { TxSender, type Eip1559Tx } from './transaction.ts';
+import { encodeBlockTag, pinnedBlockUnavailable } from './block-tag.ts';
 import type { Address, GateMarketSnapshot } from './vocabulary.ts';
 
 export const ROBINHOOD_TESTNET_CHAIN_ID = 46630n;
@@ -114,8 +115,10 @@ export type Submission = { readonly kind: 'SENT'; readonly txHash: string } | { 
 
 export type Simulation = { readonly ok: true; readonly returnData: string } | { readonly ok: false; readonly revert: string };
 
-const hexQ = (n: bigint) => `0x${n.toString(16)}`;
 const big = (h: string) => BigInt(h);
+
+/** A bounded wait between pinned re-reads; the only timer besides receipt polling. */
+export const pause = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 function revertDataOf(error: string): string {
   const m = /^RPC_[-\d]+:(0x[0-9a-fA-F]*):/.exec(error);
@@ -155,26 +158,43 @@ export class ChainClient {
   }
 
   async block(tag: 'latest' | 'safe' | 'finalized' | bigint): Promise<Read<BlockRef>> {
-    const b = await this.#req<{ number: string; hash: string; timestamp: string } | null>('eth_getBlockByNumber', [typeof tag === 'bigint' ? hexQ(tag) : tag, false]);
+    const t = encodeBlockTag(tag);
+    if (!t.ok) return fail(t.error);
+    const b = await this.#req<{ number: string; hash: string; timestamp: string } | null>('eth_getBlockByNumber', [t.value, false]);
     if (!b.ok) return b;
     if (b.value === null) return fail('BLOCK_NOT_FOUND');
     return { ok: true, value: { number: big(b.value.number), hash: b.value.hash, timestamp: big(b.value.timestamp) } };
   }
 
   async call(to: Address, data: string, block: bigint | 'latest' = 'latest', from?: Address): Promise<Simulation> {
-    const r = await this.#req<string>('eth_call', [{ to, data, ...(from === undefined ? {} : { from }) }, typeof block === 'bigint' ? hexQ(block) : block]);
+    const t = encodeBlockTag(block);
+    if (!t.ok) return { ok: false, revert: t.error };
+    const r = await this.#req<string>('eth_call', [{ to, data, ...(from === undefined ? {} : { from }) }, t.value]);
     return r.ok ? { ok: true, returnData: r.value } : { ok: false, revert: revertDataOf(r.error) };
   }
 
   async #word(to: Address, data: string, block: bigint | 'latest'): Promise<Read<string>> {
     const r = await this.call(to, data, block);
-    if (!r.ok) return fail(`CALL_REVERTED.${r.revert}`);
+    if (!r.ok) {
+      // An endpoint that cannot serve the pinned block has said nothing about the contract: not a revert.
+      const unavailable = typeof block === 'bigint' ? pinnedBlockUnavailable(r.revert, block) : null;
+      if (unavailable === 'AHEAD_OF_NODE') return fail(`BLOCK_AHEAD_OF_NODE.${r.revert}`);
+      if (unavailable === 'STATE_PRUNED') return fail(`HISTORICAL_STATE_UNAVAILABLE.${r.revert}`);
+      return fail(`CALL_REVERTED.${r.revert}`);
+    }
     if (r.returnData.length < 66) return fail('RETURN_TOO_SHORT');
     return { ok: true, value: r.returnData };
   }
 
   async code(address: Address, block: bigint | 'latest' = 'latest'): Promise<Read<string>> {
-    return this.#req<string>('eth_getCode', [address, typeof block === 'bigint' ? hexQ(block) : block]);
+    const t = encodeBlockTag(block);
+    if (!t.ok) return fail(t.error);
+    const r = await this.#req<string>('eth_getCode', [address, t.value]);
+    if (r.ok || typeof block !== 'bigint') return r;
+    const unavailable = pinnedBlockUnavailable(r.error, block);
+    if (unavailable === 'AHEAD_OF_NODE') return fail(`BLOCK_AHEAD_OF_NODE.${r.error}`);
+    if (unavailable === 'STATE_PRUNED') return fail(`HISTORICAL_STATE_UNAVAILABLE.${r.error}`);
+    return r;
   }
 
   async codehash(address: Address, block: bigint | 'latest' = 'latest'): Promise<Read<string>> {

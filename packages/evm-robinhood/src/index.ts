@@ -9,7 +9,8 @@
  * - `custody` holds the principal and agent keys and signs only admitted gate
  *   artifacts; `transaction` signs typed transactions for one chain.
  * - `chain` is the only network access, to Robinhood Chain testnet only;
- *   `live` and `state-reader` use it.
+ *   `live` and `state-reader` use it. `block-tag` is the one encoder of the
+ *   block identifiers it sends.
  *
  * Core, the ledger and the control engine stay venue-independent: everything
  * Robinhood- and EVM-specific lives here.
@@ -24,6 +25,7 @@ export { EXECUTE_SIGNATURE, executeCalldata, calldata, encodeArguments, type Abi
 export { LocalAgentSigner, LocalGateCustody, keyAddress, verifyAdmitted, type AgentSigner, type CustodyBinding, type CustodyResult, type CustodyView, type GateClaim, type GateKeyCustody } from './custody.ts';
 export { TxSender, createAddress, type Eip1559Tx } from './transaction.ts';
 export { ChainClient, JsonRpcClient, REFUSED_CHAIN_IDS, ROBINHOOD_TESTNET_CHAIN_ID, RpcHostRefused, TESTNET_RPC_HOSTS, isQuickNodeHost, type RpcEndpointKind, type RpcOptions, type BlockRef, type Read, type Receipt, type Simulation, type Submission } from './chain.ts';
+export { MAX_BLOCK_NUMBER, encodeBlockTag, pinnedBlockUnavailable, type BlockTag, type BlockTagName, type EncodedBlockTag } from './block-tag.ts';
 export { LiveGateChain } from './live.ts';
-export { gateMarketState, readGateMarkets, type GateStateRead } from './state-reader.ts';
+export { PINNED_REREADS, PINNED_REREAD_PAUSE_MS, gateMarketState, readGateMarkets, type GateStateRead, type PinnedReadOptions } from './state-reader.ts';
 export { GateSigner, type GateCall, type GateChain, type GateSignerConfig, type GateSignerDeps, type IssueOutcome, type IssueRequest, type IssueStage, type RecoveryReport } from './signer.ts';

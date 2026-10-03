@@ -444,6 +444,22 @@ every known mainnet (1, 42161, 42170, 4663), so a fallback can never cross
 from testnet to anything else. An answer — a wrong chain, a revert, an RPC
 error — is never retried elsewhere. A send never falls back.
 
+**Block identifiers (C1.4).** Every block parameter is encoded by
+`@mandate/evm-robinhood`'s `encodeBlockTag`: a block number becomes a
+canonical hex quantity (`0x7a53fc9`), a named tag (`latest`, `pending`,
+`safe`, `finalized`) passes unchanged, and a negative, a value past int64,
+a JS number or any other string is refused before anything is sent
+(`BLOCK_TAG_INVALID`). The gate-market snapshot is read at the one block
+`latest` named. The public RPC is load-balanced: the node that reports
+`latest` and the node that serves the pinned `eth_call` can differ, and a
+node behind the pinned block answers `-32000 unsupported block number N`.
+That answer is the endpoint's, not the contract's (`BLOCK_AHEAD_OF_NODE`,
+not `CALL_REVERTED`); the whole snapshot is re-read at the **same** block
+at most three times, 400 ms apart, and is otherwise `UNKNOWN` — refused,
+nothing sent. A non-archive node's `historical state … is not available` is
+`HISTORICAL_STATE_UNAVAILABLE` and is never waited on. No read is moved to
+`latest` to get past either.
+
 **RPC response ≠ authorization.** Provider choice changes which node
 answers, never what Mandate authorized, the portfolio limits, the
 reservation identity or which key may sign.
