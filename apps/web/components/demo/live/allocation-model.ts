@@ -172,8 +172,9 @@ export interface PlanningCard {
 }
 
 export function planningCards(events: readonly LiveEvent[], roomId: string | null): PlanningCard[] {
-  const opened = [...events].reverse().find((e) => e.kind === "ROOM_OPENED" && e.data.stage === "PRE_AUTHORIZATION" && (roomId === null || e.roomId === roomId));
-  const room = roomId ?? opened?.roomId ?? null;
+  // A single-agent plan opens no Room: its card alone carries the planning id.
+  const latest = [...events].reverse().find((e) => (e.kind === "ROOM_OPENED" && e.data.stage === "PRE_AUTHORIZATION") || (e.kind === "OPPORTUNITY_CARD_CREATED" && e.data.roomPurpose !== "REALLOCATION"));
+  const room = roomId ?? latest?.roomId ?? null;
   return events
     .filter((e) => e.kind === "OPPORTUNITY_CARD_CREATED" && e.roomId === room && e.agent !== null)
     .map((e) => ({ role: e.agent as RoleName, action: str(e.data.action), candidate: typeof e.data.candidate === "string" ? e.data.candidate : null, rationale: str(e.data.rationale), runtime: str(e.data.runtime) }));

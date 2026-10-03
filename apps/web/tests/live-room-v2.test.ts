@@ -117,3 +117,11 @@ test('44. a single-agent proposal is not labelled as a Mandate Room', () => {
   assert.match(planning, /One agent is proposing how much/);
   assert.match(lab, /stageStatus[\s\S]*?"Allocation proposal"/);
 });
+
+test('45. a single-agent plan shows its own card: no Room was opened to name it', () => {
+  const multi = [event('ROOM_OPENED', { stage: 'PRE_AUTHORIZATION' }, null, 'plan-1-1'), event('OPPORTUNITY_CARD_CREATED', { roomPurpose: 'INITIAL_ALLOCATION', action: 'PROPOSE' }, 'stock', 'plan-1-1')];
+  const single = event('OPPORTUNITY_CARD_CREATED', { roomPurpose: null, action: 'PROPOSE' }, 'perps', 'plan-1-2');
+  assert.deepEqual(planningCards([single], null).map((c) => c.role), ['perps']);
+  assert.deepEqual(planningCards([...multi, single], null).map((c) => c.role), ['perps'], 'the later plan wins over an earlier Room');
+  assert.deepEqual(planningCards([...multi, single, event('OPPORTUNITY_CARD_CREATED', { roomPurpose: 'REALLOCATION' }, 'yield', 'realloc-1')], null).map((c) => c.role), ['perps'], 'a post-sign reallocation card is not a planning card');
+});
