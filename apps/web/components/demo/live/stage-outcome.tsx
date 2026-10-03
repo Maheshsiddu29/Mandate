@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import type { Failure } from "./live-flow";
 import type { AuthorizedStockTrade } from "./allocation-model";
 import { ROLE_TITLES, reasonLabel, usd, type RoleName, type SettlementView, type TradeReview } from "./live-model";
-import { receiptHeading, type SettlementRefusal } from "./settlement-refusal";
+import { proofStatus, receiptHeading, type SettlementRefusal } from "./settlement-refusal";
 import { shortAddress } from "./wallet";
 import { AgentGlyph, Pill } from "./workspace-ui";
 
@@ -93,22 +93,9 @@ const STEPS = [
 ] as const;
 const ORDER: Readonly<Record<string, number>> = { NONE: -1, PREFLIGHT: 0, READY: 0, PREFLIGHT_FAILED: 0, SIGN_GATE: 1, SIMULATION: 2, SIMULATION_FAILED: 2, SPINE_READY: 2, SEND_REQUIRED: 3, READY_FOR_SEND: 3, SUBMITTED: 4, RECONCILING: 4, FAILED: 4, NEEDS_REVIEW: 4, RELEASED: 4, SETTLED: 5 };
 
-/** The proof's one-word state: never CONFIRMED without LIVE_TESTNET, never FAILED for an outcome still being checked. */
+/** The proof's one-word state: never CONFIRMED without LIVE_TESTNET, never FAILED before a transaction exists. */
 function proofLabel(s: SettlementView): string {
-  if (s.settled) return "CONFIRMED";
-  switch (s.stage) {
-    case "READY_FOR_SEND":
-    case "SPINE_READY":
-      return "READY · NOT SENT";
-    case "RECONCILING":
-      return "CHECKING";
-    case "NEEDS_REVIEW":
-      return "NEEDS REVIEW";
-    case "RELEASED":
-      return "NOT EXECUTED";
-    default:
-      return s.stage.replaceAll("_", " ");
-  }
+  return proofStatus({ settled: s.settled, stage: s.stage, txHash: s.txHash });
 }
 
 /** Portfolio authorization and domain settlement authority, when they differ in kind: shown, never implied. */
@@ -325,7 +312,7 @@ function SettlementProof(props: {
         <p className="mw-fine">Testnet settlement proof</p>
         {settlement.present ? (
           <>
-            <p className="mw-proof__main">{settlement.network || "Robinhood Chain Testnet"} <Pill tone={settlement.settled ? "good" : settlement.stage === "FAILED" || settlement.stage === "NEEDS_REVIEW" || settlement.stage === "RELEASED" ? "bad" : "warn"}>{proofLabel(settlement)}</Pill></p>
+            <p className="mw-proof__main">{settlement.network || "Robinhood Chain Testnet"} <Pill tone={settlement.settled ? "good" : settlement.txHash !== null && (settlement.stage === "FAILED" || settlement.stage === "RELEASED") ? "bad" : "warn"}>{proofLabel(settlement)}</Pill></p>
             <SessionLine sessionId={props.sessionId} />
             {settlement.fixtureIn === null ? null : <p className="mw-fine">{settlement.fixtureIn} → {settlement.fixtureOut ?? "—"}</p>}
             {settlement.txHash === null ? null : <p className="mw-hash">Transaction <code title={settlement.txHash}>{shortHash(settlement.txHash)}</code>{settlement.block === null ? null : <span>Confirmed in block {settlement.block}</span>}</p>}
@@ -333,7 +320,8 @@ function SettlementProof(props: {
             {settlement.explorerUrl === null ? null : <a className="mw-soft-button" href={settlement.explorerUrl} target="_blank" rel="noreferrer noopener">View transaction ↗</a>}
             {settlement.stage === "SUBMITTED" ? <p className="mw-fine">Transaction submitted. A transaction hash is not settlement. Confirming…</p> : null}
             {settlement.stage === "SIMULATION_FAILED" ? <p className="mw-fine">Simulation failed. Nothing was sent.</p> : null}
-            {settlement.stage === "FAILED" ? <p className="mw-fine">Failed receipt. Never presented as LIVE_TESTNET. {failed || "Nothing was sent."}</p> : null}
+            {settlement.stage === "FAILED" && settlement.txHash !== null ? <p className="mw-fine">Failed receipt. Never presented as LIVE_TESTNET. {failed || "Nothing was sent."}</p> : null}
+            {settlement.stage === "FAILED" && settlement.txHash === null ? <p className="mw-fine">No transaction was submitted.</p> : null}
             {settlement.stage === "READY_FOR_SEND" ? <p className="mw-fine">Broadcast is disabled in this milestone: nothing was sent.</p> : null}
             {settlement.stage === "PREFLIGHT_FAILED" ? <p className="mw-fine">{failed || "Nothing was sent."}</p> : null}
             {detail !== "" && settlement.stage !== "FAILED" && settlement.stage !== "PREFLIGHT_FAILED" ? <p className="mw-fine">{detail}</p> : null}

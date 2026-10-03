@@ -68,6 +68,28 @@ export function executionRetry(code: string | null): boolean {
  * A refusal before any broadcast is not an onchain failure.
  * "Settlement failed" is only for a transaction that was submitted.
  */
+/** The proof pill. A refusal with no transaction is not a failed receipt. */
+export function proofStatus(input: { readonly settled: boolean; readonly stage: string; readonly txHash: string | null }): string {
+  if (input.settled) return "CONFIRMED";
+  const submitted = input.txHash !== null && input.txHash !== "";
+  if (!submitted && (input.stage === "FAILED" || input.stage === "PREFLIGHT_FAILED" || input.stage === "SIMULATION_FAILED")) return "NOT SENT";
+  switch (input.stage) {
+    case "READY_FOR_SEND":
+    case "SPINE_READY":
+      return "READY · NOT SENT";
+    case "RECONCILING":
+      return "CHECKING";
+    case "NEEDS_REVIEW":
+      return "NEEDS REVIEW";
+    case "RELEASED":
+      return submitted ? "FAILED" : "NOT EXECUTED";
+    case "FAILED":
+      return "FAILED";
+    default:
+      return input.stage.replaceAll("_", " ");
+  }
+}
+
 export function receiptHeading(input: { readonly settled: boolean; readonly txHash: string | null; readonly stage: string; readonly refused: boolean }): { readonly title: string; readonly pill: string } {
   if (input.settled) return { title: "Settled", pill: "✓ Settled" };
   const submitted = input.txHash !== null && input.txHash !== "";

@@ -4,7 +4,7 @@ import test from 'node:test';
 import type { JsonRecord, LiveEvent } from '../components/demo/live/live-client.ts';
 import { deriveFlow, eventsAfter, type FlowInput } from '../components/demo/live/live-flow.ts';
 import { derivePresentation } from '../components/demo/live/live-model.ts';
-import { executionRetry, receiptHeading, settlementRefusal } from '../components/demo/live/settlement-refusal.ts';
+import { executionRetry, proofStatus, receiptHeading, settlementRefusal } from '../components/demo/live/settlement-refusal.ts';
 import { APPROVAL_CHAIN, WALLET_METHODS, injectedWallet } from '../components/demo/live/wallet.ts';
 
 /*
@@ -134,7 +134,7 @@ test('a session-bound dry run ends READY · NOT SENT: complete, never settled, b
   assert.equal(s.principals?.portfolioMethod, 'WALLET_EIP712');
   assert.equal(s.principals?.domainKind, 'TESTNET_FIXTURE_CUSTODY');
   assert.equal(deriveFlow(done(events)).phase, 'COMPLETE');
-  assert.match(outcome, /READY · NOT SENT/);
+  assert.match(read('../components/demo/live/settlement-refusal.ts'), /READY · NOT SENT/);
   assert.match(outcome, /Broadcast is disabled in this milestone: nothing was sent\./);
   assert.match(outcome, /Portfolio authorization/);
   assert.match(outcome, /Domain settlement authority/);
@@ -179,6 +179,11 @@ test('a settlement 409 does not enter Executing, and the signed total is not a h
   assert.equal(refusedCopy.txHash, null);
   assert.equal(receiptHeading({ settled: false, txHash: null, stage: 'FAILED', refused: true }).title, 'Not sent');
   assert.equal(receiptHeading({ settled: false, txHash: '0xabc', stage: 'FAILED', refused: false }).title, 'Settlement failed');
+  assert.equal(proofStatus({ settled: false, stage: 'FAILED', txHash: null }), 'NOT SENT');
+  assert.equal(proofStatus({ settled: false, stage: 'FAILED', txHash: '0xabc' }), 'FAILED');
+  assert.equal(proofStatus({ settled: true, stage: 'SETTLED', txHash: '0xabc' }), 'CONFIRMED');
+  assert.match(outcome, /No transaction was submitted/);
+  assert.match(outcome, /settlement\.txHash !== null \? <p className="mw-fine">Failed receipt/);
   assert.equal(executionRetry('SPINE_EXPIRED'), false);
   assert.equal(executionRetry('SETTLEMENT_IN_PROGRESS'), false);
   assert.equal(executionRetry('BUSY'), false);
