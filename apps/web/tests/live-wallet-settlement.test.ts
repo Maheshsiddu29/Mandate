@@ -4,6 +4,7 @@ import test from 'node:test';
 import type { JsonRecord, LiveEvent } from '../components/demo/live/live-client.ts';
 import { deriveFlow, eventsAfter, type FlowInput } from '../components/demo/live/live-flow.ts';
 import { derivePresentation } from '../components/demo/live/live-model.ts';
+import { executionRetry, receiptHeading, settlementRefusal } from '../components/demo/live/settlement-refusal.ts';
 import { APPROVAL_CHAIN, WALLET_METHODS, injectedWallet } from '../components/demo/live/wallet.ts';
 
 /*
@@ -171,10 +172,24 @@ test('a settlement 409 does not enter Executing, and the signed total is not a h
   const refused = after(['TESTNET_SEND_AUTHORIZATION_REFUSED', { reason: 'SEND_NOT_AUTHORIZED' }]);
   assert.notEqual(deriveFlow(done(refused)).phase, 'SETTLING');
   assert.equal(derivePresentation(refused).settlement.stage, 'FAILED');
-  assert.match(outcome, /SEND_NOT_AUTHORIZED: "Execution was not accepted\. Nothing was sent\."/);
-  assert.match(outcome, /SPINE_EXPIRED: "Authorization expired\./);
-  assert.match(outcome, /SETTLEMENT_IN_PROGRESS: "Execution is already in progress\."/);
-  assert.match(outcome, /NO_STOCK_RESERVATION: "There is no Stock reservation to execute\. Nothing was sent\."/);
+  const refusedCopy = settlementRefusal({ code: 'SEND_NOT_AUTHORIZED', message: 'Broadcast needs an explicit execution request. Nothing was sent.', stage: 'SEND_GATE', transactions: 0, txHash: null });
+  assert.equal(refusedCopy.code, 'SEND_NOT_AUTHORIZED');
+  assert.match(refusedCopy.summary, /Nothing was sent/);
+  assert.equal(refusedCopy.transactions, 0);
+  assert.equal(refusedCopy.txHash, null);
+  assert.equal(receiptHeading({ settled: false, txHash: null, stage: 'FAILED', refused: true }).title, 'Not sent');
+  assert.equal(receiptHeading({ settled: false, txHash: '0xabc', stage: 'FAILED', refused: false }).title, 'Settlement failed');
+  assert.equal(executionRetry('SPINE_EXPIRED'), false);
+  assert.equal(executionRetry('SETTLEMENT_IN_PROGRESS'), false);
+  assert.equal(executionRetry('BUSY'), false);
+  assert.equal(executionRetry('NO_STOCK_RESERVATION'), false);
+  assert.equal(executionRetry('SPINE_METHOD_REQUIRED'), false);
+  assert.equal(executionRetry('CONSUMED'), false);
+  assert.equal(executionRetry('GATE_EXECUTION_AUTHORITY_REQUIRED'), true);
+  assert.equal(executionRetry('SEND_NOT_AUTHORIZED'), true);
+  assert.doesNotMatch(outcome, /<p className="mw-notice mw-notice--bad"/);
+  assert.match(outcome, /<div className="mw-notice mw-notice--bad"/);
+  assert.match(outcome, /<dt>Reason<\/dt>/);
   assert.doesNotMatch(outcome, /Awaiting operator send authorization/);
   assert.doesNotMatch(outcome, /Ready · not sent/);
   assert.match(lab, /setSettleConflict/);

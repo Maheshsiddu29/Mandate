@@ -15,7 +15,8 @@ import { EventLogBody, PauseBody, ReviewBody, StressBody } from "./sheets";
 import { AgentsStage, AgentSummaryList } from "./stage-agents";
 import { DraftingStage, PromptStage } from "./stage-compose";
 import { ApproveStage, ConfigureStage, draftAccess, mandateSummary, PermissionsBody, type WalletState } from "./stage-configure";
-import { AuthorizedStage, FailedStage, ReceiptStage, SettlingStage, VerifyStage, settlementRefusal, type SettlementOffer } from "./stage-outcome";
+import { AuthorizedStage, FailedStage, ReceiptStage, SettlingStage, VerifyStage, type SettlementOffer } from "./stage-outcome";
+import { executionRetry, settlementRefusal, type SettlementRefusal } from "./settlement-refusal";
 import { APPROVAL_CHAIN, injectedWallet, shortAddress } from "./wallet";
 import { Sheet } from "./workspace-ui";
 import "./live-workspace.css";
@@ -104,7 +105,7 @@ export function LiveLab(): ReactNode {
   const [amending, setAmending] = useState(false);
   const [runFrom, setRunFrom] = useState<number | null>(null);
   const [error, setError] = useState("");
-  const [settleConflict, setSettleConflict] = useState<{ readonly code: string; readonly message: string } | null>(null);
+  const [settleConflict, setSettleConflict] = useState<SettlementRefusal | null>(null);
   const [notice, setNotice] = useState("");
   const [sheet, setSheet] = useState<SheetName>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -429,7 +430,16 @@ export function LiveLab(): ReactNode {
     if (!result.ok) {
       const code = str(result.body.error);
       const text = message(result.body);
-      setSettleConflict({ code: code === "—" ? "" : code, message: text });
+      const stage = str(result.body.stage);
+      const hash = str(result.body.txHash);
+      const count = result.body.transactions;
+      setSettleConflict(settlementRefusal({
+        code: code === "—" ? "" : code,
+        message: text === "—" ? "" : text,
+        stage: stage === "—" ? null : stage,
+        transactions: typeof count === "number" ? count : typeof count === "string" && /^-?\d+$/.test(count) ? Number(count) : null,
+        txHash: hash === "—" ? null : hash,
+      }));
       setError(text);
       return null;
     }
@@ -614,7 +624,7 @@ export function LiveLab(): ReactNode {
           sessionId={sessionId}
           signing={signing}
           walletReady={wallet.address !== null && wallet.chainId === APPROVAL_CHAIN.chainId}
-          conflict={settleConflict === null ? null : settlementRefusal(settleConflict.code, settleConflict.message)}
+          conflict={settleConflict}
           onSignStock={() => void signStock()}
           onPrepareWallet={() => {
             if (wallet.address === null) void connectWallet();
@@ -633,7 +643,8 @@ export function LiveLab(): ReactNode {
           offer={settlementOffer}
           walletOk={wallet.address !== null && wallet.chainId === APPROVAL_CHAIN.chainId && (str(authorization.principal) === "—" || wallet.address === str(authorization.principal).toLowerCase()) && (authorization.method === "WALLET_PRINCIPAL_V2" || authorization.method === "WALLET_PRINCIPAL_V2_PLAN")}
           busy={task !== null || signing}
-          conflict={settleConflict === null ? null : settlementRefusal(settleConflict.code, settleConflict.message)}
+          conflict={settleConflict}
+          retry={executionRetry(settleConflict?.code ?? null)}
           onExecute={() => void execute()}
           onDetails={() => setSheet("review")}
           onRoom={roomSeen ? () => setSheet("room") : null}
