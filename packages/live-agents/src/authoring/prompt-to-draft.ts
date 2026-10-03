@@ -337,8 +337,10 @@ export function interpretLocally(prompt: string): DraftInterpretation {
     new RegExp(String.raw`\b(?:i have|i'?ve got|my (?:total )?(?:budget|capital|portfolio)(?: is| of|:)?|total (?:capital|budget|portfolio)(?: of| is|:)?)\s*(?:${MONEY})`).exec(p) ??
     /\b(five hundred)\s*(?:dollars?|usd[c]?)?\b/.exec(p);
   const total = new RegExp(String.raw`\btotal (?:capital|budget|portfolio)(?: of| is|:)?\s*(?:${MONEY})`).exec(p);
+  // Bare "use $X" after an agent name is that agent's budget, not portfolio maxDeployed.
   const upTo =
-    new RegExp(String.raw`\b(?:deploy|invest|allocate|put|use|manage)\s+(?:up to|at most|no more than|a maximum of|max(?:imum)?)?\s*(?:${MONEY})`).exec(p) ??
+    new RegExp(String.raw`\b(?:deploy|invest|allocate|put|manage)\s+(?:up to|at most|no more than|a maximum of|max(?:imum)?)?\s*(?:${MONEY})`).exec(p) ??
+    new RegExp(String.raw`(?:^|[.!?]\s)use\s+(?:${MONEY})`).exec(p) ??
     new RegExp(String.raw`(?:${MONEY})\s+(?:across|between|among|split (?:across|between))\b`).exec(p) ??
     new RegExp(String.raw`^\s*(?:${MONEY})\s*(?:[.:;,]|$)`).exec(p) ??
     new RegExp(String.raw`\bwith\s+(?:${MONEY})\b`).exec(p);
@@ -385,17 +387,30 @@ export function interpretLocally(prompt: string): DraftInterpretation {
     issues.push({ kind: 'CONFLICT', field: 'portfolio.minUnallocated', text: `"Deploy everything" conflicts with keeping ${money(keepMoney) ?? 'an amount'} USDC unallocated. Choose one.` });
   }
 
-  const cap = String.raw`[^.;\n]*?\b(?:max(?:imum)?|at most|up to|capped at|cap(?: of)?|limit(?:ed)? to|limit of|no more than|under|below)\s*(?:${MONEY})`;
-  const derivative = new RegExp(String.raw`\b(?:perps?|perpetuals?|derivatives?|futures)\b${cap}`).exec(p);
-  if (derivative !== null) portfolio['maxDerivative'] = money(derivative);
-  const illiquid = new RegExp(String.raw`\b(?:nfts?|illiquid|collectibles?)\b${cap}`).exec(p);
-  if (illiquid !== null) portfolio['maxIlliquid'] = money(illiquid);
+  // Cap language must stay near the role — do not span across another agent name.
+  const nearCap = String.raw`(?:\s+(?:can use|exposure|capital|budget|allocation|agent))?\s+(?:max(?:imum)?|at most|up to|capped at|cap(?: of)?|limit(?:ed)? to|limit of|no more than|under|below|never above)\s*(?:${MONEY})`;
+  const derivative = new RegExp(String.raw`\b(?:perps?|perpetuals?|derivatives?|futures)\b${nearCap}`).exec(p);
+  if (derivative !== null) portfolio['maxDerivative'] = money(derivative, 1);
+  const illiquid = new RegExp(String.raw`\b(?:nfts?|illiquid|collectibles?)\b${nearCap}`).exec(p);
+  if (illiquid !== null) portfolio['maxIlliquid'] = money(illiquid, 1);
   for (const [role, word] of [['stock', String.raw`stocks?|equit(?:y|ies)`], ['swap', String.raw`swaps?`], ['yield', String.raw`yield|vaults?|earn`], ['nft', String.raw`nfts?`], ['perps', String.raw`perps?|perpetuals?`]] as const) {
-    const m = new RegExp(String.raw`\b(?:${word})\b${cap}`).exec(p);
+    const m = new RegExp(String.raw`\b(?:${word})\b${nearCap}`).exec(p);
     if (m !== null) {
-      agent(role).maxAllocation = money(m);
-      if (role === 'perps' && portfolio['maxDerivative'] === null) portfolio['maxDerivative'] = money(m);
-      if (role === 'nft' && portfolio['maxIlliquid'] === null) portfolio['maxIlliquid'] = money(m);
+      const amount = money(m, 1);
+      if (amount === null) continue;
+      agent(role).maxAllocation = amount;
+      if (role === 'perps' && portfolio['maxDerivative'] === null) portfolio['maxDerivative'] = amount;
+      if (role === 'nft' && portfolio['maxIlliquid'] === null) portfolio['maxIlliquid'] = amount;
+    }
+  }
+  // "Stock and Perps can use $2k" — shared ceiling/total for the named group.
+  const groupUse = new RegExp(String.raw`\b((?:stocks?|swaps?|nfts?|yield|perps?|equities)(?:\s*,\s*|\s+and\s+)(?:stocks?|swaps?|nfts?|yield|perps?|equities)(?:(?:\s*,\s*|\s+and\s+)(?:stocks?|swaps?|nfts?|yield|perps?|equities))*)\s+can use\s+(?:${MONEY})`).exec(p);
+  if (groupUse !== null) {
+    const amount = money(groupUse, 2);
+    if (amount !== null && portfolio['totalCapital'] === null) {
+      portfolio['totalCapital'] = amount;
+      portfolio['maxDeployed'] = amount;
+      notes.push(`"${groupUse[0].trim()}" read as the portfolio total those agents may draw from.`);
     }
   }
 
@@ -418,26 +433,56 @@ export function interpretLocally(prompt: string): DraftInterpretation {
     }
   }
 
+  const roleWord = (r: Role): string => ROLE_WORDS[r].source.replace(/\\b/g, '').replace(/^\((?!\?)/, '(?:');
+
   // A role named directly with an amount is that agent's budget: "Stock $800", "swap: $400", "perps gets $300".
+  // Skip "can use $N" when it is the shared group phrase ("Stock and Perps can use $2k").
+  const sharedUse = groupUse?.[0] ?? '';
   for (const r of ROLES) {
-    const word = ROLE_WORDS[r].source.replace(/\\b/g, '');
-    const m = new RegExp(String.raw`\b${word}\s*(?::|=|-|–|gets|can use|budget(?: of)?|with)?\s*(?:${MONEY})`).exec(p);
+    const m = new RegExp(String.raw`\b${roleWord(r)}\s*(?::|=|-|–|gets|can use|budget(?: of)?|with)?\s*(?:${MONEY})`).exec(p);
     if (m !== null) {
-      agent(r).budget = money(m, 2);
-      agent(r).enabled = true;
-      notes.push(`"${m[0].trim()}" read as the ${r} agent's budget: the most it may use, not an amount it must spend.`);
+      if (sharedUse !== '' && sharedUse.includes(m[0].trim())) {
+        agent(r).enabled = true;
+        continue;
+      }
+      const amount = money(m, 1);
+      if (amount !== null) {
+        agent(r).budget = amount;
+        agent(r).enabled = true;
+        notes.push(`"${m[0].trim()}" read as the ${r} agent's budget: the most it may use, not an amount it must spend.`);
+      }
     }
   }
   // "Give Stock $800 and Yield $400"
   for (const r of ROLES) {
-    const word = ROLE_WORDS[r].source.replace(/\\b/g, '');
-    const give = new RegExp(String.raw`\bgive\s+(?:the\s+)?(?:${word})(?:\s+agent)?\s+(?:${MONEY})`).exec(p);
+    const give = new RegExp(String.raw`\bgive\s+(?:the\s+)?(?:${roleWord(r)})(?:\s+agent)?\s+(?:${MONEY})`).exec(p);
     if (give !== null) {
-      const amount = money(give);
+      const amount = money(give, 1);
+      if (amount === null) continue;
       agent(r).enabled = true;
       agent(r).budget = amount;
       agent(r).maxAllocation = amount;
       notes.push(`"${give[0].trim()}" read as the ${r} agent's fixed budget.`);
+    }
+  }
+  // "… the remaining $800" with fixed budgets → total = fixed + remainder when no total was stated.
+  const remaining = new RegExp(String.raw`\b(?:the\s+)?(?:remaining|rest|remainder)\s+(?:${MONEY})`).exec(p);
+  if (remaining !== null && portfolio['totalCapital'] === null) {
+    const rem = money(remaining, 1);
+    let fixed = 0n;
+    for (const a of agents.values()) {
+      if (a.budget !== null) {
+        const b = parseUsdc(a.budget);
+        if (b !== null) fixed += b;
+      }
+    }
+    if (rem !== null) {
+      const remAtoms = parseUsdc(rem);
+      if (remAtoms !== null) {
+        portfolio['totalCapital'] = usdcText(fixed + remAtoms);
+        portfolio['maxDeployed'] = portfolio['totalCapital'];
+        notes.push(`Remaining ${rem} USDC plus fixed budgets implies total capital ${portfolio['totalCapital']} USDC.`);
+      }
     }
   }
   if (/\b(?:let|allow)\b[^.;\n]*\b(?:decide|split|allocate|choose)\b[^.;\n]*\b(?:rest|remainder|remaining|the others?|how to (?:use|split)|however they)\b/.test(p) || /\bdecide how to (?:use|split)\b/.test(p) || /\bhowever they think is best\b/.test(p)) {
@@ -451,9 +496,9 @@ export function interpretLocally(prompt: string): DraftInterpretation {
   }
 
   // Risk preference is advisory only — never grants leverage, perps, or venues.
-  if (/\b(?:conservative|low[- ]risk)\b/.test(p)) notes.push('Risk preference (advisory only): CONSERVATIVE — does not grant leverage, Perps, or widen venues.');
-  else if (/\b(?:moderate|balanced)\b/.test(p) && !/\bbalanced preset\b/.test(p)) notes.push('Risk preference (advisory only): MODERATE — does not grant leverage, Perps, or widen venues.');
-  else if (/\b(?:aggressive|high[- ]risk)\b/.test(p)) notes.push('Risk preference (advisory only): AGGRESSIVE — does not grant leverage, Perps, or widen venues.');
+  if (/\b(?:conservative(?:ly)?|low[- ]risk)\b/.test(p)) notes.push('Risk preference (advisory only): CONSERVATIVE — does not grant leverage, Perps, or widen venues.');
+  else if (/\b(?:moderate(?:ly)?|balanced)\b/.test(p) && !/\bbalanced preset\b/.test(p)) notes.push('Risk preference (advisory only): MODERATE — does not grant leverage, Perps, or widen venues.');
+  else if (/\b(?:aggressive(?:ly)?|high[- ]risk)\b/.test(p)) notes.push('Risk preference (advisory only): AGGRESSIVE — does not grant leverage, Perps, or widen venues.');
 
   // "Let the Stock agent manage $800": that agent's ceiling, which is the field the compose form shows.
   const directedRoles: Role[] = [];
@@ -482,6 +527,12 @@ export function interpretLocally(prompt: string): DraftInterpretation {
   if (everyAgent) {
     for (const r of ROLES) agent(r).enabled = true;
     notes.push('Every agent explicitly enabled because the prompt named every agent.');
+    const everyAmt = new RegExp(String.raw`\blet every agent use\s+(?:${MONEY})|\b(?:every|all)\s+(?:five\s+)?agents?\s+use\s+(?:${MONEY})`).exec(p);
+    if (everyAmt !== null && portfolio['totalCapital'] === null) {
+      const amount = money(everyAmt, 1);
+      portfolio['totalCapital'] = amount;
+      portfolio['maxDeployed'] = amount;
+    }
   }
 
   const mentioned = ROLES.filter((r) => ROLE_WORDS[r].test(p));
@@ -568,9 +619,9 @@ export function interpretLocally(prompt: string): DraftInterpretation {
   if (fee !== null) {
     issues.push({ kind: 'UNSUPPORTED', field: null, text: 'A fee-bps cap is not a signed Live Lab mandate field; name agent ceilings and slippage instead.' });
   }
-  const perTrade = /\b(?:never spend more than|max(?:imum)?|no trade above|don'?t move more than)\s*(?:${MONEY})\s*(?:per trade|each trade|in one trade)?|(?:no trade above|per trade)\s*(?:${MONEY})/.exec(p);
+  const perTrade = new RegExp(String.raw`\b(?:never spend more than|no trade above|don'?t move more than)\s*(?:${MONEY})\s*(?:per trade|each trade|in one trade)?|\b(?:max(?:imum)?)\s*(?:${MONEY})\s*(?:per trade|each trade|in one trade)`).exec(p);
   if (perTrade !== null) {
-    issues.push({ kind: 'UNSUPPORTED', field: null, text: `A per-trade cap (${money(perTrade) ?? 'amount'} USDC) is not a signed Live Lab mandate field; set each agent's budget or ceiling instead.` });
+    issues.push({ kind: 'UNSUPPORTED', field: null, text: `A per-trade cap (${money(perTrade, 1) ?? 'amount'} USDC) is not a signed Live Lab mandate field; set each agent's budget or ceiling instead.` });
   }
   const perTradePct = /\bno trade above\s*(\d{1,2}(?:\.\d{1,2})?)\s*%\b/.exec(p);
   if (perTradePct !== null) {
@@ -596,8 +647,47 @@ export function interpretLocally(prompt: string): DraftInterpretation {
     else notes.push('Live Lab actions are already buy/open/deposit only; no sell authority exists to grant.');
   }
 
+  if (/\bcalldata\b/i.test(prompt) || /\b0x[a-f0-9]{8,}\b/i.test(prompt) && !RAW_ADDRESS.test(prompt)) {
+    issues.push({ kind: 'UNSUPPORTED', field: null, text: 'Calldata or raw hex execution payloads cannot be authorized from a prompt.' });
+  }
   if (RAW_ADDRESS.test(prompt) || /\bsend (?:funds|profits|output|money)\s+to\b/i.test(prompt)) {
     issues.push({ kind: 'UNSUPPORTED', field: 'execution.recipients', text: 'Arbitrary recipient addresses or "send to" instructions are refused; only reviewed catalog recipients may be authorized.' });
+  }
+  if (/\bhalf\b/.test(p) && portfolio['totalCapital'] === null && !agents.size) {
+    issues.push({ kind: 'AMBIGUOUS', field: 'portfolio.totalCapital', text: 'Half of what total portfolio capital?' });
+  }
+  // Trailing "Total $X" / "Capital is $X" (optionally followed by filler like "at the end")
+  const trailingTotal = new RegExp(String.raw`\b(?:total|capital)\s*(?:is|:)?\s*(?:${MONEY})`).exec(p);
+  if (trailingTotal !== null) {
+    const amount = money(trailingTotal, 1);
+    if (amount !== null) {
+      portfolio['totalCapital'] = amount;
+      if (portfolio['maxDeployed'] === null) portfolio['maxDeployed'] = amount;
+    }
+  }
+  // "Stock only" / "NFT only"
+  const onlyRole = /\b(stocks?|swaps?|nfts?|yield|perps?|equities)\s+only\b/.exec(p);
+  if (onlyRole !== null) {
+    const token = onlyRole[1] ?? '';
+    const map: { readonly [k: string]: Role } = { stock: 'stock', stocks: 'stock', equities: 'stock', swap: 'swap', swaps: 'swap', nft: 'nft', nfts: 'nft', yield: 'yield', perp: 'perps', perps: 'perps' };
+    const role = map[token];
+    if (role !== undefined) {
+      for (const r of ROLES) agent(r).enabled = r === role;
+    }
+  }
+  // "Enable Stock" / "Disable NFT"
+  for (const r of ROLES) {
+    const w = roleWord(r);
+    if (new RegExp(String.raw`\benable\s+(?:the\s+)?(?:${w})\b`).test(p)) agent(r).enabled = true;
+    if (new RegExp(String.raw`\bdisable\s+(?:the\s+)?(?:${w})\b`).test(p)) agent(r).enabled = false;
+  }
+  // "anything except perps"
+  const except = /\b(?:anything|everything)\s+except\s+([a-z ,]+)/.exec(p);
+  if (except !== null) {
+    for (const r of ROLES) {
+      if (ROLE_WORDS[r].test(except[1] ?? '')) agent(r).enabled = false;
+      else if (agent(r).enabled === null && ROLE_WORDS[r].test(p)) agent(r).enabled = true;
+    }
   }
   if (ADVERSARIAL_EXEC.test(p) && !/\bwhatever leverage\b/.test(p)) {
     if (/\benable everything\b/.test(p) && !everyAgent) {

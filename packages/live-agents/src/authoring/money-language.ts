@@ -40,7 +40,11 @@ const WORD_AMOUNTS: { readonly [word: string]: bigint } = {
   thousand: 1000n,
 };
 
-export const MONEY_PATTERN = String.raw`\$\s?(\d[\d,]*(?:\.\d+)?)\s*(k\b|thousand\b)?|(\d[\d,]*(?:\.\d+)?)\s*(k\b|thousand\b)?\s*(?:usd[c]?|dollars?)`;
+/**
+ * Comma groups require at least one `,xxx` so "$2000" is not read as "$200".
+ * A trailing comma after a bare integer is not part of the amount.
+ */
+export const MONEY_PATTERN = String.raw`\$\s?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*(k\b|thousand\b)?|(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*(k\b|thousand\b)?\s*(?:usd[c]?|dollars?)`;
 
 /** Atoms from a MONEY_PATTERN match, or null. */
 export function moneyFromMatch(m: RegExpExecArray, offset = 1): bigint | null {

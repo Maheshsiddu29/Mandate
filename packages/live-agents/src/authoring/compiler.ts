@@ -120,9 +120,15 @@ function dedupeIssues(xs: readonly DraftIssue[]): DraftIssue[] {
 /** Fixed budgets that exceed deployable capital → CONFLICT. */
 export function overAllocationIssues(d: MandateDraft): readonly DraftIssue[] {
   const view = classifyAllocation(d);
-  if (view.deployableAtoms === null) return [];
-  if (view.fixedAtoms <= view.deployableAtoms) return [];
-  const over = view.fixedAtoms - view.deployableAtoms;
+  let room = view.deployableAtoms;
+  if (room === null) {
+    // Before maxDeployed is filled, still refuse fixed budgets above total − reserve.
+    const total = d.portfolio.totalCapital === null ? null : parseUsdc(d.portfolio.totalCapital);
+    const reserve = d.portfolio.minUnallocated === null ? 0n : parseUsdc(d.portfolio.minUnallocated);
+    if (total !== null && reserve !== null && reserve <= total) room = total - reserve;
+  }
+  if (room === null || view.fixedAtoms <= room) return [];
+  const over = view.fixedAtoms - room;
   return [{
     kind: 'CONFLICT',
     field: 'portfolio.totalCapital',
