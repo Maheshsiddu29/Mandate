@@ -215,6 +215,47 @@ describe('V2 settlement bridge', () => {
     assert.equal(restarted.calls[0]?.gate.source, undefined);
   });
 
+  it('C1.4: an RPC state-read refusal after the gate signature is a NOT SENT 409 with the exact reason and the hold, and one signature was asked for', async () => {
+    const h = harness();
+    const reason = 'GATE_STATE_UNKNOWN.MARKET.BLOCK_AHEAD_OF_NODE.RPC_-32000:unsupported block number 128270281';
+    let asked = 0;
+    const ui = new SpineUi({
+      openSession: async () => ({ id: 'lab-1', events: { emit: () => 0 } }) as unknown as LiveSession,
+      taskOf: () => null,
+      settle: async (input) => {
+        asked += (await input.resolveGateExecution?.(request)) === SIG ? 1 : 0;
+        return { status: 'INELIGIBLE', stage: 'DOMAIN', reason, reports: [], held: { state: 'PREPARED', until: 1_790_814_765n } };
+      },
+      deployment: { chainId: 46630n } as SpineUiHost['deployment'],
+      rpc: {} as SpineUiHost['rpc'],
+      keys: { principal: KEY_SENTINEL, agent: '0xAGENTKEY' },
+      journalFor: () => ({ close: () => undefined }) as unknown as ReturnType<SpineUiHost['journalFor']>,
+      scratch: () => ({ path: '/tmp/scratch', cleanup: () => undefined }),
+      ledgerPath: () => '/tmp/durable',
+      schedule: () => () => undefined,
+      signatureWaitMs: 1_000,
+    });
+    const parked = await ui.handle('POST', '/api/live/sessions/lab-1/settle', { mode: 'SEND', intent: 'EXECUTE_ROBINHOOD_TESTNET' });
+    assert.equal(body(parked as NonNullable<typeof parked>)['status'], 'GATE_SIGNATURE_REQUIRED');
+    const r = await ui.handle('POST', '/api/live/sessions/lab-1/settle', { mode: 'SEND', gateSignature: SIG });
+    assert.equal(r?.status, 409);
+    const b = body(r as NonNullable<typeof r>);
+    assert.equal(b['error'], reason);
+    assert.equal(b['stage'], 'DOMAIN');
+    assert.equal(b['transactions'], 0);
+    assert.equal(b['txHash'], null);
+    assert.equal(b['held'], true);
+    assert.equal(b['attemptState'], 'PREPARED');
+    assert.equal(b['heldUntil'], '1790814765');
+    assert.match(String(b['message']), /^Robinhood Chain testnet state could not be verified \(DOMAIN: GATE_STATE_UNKNOWN\.MARKET\.BLOCK_AHEAD_OF_NODE\.RPC_-32000:unsupported block number 128270281\)\. Nothing was sent\.$/);
+    assert.equal(asked, 1);
+    assert.doesNotMatch(JSON.stringify(b), new RegExp(`${KEY_SENTINEL}|${SIG.slice(2, 12)}`));
+    // A refusal with no hold says so too.
+    const plain = await h.ui.handle('POST', '/api/live/sessions/lab-1/settle', { mode: 'SEND', sendAuthorization: 'nope' });
+    assert.equal(body(plain as NonNullable<typeof plain>)['held'], false);
+    assert.equal(body(plain as NonNullable<typeof plain>)['heldUntil'], null);
+  });
+
   it('refuses a signature that was not just requested, a busy session, and an unknown session', async () => {
     const h = harness();
     const stale = await post(h, { mode: 'DRY_RUN', gateSignature: SIG });

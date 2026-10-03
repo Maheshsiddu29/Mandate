@@ -144,6 +144,27 @@ all stop before broadcast. Copy stays short. The reason code sits under
 details. A demo principal cannot settle (`SPINE_METHOD_REQUIRED`). There is
 no fallback to `LocalPrincipalSigner`.
 
+**Chain state not verified (C1.4).** A gate-market or chain-time read the
+RPC could not answer (`GATE_STATE_UNKNOWN.…`, `CHAIN_TIME_UNREADABLE.…`) is
+refused at `DOMAIN` with `transactions: 0` and `txHash: null`. The page says
+"Robinhood Chain testnet state could not be verified. Nothing was sent." and
+keeps the exact reason under Details. On the public RPC the live case was
+`MARKET.BLOCK_AHEAD_OF_NODE.RPC_-32000:unsupported block number N`: the node
+serving the pinned read was behind the one that reported `latest`
+([wallet-settlement-boundaries.md §6](wallet-settlement-boundaries.md)).
+
+Whether Execute comes back depends on when the read failed, and the server
+says which (`held`, `attemptState`, `heldUntil` on the 409):
+
+- **Before the domain was bound** (the first gate-market read): nothing was
+  signed and nothing is held. Execute stays. The next attempt asks for one
+  `MandateAuthorization`.
+- **After it** (the re-read after the wallet signed): a signed gate
+  mandate exists, so the attempt is held for reconciliation until that
+  artifact's deadline (about 16 minutes), then released with no execution.
+  It is never resent. Execute is hidden and the page says when the hold
+  ends. This is the existing fail-closed rule, not new to C1.4.
+
 ## 14. Candidate and fixture
 
 The primary object stays the semantic Stock candidate (`nvda-note-a` or

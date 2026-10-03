@@ -32,4 +32,4 @@ export { reservationStatus, SETTLEMENT_ARTIFACT_KIND, type ReservationStatus } f
 export { reconcileAttempts, judge, gatherEvidence, RECONCILE_OUTCOMES, type ReconcileOutcome, type ReconcileReport, type ChainEvidence } from './reconcile.ts';
 export { domainPolicy, type DomainKeys } from './domain-leg.ts';
 export { reverifySpine, SPINE_CHAIN_ID, type SpineCheck, type SpineFacts } from './spine.ts';
-export { settleSpine, type SpineSettlementInput, type SpineSettlementResult } from './spine-settlement.ts';
+export { settleSpine, type SpineHold, type SpineSettlementInput, type SpineSettlementResult } from './spine-settlement.ts';

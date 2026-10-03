@@ -250,6 +250,118 @@ describe('V2 authority spine settlement', () => {
     }
   });
 
+  it('C1.4: a gate-market read the RPC node cannot serve, after the wallet signed, is refused at DOMAIN — nothing sent, no hash, one signature — and held for reconciliation, never resent', async () => {
+    const wallet = addressOfKey(OTHER_KEY);
+    const dir = mkdtempSync(join(tmpdir(), 'mandate-spine-rpc-'));
+    const LIVE_REASON = 'MARKET.BLOCK_AHEAD_OF_NODE.RPC_-32000:unsupported block number 128270281';
+    try {
+      await v2Session(dir, OTHER_KEY, 'lab-spine-rpc');
+      const rpc = new ModelRpc();
+      rpc.chain.fund(MDUSD, wallet, 700_000_000n);
+      rpc.chain.approve(MDUSD, wallet, GATE, 200_000_000n);
+      const world = await restored(dir, 'lab-spine-rpc', rpc);
+      try {
+        const original = rpc.gateMarkets.bind(rpc);
+        let reads = 0;
+        // The live failure's shape: the second, post-signature read meets a node behind the pinned block.
+        rpc.gateMarkets = async (policy) => ((reads += 1) === 2 ? { status: 'UNKNOWN', reason: LIVE_REASON } : original(policy));
+        let requested = 0;
+        const gate = new SendGate();
+        assert.equal(gate.authorizeBrowserIntent(), true);
+        const refused = await settleSpine({ session: world.session, journal: world.journal, deployment: world.deployment, rpc, keys: KEYS, mode: 'SEND', gate, ledgerPath: world.ledger('send.db'), resolveGateExecution: (req) => ((requested += 1), signGate(req, OTHER_KEY)) });
+        assert.deepEqual({ status: refused.status, stage: refused.status === 'INELIGIBLE' ? refused.stage : null, reason: refused.status === 'INELIGIBLE' ? refused.reason : null }, { status: 'INELIGIBLE', stage: 'DOMAIN', reason: `GATE_STATE_UNKNOWN.${LIVE_REASON}` });
+        assert.equal(requested, 1);
+        assert.equal(rpc.prepared, 0);
+        assert.equal(rpc.broadcasts, 0);
+        assert.equal(rpc.chain.txs.length, 0);
+        assert.equal(gate.state, 'AUTHORIZED');
+        const events = world.session.events.events;
+        const refusal = events.filter((e) => e.kind === 'DOMAIN_EXECUTION_INELIGIBLE').at(-1);
+        assert.equal(refusal?.data['stage'], 'DOMAIN');
+        assert.equal(refusal?.data['transactions'], 0);
+        assert.equal(events.some((e) => /^TESTNET_TX_(SUBMISSION_STARTED|SUBMITTED|CONFIRMED)$/.test(e.kind) || e.data['txHash'] !== undefined), false);
+        // The wallet's MandateAuthorization exists, so the attempt is held — reconciled, never resent — until it is dead.
+        const attempt = world.journal.all().at(-1);
+        assert.ok(attempt);
+        assert.equal(attempt.state, 'PREPARED');
+        assert.notEqual(attempt.domainOpenedAt, null);
+        assert.deepEqual(refused.status === 'INELIGIBLE' ? refused.held : null, { state: 'PREPARED', until: BigInt(attempt.artifactDeadAfter ?? '0') });
+
+        // The node caught up; another execute still asks for no signature and sends nothing.
+        rpc.gateMarkets = original;
+        const execute = async () => {
+          const g = new SendGate();
+          assert.equal(g.authorizeBrowserIntent(), true);
+          return settleSpine({ session: world.session, journal: world.journal, deployment: world.deployment, rpc, keys: KEYS, mode: 'SEND', gate: g, ledgerPath: world.ledger('send.db'), resolveGateExecution: (req) => ((requested += 1), signGate(req, OTHER_KEY)) });
+        };
+        const held = await execute();
+        assert.equal(held.status, 'RECONCILED_ONLY');
+        assert.equal(held.status === 'RECONCILED_ONLY' && held.attempt.quarantine, 'AWAITING_DEADLINE');
+        assert.equal(requested, 1);
+        assert.equal(rpc.broadcasts, 0);
+
+        // Past the artifact's deadline: released with no execution, still never resent.
+        rpc.chain.time += 2_000n;
+        const released = await execute();
+        assert.equal(released.status, 'RECONCILED_ONLY');
+        assert.equal(released.status === 'RECONCILED_ONLY' && released.attempt.state, 'RELEASED');
+        assert.equal(requested, 1);
+        assert.equal(rpc.broadcasts, 0);
+        assert.equal(rpc.chain.txs.length, 0);
+      } finally {
+        world.close();
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('C1.4: the same refusal before the domain is bound asks for no signature, holds nothing, and the next execute signs once and sends once', async () => {
+    const wallet = addressOfKey(OTHER_KEY);
+    const dir = mkdtempSync(join(tmpdir(), 'mandate-spine-rpc-first-'));
+    try {
+      await v2Session(dir, OTHER_KEY, 'lab-spine-rpc-first');
+      const rpc = new ModelRpc();
+      rpc.chain.fund(MDUSD, wallet, 700_000_000n);
+      rpc.chain.approve(MDUSD, wallet, GATE, 200_000_000n);
+      const world = await restored(dir, 'lab-spine-rpc-first', rpc);
+      try {
+        const original = rpc.gateMarkets.bind(rpc);
+        rpc.gateMarkets = async () => ({ status: 'UNKNOWN', reason: 'MARKET.BLOCK_AHEAD_OF_NODE.RPC_-32000:unsupported block number 128270281' });
+        let requested = 0;
+        const execute = async () => {
+          const g = new SendGate();
+          assert.equal(g.authorizeBrowserIntent(), true);
+          return settleSpine({ session: world.session, journal: world.journal, deployment: world.deployment, rpc, keys: KEYS, mode: 'SEND', gate: g, ledgerPath: world.ledger('send.db'), resolveGateExecution: (req) => ((requested += 1), signGate(req, OTHER_KEY)) });
+        };
+        const refused = await execute();
+        assert.equal(refused.status, 'INELIGIBLE');
+        assert.equal(refused.status === 'INELIGIBLE' && refused.stage, 'DOMAIN');
+        assert.equal(refused.status === 'INELIGIBLE' ? refused.held : 'x', undefined);
+        assert.equal(requested, 0);
+        assert.equal(rpc.prepared + rpc.broadcasts, 0);
+
+        rpc.gateMarkets = original;
+        const sent = await execute();
+        assert.equal(sent.status, 'SENT');
+        assert.equal(sent.status === 'SENT' && sent.outcome.status, 'CONFIRMED');
+        assert.equal(requested, 1);
+        assert.equal(rpc.broadcasts, 1);
+
+        // Consumed: another execute reconciles only — no signature request, no second broadcast.
+        const replay = await execute();
+        assert.equal(replay.status, 'RECONCILED_ONLY');
+        assert.equal(replay.status === 'RECONCILED_ONLY' && replay.attempt.state, 'CONSUMED');
+        assert.equal(requested, 1);
+        assert.equal(rpc.broadcasts, 1);
+      } finally {
+        world.close();
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('refuses a demonstration-key session instead of settling it through custody', async () => {
     const world = await settlementWorld();
     try {

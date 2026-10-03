@@ -55,6 +55,15 @@ export interface Judgement {
   readonly reason: string;
 }
 
+/**
+ * Once its domain leg was bound, an attempt may have produced a gate
+ * artifact: from then on only reconciliation resolves it — held until every
+ * artifact is dead, then released — and it is never sent again.
+ */
+export function reconciliationOnly(a: AttemptRecord): boolean {
+  return a.state !== 'PREPARED' || a.domainOpenedAt !== null;
+}
+
 /** The latest chain time at which any artifact of the attempt could still execute. */
 export function deadOnlyAfter(a: AttemptRecord, artifacts: readonly ArtifactRecord[]): bigint | null {
   const bounds = [...artifacts.map((x) => BigInt(x.deadline)), ...(a.artifactDeadAfter === null ? [] : [BigInt(a.artifactDeadAfter)])];

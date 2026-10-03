@@ -18,8 +18,8 @@ import type { LiveSession } from '@mandate/live-agents';
 import type { TestnetDeployment } from './deployment.ts';
 import type { DomainKeys } from './domain-leg.ts';
 import { ASSET_QUALIFICATION } from './evidence.ts';
-import type { AttemptRecord, SettlementJournal } from './journal.ts';
-import { reconcileAttempts, type ReconcileReport } from './reconcile.ts';
+import type { AttemptRecord, AttemptState, SettlementJournal } from './journal.ts';
+import { deadOnlyAfter, reconcileAttempts, reconciliationOnly, type ReconcileReport } from './reconcile.ts';
 import type { TestnetRpc } from './rpc.ts';
 import type { SendGate } from './send-gate.ts';
 import type { GateExecutionRequest } from './gate-authority.ts';
@@ -28,10 +28,16 @@ import { reverifySpine } from './spine.ts';
 
 export type SpineSettlementResult =
   | { readonly status: 'RECONCILED_ONLY'; readonly reports: readonly ReconcileReport[]; readonly attempt: AttemptRecord }
-  | { readonly status: 'INELIGIBLE'; readonly stage: string; readonly reason: string; readonly reports: readonly ReconcileReport[] }
+  | { readonly status: 'INELIGIBLE'; readonly stage: string; readonly reason: string; readonly reports: readonly ReconcileReport[]; readonly held?: SpineHold }
   | { readonly status: 'NOT_READY'; readonly outcome: SettlementOutcome; readonly reports: readonly ReconcileReport[] }
   | { readonly status: 'READY'; readonly outcome: Extract<SettlementOutcome, { status: 'READY' }>; readonly principals: PrincipalBinding; readonly reports: readonly ReconcileReport[] }
   | { readonly status: 'SENT'; readonly outcome: SettlementOutcome; readonly principals: PrincipalBinding; readonly reports: readonly ReconcileReport[] };
+
+/** A refused attempt that only reconciliation may resolve: nothing is resent; released once every artifact is dead (`until`, chain seconds). */
+export interface SpineHold {
+  readonly state: AttemptState;
+  readonly until: bigint | null;
+}
 
 export interface SpineSettlementInput {
   readonly session: LiveSession;
@@ -93,7 +99,11 @@ export async function settleSpine(i: SpineSettlementInput): Promise<SpineSettlem
     ...(presented ? { gateExecution: 'WALLET_EIP712' as const, resolveGateExecution: i.resolveGateExecution ?? (() => null) } : {}),
   });
   const principals = principalBinding(record.authorization, d, presented && outcome.status !== 'INELIGIBLE' && outcome.status !== 'PREFLIGHT_FAILED' ? 'WALLET_EIP712' : undefined);
-  if (outcome.status === 'INELIGIBLE') return { status: 'INELIGIBLE', stage: outcome.stage, reason: outcome.reason, reports };
+  if (outcome.status === 'INELIGIBLE') {
+    const attempt = journal.get(p.execution.reservation);
+    if (attempt === null || !reconciliationOnly(attempt)) return { status: 'INELIGIBLE', stage: outcome.stage, reason: outcome.reason, reports };
+    return { status: 'INELIGIBLE', stage: outcome.stage, reason: outcome.reason, reports, held: { state: attempt.state, until: deadOnlyAfter(attempt, journal.artifacts(attempt.reservation)) } };
+  }
   if (i.mode === 'DRY_RUN') {
     if (outcome.status !== 'READY') return { status: 'NOT_READY', outcome, reports };
     return { status: 'READY', outcome, principals, reports };

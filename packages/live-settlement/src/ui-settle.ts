@@ -22,7 +22,7 @@ import type { GateExecutionRequest } from './gate-authority.ts';
 import type { SettlementJournal } from './journal.ts';
 import type { TestnetRpc } from './rpc.ts';
 import { SendGate, SEND_AUTHORIZATION_PHRASE } from './send-gate.ts';
-import type { SpineSettlementInput, SpineSettlementResult } from './spine-settlement.ts';
+import type { SpineHold, SpineSettlementInput, SpineSettlementResult } from './spine-settlement.ts';
 import type { TestnetDeployment } from './deployment.ts';
 import type { DomainKeys } from './domain-leg.ts';
 
@@ -67,10 +67,23 @@ const SIG = /^0x[0-9a-fA-F]{130}$/;
 const ok = (body: { readonly [k: string]: LabJson }, status = 200): LabRouteResponse => ({ status, body });
 const refuse = (status: number, error: string, message: string): LabRouteResponse => ({ status, body: { error, message } });
 /** A settle call that did not broadcast. Stage and transaction count are the server's, so the page can show them. */
-const denied = (error: string, message: string, facts: { readonly stage: string | null; readonly transactions: number; readonly txHash: string | null }): LabRouteResponse => ({
+const denied = (error: string, message: string, facts: { readonly stage: string | null; readonly transactions: number; readonly txHash: string | null; readonly held?: SpineHold }): LabRouteResponse => ({
   status: 409,
-  body: { error, message, stage: facts.stage, transactions: facts.transactions, txHash: facts.txHash },
+  body: {
+    error,
+    message,
+    stage: facts.stage,
+    transactions: facts.transactions,
+    txHash: facts.txHash,
+    // Whether another execute can start: a held attempt is reconciled, never resent.
+    held: facts.held !== undefined,
+    attemptState: facts.held?.state ?? null,
+    heldUntil: facts.held?.until?.toString() ?? null,
+  },
 });
+
+/** A chain read that could not establish the gate's state or chain time: nothing about the trade was decided. */
+const STATE_UNVERIFIED = /^(GATE_STATE_UNKNOWN|CHAIN_TIME_UNREADABLE)\./;
 
 function asJson(value: unknown): LabJson {
   return JSON.parse(JSON.stringify(value, (_k, x: unknown) => (typeof x === 'bigint' ? x.toString() : x))) as LabJson;
@@ -361,8 +374,13 @@ export class SpineUi {
       });
     }
     if (result.status === 'INELIGIBLE') {
-      const message = result.reason === 'GATE_EXECUTION_AUTHORITY_REQUIRED' ? 'No gate signature was provided. Nothing was broadcast. Dry-run again to request a new MandateAuthorization.' : `${result.stage}: ${result.reason}. Nothing was broadcast.`;
-      return denied(result.reason, message, { stage: result.stage, transactions: 0, txHash: null });
+      const message =
+        result.reason === 'GATE_EXECUTION_AUTHORITY_REQUIRED'
+          ? 'No gate signature was provided. Nothing was broadcast. Dry-run again to request a new MandateAuthorization.'
+          : STATE_UNVERIFIED.test(result.reason)
+            ? `Robinhood Chain testnet state could not be verified (${result.stage}: ${result.reason}). Nothing was sent.`
+            : `${result.stage}: ${result.reason}. Nothing was broadcast.`;
+      return denied(result.reason, message, { stage: result.stage, transactions: 0, txHash: null, ...(result.held === undefined ? {} : { held: result.held }) });
     }
     if (result.status === 'NOT_READY') return denied('NOT_READY', `The dry run did not reach READY (${result.outcome.status}). Nothing was broadcast.`, { stage: result.outcome.status, transactions: 0, txHash: null });
     const outcome = result.outcome;
