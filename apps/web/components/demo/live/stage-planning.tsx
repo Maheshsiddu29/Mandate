@@ -125,42 +125,105 @@ export function PlanningStage(props: {
   return (
     <div className="mw-planning">
       <header className="mw-stage-head">
-        <p className="mw-kicker">{singleAgent ? "Agent plan" : "Mandate Room"} · before you sign</p>
-        <h2>{plan === null ? (singleAgent ? "Agent is analyzing" : "Agents are analyzing") : (singleAgent ? "Agent proposes this allocation" : "Agents propose this split")}</h2>
-        <p>{singleAgent ? "One agent is proposing how much of its available capital it can use. There is no Mandate Room for a single agent." : roomCopy(purpose)} Nothing is signed or spent here.</p>
+        <p className="mw-kicker">{singleAgent ? "Agent plan" : "Planning Room"} · before you sign</p>
+        <h2>
+          {plan === null
+            ? singleAgent
+              ? `${props.state?.pool[0] ? ROLE_TITLES[props.state.pool[0]].replace(" Agent", "") : "Agent"} is analyzing`
+              : "Agents are analyzing"
+            : singleAgent
+              ? "Agent proposes this allocation"
+              : "Proposed allocation"}
+        </h2>
+        <p>
+          {singleAgent
+            ? "One agent is proposing how much of its available capital it can use. There is no Mandate Room for a single agent."
+            : `${roomCopy(purpose)} Independent agents. Shared capital. One bounded authority.`}{" "}
+          Nothing is signed or spent here.
+        </p>
       </header>
-      {props.state?.pooled === null || props.state === null ? null : <p className="mw-total"><span>Available capital</span><strong>{usd(props.state.pooled)}</strong></p>}
+      {props.state?.pooled === null || props.state === null ? null : (
+        <p className="mw-total">
+          <span>{singleAgent ? "Available authority" : "Available capital"}</span>
+          <strong>{usd(props.state.pooled)}</strong>
+        </p>
+      )}
       <ul className="mw-rows">
         {props.cards.map((c) => {
           const b = plan?.budgets.find((x) => x.role === c.role);
           return (
             <Row key={c.role} role={c.role} sub={c.rationale === "" ? ROLE_DESCRIPTORS[c.role] : c.rationale}>
-              {b === undefined ? (c.action === "ABSTAIN" ? <Pill tone="neutral">Abstains</Pill> : <Pill tone="accent">Analyzed</Pill>) : editing ? (
+              {b === undefined ? (
+                c.action === "ABSTAIN" ? (
+                  <Pill tone="neutral">Abstained</Pill>
+                ) : (
+                  <Pill tone="accent">Analyzed</Pill>
+                )
+              ) : editing ? (
                 <input className="mw-input mw-input--inline" aria-label={`${ROLE_TITLES[c.role]} proposed budget in USDC`} value={values[c.role] ?? ""} inputMode="decimal" disabled={props.busy} onChange={(e) => setEdits((x) => ({ ...x, [c.role]: e.target.value }))} />
               ) : (
-                <>{usd(b.amount)}{b.zero === null ? null : <small className="mw-muted"> · {c.action === "ABSTAIN" ? "abstained" : "not funded"}</small>}</>
+                <>
+                  {singleAgent ? <span className="mw-muted">Agent proposes </span> : null}
+                  {usd(b.amount)}
+                  {b.zero === null ? null : <small className="mw-muted"> · {c.action === "ABSTAIN" ? "abstained" : "not funded"}</small>}
+                </>
               )}
             </Row>
           );
         })}
         {pending.map((role) => (
-          <Row key={role} role={role} sub="Analyzing opportunities…"><LatticeLoader label={`${ROLE_TITLES[role]} analyzing`} status="working" pattern="ripple" showTimer={false} /></Row>
+          <Row key={role} role={role} sub="Looking for opportunities…">
+            <LatticeLoader label={`${ROLE_TITLES[role]} analyzing`} status="working" pattern="ripple" showTimer={false} />
+          </Row>
         ))}
       </ul>
       {plan === null ? null : (
         <>
-          {plan.fixed.length === 0 ? null : <p className="mw-fine">Fixed by you, unchanged: {plan.fixed.map((f) => `${ROLE_TITLES[f.role].replace(" Agent", "")} ${usd(f.amount)}`).join(" · ")}</p>}
-          <p className="mw-total"><span>Proposed allocation</span><strong>{usd(editing ? String(check.total) : plan.allocated)}</strong></p>
-          <p className="mw-total"><span>Kept in wallet</span><strong>{editing ? (check.kept === null ? "—" : usd(String(check.kept))) : usd(plan.unallocated)}</strong></p>
-          <section className="mw-why" aria-label="Why this split"><h3>Why this split</h3><p>{plan.explanation}</p></section>
-          {editing && !check.ok ? <ul className="mw-notice mw-notice--bad" role="alert">{check.issues.map((i) => <li key={i}>{i}</li>)}</ul> : null}
+          {plan.fixed.length === 0 ? null : (
+            <p className="mw-fine">Fixed by you, unchanged: {plan.fixed.map((f) => `${ROLE_TITLES[f.role].replace(" Agent", "")} ${usd(f.amount)}`).join(" · ")}</p>
+          )}
+          <p className="mw-total">
+            <span>{singleAgent ? "Agent proposes" : "Final proposed allocation"}</span>
+            <strong>{usd(editing ? String(check.total) : plan.allocated)}</strong>
+          </p>
+          <p className="mw-total">
+            <span>{singleAgent ? "Keep available" : "Available"}</span>
+            <strong>{editing ? (check.kept === null ? "—" : usd(String(check.kept))) : usd(plan.unallocated)}</strong>
+          </p>
+          {plan.explanation === "" ? null : (
+            <section className="mw-why" aria-label="Why">
+              <h3>Why</h3>
+              <p>{plan.explanation}</p>
+            </section>
+          )}
+          {editing && !check.ok ? (
+            <ul className="mw-notice mw-notice--bad" role="alert">
+              {check.issues.map((i) => (
+                <li key={i}>{i}</li>
+              ))}
+            </ul>
+          ) : null}
         </>
       )}
-      {props.error === "" ? null : <p className="mw-notice mw-notice--bad" role="alert">{props.error}</p>}
+      {props.error === "" ? null : (
+        <p className="mw-notice mw-notice--bad" role="alert">
+          {props.error}
+        </p>
+      )}
       <footer className="mw-stage-foot">
-        {plan === null ? null : <button type="button" className="mw-cta" disabled={props.busy || props.working || (editing && !check.ok)} onClick={() => props.onUse(edits)}>Use this plan</button>}
-        {plan === null ? null : <button type="button" className="mw-soft-button" disabled={props.busy || props.working} onClick={() => setEditing((e) => !e)}>{editing ? "Done editing" : "Edit allocation"}</button>}
-        <button type="button" className="mw-text-button" disabled={props.working} onClick={props.onCancel}>Back</button>
+        {plan === null ? null : (
+          <button type="button" className="mw-cta" disabled={props.busy || props.working || (editing && !check.ok)} onClick={() => props.onUse(edits)}>
+            Use this plan
+          </button>
+        )}
+        {plan === null ? null : (
+          <button type="button" className="mw-soft-button" disabled={props.busy || props.working} onClick={() => setEditing((e) => !e)}>
+            {editing ? "Done editing" : singleAgent ? "Edit" : "Edit allocation"}
+          </button>
+        )}
+        <button type="button" className="mw-text-button" disabled={props.working} onClick={props.onCancel}>
+          Back
+        </button>
       </footer>
       <p className="mw-fine">The split is advisory. Only your signature authorizes it, and Mandate re-checks every action against your signed limits.</p>
     </div>
