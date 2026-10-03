@@ -271,13 +271,13 @@ export function ApproveStage(props: {
   return (
     <div className="mw-approve">
       <header className="mw-stage-head">
-        <p className="mw-kicker">Mandate {version}</p>
+        <p className="mw-kicker">You&apos;re authorizing</p>
         <h2>Mandate review</h2>
-        <p>This is the exact authority your wallet will sign. Edit anything that is wrong before authorizing.</p>
+        <p>This is the exact authority your wallet will sign. Agents cannot exceed it.</p>
       </header>
 
       {r.blockers.length > 0 ? (
-        <section className="mw-review-blockers" aria-labelledby="review-blockers-title" role="alert">
+        <section className="mw-review-blockers" aria-labelledby="review-blockers-title" role="status">
           <h3 id="review-blockers-title">{r.blockerSummary}</h3>
           <ul>
             {r.blockers.map((b) => (
@@ -288,8 +288,8 @@ export function ApproveStage(props: {
       ) : null}
 
       {r.conflicts.length > 0 ? (
-        <section className="mw-review-needs" aria-labelledby="review-conflicts-title">
-          <h3 id="review-conflicts-title">Needs your input</h3>
+        <section className="mw-review-needs" data-kind="needs" aria-labelledby="review-conflicts-title">
+          <h3 id="review-conflicts-title">Needs input</h3>
           {r.conflicts.map((c) => (
             <div key={c.index} className="mw-review-needs__card">
               <p className="mw-review-needs__kind">Conflict</p>
@@ -313,8 +313,8 @@ export function ApproveStage(props: {
       ) : null}
 
       {r.ambiguities.length > 0 || r.clarifications.length > 0 ? (
-        <section className="mw-review-needs" aria-labelledby="review-ambiguity-title">
-          <h3 id="review-ambiguity-title">Clarify before signing</h3>
+        <section className="mw-review-needs" data-kind="needs" aria-labelledby="review-ambiguity-title">
+          <h3 id="review-ambiguity-title">Needs input</h3>
           {[...r.ambiguities, ...r.clarifications].map((c) => (
             <div key={c.index} className="mw-review-needs__card">
               <p className="mw-review-needs__kind">{c.kind === "AMBIGUOUS" ? "Ambiguous" : "Needs clarification"}</p>
@@ -332,14 +332,18 @@ export function ApproveStage(props: {
           <h3 id="review-unsupported-title">Requested but not enforceable in this mandate version</h3>
           <ul>
             {r.unsupported.map((u) => (
-              <li key={u.index} data-dangerous={u.dangerous ? "" : undefined}>
+              <li key={u.index} data-kind={u.dangerous ? "refused" : "unsupported"}>
                 <div>
                   <strong>{u.dangerous ? "Refused" : "Not supported"}</strong>
                   <p>{u.text}</p>
-                  <p className="mw-fine">This restriction will NOT be included in the signed mandate.</p>
+                  <p className="mw-fine">
+                    {u.dangerous
+                      ? "Execution recipient and trusted settlement details cannot be set from natural-language mandate text."
+                      : "This restriction is not included in the signed mandate."}
+                  </p>
                 </div>
                 {u.dangerous ? (
-                  <p className="mw-fine">Cannot accept. Change the prompt.</p>
+                  <p className="mw-fine">Cannot authorize. Change the prompt.</p>
                 ) : (
                   <button type="button" className="mw-soft-button" disabled={props.authorizing} onClick={() => props.onAcknowledgeUnsupported(u.index)}>
                     I understand — continue without this
@@ -512,7 +516,13 @@ export function ApproveStage(props: {
 
       {props.authorizing ? <div className="mw-inline-status" aria-live="polite"><LatticeLoader label={method === "wallet" ? "Waiting for your wallet" : `Signing mandate ${version}`} status="working" pattern="orbit" showTimer={false} /></div> : null}
       {props.error === "" ? null : <p className="mw-notice mw-notice--bad" role="alert">{props.error}</p>}
-      {!reviewClean ? <p className="mw-notice mw-notice--warn" role="status">Authorize is disabled until every item above is resolved. The wallet will not be asked to sign a blocked draft.</p> : null}
+      {reviewClean ? (
+        <p className="mw-fine mw-approve__promise">Your wallet signs this authority. Agents cannot exceed it.</p>
+      ) : (
+        <p className="mw-notice mw-notice--warn" role="status">
+          Authorize is disabled until every item above is resolved. The wallet will not be asked to sign a blocked draft.
+        </p>
+      )}
 
       <footer className="mw-stage-foot">
         {method === "wallet" ? (
@@ -524,7 +534,9 @@ export function ApproveStage(props: {
             Authorize mandate
           </button>
         )}
-        <button type="button" className="mw-text-button" disabled={props.authorizing} onClick={props.onCancel}>Cancel</button>
+        <button type="button" className="mw-text-button" disabled={props.authorizing} onClick={props.onCancel}>
+          Cancel
+        </button>
       </footer>
     </div>
   );
@@ -540,24 +552,24 @@ const SET_FIELDS = [
 
 const SECTIONS: readonly { readonly title: string; readonly levels: readonly string[]; readonly names?: readonly string[]; readonly fields: readonly { readonly path: string; readonly label: string; readonly prefix?: string; readonly suffix?: string }[] }[] = [
   { title: "Capital", levels: ["PORTFOLIO"], names: ["Total capital", "Maximum deployed", "Allocation", "Stock spot capital"], fields: [
-    { path: "portfolio.totalCapital", label: "Total capital", prefix: "$" },
-    { path: "portfolio.maxDeployed", label: "Maximum deployed", prefix: "$" },
-    { path: "portfolio.minUnallocated", label: "Minimum unallocated", prefix: "$" },
+    { path: "portfolio.totalCapital", label: "Portfolio authority", prefix: "$" },
+    { path: "portfolio.maxDeployed", label: "Maximum initially deployable", prefix: "$" },
+    { path: "portfolio.minUnallocated", label: "Minimum kept available", prefix: "$" },
   ] },
-  { title: "Risk", levels: ["PORTFOLIO"], names: ["Derivative exposure", "Illiquid exposure", "Validity"], fields: [
-    { path: "portfolio.maxDerivative", label: "Derivative exposure cap", prefix: "$" },
-    { path: "portfolio.maxIlliquid", label: "Illiquid exposure cap", prefix: "$" },
-    { path: "portfolio.validityMinutes", label: "Validity", suffix: "min" },
+  { title: "Exposure", levels: ["PORTFOLIO"], names: ["Derivative exposure", "Illiquid exposure", "Validity"], fields: [
+    { path: "portfolio.maxDerivative", label: "Derivative exposure", prefix: "$" },
+    { path: "portfolio.maxIlliquid", label: "Illiquid exposure", prefix: "$" },
+    { path: "portfolio.validityMinutes", label: "Mandate duration", suffix: "min" },
     { path: "market.maxLeverage", label: "Maximum leverage", suffix: "×" },
   ] },
-  { title: "Markets", levels: ["MARKET"], fields: [] },
-  { title: "Execution", levels: ["EXECUTION"], fields: [
+  { title: "Assets & venues", levels: ["MARKET"], fields: [] },
+  { title: "Execution limits", levels: ["EXECUTION"], fields: [
     { path: "market.maxSlippageBps", label: "Maximum slippage", suffix: "bps" },
     { path: "market.maxQuoteAgeSeconds", label: "Quote freshness", suffix: "s" },
   ] },
-  { title: "Agent limits", levels: ["AGENT"], fields: ROLES.flatMap((role) => [
-    { path: `agents.${role}.maxAllocation`, label: `${ROLE_TITLES[role]} ceiling`, prefix: "$" },
-    { path: `agents.${role}.maxExposure`, label: `${ROLE_TITLES[role]} exposure`, prefix: "$" },
+  { title: "Agents", levels: ["AGENT"], fields: ROLES.flatMap((role) => [
+    { path: `agents.${role}.maxAllocation`, label: `${ROLE_TITLES[role].replace(" Agent", "")} maximum`, prefix: "$" },
+    { path: `agents.${role}.maxExposure`, label: `${ROLE_TITLES[role].replace(" Agent", "")} exposure`, prefix: "$" },
   ]) },
 ];
 
@@ -627,12 +639,9 @@ export function PermissionsBody(props: {
                 })}
               </div>
             ) : null}
-            {section.title === "Markets" && access !== null ? SET_FIELDS.map((field) => <SetField key={field.path} field={field} access={access} catalog={props.catalog} editable={props.editable} busy={props.busy} onField={props.onField} />) : null}
-            {section.title === "Execution" && access !== null ? (
-              <>
-                <SetField field={{ path: "execution.recipients", set: "recipients", label: "Recipients" }} access={access} catalog={props.catalog} editable={false} busy={props.busy} onField={props.onField} />
-                <p className="mw-fine">Trusted execution details (recipients, Gate, adapter, chain, calldata) are not editable here.</p>
-              </>
+            {section.title === "Assets & venues" && access !== null ? SET_FIELDS.map((field) => <SetField key={field.path} field={field} access={access} catalog={props.catalog} editable={props.editable} busy={props.busy} onField={props.onField} />) : null}
+            {section.title === "Execution limits" && access !== null ? (
+              <p className="mw-fine">Trusted execution details (recipients, Gate, adapter, chain, calldata) are not editable here.</p>
             ) : null}
             <Guardrails rows={rows} />
           </section>
