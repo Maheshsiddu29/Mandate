@@ -11,6 +11,7 @@
 
 import { CATALOG_SETS, catalogIds, type CatalogSet } from './catalog.ts';
 import type { MandateDraft } from './draft-types.ts';
+import { resolveIssueSafe } from './issue-policy.ts';
 import { ROLES } from '../types.ts';
 
 export type FieldType = 'text' | 'boolean' | 'ids';
@@ -62,8 +63,17 @@ export function parseFieldValue(path: unknown, raw: unknown): { readonly ok: tru
 /** Paths as the versioning diff lists them. */
 export const draftPaths = (): readonly string[] => DRAFT_FIELD_PATHS.map((f) => f.path);
 
-/** A draft with interpretation issue `index` removed: the principal has resolved it themselves. */
-export function resolveIssue(d: MandateDraft, index: number): MandateDraft | null {
-  if (!Number.isSafeInteger(index) || index < 0 || index >= d.issues.length) return null;
-  return { ...d, issues: d.issues.filter((_, i) => i !== index) };
+/**
+ * A draft with interpretation issue `index` removed when dismissal is safe
+ * (docs/demo/c2-1-authority-review.md §3). Soft unsupported requires
+ * `acknowledgeSoftUnsupported`. Dangerous / conflict / ambiguous return null.
+ */
+export function resolveIssue(d: MandateDraft, index: number, acknowledgeSoftUnsupported = false): MandateDraft | null {
+  const r = resolveIssueSafe(d, index, { acknowledgeSoftUnsupported });
+  return r.ok ? r.draft : null;
+}
+
+/** Resolve with a structured refusal code for the API. */
+export function resolveIssueWithPolicy(d: MandateDraft, index: number, acknowledgeSoftUnsupported = false): ReturnType<typeof resolveIssueSafe> {
+  return resolveIssueSafe(d, index, { acknowledgeSoftUnsupported });
 }

@@ -21,7 +21,8 @@
 
 import { DOMAIN_AGENTS } from '../agents/index.ts';
 import { AGENT_DOMAINS, CATALOG, CATALOG_SETS } from '../authoring/catalog.ts';
-import { parseFieldValue, resolveIssue } from '../authoring/draft-fields.ts';
+import { parseFieldValue, resolveIssueWithPolicy } from '../authoring/draft-fields.ts';
+import { choosePortfolioTotal, draftIssuesBlockAuthorize } from '../authoring/issue-policy.ts';
 import { PRESETS, withField, type MandateDraft, type Preset } from '../authoring/draft-types.ts';
 import type { DraftValidation } from '../authoring/draft-validator.ts';
 import { PAUSE_CONFIRMATION } from '../authoring/mandate-versioning.ts';
@@ -410,21 +411,38 @@ export class LiveLab {
     if (entry.draft === null) return refuse(409, 'NO_DRAFT', 'Create a draft first.');
     const f = parseFieldValue(body['path'], body['value'] ?? null);
     if (!f.ok) return refuse(400, 'BAD_REQUEST', f.error);
+    // Trusted execution surfaces are not user-authored mandate fields in Review.
+    if (f.path === 'execution.recipients') {
+      return refuse(400, 'TRUSTED_FIELD', 'Recipients, Gate, adapter, chain and calldata are not editable from the Review UI.');
+    }
     entry.draft = withField(entry.draft, f.path, f.value, 'USER');
     return ok(this.#view(entry));
   }
 
   #resolve(entry: Entry, body: JsonObject): ApiResponse {
     if (entry.draft === null) return refuse(409, 'NO_DRAFT', 'Create a draft first.');
+    // Capital conflict: choose one of the explicit totals.
+    if (body['chooseTotal'] !== undefined) {
+      if (typeof body['chooseTotal'] !== 'string') return refuse(400, 'BAD_REQUEST', 'chooseTotal must be a USDC amount.');
+      const chosen = choosePortfolioTotal(entry.draft, body['chooseTotal']);
+      if (!chosen.ok) return refuse(400, 'BAD_REQUEST', chosen.message);
+      entry.draft = chosen.draft;
+      return ok(this.#view(entry));
+    }
     const index = body['index'];
-    const next = typeof index === 'number' ? resolveIssue(entry.draft, index) : null;
-    if (next === null) return refuse(400, 'BAD_REQUEST', 'index must name an open issue.');
-    entry.draft = next;
+    if (typeof index !== 'number') return refuse(400, 'BAD_REQUEST', 'index must name an open issue.');
+    const ack = body['acknowledgeUnsupported'] === true;
+    const next = resolveIssueWithPolicy(entry.draft, index, ack);
+    if (!next.ok) return refuse(next.code === 'DANGEROUS_UNSUPPORTED' ? 409 : 400, next.code, next.message);
+    entry.draft = next.draft;
     return ok(this.#view(entry));
   }
 
   async #authorize(entry: Entry, body: JsonObject): Promise<ApiResponse> {
     if (entry.draft === null) return refuse(409, 'NO_DRAFT', 'Create a draft first.');
+    if (draftIssuesBlockAuthorize(entry.draft)) {
+      return refuse(409, 'REVIEW_BLOCKED', 'Resolve conflicts, ambiguities and unsupported instructions on Review before authorizing.');
+    }
     const confirmation = body['confirmation'];
     if (typeof confirmation !== 'string' || confirmation.length > 64) return refuse(400, 'BAD_REQUEST', 'confirmation must be the exact text shown.');
     const r = await entry.session.authorize(entry.draft, confirmation);
@@ -434,6 +452,9 @@ export class LiveLab {
 
   #walletChallenge(entry: Entry, body: JsonObject): ApiResponse {
     if (entry.draft === null) return refuse(409, 'NO_DRAFT', 'Create a draft first.');
+    if (draftIssuesBlockAuthorize(entry.draft)) {
+      return refuse(409, 'REVIEW_BLOCKED', 'Resolve conflicts, ambiguities and unsupported instructions on Review before signing.');
+    }
     const address = body['address'];
     if (typeof address !== 'string' || address.length > 42) return refuse(400, 'BAD_REQUEST', 'address must be the connected wallet address.');
     const spine = body['spine'];

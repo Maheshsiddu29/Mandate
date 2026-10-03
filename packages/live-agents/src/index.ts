@@ -13,6 +13,14 @@ export { LiveSession, type SessionOptions, type RestoreOptions, type RunResult, 
 export { SessionStore, SessionStoreCorruption, sessionExists, sessionDir, SESSION_SCHEMA } from './persistence/session-store.ts';
 export { emptyDraft, presetDraft, applyPreset, withField, fieldAt, PRESETS, ISSUE_KINDS, HUMAN_FIELD_SOURCES, FIELD_SOURCES, type MandateDraft, type Preset, type DraftIssue, type FieldSource, type FieldEvidence } from './authoring/draft-types.ts';
 export { compileMandateDraft, compileLocalPrompt, mergeFormOntoPrompt, overAllocationIssues, type CompileInput, type CompileResult } from './authoring/compiler.ts';
+export {
+  isDangerousUnsupported,
+  isSoftUnsupported,
+  resolveIssueSafe,
+  choosePortfolioTotal,
+  draftIssuesBlockAuthorize,
+  type ResolveRefusal,
+} from './authoring/issue-policy.ts';
 export { DRAFT_FIELD_PATHS, parseFieldValue } from './authoring/draft-fields.ts';
 export { CATALOG, CATALOG_SETS, AGENT_DOMAINS, REVIEWED_BOUNDS } from './authoring/catalog.ts';
 export { PAUSE_CONFIRMATION, AUTHORIZATION_METHODS, type VersionRecord, type AuthorizeResult, type ActiveMandate, type PrincipalAuthorization, type AuthorizationMethod } from './authoring/mandate-versioning.ts';
