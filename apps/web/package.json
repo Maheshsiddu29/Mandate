@@ -12,7 +12,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/public-boundary.test.mjs tests/judge-demo.test.ts tests/live-lab.test.ts tests/live-experience.test.ts tests/live-workspace.test.ts tests/live-wallet-settlement.test.ts tests/live-held-restore.test.ts tests/live-reasons.test.ts tests/live-room-v2.test.ts tests/authority-review.test.ts",
+    "test": "node --test tests/public-boundary.test.mjs tests/judge-demo.test.ts tests/live-lab.test.ts tests/live-experience.test.ts tests/live-workspace.test.ts tests/live-wallet-settlement.test.ts tests/live-held-restore.test.ts tests/live-reasons.test.ts tests/live-room-v2.test.ts tests/authority-review.test.ts tests/c2-2-demo-ux.test.ts",
     "check": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "dependencies": {

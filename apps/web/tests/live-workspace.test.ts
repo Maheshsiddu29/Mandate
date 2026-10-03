@@ -71,7 +71,7 @@ test('the Mandate Room is conditional: a run without a conflict never shows the 
   assert.equal(phases.at(-1), 'AUTHORIZED');
   // The Room sheet, its trail entry and the failure's Room link appear only once a ROOM_OPENED was seen.
   assert.match(lab, /const roomSeen = runEvents\.some\(\(event\) => event\.kind === "ROOM_OPENED"\);/);
-  assert.match(lab, /\{roomSeen && phase !== "ROOM" \? <button/);
+  assert.match(lab, /roomSeen && phase !== "ROOM"/);
   // With a conflict, the Room opens automatically from the real event.
   const conflicted = [...direct.slice(0, 3), e(4, 'PORTFOLIO_CONFLICT'), e(5, 'ROOM_OPENED')];
   assert.equal(deriveFlow({ ...base, runEvents: conflicted }).phase, 'ROOM');

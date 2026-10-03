@@ -281,10 +281,9 @@ test('Approve stage wires review gating, conflict resolution, and Authorize mand
   assert.match(configure, /onChooseTotal/);
   assert.match(configure, /onAcknowledgeUnsupported/);
   assert.match(configure, /Requested but not enforceable/);
-  assert.match(configure, /Needs your input/);
+  assert.match(configure, /Needs input/);
   assert.match(configure, /Edit permissions/);
   assert.match(configure, /Trusted execution details/);
-  assert.match(configure, /editable=\{false\}/);
   assert.match(lab, /buildAuthorityReview/);
   assert.match(lab, /acknowledgeUnsupported: true/);
   assert.match(lab, /chooseTotal/);

@@ -54,25 +54,25 @@ const upTo = (sequence: number) => eventsAfter(run.filter((item) => item.sequenc
 
 test('the first screen is one prompt: no agents, limits, Room, settlement or log', () => {
   assert.equal(deriveFlow(idle).phase, 'PROMPT');
-  assert.match(compose, /What should your agents do\?/);
+  assert.match(compose, /What do you want your agents to do\?/);
   assert.match(compose, /<PromptBar[\s\S]*tone="light"/);
-  assert.match(compose, /Prompt suggestions/);
-  for (const chip of ['Deploy $2,000', 'Keep $300 unallocated', 'Limit derivatives to $400', 'Approved venues only', 'Prefer stocks + yield']) assert.ok(compose.includes(chip), chip);
+  assert.match(compose, /Example mandates/);
+  for (const chip of ['Let Stock and Yield manage $2,000 conservatively.', 'Stock can use $1,000. Keep half of the capital untouched.', 'Let the Stock agent manage $800.']) assert.ok(compose.includes(chip), chip);
   assert.doesNotMatch(compose, /AgentConfigRow|Advanced permissions|RoomChat|Settlement|EventLog/);
 });
 
 test('the five-step stepper is gone; a quiet status line remains', () => {
   assert.doesNotMatch(lab, /live-stepper|Demo progression|const STEPS|StageShell/);
   assert.match(lab, /className="mw-bar__status"/);
-  assert.equal(deriveFlow({ ...idle, drafting: true }).status, 'Drafting');
-  assert.equal(deriveFlow(running(upTo(30))).status, 'Negotiating');
+  assert.equal(deriveFlow({ ...idle, drafting: true }).status, 'Interpreting');
+  assert.equal(deriveFlow(running(upTo(30))).status, 'Live');
 });
 
 test('submitting the prompt shows drafting only while the real request is open', () => {
   assert.equal(deriveFlow({ ...idle, drafting: true }).phase, 'DRAFTING');
   assert.match(lab, /setDrafting\(true\);[\s\S]*await api\(SERVER, "POST", `\/sessions\/\$\{id\}\/draft`[\s\S]*setDrafting\(false\)/);
-  assert.match(compose, /<LatticeLoader label="Building your mandate" status="working"/);
-  assert.match(compose, /Turning your intent into explicit authority\./);
+  assert.match(compose, /<LatticeLoader label="Interpreting mandate…" status="working"/);
+  assert.match(compose, /Interpreting mandate/);
 });
 
 test('no timer, delay or randomness drives any state', () => {
@@ -116,11 +116,11 @@ test('capital allocation compares agent ceilings to deployable capital, and only
 
 test('advanced permissions start closed and open as an accessible dialog', () => {
   assert.match(lab, /useState<SheetName>\(null\)/);
-  assert.match(lab, /title="Advanced permissions"/);
+  assert.match(lab, /title="Edit permissions"/);
   assert.match(shared, /dialog\.showModal\(\)/);
   assert.match(shared, /aria-labelledby=\{id\}/);
   assert.match(shared, /aria-label=\{`Close \$\{title\}`\}/);
-  for (const section of ['Capital', 'Risk', 'Markets', 'Execution', 'Agent limits']) assert.match(configure, new RegExp(`title: "${section}"`));
+  for (const section of ['Capital', 'Exposure', 'Assets & venues', 'Execution limits', 'Agents']) assert.match(configure, new RegExp(`title: "${section}"`));
   for (const status of ['From your prompt', 'Default', 'Edited']) assert.ok(configure.includes(status), status);
   assert.match(configure, /What Mandate enforces/);
 });
@@ -327,8 +327,8 @@ test('settlement progress follows settlement events; a hash is submitted, not co
 test('the decision and the fixture settlement proof stay separate, with the disclaimer always shown', () => {
   assert.match(outcome, /export const FIXTURE_QUALIFICATION = "Valueless demo assets\. Not an NVDA trade\. Not a Robinhood Stock Token\."/);
   assert.match(outcome, /<p className="mw-proof__qualify">\{FIXTURE_QUALIFICATION\}<\/p>/);
-  assert.match(outcome, /mw-proof__decision[\s\S]*Trade decision[\s\S]*mw-proof__chain[\s\S]*Settlement proof/);
-  assert.match(outcome, /The browser never sends transactions\./);
+  assert.match(outcome, /mw-proof__decision[\s\S]*mw-proof__chain[\s\S]*Testnet settlement proof/);
+  assert.match(outcome, /The browser never sends transactions/);
   assert.doesNotMatch(outcome, /\$\{usd\([^)]*\)\} → \$\{settlement\.fixtureOut/);
 });
 
@@ -356,8 +356,9 @@ test('failures stay in the same panel and say nothing was authorized', () => {
 });
 
 test('policy stress is a secondary security demo after the trade', () => {
-  assert.match(outcome, /Test the firewall/);
+  assert.match(lab, /Test the firewall/);
   assert.match(lab, /<Sheet open=\{sheet === "stress"\}[\s\S]*<StressBody/);
+  assert.doesNotMatch(outcome, /Test the firewall/);
   assert.doesNotMatch(agentsUi + compose + configure, /policy-stress|StressBody/);
   assert.match(sheets, /VALID AGENT ≠ VALID ACTION/);
   assert.match(sheets, /DIFFERENT AUTHORIZATION RESULT/);

@@ -121,7 +121,7 @@ test('43. Start over leaves a restored evidence-only session before building aga
 });
 
 test('44. a single-agent proposal is not labelled as a Mandate Room', () => {
-  assert.match(planning, /singleAgent \? "Agent plan" : "Mandate Room"/);
+  assert.match(planning, /singleAgent \? "Agent plan" : "Planning Room"/);
   assert.match(planning, /One agent is proposing how much/);
   assert.match(lab, /stageStatus[\s\S]*?"Agent plan"/);
 });
