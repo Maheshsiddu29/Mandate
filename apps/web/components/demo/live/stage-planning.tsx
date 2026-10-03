@@ -110,7 +110,8 @@ export function PlanningStage(props: {
   const { plan } = props;
   const [editing, setEditing] = useState(false);
   const [edits, setEdits] = useState<{ readonly [role: string]: string }>({});
-  const purpose = plan?.purpose ?? (props.state?.intent === "HYBRID" ? "HYBRID_ALLOCATION" : "INITIAL_ALLOCATION");
+  const singleAgent = (plan !== null && plan.purpose === null) || (plan === null && props.state?.pool.length === 1);
+  const purpose = singleAgent ? null : (plan?.purpose ?? (props.state?.intent === "HYBRID" ? "HYBRID_ALLOCATION" : "INITIAL_ALLOCATION"));
   const pending = (props.state?.pool ?? []).filter((r) => !props.cards.some((c) => c.role === r));
   const values = plan === null ? {} : Object.fromEntries(plan.budgets.map((b) => [b.role, edits[b.role] ?? b.amount ?? "0"]));
   const check = checkBudgets({
@@ -124,9 +125,9 @@ export function PlanningStage(props: {
   return (
     <div className="mw-planning">
       <header className="mw-stage-head">
-        <p className="mw-kicker">Mandate Room · before you sign</p>
-        <h2>{plan === null ? "Agents are analyzing" : "Agents propose this split"}</h2>
-        <p>{roomCopy(purpose)} Nothing is signed or spent here.</p>
+        <p className="mw-kicker">{singleAgent ? "Allocation proposal" : "Mandate Room"} · before you sign</p>
+        <h2>{plan === null ? (singleAgent ? "Agent is analyzing" : "Agents are analyzing") : (singleAgent ? "Agent proposes this allocation" : "Agents propose this split")}</h2>
+        <p>{singleAgent ? "One agent is proposing how much of its available capital it can use." : roomCopy(purpose)} Nothing is signed or spent here.</p>
       </header>
       {props.state?.pooled === null || props.state === null ? null : <p className="mw-total"><span>Available capital</span><strong>{usd(props.state.pooled)}</strong></p>}
       <ul className="mw-rows">

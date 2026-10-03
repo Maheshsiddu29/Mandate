@@ -253,6 +253,7 @@ export function LiveLab(): ReactNode {
 
   // Keep the one main panel in view as it changes shape; never move the page when it is already visible.
   const stageKey = STAGE_KEY[phase];
+  const stageStatus = phase === "PLANNING" && ((plan !== null && plan.purpose === null) || (plan === null && allocation?.pool.length === 1)) ? "Allocation proposal" : flow.status;
   useEffect(() => {
     const previous = shownStage.current;
     shownStage.current = stageKey;
@@ -522,6 +523,19 @@ export function LiveLab(): ReactNode {
             setReviewing(true);
           }}
           onStartOver={() => {
+            // An amendment keeps its signed session; a fresh start leaves the old (possibly restored, evidence-only) one.
+            if (!amending) {
+              rememberSession(null);
+              setSessionId(null);
+              setView({});
+              setEvents([]);
+              lastSequence.current = -1;
+              setResumed(false);
+            }
+            setPlanOpen(false);
+            setReviewing(false);
+            setNotice("");
+            setError("");
             setComposing(true);
             setAmending(false);
             setPrompt(amending ? prompt : submitted);
@@ -644,7 +658,7 @@ export function LiveLab(): ReactNode {
       <div ref={barRef} className="mw-bar">
         <div className="mw-bar__left">
           <span className="mw-bar__title">Live demo</span>
-          <span className="mw-bar__status" data-phase={phase} aria-live="polite">{flow.status}</span>
+          <span className="mw-bar__status" data-phase={phase} aria-live="polite">{stageStatus}</span>
         </div>
         <div className="mw-bar__right">
           <details className="mw-menu" onKeyDown={(event) => { if (event.key === "Escape") closeMenu(event.currentTarget); }}>
@@ -694,7 +708,7 @@ export function LiveLab(): ReactNode {
             animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
             exit={reduced ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, y: -6, scale: 0.99, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } }}
             transition={reduced ? { duration: 0 } : { duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
-            aria-label={flow.status}
+            aria-label={stageStatus}
           >
             {stage}
           </motion.section>

@@ -18,6 +18,7 @@ const LIVE = '../components/demo/live/';
 const outcome = read(`${LIVE}stage-outcome.tsx`);
 const lab = read(`${LIVE}live-lab.tsx`);
 const room = read(`${LIVE}live-model.ts`);
+const planning = read(`${LIVE}stage-planning.tsx`);
 
 let seq = 0;
 function event(kind: string, data: JsonRecord = {}, agent: string | null = null, roomId: string | null = null): LiveEvent {
@@ -105,4 +106,14 @@ test('42. every Room says why it exists; the generic conflict text is gone', () 
   assert.equal(roomCopy('INITIAL_ALLOCATION'), 'Agents are proposing how to allocate your capital.');
   assert.equal(roomCopy('REALLOCATION'), 'Agents are deciding how released capital should be reassigned.');
   assert.equal(roomCopy('SHARED_RESOURCE_COORDINATION'), 'Valid proposals are competing for shared authority.');
+});
+
+test('43. Start over leaves a restored evidence-only session before building again', () => {
+  assert.match(lab, /if \(!amending\) \{\s*rememberSession\(null\);\s*setSessionId\(null\)/, 'an amendment keeps its signed session');
+});
+
+test('44. a single-agent proposal is not labelled as a Mandate Room', () => {
+  assert.match(planning, /singleAgent \? "Allocation proposal" : "Mandate Room"/);
+  assert.match(planning, /One agent is proposing how much/);
+  assert.match(lab, /stageStatus[\s\S]*?"Allocation proposal"/);
 });
