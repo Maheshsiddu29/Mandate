@@ -9,7 +9,7 @@
  */
 
 import type { LiveEvent } from "./live-client.ts";
-import { deriveAgents, deriveSettlement, type AgentCard } from "./live-model.ts";
+import { deriveAgents, deriveSettlement, type AgentCard, type SettlementView } from "./live-model.ts";
 
 export const PHASES = [
   "PROMPT",
@@ -54,6 +54,8 @@ export interface FlowInput {
   readonly runEvents: readonly LiveEvent[];
   /** The mandate was paused (revoked) in this session. */
   readonly paused: boolean;
+  /** The settlement view corrected by the server's durable state (settlement-restore.ts); events alone otherwise. */
+  readonly settlement?: SettlementView;
 }
 
 export interface Flow {
@@ -102,7 +104,7 @@ export function deriveFlow(input: FlowInput): Flow {
 
   const events = input.runEvents;
   if (has(events, "PORTFOLIO_AUTHORIZED")) {
-    const settlement = deriveSettlement(events);
+    const settlement = input.settlement ?? deriveSettlement(events);
     // A click is not progress. Only a server stage that is actually underway moves the page.
     const underway = new Set(["PREFLIGHT", "READY", "SIGN_GATE", "SIMULATION", "SEND_REQUIRED", "SUBMITTED", "RECONCILING"]);
     const settling = underway.has(settlement.stage);

@@ -17,6 +17,7 @@ import { DraftingStage, PromptStage } from "./stage-compose";
 import { ApproveStage, ConfigureStage, draftAccess, mandateSummary, PermissionsBody, type WalletState } from "./stage-configure";
 import { AuthorizedStage, FailedStage, ReceiptStage, SettlingStage, VerifyStage, type SettlementOffer } from "./stage-outcome";
 import { executionRetry, settlementRefusal, type SettlementRefusal } from "./settlement-refusal";
+import { executeOffered, parseRestored, restoreSettlement } from "./settlement-restore";
 import { APPROVAL_CHAIN, injectedWallet, shortAddress } from "./wallet";
 import { Sheet } from "./workspace-ui";
 import "./live-workspace.css";
@@ -32,6 +33,14 @@ const REFRESH_ON = new Set([
   "POLICY_STRESS_COMPLETED",
   "MANDATE_AMENDMENT_REFUSED",
   "MANDATE_AMENDMENT_AUTHORIZED",
+  // The session read carries the server's durable settlement state: re-read it whenever settlement moves.
+  "GATE_EXECUTION_SIGNATURE_REQUIRED",
+  "DOMAIN_EXECUTION_INELIGIBLE",
+  "DOMAIN_EXECUTION_SETTLED",
+  "TESTNET_TX_SUBMITTED",
+  "SETTLEMENT_RECONCILED",
+  "RESERVATION_CONSUMED",
+  "RESERVATION_RELEASED",
 ]);
 const STAGE_KEY: Record<Phase, string> = {
   PROMPT: "prompt",
@@ -223,6 +232,9 @@ export function LiveLab(): ReactNode {
   const runStart = runFrom ?? resumedFrom;
   const runEvents = useMemo(() => eventsAfter(events, runStart), [events, runStart]);
   const presentation = useMemo(() => derivePresentation(runEvents, arr(lastRun.timing).map(rec)), [runEvents, lastRun.timing]);
+  // Whether an attempt is held is the server's durable state, read with the session; this page only shows it.
+  const restored = useMemo(() => parseRestored(view.settlement), [view.settlement]);
+  const settlement = useMemo(() => restoreSettlement(presentation.settlement, runEvents, restored), [presentation.settlement, runEvents, restored]);
   const stress = useMemo(() => derivePresentation(events).stress, [events]);
   const review = useMemo(() => deriveReview(runEvents), [runEvents]);
   const chat = useMemo(() => deriveRoomChat(runEvents), [runEvents]);
@@ -244,6 +256,7 @@ export function LiveLab(): ReactNode {
     lastError: typeof view.lastError === "string" ? view.lastError : null,
     runEvents,
     paused: view.paused === true,
+    settlement,
   });
   const phase = flow.phase;
   const pending = presentation.agents.some((agent) => agent.phase === "PENDING" || agent.phase === "RESPONDING");
@@ -454,11 +467,21 @@ export function LiveLab(): ReactNode {
     setSigning(true);
     setError("");
     await postSettle({ mode: "SEND", intent: "EXECUTE_ROBINHOOD_TESTNET" });
+    await refresh();
+    setSigning(false);
+  }
+
+  /** Reconciliation from chain evidence only: the server signs and sends nothing for it. */
+  async function reconcile(): Promise<void> {
+    setSigning(true);
+    setError("");
+    await postSettle({ mode: "RECONCILE" });
+    await refresh();
     setSigning(false);
   }
 
   async function signStock(): Promise<void> {
-    const gate = presentation.settlement.gateSign;
+    const gate = settlement.gateSign;
     const w = injectedWallet();
     const address = wallet.address;
     if (SERVER === null || sessionId === null || gate === null || w === null || address === null) {
@@ -484,6 +507,7 @@ export function LiveLab(): ReactNode {
       return;
     }
     await postSettle({ mode: gate.mode, gateSignature: signed.value });
+    await refresh();
     setSigning(false);
   }
 
@@ -622,11 +646,13 @@ export function LiveLab(): ReactNode {
     case "SETTLING":
       stage = (
         <SettlingStage
-          settlement={presentation.settlement}
+          settlement={settlement}
           sessionId={sessionId}
           signing={signing}
           walletReady={wallet.address !== null && wallet.chainId === APPROVAL_CHAIN.chainId}
           conflict={settleConflict}
+          restored={restored}
+          onReconcile={() => void reconcile()}
           onSignStock={() => void signStock()}
           onPrepareWallet={() => {
             if (wallet.address === null) void connectWallet();
@@ -639,14 +665,16 @@ export function LiveLab(): ReactNode {
       stage = (
         <ReceiptStage
           review={review}
-          settlement={presentation.settlement}
+          settlement={settlement}
           stockTrade={stockTrade}
           sessionId={sessionId}
           offer={settlementOffer}
           walletOk={wallet.address !== null && wallet.chainId === APPROVAL_CHAIN.chainId && (str(authorization.principal) === "—" || wallet.address === str(authorization.principal).toLowerCase()) && (authorization.method === "WALLET_PRINCIPAL_V2" || authorization.method === "WALLET_PRINCIPAL_V2_PLAN")}
           busy={task !== null || signing}
           conflict={settleConflict}
-          retry={executionRetry(settleConflict?.code ?? null, settleConflict?.held ?? false)}
+          retry={executionRetry(settleConflict?.code ?? null, settleConflict?.held ?? false) && executeOffered(restored, runEvents)}
+          restored={restored}
+          onReconcile={() => void reconcile()}
           onExecute={() => void execute()}
           onDetails={() => setSheet("review")}
           onRoom={roomSeen ? () => setSheet("room") : null}
@@ -741,7 +769,7 @@ export function LiveLab(): ReactNode {
         <PermissionsBody access={view.draft === null || view.draft === undefined ? null : access} guardrails={arr(validation.guardrails).map(rec)} catalog={rec(status?.catalog)} editable={phase === "CONFIGURE"} busy={task !== null} onField={field} />
       </Sheet>
       <Sheet open={sheet === "review"} onClose={() => setSheet(null)} title="Trade review" kicker="Summary · decisions · evidence" wide>
-        <ReviewBody review={review} agents={presentation.agents} settlement={presentation.settlement} mandate={activeRecord} sessionId={sessionId ?? "—"} provider={`${str(provider.name)} · ${str(provider.model)}`} eventCount={events.length} onEvents={() => setSheet("events")} />
+        <ReviewBody review={review} agents={presentation.agents} settlement={settlement} mandate={activeRecord} sessionId={sessionId ?? "—"} provider={`${str(provider.name)} · ${str(provider.model)}`} eventCount={events.length} onEvents={() => setSheet("events")} />
       </Sheet>
       <Sheet open={sheet === "agents"} onClose={() => setSheet(null)} title="Agent decisions" kicker="Model proposal · Mandate result">
         <AgentsStage agents={presentation.agents} enabled={access.enabled} now={now} reviewing={false} version={activeVersion} reduced={reduced} />

@@ -100,6 +100,8 @@ export function proofStatus(input: { readonly settled: boolean; readonly stage: 
       return "READY · NOT SENT";
     case "RECONCILING":
       return "CHECKING";
+    case "HELD":
+      return "HELD · NOT SENT";
     case "NEEDS_REVIEW":
       return "NEEDS REVIEW";
     case "RELEASED":
@@ -115,6 +117,8 @@ export function receiptHeading(input: { readonly settled: boolean; readonly txHa
   if (input.settled) return { title: "Settled", pill: "✓ Settled" };
   const submitted = input.txHash !== null && input.txHash !== "";
   if (submitted && (input.stage === "FAILED" || input.stage === "RELEASED")) return { title: "Settlement failed", pill: "✕ Not settled" };
+  if (input.stage === "HELD") return { title: "Execution held", pill: "! Held" };
+  if (input.stage === "RELEASED") return { title: "Not executed", pill: "✕ Not executed" };
   if (input.refused || input.stage === "FAILED" || input.stage === "PREFLIGHT_FAILED" || input.stage === "SIMULATION_FAILED") {
     return { title: "Not sent", pill: "✕ Not sent" };
   }

@@ -6,6 +6,7 @@ import type { Failure } from "./live-flow";
 import type { AuthorizedStockTrade } from "./allocation-model";
 import { ROLE_TITLES, reasonLabel, usd, type RoleName, type SettlementView, type TradeReview } from "./live-model";
 import { holdNote, proofStatus, receiptHeading, type SettlementRefusal } from "./settlement-refusal";
+import { heldCopy, reconcileOffered, type RestoredSettlement } from "./settlement-restore";
 import { shortAddress } from "./wallet";
 import { AgentGlyph, Pill } from "./workspace-ui";
 
@@ -34,6 +35,38 @@ function RefusalNotice({ conflict }: { readonly conflict: SettlementRefusal }): 
           {conflict.held ? <div><dt>Attempt</dt><dd>Held for reconciliation{conflict.heldUntil === null ? "" : ` until ${conflict.heldUntil} (unix seconds)`}</dd></div> : null}
         </dl>
       </details>
+    </div>
+  );
+}
+
+/** Asks the server to reconcile from chain evidence. It never signs or sends, and is offered only for a held attempt. */
+function ReconcileButton(props: { readonly restored: RestoredSettlement | null; readonly busy: boolean; readonly onReconcile: () => void }): ReactNode {
+  if (!reconcileOffered(props.restored)) return null;
+  return (
+    <>
+      <button type="button" className="mw-soft-button" disabled={props.busy} onClick={props.onReconcile}>Check settlement status</button>
+      <p className="mw-fine">Checking reads chain state only. It never signs or sends.</p>
+    </>
+  );
+}
+
+/** A signed attempt the server holds for reconciliation (durable state, never inferred here). Nothing was sent. */
+function HeldNotice(props: { readonly settlement: SettlementView; readonly restored: RestoredSettlement | null; readonly busy: boolean; readonly onReconcile: () => void }): ReactNode {
+  const { restored } = props;
+  const copy = heldCopy({ reason: props.settlement.detail, heldUntil: restored?.heldUntil ?? null }, (ms) => new Date(ms).toLocaleString());
+  return (
+    <div className="mw-notice" role="status">
+      <p><strong>{copy.title}</strong></p>
+      <p>{copy.line}</p>
+      <p>{copy.until}</p>
+      <dl className="mw-evidence mw-evidence--compact">
+        <div><dt>Transaction</dt><dd>None</dd></div>
+        <div><dt>Broadcasts</dt><dd>0</dd></div>
+        <div><dt>Attempt</dt><dd><code>{restored?.attemptState ?? "—"}{restored?.quarantine == null ? "" : ` · ${restored.quarantine}`}</code></dd></div>
+        <div><dt>Reservation</dt><dd><code>{restored?.reservationState ?? "—"}</code></dd></div>
+        {props.settlement.detail === "" ? null : <div><dt>Reason</dt><dd><code>{props.settlement.detail}</code></dd></div>}
+      </dl>
+      <ReconcileButton restored={restored} busy={props.busy} onReconcile={props.onReconcile} />
     </div>
   );
 }
@@ -141,6 +174,8 @@ export function SettlingStage(props: {
   readonly onSignStock: () => void;
   readonly onPrepareWallet: () => void;
   readonly conflict: SettlementRefusal | null;
+  readonly restored: RestoredSettlement | null;
+  readonly onReconcile: () => void;
 }): ReactNode {
   const { settlement } = props;
   return (
@@ -165,6 +200,7 @@ export function SettlingStage(props: {
       {settlement.stage === "SIMULATION" ? <p className="mw-notice">Simulation ends with a dry-run result or a refusal. Nothing is broadcast.</p> : null}
       {settlement.stage === "SUBMITTED" ? <p className="mw-notice">A transaction hash is not settlement. Waiting for a confirmed receipt and verified postconditions.</p> : null}
       {settlement.stage === "RECONCILING" ? <p className="mw-notice" aria-live="polite">Checking settlement status… The reservation stays held and nothing is resent.</p> : null}
+      {settlement.stage === "SUBMITTED" || settlement.stage === "RECONCILING" ? <ReconcileButton restored={props.restored} busy={props.signing} onReconcile={props.onReconcile} /> : null}
       {props.conflict === null ? null : <RefusalNotice conflict={props.conflict} />}
       <p className="mw-fine">{FIXTURE_QUALIFICATION}</p>
     </div>
@@ -182,7 +218,7 @@ function SessionLine({ sessionId }: { readonly sessionId: string | null }): Reac
 
 function canExecute(settlement: SettlementView): boolean {
   if (settlement.settled || settlement.consumed) return false;
-  if (settlement.stage === "SUBMITTED" || settlement.stage === "RECONCILING" || settlement.stage === "READY_FOR_SEND" || settlement.stage === "SIGN_GATE" || settlement.stage === "SIMULATION" || settlement.stage === "PREFLIGHT") return false;
+  if (settlement.stage === "HELD" || settlement.stage === "SUBMITTED" || settlement.stage === "RECONCILING" || settlement.stage === "READY_FOR_SEND" || settlement.stage === "SIGN_GATE" || settlement.stage === "SIMULATION" || settlement.stage === "PREFLIGHT") return false;
   return true;
 }
 
@@ -207,6 +243,7 @@ function settlementStatus(stage: SettlementView["stage"]): string {
 }
 
 function failureLine(detail: string): string {
+  if (detail === "SETTLEMENT_INTERRUPTED") return "Execution was interrupted. Nothing was sent.";
   if (detail.includes("SPINE_EXPIRED")) return "Authorization expired. Review and authorize a fresh mandate.";
   if (detail.includes("GATE_EXECUTION_AUTHORITY_REQUIRED")) return "Wallet authorization required. Nothing was sent.";
   if (detail.includes("NO_PENDING_SIGNATURE")) return "Choose Execute again. Nothing was sent.";
@@ -271,6 +308,8 @@ function SettlementProof(props: {
   readonly walletOk: boolean;
   readonly retry: boolean;
   readonly onExecute: () => void;
+  readonly restored: RestoredSettlement | null;
+  readonly onReconcile: () => void;
 }): ReactNode {
   const { settlement, stockTrade } = props;
   // No Stock reservation, no Stock trade: the model's choice alone is never a trade decision, and offers no settlement control.
@@ -329,8 +368,11 @@ function SettlementProof(props: {
             {settlement.stage === "PREFLIGHT_FAILED" ? <p className="mw-fine">{failed || "Nothing was sent."}</p> : null}
             {detail !== "" && settlement.stage !== "FAILED" && settlement.stage !== "PREFLIGHT_FAILED" ? <p className="mw-fine">{detail}</p> : null}
             {settlement.stage === "RECONCILING" ? <p className="mw-fine">Confirming… Nothing is resent.</p> : null}
+            {settlement.stage === "HELD" ? <HeldNotice settlement={settlement} restored={props.restored} busy={props.busy} onReconcile={props.onReconcile} /> : null}
             {settlement.stage === "NEEDS_REVIEW" ? <p className="mw-fine">Settlement needs review. No retry was sent.</p> : null}
-            {settlement.stage === "RELEASED" ? <p className="mw-fine">Transaction failed or never executed. The reservation was released only after the gate deadline passed with nothing recorded onchain.</p> : null}
+            {settlement.stage === "RELEASED" && settlement.txHash !== null ? <p className="mw-fine">Transaction failed or never executed. The reservation was released only after the gate deadline passed with nothing recorded onchain.</p> : null}
+            {settlement.stage === "RELEASED" && settlement.txHash === null ? <p className="mw-fine">Not executed. The signed authorization expired with nothing recorded onchain, so the reservation was released. It is never resent; a new execution needs a new run.</p> : null}
+            {settlement.stage === "SUBMITTED" || settlement.stage === "RECONCILING" || settlement.stage === "FAILED" || settlement.stage === "NEEDS_REVIEW" ? <ReconcileButton restored={props.restored} busy={props.busy} onReconcile={props.onReconcile} /> : null}
             {settlement.settled ? (
               <ul className="mw-rows">
                 <li>Mandate verified</li>
@@ -375,15 +417,17 @@ export function ReceiptStage(props: {
   readonly onRunAgain: () => void;
   readonly onAdjust: () => void;
   readonly busy: boolean;
+  readonly restored: RestoredSettlement | null;
+  readonly onReconcile: () => void;
 }): ReactNode {
   const { review, settlement } = props;
   const heading = receiptHeading({ settled: settlement.settled, txHash: settlement.txHash, stage: settlement.stage, refused: props.conflict !== null });
   return (
     <div className="mw-receipt">
       <header className="mw-stage-head">
-        <Pill tone={heading.title === "Settlement failed" || heading.title === "Settlement needs review" || heading.title === "Not sent" ? "bad" : heading.title === "Confirming" ? "warn" : "good"}>{heading.pill}</Pill>
+        <Pill tone={heading.title === "Settlement failed" || heading.title === "Settlement needs review" || heading.title === "Not sent" || heading.title === "Not executed" ? "bad" : heading.title === "Confirming" || heading.title === "Execution held" ? "warn" : "good"}>{heading.pill}</Pill>
         <h2>{heading.title}</h2>
-        <p>{heading.title === "Not sent" ? "Mandate authorized the Stock action, but settlement was not started. Nothing was broadcast." : <>{review.authorizedCount} of {review.evaluated} agents authorized{review.reserved === null ? "" : ` · ${usd(review.reserved)} reserved`}.{settlement.settled ? "" : " Reserved is not settled."}</>}</p>
+        <p>{heading.title === "Not sent" ? "Mandate authorized the Stock action, but settlement was not started. Nothing was broadcast." : heading.title === "Execution held" ? "Mandate authorized the Stock action. Its signed execution is held for reconciliation. Nothing was broadcast." : <>{review.authorizedCount} of {review.evaluated} agents authorized{review.reserved === null ? "" : ` · ${usd(review.reserved)} reserved`}.{settlement.settled ? "" : " Reserved is not settled."}</>}</p>
       </header>
 
       <div className="mw-receipt__grid">
@@ -411,8 +455,8 @@ export function ReceiptStage(props: {
         )}
       </div>
 
-      {props.conflict === null ? null : <RefusalNotice conflict={props.conflict} />}
-      <SettlementProof settlement={settlement} stockTrade={props.stockTrade} sessionId={props.sessionId} offer={props.offer} busy={props.busy} walletOk={props.walletOk} retry={props.retry} onExecute={props.onExecute} />
+      {props.conflict === null || settlement.stage === "HELD" ? null : <RefusalNotice conflict={props.conflict} />}
+      <SettlementProof settlement={settlement} stockTrade={props.stockTrade} sessionId={props.sessionId} offer={props.offer} busy={props.busy} walletOk={props.walletOk} retry={props.retry} onExecute={props.onExecute} restored={props.restored} onReconcile={props.onReconcile} />
 
       <footer className="mw-stage-foot mw-stage-foot--receipt">
         <button type="button" className="mw-cta" onClick={props.onDetails}>Review details</button>

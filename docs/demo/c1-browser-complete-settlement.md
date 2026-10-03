@@ -111,6 +111,26 @@ Existing events, shown in product language:
 | `DOMAIN_EXECUTION_SETTLED` with `LIVE_TESTNET` | Settled |
 | ineligible / simulation failed | Nothing was sent |
 
+After a reload or restart the page corrects that event view with the
+server's restored `settlement` (§9; `apps/web/components/demo/live/settlement-restore.ts`).
+The page maps it and decides nothing. An open settle call (`pending`), or
+a settlement event newer than `asOfEvents`, leaves the event view as it is.
+
+| `settlementStatus` | Page |
+| --- | --- |
+| `HELD` | **Execution held**. Nothing was sent; transaction none, broadcasts 0; when the hold ends. Check settlement status. No Execute. |
+| `SUBMITTED` | Confirming, with the journal's hash. Check settlement status. No Execute. |
+| `SETTLED` | Settled receipt from the events; reservation consumed. No Execute. |
+| `RELEASED` | **Not executed**. The reservation was released; nothing is resent. No Execute. |
+| `REVERTED` / `NEEDS_REVIEW` | The failed receipt / Settlement needs review. No Execute. |
+| `NO_ATTEMPT`, `PREPARED`, `PREPARATION_FAILED` | A stage that was underway becomes "interrupted, nothing was sent". Execute follows `executable`. |
+
+Execute is offered only when the session read carries a current
+`settlement` with `executable: true`. No `settlement` (an older server,
+`agents:serve`, a malformed object) means no Execute. Check settlement
+status posts `RECONCILE` and re-reads the session. It never signs. Nothing
+retries on its own.
+
 ## 9. Persistence
 
 The session event log, the settlement journal, and the portfolio ledger are
@@ -150,6 +170,13 @@ signature. It is refused while a settle call is open.
 An attempt past `PREPARED` is reconciliation only. `CONSUMED` stays
 `CONSUMED`. The page does not ask for typed data and does not show Execute.
 Nothing is resent.
+
+Execute cannot come back for a held attempt after a reload or a restart.
+The journal still holds the attempt, so the session read reports it held
+and `executable: false`. A stale Execute that still reaches the server
+only reconciles (`RECONCILED_ONLY`). Once the hold ends, reconciliation
+closes the reservation. The old signature is never reused, and that
+reservation is never executable again.
 
 ## 11. Trust boundary
 
@@ -192,7 +219,9 @@ says which (`held`, `attemptState`, `heldUntil` on the 409):
   mandate exists, so the attempt is held for reconciliation until that
   artifact's deadline (about 16 minutes), then released with no execution.
   It is never resent. Execute is hidden and the page says when the hold
-  ends. This is the existing fail-closed rule, not new to C1.4.
+  ends. This is the existing fail-closed rule, not new to C1.4. Since
+  C1.5 the hold is read back from the journal after a reload or a restart
+  (§8, §9), so Execute stays hidden there too.
 
 ## 14. Candidate and fixture
 
@@ -248,6 +277,18 @@ that is a separate, explicit choice. A stub session cannot send
     testnet proof, not a second trade.
 11. Refresh. Restart `agents:lab`. Open the same session. The receipt is
     the same. Execute is gone. Nothing is resent.
+
+If step 8 is refused with "chain state could not be verified" after the
+wallet signed (C1.5):
+
+1. The page shows **Execution held**. It shows transaction none and
+   broadcasts 0, and says when the hold ends. Execute is not shown.
+2. Refresh. Then restart `agents:lab` and open the same session. Both
+   still show **Execution held**, with no Execute and no new signature
+   prompt.
+3. After the hold time, choose **Check settlement status**. The page
+   shows **Not executed**: the reservation was released and nothing was
+   sent. Execute is not shown for it. A new execution needs a new run.
 
 Wallet signatures on this path: two. The portfolio mandate, then one gate
 signature. The CLI `--send` command is different: it dry-runs first and

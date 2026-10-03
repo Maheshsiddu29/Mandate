@@ -259,8 +259,10 @@ export interface SettlementView {
    * B.5.3 adds: READY_FOR_SEND (the session-bound dry run passed; B.5.3 never broadcasts), RECONCILING (an
    * execution's outcome is still being established: "checking settlement status"), NEEDS_REVIEW (quarantined
    * after reconciliation: no retry was sent) and RELEASED (definitively not executed; the reservation released).
+   * C1.5 adds HELD, which no event produces: only the server's durable settlement state sets it
+   * (settlement-restore.ts) — a signed attempt with nothing sent, held for reconciliation.
    */
-  readonly stage: "NONE" | "PREFLIGHT" | "PREFLIGHT_FAILED" | "READY" | "SIGN_GATE" | "SIMULATION" | "SIMULATION_FAILED" | "SEND_REQUIRED" | "READY_FOR_SEND" | "SPINE_READY" | "SUBMITTED" | "RECONCILING" | "FAILED" | "NEEDS_REVIEW" | "RELEASED" | "SETTLED";
+  readonly stage: "NONE" | "PREFLIGHT" | "PREFLIGHT_FAILED" | "READY" | "SIGN_GATE" | "SIMULATION" | "SIMULATION_FAILED" | "SEND_REQUIRED" | "READY_FOR_SEND" | "SPINE_READY" | "SUBMITTED" | "RECONCILING" | "HELD" | "FAILED" | "NEEDS_REVIEW" | "RELEASED" | "SETTLED";
   readonly settled: boolean;
   readonly evidence: string | null;
   readonly network: string;
@@ -855,7 +857,7 @@ export function deriveSettlement(events: readonly LiveEvent[]): SettlementView {
 }
 
 /** Stages after which nothing further happens without a new action: the flow may show the receipt. */
-export const SETTLEMENT_TERMINAL = ["SETTLED", "FAILED", "PREFLIGHT_FAILED", "SIMULATION_FAILED", "READY_FOR_SEND", "SPINE_READY", "NEEDS_REVIEW", "RELEASED"] as const;
+export const SETTLEMENT_TERMINAL = ["SETTLED", "FAILED", "PREFLIGHT_FAILED", "SIMULATION_FAILED", "READY_FOR_SEND", "SPINE_READY", "HELD", "NEEDS_REVIEW", "RELEASED"] as const;
 
 export function settlementTerminal(s: SettlementView): boolean {
   return (SETTLEMENT_TERMINAL as readonly string[]).includes(s.stage);
