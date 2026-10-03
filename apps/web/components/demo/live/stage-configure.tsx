@@ -272,17 +272,41 @@ export function ApproveStage(props: {
         <h2>Review your mandate</h2>
         <p>Approve once. Agents then work inside these limits without asking again. The Room can never add to them.</p>
       </header>
-      <dl className="mw-summary">
-        <div><dt>Capital</dt><dd>{usd(props.access.text("portfolio.totalCapital"))}</dd></div>
-        <div><dt>Derivative exposure</dt><dd>≤ {usd(props.access.text("portfolio.maxDerivative"))}</dd></div>
-        <div className="mw-summary__wide"><dt>Agents</dt><dd>{enabled.length === 0 ? "None" : enabled.map((role) => ROLE_TITLES[role]).join(" · ")}</dd></div>
-        {props.budgets === undefined || props.budgets.every((b) => b.amount === null) ? null : (
-          <div className="mw-summary__wide"><dt>Allocation</dt><dd>{props.budgets.map((b) => `${ROLE_TITLES[b.role].replace(" Agent", "")} ${b.amount === null ? "—" : usd(b.amount)}`).join(" · ")}</dd></div>
-        )}
-        {props.autoReallocate === undefined ? null : <div className="mw-summary__wide"><dt>Reallocation</dt><dd>{props.autoReallocate ? "Allowed inside each signed maximum" : "Not allowed: unused capital stays in your wallet"}</dd></div>}
-        <div><dt>Markets</dt><dd>{venues === null ? "Not set" : `${venues.length} approved venues only`}</dd></div>
-        <div><dt>Valid for</dt><dd>{props.access.text("portfolio.validityMinutes") === "" ? "Not set" : `${props.access.text("portfolio.validityMinutes")} minutes`}</dd></div>
-      </dl>
+      <section className="mw-authority-review" aria-label="Authority that will be signed">
+        <h3 className="mw-authority-review__title">Portfolio authority</h3>
+        <p className="mw-authority-review__capital">{usd(props.access.text("portfolio.totalCapital"))}</p>
+        <ul className="mw-authority-review__agents">
+          {ROLES.map((role) => {
+            const on = props.access.enabled(role);
+            const max = props.access.text(`agents.${role}.maxAllocation`) || props.access.text(`agents.${role}.budget`);
+            const budget = props.budgets?.find((b) => b.role === role)?.amount ?? null;
+            const source = props.access.source(`agents.${role}.maxAllocation`) ?? props.access.source(`agents.${role}.budget`) ?? props.access.source(`agents.${role}.enabled`);
+            return (
+              <li key={role} data-enabled={on === true ? "on" : on === false ? "off" : "unset"}>
+                <strong>{ROLE_TITLES[role].replace(" Agent", "")}</strong>
+                <span>{on === true ? "Enabled" : on === false ? "Disabled" : "Not set"}</span>
+                <span>{on === true ? (max === "" ? "Dynamic / ceiling unset" : `Maximum ${usd(max)}`) : "—"}</span>
+                {on === true && budget !== null && budget !== "" ? <span>Budget {usd(budget)}</span> : null}
+                {source === null ? null : <span className="mw-provenance" title="Where this value came from">{SOURCE_LABEL[source] ?? source}</span>}
+              </li>
+            );
+          })}
+        </ul>
+        <details className="mw-disclosure">
+          <summary>Advanced limits</summary>
+          <dl className="mw-summary">
+            <div><dt>Derivative exposure</dt><dd>{props.access.text("portfolio.maxDerivative") === "" ? "Not set" : `≤ ${usd(props.access.text("portfolio.maxDerivative"))}`}</dd></div>
+            <div><dt>Illiquid exposure</dt><dd>{props.access.text("portfolio.maxIlliquid") === "" ? "Not set" : `≤ ${usd(props.access.text("portfolio.maxIlliquid"))}`}</dd></div>
+            <div><dt>Unused capital</dt><dd>{props.access.text("portfolio.minUnallocated") === "" ? "Allowed (no minimum reserve)" : `Keep at least ${usd(props.access.text("portfolio.minUnallocated"))}`}</dd></div>
+            <div><dt>Auto reallocation</dt><dd>{props.autoReallocate === true ? "On — unused capital may move inside signed maxima" : "Off"}</dd></div>
+            <div><dt>Leverage</dt><dd>{props.access.text("market.maxLeverage") === "" ? "Not set" : `${props.access.text("market.maxLeverage")}×`}</dd></div>
+            <div><dt>Slippage</dt><dd>{props.access.text("market.maxSlippageBps") === "" ? "Not set" : `${props.access.text("market.maxSlippageBps")} bps`}</dd></div>
+            <div><dt>Quote freshness</dt><dd>{props.access.text("market.maxQuoteAgeSeconds") === "" ? "Not set" : `${props.access.text("market.maxQuoteAgeSeconds")} s`}</dd></div>
+            <div><dt>Venues</dt><dd>{venues === null ? "Not set" : `${venues.length} approved venues only`}</dd></div>
+            <div><dt>Valid for</dt><dd>{props.access.text("portfolio.validityMinutes") === "" ? "Not set" : `${props.access.text("portfolio.validityMinutes")} minutes`}</dd></div>
+          </dl>
+        </details>
+      </section>
 
       <section className="mw-signer" aria-label="How this mandate is signed" role="radiogroup">
         <button type="button" role="radio" aria-checked={method === "wallet"} className="mw-signer__option" data-selected={method === "wallet" ? "" : undefined} data-disabled={wallet.available ? undefined : ""} disabled={!wallet.available || props.authorizing} onClick={() => setMethod("wallet")}>
@@ -366,7 +390,15 @@ const SECTIONS: readonly { readonly title: string; readonly levels: readonly str
   ]) },
 ];
 
-const SOURCE_LABEL: Readonly<Record<string, string>> = { INTERPRETED: "From your prompt", PRESET: "Default", USER: "Edited" };
+const SOURCE_LABEL: Readonly<Record<string, string>> = {
+  INTERPRETED: "From your prompt",
+  EXPLICIT_PROMPT: "From your prompt",
+  MODEL_EXTRACTED: "Suggested",
+  DETERMINISTIC_DERIVED: "Derived from your prompt",
+  PRESET: "Default",
+  USER: "Edited",
+  PLANNED: "From Planning Room",
+};
 
 function Guardrails({ rows }: { readonly rows: readonly JsonRecord[] }): ReactNode {
   if (rows.length === 0) return null;
