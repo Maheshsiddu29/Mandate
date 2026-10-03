@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, arr, liveServerUrl, rec, str, streamEvents, type Json, type JsonRecord, type LiveEvent } from "./live-client";
-import { deriveFlow, eventsAfter, type Phase } from "./live-flow";
+import { deriveFlow, eventsAfter, progressStep, type Phase } from "./live-flow";
 import { awaitingReplies, derivePresentation, deriveReview, deriveRoomChat, proposedPortfolio, ROLES } from "./live-model";
 import { RoomChat } from "./room-chat";
 import { allocationState, authorizedStockTrade, planningCards, planView, serverCompatible, STALE_SERVER } from "./allocation-model";
@@ -146,7 +146,7 @@ export function LiveLab(): ReactNode {
           return;
         }
         if (str(settlement.body.spine) !== "V2") {
-          setSettlementOffer({ kind: "unavailable", message: "This server is not the V2 settlement spine. Nothing will be sent." });
+          setSettlementOffer({ kind: "unavailable", message: "This local settlement server cannot settle from the browser. Nothing will be sent." });
           return;
         }
         setSettlementOffer({ kind: "ready" });
@@ -516,12 +516,6 @@ export function LiveLab(): ReactNode {
     setSigning(false);
   }
 
-  const runAgain = async (): Promise<void> => {
-    setSheet(null);
-    const body = await call("GET", "");
-    await startRun(body ?? view);
-  };
-
   if (SERVER === null) {
     return (
       <main className="mw" id="main-content">
@@ -700,16 +694,24 @@ export function LiveLab(): ReactNode {
           onReconcile={() => void reconcile()}
           onExecute={() => void execute()}
           onDetails={() => setSheet("review")}
-          onRoom={roomSeen ? () => setSheet("room") : null}
-          onStress={() => setSheet("stress")}
-          onRunAgain={() => void runAgain()}
-          onAdjust={() => void adjust()}
+          onStartNew={() => {
+            rememberSession(null);
+            window.location.assign(window.location.pathname);
+          }}
         />
       );
       break;
     case "FAILED":
       stage = (
-        <FailedStage failure={flow.failure ?? "RUN_ERROR"} busy={task !== null} onRunAgain={() => void runAgain()} onAdjust={() => void adjust()} onRoom={roomSeen ? () => setSheet("room") : null}>
+        <FailedStage
+          failure={flow.failure ?? "RUN_ERROR"}
+          busy={task !== null}
+          onStartNew={() => {
+            rememberSession(null);
+            window.location.assign(window.location.pathname);
+          }}
+          onAdjust={() => void adjust()}
+        >
           <AgentSummaryList agents={presentation.agents} enabled={access.enabled} />
         </FailedStage>
       );
@@ -730,6 +732,13 @@ export function LiveLab(): ReactNode {
         <div className="mw-bar__left">
           <span className="mw-bar__title">Live demo</span>
           <span className="mw-bar__status" data-phase={phase} aria-live="polite">{stageStatus}</span>
+          <ol className="mw-progress" aria-label="Demo progress">
+            {(["Define", "Review", "Authorize", "Live", "Receipt"] as const).map((step) => (
+              <li key={step} data-current={progressStep(phase) === step ? "" : undefined}>
+                {step}
+              </li>
+            ))}
+          </ol>
         </div>
         <div className="mw-bar__right">
           <details className="mw-menu" onKeyDown={(event) => { if (event.key === "Escape") closeMenu(event.currentTarget); }}>
@@ -764,9 +773,21 @@ export function LiveLab(): ReactNode {
 
       {showTrail ? (
         <nav className="mw-trail" aria-label="Completed steps">
-          <button type="button" onClick={() => setSheet("permissions")}><span className="mw-trail__k">Mandate V{activeVersion}</span>{mandateSummary(access, activeVersion !== null && !amending)}{authorizedBy === null ? "" : ` · ${authorizedBy}`}</button>
-          <button type="button" onClick={() => setSheet("agents")}><span className="mw-trail__k">Agents</span>{blockedCount} blocked · {allowedCount} allowed</button>
-          {roomSeen && phase !== "ROOM" ? <button type="button" onClick={() => setSheet("room")}><span className="mw-trail__k">Room</span>{presentation.room.noFeasible ? "unresolved" : presentation.room.proposal ? "resolved" : "negotiating"}</button> : null}
+          <button type="button" onClick={() => setSheet("permissions")}>
+            <span className="mw-trail__k">Authority</span>
+            {mandateSummary(access, activeVersion !== null && !amending)}
+            {authorizedBy === null ? "" : ` · ${authorizedBy}`}
+          </button>
+          <button type="button" onClick={() => setSheet("agents")}>
+            <span className="mw-trail__k">Agents</span>
+            {blockedCount} blocked · {allowedCount} allowed
+          </button>
+          {roomSeen && phase !== "ROOM" ? (
+            <button type="button" onClick={() => setSheet("room")}>
+              <span className="mw-trail__k">Coordination</span>
+              {presentation.room.noFeasible ? "unresolved" : presentation.room.proposal ? "resolved" : "negotiating"}
+            </button>
+          ) : null}
         </nav>
       ) : null}
 
@@ -788,7 +809,7 @@ export function LiveLab(): ReactNode {
 
       <p className="mw-thesis">Agents propose. Agents negotiate. Mandate authorizes. Markets settle.</p>
 
-      <Sheet open={sheet === "permissions"} onClose={() => setSheet(null)} title="Advanced permissions" kicker={activeVersion !== null && !amending && !reviewing && phase !== "CONFIGURE" ? `Mandate V${activeVersion} · signed` : "Draft"}>
+      <Sheet open={sheet === "permissions"} onClose={() => setSheet(null)} title="Edit permissions" kicker={activeVersion !== null && !amending && !reviewing && phase !== "CONFIGURE" ? "Signed mandate" : "Draft"}>
         <PermissionsBody access={view.draft === null || view.draft === undefined ? null : access} guardrails={arr(validation.guardrails).map(rec)} catalog={rec(status?.catalog)} editable={phase === "CONFIGURE"} busy={task !== null} onField={field} />
       </Sheet>
       <Sheet open={sheet === "review"} onClose={() => setSheet(null)} title="Trade review" kicker="Summary · decisions · evidence" wide>
