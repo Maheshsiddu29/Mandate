@@ -171,7 +171,7 @@ test('the review step signs with a real wallet, or with the labelled demo key â€
   assert.match(lab, /gate\.mode !== "SEND"/);
   assert.doesNotMatch(lab, /sendAuthorization|tokenIn:|calldata/);
   assert.match(lab, /npm run agents:lab/);
-  assert.match(outcome, /Sign stock authorization/);
+  assert.match(outcome, /Sign execution/);
   assert.match(outcome, /Sign execution authorization/);
   assert.match(outcome, /Nothing is broadcast\./);
   assert.match(outcome, /Execute on Robinhood Testnet/);

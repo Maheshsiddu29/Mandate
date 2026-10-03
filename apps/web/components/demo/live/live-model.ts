@@ -801,7 +801,7 @@ export function deriveSettlement(events: readonly LiveEvent[]): SettlementView {
       });
     }
     if (event.kind === "DOMAIN_EXECUTION_INELIGIBLE" && !view.settled) touch({ stage: "FAILED", settled: false, detail: str(data.reason), gateSign: null });
-    if (event.kind === "TESTNET_SEND_AUTHORIZATION_REFUSED" && !view.settled) view = { ...view, present: true, detail: "The operator phrase was refused. Nothing was sent." };
+    if (event.kind === "TESTNET_SEND_AUTHORIZATION_REFUSED" && !view.settled) touch({ stage: "FAILED", settled: false, detail: str(data.reason) === "—" ? "SEND_NOT_AUTHORIZED" : str(data.reason) });
     if (event.kind === "TESTNET_SIMULATION_STARTED") touch({ stage: "SIMULATION", settled: false });
     if (event.kind === "TESTNET_SIMULATION_PASSED") touch({ stage: "SIMULATION", settled: false, detail: data.gasEstimate === undefined ? view.detail : `Gas estimate ${str(data.gasEstimate)}` });
     if (event.kind === "TESTNET_SIMULATION_FAILED") touch({ stage: "SIMULATION_FAILED", settled: false, detail: str(data.reason) });

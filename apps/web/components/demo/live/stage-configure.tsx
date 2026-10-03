@@ -15,6 +15,18 @@ export interface DraftAccess {
   readonly source: (path: string) => string | null;
 }
 
+/** The signed or draft capital, labelled so a portfolio total is not read as one agent's ceiling. */
+export function mandateSummary(access: DraftAccess, signed: boolean): string {
+  const total = access.text("portfolio.totalCapital");
+  const enabled = ROLES.filter((role) => access.enabled(role) === true);
+  const head = `${total === "" ? "—" : usd(total)} ${signed ? "authorized" : "draft"} · ${enabled.length} ${enabled.length === 1 ? "agent" : "agents"}`;
+  const distinct = enabled
+    .map((role) => ({ role, amount: access.text(`agents.${role}.maxAllocation`) || access.text(`agents.${role}.budget`) }))
+    .filter((item) => item.amount !== "" && item.amount !== total);
+  if (distinct.length === 0) return head;
+  return `${head} · ${distinct.map((item) => `${ROLE_TITLES[item.role]} ${usd(item.amount)} allocated`).join(", ")}`;
+}
+
 export function draftAccess(draft: JsonRecord): DraftAccess {
   const at = (path: string): Json | undefined => {
     const [section, first, second] = path.split(".");

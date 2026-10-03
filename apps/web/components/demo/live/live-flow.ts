@@ -9,7 +9,7 @@
  */
 
 import type { LiveEvent } from "./live-client.ts";
-import { deriveAgents, deriveSettlement, settlementTerminal, type AgentCard } from "./live-model.ts";
+import { deriveAgents, deriveSettlement, type AgentCard } from "./live-model.ts";
 
 export const PHASES = [
   "PROMPT",
@@ -103,7 +103,9 @@ export function deriveFlow(input: FlowInput): Flow {
   const events = input.runEvents;
   if (has(events, "PORTFOLIO_AUTHORIZED")) {
     const settlement = deriveSettlement(events);
-    const settling = settlement.present && !settlementTerminal(settlement);
+    // A click is not progress. Only a server stage that is actually underway moves the page.
+    const underway = new Set(["PREFLIGHT", "READY", "SIGN_GATE", "SIMULATION", "SEND_REQUIRED", "SUBMITTED", "RECONCILING"]);
+    const settling = underway.has(settlement.stage);
     if (settling) return flow("SETTLING");
     if (!settlement.present && input.task === "RUN") return flow("AUTHORIZED");
     return flow("COMPLETE");

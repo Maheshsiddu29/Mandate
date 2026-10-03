@@ -7,15 +7,15 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, arr, liveServerUrl, rec, str, streamEvents, type Json, type JsonRecord, type LiveEvent } from "./live-client";
 import { deriveFlow, eventsAfter, type Phase } from "./live-flow";
-import { awaitingReplies, derivePresentation, deriveReview, deriveRoomChat, proposedPortfolio, ROLES, usd } from "./live-model";
+import { awaitingReplies, derivePresentation, deriveReview, deriveRoomChat, proposedPortfolio, ROLES } from "./live-model";
 import { RoomChat } from "./room-chat";
 import { allocationState, authorizedStockTrade, budgetRows, planningCards, planView, serverCompatible, STALE_SERVER } from "./allocation-model";
 import { AgentSelection, AllocationPanel, PlanningStage } from "./stage-planning";
 import { EventLogBody, PauseBody, ReviewBody, StressBody } from "./sheets";
 import { AgentsStage, AgentSummaryList } from "./stage-agents";
 import { DraftingStage, PromptStage } from "./stage-compose";
-import { ApproveStage, ConfigureStage, draftAccess, PermissionsBody, type WalletState } from "./stage-configure";
-import { AuthorizedStage, FailedStage, ReceiptStage, SettlingStage, VerifyStage, type SettlementOffer } from "./stage-outcome";
+import { ApproveStage, ConfigureStage, draftAccess, mandateSummary, PermissionsBody, type WalletState } from "./stage-configure";
+import { AuthorizedStage, FailedStage, ReceiptStage, SettlingStage, VerifyStage, settlementRefusal, type SettlementOffer } from "./stage-outcome";
 import { APPROVAL_CHAIN, injectedWallet, shortAddress } from "./wallet";
 import { Sheet } from "./workspace-ui";
 import "./live-workspace.css";
@@ -104,6 +104,7 @@ export function LiveLab(): ReactNode {
   const [amending, setAmending] = useState(false);
   const [runFrom, setRunFrom] = useState<number | null>(null);
   const [error, setError] = useState("");
+  const [settleConflict, setSettleConflict] = useState<{ readonly code: string; readonly message: string } | null>(null);
   const [notice, setNotice] = useState("");
   const [sheet, setSheet] = useState<SheetName>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -426,9 +427,13 @@ export function LiveLab(): ReactNode {
     if (SERVER === null || sessionId === null) return null;
     const result = await api(SERVER, "POST", `/sessions/${sessionId}/settle`, body);
     if (!result.ok) {
-      setError(message(result.body));
+      const code = str(result.body.error);
+      const text = message(result.body);
+      setSettleConflict({ code: code === "—" ? "" : code, message: text });
+      setError(text);
       return null;
     }
+    setSettleConflict(null);
     setError("");
     return result.body;
   }
@@ -609,6 +614,7 @@ export function LiveLab(): ReactNode {
           sessionId={sessionId}
           signing={signing}
           walletReady={wallet.address !== null && wallet.chainId === APPROVAL_CHAIN.chainId}
+          conflict={settleConflict === null ? null : settlementRefusal(settleConflict.code, settleConflict.message)}
           onSignStock={() => void signStock()}
           onPrepareWallet={() => {
             if (wallet.address === null) void connectWallet();
@@ -627,6 +633,7 @@ export function LiveLab(): ReactNode {
           offer={settlementOffer}
           walletOk={wallet.address !== null && wallet.chainId === APPROVAL_CHAIN.chainId && (str(authorization.principal) === "—" || wallet.address === str(authorization.principal).toLowerCase()) && (authorization.method === "WALLET_PRINCIPAL_V2" || authorization.method === "WALLET_PRINCIPAL_V2_PLAN")}
           busy={task !== null || signing}
+          conflict={settleConflict === null ? null : settlementRefusal(settleConflict.code, settleConflict.message)}
           onExecute={() => void execute()}
           onDetails={() => setSheet("review")}
           onRoom={roomSeen ? () => setSheet("room") : null}
@@ -693,7 +700,7 @@ export function LiveLab(): ReactNode {
 
       {showTrail ? (
         <nav className="mw-trail" aria-label="Completed steps">
-          <button type="button" onClick={() => setSheet("permissions")}><span className="mw-trail__k">Mandate V{activeVersion}</span>{usd(access.text("portfolio.totalCapital"))} · {ROLES.filter((role) => access.enabled(role) === true).length} agents{authorizedBy === null ? "" : ` · ${authorizedBy}`}</button>
+          <button type="button" onClick={() => setSheet("permissions")}><span className="mw-trail__k">Mandate V{activeVersion}</span>{mandateSummary(access, activeVersion !== null && !amending)}{authorizedBy === null ? "" : ` · ${authorizedBy}`}</button>
           <button type="button" onClick={() => setSheet("agents")}><span className="mw-trail__k">Agents</span>{blockedCount} blocked · {allowedCount} allowed</button>
           {roomSeen && phase !== "ROOM" ? <button type="button" onClick={() => setSheet("room")}><span className="mw-trail__k">Room</span>{presentation.room.noFeasible ? "unresolved" : presentation.room.proposal ? "resolved" : "negotiating"}</button> : null}
         </nav>

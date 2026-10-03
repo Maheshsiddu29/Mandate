@@ -10,6 +10,24 @@ import { AgentGlyph, Pill } from "./workspace-ui";
 
 export const FIXTURE_QUALIFICATION = "Valueless demo assets. Not an NVDA trade. Not a Robinhood Stock Token.";
 
+const SETTLEMENT_REFUSAL: Readonly<Record<string, string>> = {
+  SEND_NOT_AUTHORIZED: "Execution was not accepted. Nothing was sent.",
+  SETTLEMENT_IN_PROGRESS: "Execution is already in progress.",
+  BUSY: "A run is still in progress. Nothing was sent.",
+  NO_PENDING_SIGNATURE: "Choose Execute again. Nothing was sent.",
+  SPINE_EXPIRED: "Authorization expired. Review and authorize a fresh mandate.",
+  NO_STOCK_RESERVATION: "There is no Stock reservation to execute. Nothing was sent.",
+  LIVE_MODEL_REQUIRED_FOR_TESTNET_SEND: "A live model session is required before a testnet send. Nothing was sent.",
+  SPINE_METHOD_REQUIRED: "Connect the wallet that authorized this mandate. Nothing was sent.",
+};
+
+/** A refused settle call, in product language, with the server's code kept for details. */
+export function settlementRefusal(code: string, serverMessage: string): { readonly summary: string; readonly detail: string } {
+  const known = SETTLEMENT_REFUSAL[code];
+  const summary = known ?? (serverMessage === "" ? "Execution was refused. Nothing was sent." : serverMessage);
+  return { summary, detail: code === "" ? serverMessage : `${code}: ${serverMessage}` };
+}
+
 /** What `GET /api/live/settlement` told the page. This milestone does not keep the operator phrase. */
 export type SettlementOffer =
   | { readonly kind: "loading" }
@@ -65,15 +83,14 @@ export function AuthorizedStage({ review }: { readonly review: TradeReview }): R
 }
 
 const STEPS = [
-  { label: "Preparing transaction", from: ["PREFLIGHT", "READY"], failed: "PREFLIGHT_FAILED" },
-  { label: "Sign stock authorization", from: ["SIGN_GATE"], failed: null },
-  { label: "Simulating", from: ["SIMULATION"], failed: "SIMULATION_FAILED" },
-  { label: "Ready · not sent", from: ["SPINE_READY"], failed: null },
-  { label: "Awaiting operator send authorization", from: ["SEND_REQUIRED", "READY_FOR_SEND"], failed: null },
+  { label: "Checking authorization", from: ["PREFLIGHT", "READY"], failed: "PREFLIGHT_FAILED" },
+  { label: "Sign execution", from: ["SIGN_GATE"], failed: null },
+  { label: "Simulating", from: ["SIMULATION", "SPINE_READY"], failed: "SIMULATION_FAILED" },
+  { label: "Submitting", from: ["SEND_REQUIRED", "READY_FOR_SEND"], failed: null },
   { label: "Submitted", from: ["SUBMITTED", "RECONCILING"], failed: "FAILED" },
   { label: "Confirmed", from: ["SETTLED"], failed: null },
 ] as const;
-const ORDER: Readonly<Record<string, number>> = { NONE: -1, PREFLIGHT: 0, READY: 0, PREFLIGHT_FAILED: 0, SIGN_GATE: 1, SIMULATION: 2, SIMULATION_FAILED: 2, SPINE_READY: 3, SEND_REQUIRED: 4, READY_FOR_SEND: 4, SUBMITTED: 5, RECONCILING: 5, FAILED: 5, NEEDS_REVIEW: 5, RELEASED: 5, SETTLED: 6 };
+const ORDER: Readonly<Record<string, number>> = { NONE: -1, PREFLIGHT: 0, READY: 0, PREFLIGHT_FAILED: 0, SIGN_GATE: 1, SIMULATION: 2, SIMULATION_FAILED: 2, SPINE_READY: 2, SEND_REQUIRED: 3, READY_FOR_SEND: 3, SUBMITTED: 4, RECONCILING: 4, FAILED: 4, NEEDS_REVIEW: 4, RELEASED: 4, SETTLED: 5 };
 
 /** The proof's one-word state: never CONFIRMED without LIVE_TESTNET, never FAILED for an outcome still being checked. */
 function proofLabel(s: SettlementView): string {
@@ -132,6 +149,7 @@ export function SettlingStage(props: {
   readonly walletReady: boolean;
   readonly onSignStock: () => void;
   readonly onPrepareWallet: () => void;
+  readonly conflict: { readonly summary: string; readonly detail: string } | null;
 }): ReactNode {
   const { settlement } = props;
   return (
@@ -156,6 +174,12 @@ export function SettlingStage(props: {
       {settlement.stage === "SIMULATION" ? <p className="mw-notice">Simulation ends with a dry-run result or a refusal. Nothing is broadcast.</p> : null}
       {settlement.stage === "SUBMITTED" ? <p className="mw-notice">A transaction hash is not settlement. Waiting for a confirmed receipt and verified postconditions.</p> : null}
       {settlement.stage === "RECONCILING" ? <p className="mw-notice" aria-live="polite">Checking settlement status… The reservation stays held and nothing is resent.</p> : null}
+      {props.conflict === null ? null : (
+        <p className="mw-notice mw-notice--bad" role="alert">
+          {props.conflict.summary}
+          <details className="mw-tech"><summary>Details</summary><p className="mw-fine">{props.conflict.detail}</p></details>
+        </p>
+      )}
       <p className="mw-fine">{FIXTURE_QUALIFICATION}</p>
     </div>
   );
@@ -192,7 +216,7 @@ function settlementStatus(stage: SettlementView["stage"]): string {
     case "SETTLED":
       return "Settled";
     default:
-      return "Only the authorized Stock action has a testnet settlement path.";
+      return "Executing the authorized Stock action on Robinhood Chain Testnet.";
   }
 }
 
@@ -354,6 +378,7 @@ export function ReceiptStage(props: {
   readonly offer: SettlementOffer;
   readonly walletOk: boolean;
   readonly onExecute: () => void;
+  readonly conflict: { readonly summary: string; readonly detail: string } | null;
   readonly onDetails: () => void;
   readonly onRoom: (() => void) | null;
   readonly onStress: () => void;
@@ -396,6 +421,12 @@ export function ReceiptStage(props: {
         )}
       </div>
 
+      {props.conflict === null ? null : (
+        <p className="mw-notice mw-notice--bad" role="alert">
+          {props.conflict.summary}
+          <details className="mw-tech"><summary>Details</summary><p className="mw-fine">{props.conflict.detail}</p></details>
+        </p>
+      )}
       <SettlementProof settlement={settlement} stockTrade={props.stockTrade} sessionId={props.sessionId} offer={props.offer} busy={props.busy} walletOk={props.walletOk} onExecute={props.onExecute} />
 
       <footer className="mw-stage-foot mw-stage-foot--receipt">

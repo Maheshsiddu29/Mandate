@@ -105,7 +105,7 @@ test('a V2 dry run ends READY · NOT SENT, and the gate signature is a step befo
   const refused = after(['DOMAIN_EXECUTION_INELIGIBLE', { reason: 'GATE_EXECUTION_AUTHORITY_REQUIRED' }]);
   assert.equal(derivePresentation(refused).settlement.stage, 'FAILED');
   assert.equal(derivePresentation(refused).settlement.detail, 'GATE_EXECUTION_AUTHORITY_REQUIRED');
-  assert.match(outcome, /Sign stock authorization/);
+  assert.match(outcome, /Sign execution/);
   assert.match(outcome, /Sign execution authorization/);
   assert.match(outcome, /This signs execution authority\. It is not a transaction\./);
   assert.match(outcome, /Execute on Robinhood Testnet/);
@@ -165,6 +165,24 @@ test('a durable confirmed settlement after a reload: settled only with LIVE_TEST
   assert.equal(derivePresentation(hashOnly).settlement.settled, false);
   const reference = after(['DOMAIN_EXECUTION_SETTLED', { evidence: 'REFERENCE_MODEL', txHash: '0xabc' }]);
   assert.equal(derivePresentation(reference).settlement.settled, false);
+});
+
+test('a settlement 409 does not enter Executing, and the signed total is not a hidden $2,500', () => {
+  const refused = after(['TESTNET_SEND_AUTHORIZATION_REFUSED', { reason: 'SEND_NOT_AUTHORIZED' }]);
+  assert.notEqual(deriveFlow(done(refused)).phase, 'SETTLING');
+  assert.equal(derivePresentation(refused).settlement.stage, 'FAILED');
+  assert.match(outcome, /SEND_NOT_AUTHORIZED: "Execution was not accepted\. Nothing was sent\."/);
+  assert.match(outcome, /SPINE_EXPIRED: "Authorization expired\./);
+  assert.match(outcome, /SETTLEMENT_IN_PROGRESS: "Execution is already in progress\."/);
+  assert.match(outcome, /NO_STOCK_RESERVATION: "There is no Stock reservation to execute\. Nothing was sent\."/);
+  assert.doesNotMatch(outcome, /Awaiting operator send authorization/);
+  assert.doesNotMatch(outcome, /Ready · not sent/);
+  assert.match(lab, /setSettleConflict/);
+  assert.match(lab, /async function execute\(\)[\s\S]*postSettle\(\{ mode: "SEND", intent: "EXECUTE_ROBINHOOD_TESTNET" \}\);[\s\S]*setSigning\(false\);\s*\}/);
+  const configure = read('../components/demo/live/stage-configure.tsx');
+  assert.match(configure, /signed \? "authorized" : "draft"/);
+  assert.match(configure, /allocated/);
+  assert.doesNotMatch(configure, /2500|2,500/);
 });
 
 test('a reload returns to the same durable session and replays its events; duplicates never apply twice', () => {
