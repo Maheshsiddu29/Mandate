@@ -125,9 +125,9 @@ export function PlanningStage(props: {
   return (
     <div className="mw-planning">
       <header className="mw-stage-head">
-        <p className="mw-kicker">{singleAgent ? "Allocation proposal" : "Mandate Room"} · before you sign</p>
+        <p className="mw-kicker">{singleAgent ? "Agent plan" : "Mandate Room"} · before you sign</p>
         <h2>{plan === null ? (singleAgent ? "Agent is analyzing" : "Agents are analyzing") : (singleAgent ? "Agent proposes this allocation" : "Agents propose this split")}</h2>
-        <p>{singleAgent ? "One agent is proposing how much of its available capital it can use." : roomCopy(purpose)} Nothing is signed or spent here.</p>
+        <p>{singleAgent ? "One agent is proposing how much of its available capital it can use. There is no Mandate Room for a single agent." : roomCopy(purpose)} Nothing is signed or spent here.</p>
       </header>
       {props.state?.pooled === null || props.state === null ? null : <p className="mw-total"><span>Available capital</span><strong>{usd(props.state.pooled)}</strong></p>}
       <ul className="mw-rows">
