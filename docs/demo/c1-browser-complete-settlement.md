@@ -173,3 +173,32 @@ No session keys, no smart-account redesign, no protocol rewrite, no new
 agents, no SDK, no mainnet, no claim that MDEMO is NVDA. The human runs the
 one live browser broadcast after automated checks are green. This milestone
 does not broadcast it.
+
+## Manual acceptance
+
+Automated tests do not broadcast. After they are green, one person can run
+this once. Use a wallet that already holds MDUSD and has approved the
+deployed gate. Do not fund or approve from this repository's scripts unless
+that is a separate, explicit choice. A stub session cannot send
+(`LIVE_MODEL_REQUIRED_FOR_TESTNET_SEND`).
+
+1. From the repository root, `npm run agents:lab`.
+2. In `apps/web`, `npm run dev`, and open `http://localhost:3000/demo/live`.
+3. Connect the wallet on Robinhood Chain testnet (chain 46630).
+4. Compose a mandate that leaves Stock reserved, and approve it in the
+   wallet (`PortfolioMandateAuthorizationV2`).
+5. Run the agents with the live model. Wait until Stock is reserved.
+6. Choose **Execute on Robinhood Testnet**.
+7. Sign the one `MandateAuthorization` prompt. Rejecting it sends nothing.
+8. The server re-verifies, runs `eth_call`, then `eth_estimateGas`, then
+   broadcasts that same call once. The deployer pays gas.
+9. The page shows the transaction hash while it is confirming, and
+   **Settled** only after `LIVE_TESTNET`.
+10. The receipt leads with the Stock candidate. MDUSD → MDEMO is the
+    testnet proof, not a second trade.
+11. Refresh. Restart `agents:lab`. Open the same session. The receipt is
+    the same. Execute is gone. Nothing is resent.
+
+Wallet signatures on this path: two. The portfolio mandate, then one gate
+signature. The CLI `--send` command is different: it dry-runs first and
+asks again.
