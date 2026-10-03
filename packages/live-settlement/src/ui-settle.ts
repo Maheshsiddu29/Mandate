@@ -11,6 +11,13 @@
  * with the same SendGate, before that run starts. The deployer key still
  * pays gas. A signature is not reused across runs.
  *
+ * The lab's own session read (`GET /api/live/sessions/:id`) is returned with
+ * the durable settlement state under `settlement` (settlement-state.ts), so
+ * a reload or a restart restores a held attempt from the journal rather
+ * than from page memory. `{ "mode": "RECONCILE" }` runs the same restart
+ * reconciliation `settleSpine` starts with, and nothing else: no gate, no
+ * signature, no send.
+ *
  * No environment, file, clock or socket lives here. The composition script
  * opens those and passes them in.
  */
@@ -20,8 +27,11 @@ import { selectStockExecution } from './authorized-execution.ts';
 import { ASSET_QUALIFICATION } from './evidence.ts';
 import type { GateExecutionRequest } from './gate-authority.ts';
 import type { SettlementJournal } from './journal.ts';
+import { reservationStatus, type ReservationStatus } from './portfolio-ledger.ts';
+import type { ReconcileDeps, ReconcileReport } from './reconcile.ts';
 import type { TestnetRpc } from './rpc.ts';
 import { SendGate, SEND_AUTHORIZATION_PHRASE } from './send-gate.ts';
+import { durableSettlement, unreadableSettlement, type DurableSettlement, type PendingSettlement } from './settlement-state.ts';
 import type { SpineHold, SpineSettlementInput, SpineSettlementResult } from './spine-settlement.ts';
 import type { TestnetDeployment } from './deployment.ts';
 import type { DomainKeys } from './domain-leg.ts';
@@ -42,6 +52,8 @@ export interface SpineUiHost {
   readonly openSession: (id: string) => Promise<LiveSession | null>;
   readonly taskOf: (id: string) => 'RUN' | 'POLICY_STRESS' | 'PLAN' | null;
   readonly settle: (input: SpineSettlementInput) => Promise<SpineSettlementResult>;
+  /** Restart reconciliation over a reader: it cannot send. */
+  readonly reconcile: (deps: ReconcileDeps) => Promise<readonly ReconcileReport[]>;
   readonly deployment: TestnetDeployment;
   readonly rpc: TestnetRpc;
   readonly keys: DomainKeys;
@@ -62,6 +74,7 @@ interface Job {
 }
 
 const SETTLE_PATH = /^\/api\/live\/sessions\/([A-Za-z0-9-]{1,64})\/settle$/;
+const SESSION_READ = /^\/api\/live\/sessions\/([A-Za-z0-9-]{1,64})$/;
 const SIG = /^0x[0-9a-fA-F]{130}$/;
 
 const ok = (body: { readonly [k: string]: LabJson }, status = 200): LabRouteResponse => ({ status, body });
@@ -95,7 +108,7 @@ export const BROWSER_EXECUTE_INTENT = 'EXECUTE_ROBINHOOD_TESTNET';
 const SETTLEMENT_FIELDS = new Set(['mode', 'gateSignature', 'sendAuthorization', 'cancel', 'intent']);
 
 interface ParsedBody {
-  readonly mode: 'DRY_RUN' | 'SEND';
+  readonly mode: 'DRY_RUN' | 'SEND' | 'RECONCILE';
   readonly gateSignature: string | null;
   readonly sendAuthorization: string | null;
   readonly cancel: boolean;
@@ -110,7 +123,8 @@ function parseBody(body: unknown): { readonly ok: true; readonly value: ParsedBo
     if (!SETTLEMENT_FIELDS.has(key)) return { ok: false, response: refuse(400, 'BAD_REQUEST', `Unexpected field "${key}". Execution parameters are not accepted from the browser.`) };
   }
   const mode = rec['mode'];
-  if (mode !== 'DRY_RUN' && mode !== 'SEND') return { ok: false, response: refuse(400, 'BAD_REQUEST', 'mode must be "DRY_RUN" or "SEND".') };
+  if (mode !== 'DRY_RUN' && mode !== 'SEND' && mode !== 'RECONCILE') return { ok: false, response: refuse(400, 'BAD_REQUEST', 'mode must be "DRY_RUN", "SEND" or "RECONCILE".') };
+  if (mode === 'RECONCILE' && Object.keys(rec).length !== 1) return { ok: false, response: refuse(400, 'BAD_REQUEST', 'A reconciliation takes no signature, phrase, intent or cancel.') };
   const gateSignature = rec['gateSignature'];
   if (gateSignature !== undefined && gateSignature !== null && typeof gateSignature !== 'string') return { ok: false, response: refuse(400, 'BAD_REQUEST', 'gateSignature must be the wallet signature.') };
   if (typeof gateSignature === 'string' && (gateSignature.length > 140 || !SIG.test(gateSignature))) return { ok: false, response: refuse(400, 'BAD_REQUEST', 'gateSignature must be a 65-byte hex signature.') };
@@ -188,13 +202,20 @@ function signResponse(sessionId: string, mode: 'DRY_RUN' | 'SEND', request: Gate
 export class SpineUi {
   readonly #host: SpineUiHost;
   readonly #jobs = new Map<string, Job>();
+  readonly #reconciling = new Set<string>();
 
   constructor(host: SpineUiHost) {
     this.#host = host;
   }
 
-  /** Null when this request is not a settlement route, so the lab handles it. */
-  async handle(method: string, path: string, body: unknown): Promise<LabRouteResponse | null> {
+  /**
+   * Null when this request is not a settlement route, so the lab handles it.
+   * `lab` is the lab's own answer to this request: the session read is that
+   * answer with the durable settlement state added.
+   */
+  async handle(method: string, path: string, body: unknown, lab?: () => Promise<{ readonly status: number; readonly body: unknown }>): Promise<LabRouteResponse | null> {
+    const read = SESSION_READ.exec(path);
+    if (method === 'GET' && read !== null && lab !== undefined) return this.#sessionRead(read[1] as string, await lab());
     if (method === 'GET' && path === '/api/live/settlement') {
       return ok({
         available: true,
@@ -227,11 +248,12 @@ export class SpineUi {
       }
       return this.#deliver(id, pending, body.gateSignature);
     }
-    if (pending !== undefined) return refuse(409, 'SETTLEMENT_IN_PROGRESS', 'A settlement is already running for this session.');
+    if (pending !== undefined || this.#reconciling.has(id)) return refuse(409, 'SETTLEMENT_IN_PROGRESS', 'A settlement is already running for this session.');
     if (body.gateSignature !== null || body.cancel) return refuse(409, 'NO_PENDING_SIGNATURE', 'No gate signature was requested. Start a dry run or send first. A signature from an earlier run is not accepted.');
     if (this.#host.taskOf(id) !== null) return refuse(409, 'BUSY', 'A run is still in progress. Settlement starts after it finishes.');
     const session = await this.#host.openSession(id);
     if (session === null) return refuse(404, 'SESSION_NOT_FOUND', 'No such session.');
+    if (body.mode === 'RECONCILE') return this.#reconcile(session);
 
     const gate = new SendGate();
     // The phrase and the browser intent are different surfaces. The browser path never types the phrase.
@@ -323,6 +345,77 @@ export class SpineUi {
     } catch {
       return refuse(500, 'INTERNAL', 'The settlement could not be completed. Nothing further was broadcast.');
     }
+  }
+
+  /** Chain evidence only, over the reader: the same pass `settleSpine` opens with. No gate is opened, so nothing can be sent. */
+  async #reconcile(session: LiveSession): Promise<LabRouteResponse> {
+    let journal: SettlementJournal;
+    try {
+      journal = this.#host.journalFor(session);
+    } catch {
+      return refuse(500, 'INTERNAL', 'The settlement journal could not be opened. Nothing was sent.');
+    }
+    this.#reconciling.add(session.id);
+    try {
+      const reports = await this.#host.reconcile({ journal, reader: this.#host.rpc, session, deployment: this.#host.deployment });
+      this.#reconciling.delete(session.id);
+      const state = await this.#durable(session, journal);
+      return ok({
+        status: 'RECONCILED',
+        sessionId: session.id,
+        transactions: 0,
+        attempts: reports.length,
+        settlement: asJson(state),
+        message: 'Reconciled from chain evidence only. Nothing was sent.',
+      });
+    } catch {
+      return refuse(500, 'INTERNAL', 'Reconciliation could not be completed. Nothing was sent.');
+    } finally {
+      this.#reconciling.delete(session.id);
+      journal.close();
+    }
+  }
+
+  #pending(id: string): PendingSettlement {
+    if (this.#reconciling.has(id)) return 'RUNNING';
+    const job = this.#jobs.get(id);
+    return job === undefined ? null : job.phase === 'AWAITING_SIGNATURE' ? 'AWAITING_SIGNATURE' : 'RUNNING';
+  }
+
+  /** The journal's attempt for the one reserved Stock child, the ledger's word on it, and whether a settle call is open. */
+  async #durable(session: LiveSession, journal: SettlementJournal): Promise<DurableSettlement> {
+    const asOf = session.events.events.length;
+    const pending = this.#pending(session.id);
+    const stock = Array.isArray(session.reservedExecutions) ? session.reservedExecutions.filter((r) => r.role === 'stock') : [];
+    const only = stock.length === 1 ? stock[0] : undefined;
+    if (only === undefined) return durableSettlement({ reservation: null, reservationState: null, attempt: null, artifacts: [], pending, asOfEvents: asOf });
+    const reservation = only.record.reservation;
+    try {
+      const core = session.versions.coreOf(only.version)?.core;
+      const reservationState: ReservationStatus = core === undefined ? 'UNKNOWN' : reservationStatus((await core.engine.read(core.compiled.mandate.principal)).state, reservation);
+      return durableSettlement({ reservation, reservationState, attempt: journal.get(reservation), artifacts: journal.artifacts(reservation), pending, asOfEvents: asOf });
+    } catch {
+      return unreadableSettlement(reservation, pending, asOf);
+    }
+  }
+
+  async #sessionRead(id: string, base: { readonly status: number; readonly body: unknown }): Promise<LabRouteResponse> {
+    const fields = typeof base.body === 'object' && base.body !== null && !Array.isArray(base.body) ? (asJson(base.body) as { readonly [k: string]: LabJson }) : { error: 'INTERNAL', message: 'The session read was not an object.' };
+    if (base.status !== 200) return { status: base.status, body: fields };
+    const session = await this.#host.openSession(id);
+    if (session === null) return { status: base.status, body: fields };
+    let state: DurableSettlement;
+    try {
+      const journal = this.#host.journalFor(session);
+      try {
+        state = await this.#durable(session, journal);
+      } finally {
+        journal.close();
+      }
+    } catch {
+      state = unreadableSettlement(null, this.#pending(id), session.events.events.length);
+    }
+    return { status: base.status, body: { ...fields, settlement: asJson(state) } };
   }
 
   async #deliver(id: string, job: Job, signature: string | null): Promise<LabRouteResponse> {

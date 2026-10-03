@@ -19,6 +19,8 @@ and stops at READY · NOT SENT. The page does not post `SEND`.
 mount them. `npm run agents:lab` does. The body today is `mode`
 (`DRY_RUN` or `SEND`), an optional gate signature, the CLI operator phrase,
 and `cancel`. Unknown fields are currently ignored. C1 will refuse them.
+C1.5 adds `RECONCILE` and the restored `settlement` state on the session
+read (§9).
 
 The browser still must not send a token, venue, adapter, recipient, amount,
 calldata, candidate, gate address, or chain id. Those stay on the server:
@@ -115,6 +117,33 @@ The session event log, the settlement journal, and the portfolio ledger are
 already durable. A reload replays events. A settled receipt comes from those
 events, not from a new model call. Restarting `agents:lab` does not rerun
 the Room or the Stock model unless the user starts a run.
+
+**Restored settlement state (C1.5).** Events alone cannot say whether an
+attempt is held: a held refusal is a `DOMAIN_EXECUTION_INELIGIBLE` like any
+other. Under `agents:lab`, the lab's own `GET /api/live/sessions/:id` is
+returned with a `settlement` object read from the settlement journal and
+the portfolio ledger (`packages/live-settlement/src/settlement-state.ts`):
+
+| Field | Source |
+| --- | --- |
+| `settlementStatus` | journal attempt and open settle call: `NO_ATTEMPT`, `PREPARED`, `SIGNATURE_REQUIRED`, `IN_PROGRESS`, `HELD`, `SUBMITTED`, `REVERTED`, `NEEDS_REVIEW`, `SETTLED`, `RELEASED`, `PREPARATION_FAILED`, `UNREADABLE` |
+| `attemptState`, `quarantine`, `txHash`, `receiptStatus` | journal attempt |
+| `held`, `heldUntil` | not terminal and reconciliation only; latest artifact deadline (chain seconds) |
+| `transactions` | 0 without a journaled hash; 1 once accepted or mined; null when not established |
+| `reservationState` | portfolio ledger |
+| `pending` | a settle call open in this process (`AWAITING_SIGNATURE`, `RUNNING`) |
+| `executable` | no open call, the reservation still open, and no attempt that only reconciliation may resolve |
+| `asOfEvents` | session events when read; a later event is newer than this state |
+
+No signature, key, typed data or calldata is in it. A restart has no open
+call, so an attempt that was waiting on its gate signature is restored
+`HELD`: its send leg was bound. `executable` is not eligibility; Execute
+still re-verifies everything.
+
+`POST /api/live/sessions/:id/settle` with exactly `{ "mode": "RECONCILE" }`
+runs the reconciliation `settleSpine` starts with, over the RPC reader, and
+returns the same `settlement` object. It opens no send gate and asks for no
+signature. It is refused while a settle call is open.
 
 ## 10. Replay
 

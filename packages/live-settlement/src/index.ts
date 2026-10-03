@@ -13,6 +13,8 @@
  *   `portfolio-ledger` is the settlement's admit / consume / release in the
  *   portfolio ledger (B.5.3); `reconcile` drives non-terminal attempts from
  *   chain evidence after a restart, with a reader only — it cannot send.
+ * - `settlement-state` projects the journal and the ledger into the state a
+ *   reloaded page restores (held, submitted, settled, released); pure.
  *
  * Nothing in `@mandate/live-agents`, the web app or the frozen protocol
  * depends on this package.
@@ -33,3 +35,4 @@ export { reconcileAttempts, judge, gatherEvidence, RECONCILE_OUTCOMES, type Reco
 export { domainPolicy, type DomainKeys } from './domain-leg.ts';
 export { reverifySpine, SPINE_CHAIN_ID, type SpineCheck, type SpineFacts } from './spine.ts';
 export { settleSpine, type SpineHold, type SpineSettlementInput, type SpineSettlementResult } from './spine-settlement.ts';
+export { durableSettlement, SETTLEMENT_STATUSES, type DurableSettlement, type SettlementStatus, type PendingSettlement } from './settlement-state.ts';

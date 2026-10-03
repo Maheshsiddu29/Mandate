@@ -43,20 +43,25 @@ interface Harness {
   readonly timers: (() => void)[];
   closed: number;
   cleaned: number;
+  reconciled: number;
 }
 
 function harness(): Harness {
   const emitted: { kind: string; data: unknown }[] = [];
   const calls: SpineSettlementInput[] = [];
   const timers: (() => void)[] = [];
-  const h: Harness = { ui: null as unknown as SpineUi, emitted, calls, ask: false, task: null, session: true, timers, closed: 0, cleaned: 0 };
+  const h: Harness = { ui: null as unknown as SpineUi, emitted, calls, ask: false, task: null, session: true, timers, closed: 0, cleaned: 0, reconciled: 0 };
   const session = {
     id: 'lab-1',
-    events: { emit: (kind: string, fields: { readonly data?: unknown }) => emitted.push({ kind, data: fields.data }) },
+    events: { emit: (kind: string, fields: { readonly data?: unknown }) => emitted.push({ kind, data: fields.data }), events: emitted },
   } as unknown as LiveSession;
   const host: SpineUiHost = {
     openSession: async () => (h.session ? session : null),
     taskOf: () => h.task,
+    reconcile: async () => {
+      h.reconciled += 1;
+      return [];
+    },
     settle: async (input) => {
       calls.push(input);
       if (h.ask) {
@@ -220,8 +225,9 @@ describe('V2 settlement bridge', () => {
     const reason = 'GATE_STATE_UNKNOWN.MARKET.BLOCK_AHEAD_OF_NODE.RPC_-32000:unsupported block number 128270281';
     let asked = 0;
     const ui = new SpineUi({
-      openSession: async () => ({ id: 'lab-1', events: { emit: () => 0 } }) as unknown as LiveSession,
+      openSession: async () => ({ id: 'lab-1', events: { emit: () => 0, events: [] } }) as unknown as LiveSession,
       taskOf: () => null,
+      reconcile: async () => [],
       settle: async (input) => {
         asked += (await input.resolveGateExecution?.(request)) === SIG ? 1 : 0;
         return { status: 'INELIGIBLE', stage: 'DOMAIN', reason, reports: [], held: { state: 'PREPARED', until: 1_790_814_765n } };
@@ -254,6 +260,50 @@ describe('V2 settlement bridge', () => {
     const plain = await h.ui.handle('POST', '/api/live/sessions/lab-1/settle', { mode: 'SEND', sendAuthorization: 'nope' });
     assert.equal(body(plain as NonNullable<typeof plain>)['held'], false);
     assert.equal(body(plain as NonNullable<typeof plain>)['heldUntil'], null);
+  });
+
+  it('C1.5: RECONCILE reconciles only — no gate, no settle, no signature — and is refused while a settle call is open or with any other field', async () => {
+    const h = harness();
+    for (const extra of [{ intent: 'EXECUTE_ROBINHOOD_TESTNET' }, { sendAuthorization: SEND_AUTHORIZATION_PHRASE }, { gateSignature: SIG }, { cancel: true }]) {
+      const r = await post(h, { mode: 'RECONCILE', ...extra });
+      assert.equal(r?.status, 400, JSON.stringify(extra));
+    }
+    const r = await post(h, { mode: 'RECONCILE' });
+    assert.equal(r?.status, 200);
+    const b = body(r as NonNullable<typeof r>);
+    assert.equal(b['status'], 'RECONCILED');
+    assert.equal(b['transactions'], 0);
+    assert.equal(h.reconciled, 1);
+    assert.equal(h.calls.length, 0);
+    assert.equal(h.closed, 1);
+    assert.equal((b['settlement'] as { readonly executable: boolean }).executable, false);
+    h.ask = true;
+    await post(h, { mode: 'SEND', intent: 'EXECUTE_ROBINHOOD_TESTNET' });
+    const busy = await post(h, { mode: 'RECONCILE' });
+    assert.equal(busy?.status, 409);
+    assert.equal(body(busy as NonNullable<typeof busy>)['error'], 'SETTLEMENT_IN_PROGRESS');
+    assert.equal(h.reconciled, 1);
+  });
+
+  it('C1.5: the lab’s session read carries the settlement state; other reads and failures pass through unchanged', async () => {
+    const h = harness();
+    const read = await h.ui.handle('GET', '/api/live/sessions/lab-1', null, async () => ({ status: 200, body: { sessionId: 'lab-1', events: 0 } }));
+    assert.equal(read?.status, 200);
+    const b = body(read as NonNullable<typeof read>);
+    assert.equal(b['sessionId'], 'lab-1');
+    const s = b['settlement'] as { readonly settlementStatus: string; readonly pending: string | null; readonly executable: boolean };
+    assert.equal(s.settlementStatus, 'NO_ATTEMPT');
+    assert.equal(s.pending, null);
+    h.ask = true;
+    await post(h, { mode: 'SEND', intent: 'EXECUTE_ROBINHOOD_TESTNET' });
+    const parked = await h.ui.handle('GET', '/api/live/sessions/lab-1', null, async () => ({ status: 200, body: { sessionId: 'lab-1' } }));
+    assert.equal((body(parked as NonNullable<typeof parked>)['settlement'] as { readonly settlementStatus: string }).settlementStatus, 'SIGNATURE_REQUIRED');
+    const missing = await h.ui.handle('GET', '/api/live/sessions/nope', null, async () => ({ status: 404, body: { error: 'SESSION_NOT_FOUND', message: 'x' } }));
+    assert.deepEqual(missing, { status: 404, body: { error: 'SESSION_NOT_FOUND', message: 'x' } });
+    // Without the lab's own answer, the read is the lab's: nothing is invented.
+    assert.equal(await h.ui.handle('GET', '/api/live/sessions/lab-1', null), null);
+    assert.equal(await h.ui.handle('GET', '/api/live/sessions/lab-1/events', null, async () => ({ status: 200, body: {} })), null);
+    assert.equal(h.calls.length, 1);
   });
 
   it('refuses a signature that was not just requested, a busy session, and an unknown session', async () => {

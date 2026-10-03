@@ -8,6 +8,8 @@
  *
  * The browser then dry-runs and sends through POST /api/live/sessions/:id/settle.
  * That calls `settleSpine` — the same re-verify as `npm run agents:settle:v2`.
+ * The lab's session read gains the journal's settlement state, so a reload
+ * or a restart restores a held attempt.
  * The wallet signs typed data. The deployer key pays gas and broadcasts.
  * A missing manifest or key file does not stop the lab: settlement routes
  * answer 503 and the rest of the API still serves.
@@ -26,7 +28,7 @@ import { LiveLab } from '../../live-agents/src/server/app.ts';
 import { createLabServer, listen } from '../../live-agents/src/server/http.ts';
 import { configuredScorer } from '../../live-agents/scripts/jev.ts';
 import { loadKeys, MANIFEST_PATH } from '../../evm-robinhood/scripts/lib.ts';
-import { RobinhoodTestnetRpc, SettlementJournal, parseDeployment, settleSpine } from '../src/index.ts';
+import { RobinhoodTestnetRpc, SettlementJournal, parseDeployment, reconcileAttempts, settleSpine } from '../src/index.ts';
 import { SpineUi, type LabRouteResponse } from '../src/ui-settle.ts';
 import { readRpcConfig } from './rpc-config.ts';
 
@@ -75,6 +77,7 @@ function settlement(lab: LiveLab): { readonly before: (r: ApiRequest) => Promise
     openSession: (id) => lab.openSession(id),
     taskOf: (id) => lab.taskOf(id),
     settle: (input) => settleSpine(input),
+    reconcile: (deps) => reconcileAttempts(deps),
     deployment: d,
     rpc,
     keys: domainKeys,
@@ -92,7 +95,7 @@ function settlement(lab: LiveLab): { readonly before: (r: ApiRequest) => Promise
   });
   return {
     before: async (r) => {
-      const handled = await ui.handle(r.method, r.path, r.body);
+      const handled = await ui.handle(r.method, r.path, r.body, () => lab.handle(r));
       return handled === null ? null : asApi(handled);
     },
     note: `V2 settlement on this port · RPC ${rpcConfig.label}${rpcConfig.notes.length === 0 ? '' : ` · ${rpcConfig.notes.join(' · ')}`}`,
