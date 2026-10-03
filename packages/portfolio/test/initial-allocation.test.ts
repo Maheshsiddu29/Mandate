@@ -54,6 +54,7 @@ describe('canonical initial allocation', () => {
     const outsider = { agent: { kind: 'agent-id', value: 'agent:disabled' }, allocatedAtoms: 0n, source: 'FIXED' };
     assert.equal(validateInitialAllocationPlan({ ...a.input, entries: [outsider, ...a.input.entries.slice(1)] }, a.mandate).ok, false);
     assert.equal(validateInitialAllocationPlan({ ...a.input, unallocatedAtoms: 1n }, a.mandate).ok, false);
+    assert.equal(validateInitialAllocationPlan({ ...a.input, totalCapitalAtoms: 1_999_999_999n }, a.mandate).ok, false, 'allocated above total');
     assert.equal(validateInitialAllocationPlan({ ...a.input, entries: a.input.entries.map((entry, i) => (i === 0 ? { ...entry, allocatedAtoms: -1n } : entry)), unallocatedAtoms: 800_000_001n }, a.mandate).ok, false);
     assert.equal(validateInitialAllocationPlan({ ...a.input, entries: a.input.entries.map((entry, i) => (i === 0 ? { ...entry, allocatedAtoms: '01' } : entry)) }, a.mandate).ok, false);
   });

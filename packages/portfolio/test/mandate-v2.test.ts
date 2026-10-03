@@ -88,6 +88,8 @@ describe('EIP-712 portfolio mandate V2', () => {
     assert.equal(mandateSignedByPrincipalV2Plan(m, signature, { chainId: CHAIN, sessionDigest: SESSION, initialAllocationDigest: PLAN }), true);
     assert.equal(mandateSignedByPrincipalV2Plan(m, signature, { chainId: CHAIN, sessionDigest: SESSION, initialAllocationDigest: OTHER_PLAN }), false);
     assert.equal(mandateSignedByPrincipalV2Plan(m, signature, { chainId: CHAIN, sessionDigest: OTHER_SESSION, initialAllocationDigest: PLAN }), false);
+    assert.equal(mandateSignedByPrincipalV2Plan(demoMandate({ nonce: 2n }), signature, { chainId: CHAIN, sessionDigest: SESSION, initialAllocationDigest: PLAN }), false, 'a different mandate');
+    assert.equal(mandateSignedByPrincipalV2Plan(m, signPrehash(portfolioMandateAuthorizationV2Hash(m, { chainId: CHAIN, sessionDigest: SESSION, initialAllocationDigest: PLAN }), demoKey('outsider')), { chainId: CHAIN, sessionDigest: SESSION, initialAllocationDigest: PLAN }), false, 'a different wallet');
     assert.equal(mandateSignedByPrincipalV2(demoMandate(), signature, { chainId: CHAIN, sessionDigest: SESSION }), false);
     const legacy = signPrehash(portfolioMandateV2Hash(m, { chainId: CHAIN, sessionDigest: SESSION }), key);
     assert.equal(mandateSignedByPrincipalV2Plan(m, legacy, { chainId: CHAIN, sessionDigest: SESSION, initialAllocationDigest: PLAN }), false);
