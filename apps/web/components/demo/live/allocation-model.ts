@@ -206,18 +206,25 @@ export interface AuthorizedStockTrade {
    */
   readonly settlementCapable: boolean;
   readonly hold: "NONE" | "BLOCKED" | "ABSTAINED" | "RELEASED" | "UNSUPPORTED";
+  /** The first protocol code on a blocked Stock proposal, when one was recorded. */
+  readonly blockCode: string | null;
 }
 
-function stockHold(events: readonly LiveEvent[]): AuthorizedStockTrade["hold"] {
+function stockHold(events: readonly LiveEvent[]): { readonly hold: AuthorizedStockTrade["hold"]; readonly blockCode: string | null } {
   let hold: AuthorizedStockTrade["hold"] = "NONE";
+  let blockCode: string | null = null;
   for (const event of events) {
     if (event.kind === "RESERVATION_RELEASED" && event.agent === "stock") hold = "RELEASED";
     if (event.agent !== "stock") continue;
-    if (event.kind === "PROPOSAL_BLOCKED") hold = "BLOCKED";
+    if (event.kind === "PROPOSAL_BLOCKED") {
+      hold = "BLOCKED";
+      const first = arr(event.data.reasons)[0];
+      blockCode = typeof first === "string" ? first : blockCode;
+    }
     if (event.kind === "AGENT_ABSTAINED") hold = "ABSTAINED";
     if (event.kind === "AGENT_DECISION_COMPLETED" && event.data.action === "ABSTAIN") hold = "ABSTAINED";
   }
-  return hold;
+  return { hold, blockCode };
 }
 
 /** Explicit connector evidence only. No capability event means this view does not deny one. */
@@ -244,7 +251,8 @@ export function authorizedStockTrade(events: readonly LiveEvent[], reservations:
     for (const p of arr(e.data.proposals).map(rec)) if (p.role === "stock" && p.outcome === "RESERVED" && typeof p.requested === "string") amount = p.requested;
   }
   const reserved = amount !== null || reservations.some((r) => r.role === "stock");
-  if (!reserved) return { authorized: false, candidate: null, candidateId: null, amount: null, settlementCapable: false, hold: stockHold(events) };
+  const quiet = stockHold(events);
+  if (!reserved) return { authorized: false, candidate: null, candidateId: null, amount: null, settlementCapable: false, hold: quiet.hold, blockCode: quiet.blockCode };
   const decision = [...events].reverse().find((e) => e.kind === "AGENT_DECISION_COMPLETED" && e.agent === "stock");
   const candidateId = decision === undefined || typeof decision.data.candidateId !== "string" ? null : decision.data.candidateId;
   const settlementCapable = connectorCanSettle(events, candidateId);
@@ -255,6 +263,7 @@ export function authorizedStockTrade(events: readonly LiveEvent[], reservations:
     amount,
     settlementCapable,
     hold: settlementCapable ? "NONE" : "UNSUPPORTED",
+    blockCode: null,
   };
 }
 

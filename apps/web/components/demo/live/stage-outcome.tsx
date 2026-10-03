@@ -4,7 +4,7 @@ import { LatticeLoader } from "@/components/react-bits/lattice-loader";
 import type { ReactNode } from "react";
 import type { Failure } from "./live-flow";
 import type { AuthorizedStockTrade } from "./allocation-model";
-import { ROLE_TITLES, usd, type RoleName, type SettlementView, type TradeReview } from "./live-model";
+import { ROLE_TITLES, reasonLabel, usd, type RoleName, type SettlementView, type TradeReview } from "./live-model";
 import { shortAddress } from "./wallet";
 import { AgentGlyph, Pill } from "./workspace-ui";
 
@@ -139,7 +139,7 @@ export function SettlingStage(props: {
       <header className="mw-stage-head">
         <p className="mw-kicker">{settlement.network || "Robinhood Chain Testnet"} · fixture execution</p>
         <h2>Executing</h2>
-        <p>Only the authorized Stock action has a testnet settlement path.</p>
+        <p>{settlementStatus(settlement.stage)}</p>
       </header>
       <SettlementSteps settlement={settlement} />
       {props.sessionId === null ? null : <p className="mw-fine">Session <code>{props.sessionId}</code></p>}
@@ -170,8 +170,41 @@ function SessionLine({ sessionId }: { readonly sessionId: string | null }): Reac
   return <p className="mw-fine">Session <code>{sessionId}</code></p>;
 }
 
-function canDryRun(stage: SettlementView["stage"], present: boolean): boolean {
-  return !present || stage === "NONE" || stage === "FAILED" || stage === "PREFLIGHT_FAILED" || stage === "SIMULATION_FAILED";
+function canExecute(settlement: SettlementView): boolean {
+  if (settlement.settled || settlement.consumed) return false;
+  if (settlement.stage === "SUBMITTED" || settlement.stage === "RECONCILING" || settlement.stage === "READY_FOR_SEND" || settlement.stage === "SIGN_GATE" || settlement.stage === "SIMULATION" || settlement.stage === "PREFLIGHT") return false;
+  return true;
+}
+
+function settlementStatus(stage: SettlementView["stage"]): string {
+  switch (stage) {
+    case "PREFLIGHT":
+    case "READY":
+      return "Checking mandate…";
+    case "SIGN_GATE":
+      return "Waiting for wallet signature…";
+    case "SIMULATION":
+      return "Simulating exact execution…";
+    case "SUBMITTED":
+      return "Transaction submitted. Confirming…";
+    case "RECONCILING":
+      return "Confirming…";
+    case "SETTLED":
+      return "Settled";
+    default:
+      return "Only the authorized Stock action has a testnet settlement path.";
+  }
+}
+
+function failureLine(detail: string): string {
+  if (detail.includes("SPINE_EXPIRED")) return "Authorization expired. Review and authorize a fresh mandate.";
+  if (detail.includes("GATE_EXECUTION_AUTHORITY_REQUIRED")) return "Wallet authorization required. Nothing was sent.";
+  if (detail.includes("NO_PENDING_SIGNATURE")) return "Choose Execute again. Nothing was sent.";
+  if (detail.includes("LIVE_MODEL_REQUIRED")) return "A live model session is required before a testnet send. Nothing was sent.";
+  if (detail.includes("SPINE_METHOD_REQUIRED")) return "Connect the wallet that authorized this mandate. A demo principal cannot settle.";
+  if (detail.includes("RPC") || detail.includes("CHAIN_")) return "Robinhood Chain testnet is temporarily unavailable. Nothing was sent.";
+  if (detail === "") return "";
+  return "Nothing was sent.";
 }
 
 function SettleActions(props: {
@@ -179,22 +212,20 @@ function SettleActions(props: {
   readonly offer: SettlementOffer;
   readonly busy: boolean;
   readonly capable: boolean;
-  readonly stale: boolean;
-  readonly onDryRun: () => void;
+  readonly walletOk: boolean;
+  readonly onExecute: () => void;
 }): ReactNode {
   const { settlement, offer } = props;
-  if (!props.capable || settlement.settled || settlement.stage === "READY_FOR_SEND") return null;
-  if (settlement.stage === "SPINE_READY" && !props.stale) return <p className="mw-fine">Broadcast is unavailable in this milestone. Nothing was broadcast.</p>;
-  if (!props.stale && !canDryRun(settlement.stage, settlement.present)) return null;
-  if (offer.kind === "loading") return <p className="mw-fine">Checking whether this server can dry-run.</p>;
+  if (!props.capable || !canExecute(settlement)) return null;
+  if (!props.walletOk) return <p className="mw-fine">Connect the wallet that authorized this mandate.</p>;
+  if (offer.kind === "loading") return <p className="mw-fine">Checking whether this server can settle.</p>;
   if (offer.kind === "unavailable") return <p className="mw-fine">{offer.message}</p>;
-  return <button type="button" className="mw-cta" disabled={props.busy} onClick={props.onDryRun}>Dry-run testnet settlement</button>;
-}
-
-function simulationStale(settlement: SettlementView, now: number): boolean {
-  if (settlement.stage !== "SPINE_READY" || settlement.simulationDeadline === null) return false;
-  const deadline = Number(settlement.simulationDeadline);
-  return Number.isFinite(deadline) && deadline > 0 && now >= deadline * 1000;
+  return (
+    <div className="mw-execute">
+      <p className="mw-fine">Mandate has authorized this Stock action. Execute its testnet settlement proof.</p>
+      <button type="button" className="mw-cta" disabled={props.busy} onClick={props.onExecute}>Execute on Robinhood Testnet</button>
+    </div>
+  );
 }
 
 function TechnicalDetails({ settlement }: { readonly settlement: SettlementView }): ReactNode {
@@ -207,11 +238,12 @@ function TechnicalDetails({ settlement }: { readonly settlement: SettlementView 
     ["Initial allocation", settlement.initialAllocationDigest ?? "—"],
     ["Current allocation", settlement.currentPlanDigest ?? "—"],
     ["Gas estimate", settlement.gasEstimate ?? "—"],
-    ["Broadcast", "No"],
+    ["Broadcast", settlement.settled ? "Yes" : "No"],
+    ["Receipt digest", settlement.receiptDigest ?? "—"],
   ];
   return (
     <details className="mw-tech">
-      <summary>Technical details</summary>
+      <summary>Technical proof</summary>
       <dl className="mw-evidence mw-evidence--compact">
         {rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd><code>{value}</code></dd></div>)}
       </dl>
@@ -225,19 +257,21 @@ function SettlementProof(props: {
   readonly sessionId: string | null;
   readonly offer: SettlementOffer;
   readonly busy: boolean;
-  readonly now: number;
-  readonly onDryRun: () => void;
+  readonly walletOk: boolean;
+  readonly onExecute: () => void;
 }): ReactNode {
   const { settlement, stockTrade } = props;
-  const stale = simulationStale(settlement, props.now);
   // No Stock reservation, no Stock trade: the model's choice alone is never a trade decision, and offers no settlement control.
   if (!stockTrade.authorized && !settlement.present) {
+    const blocked = stockTrade.hold === "BLOCKED";
     return (
       <section className="mw-proof" aria-label="Settlement">
         <div className="mw-proof__decision">
-          <p className="mw-kicker">Trade decision</p>
-          <p className="mw-proof__main">No authorized Stock trade</p>
-          <p className="mw-fine">{stockTrade.hold === "ABSTAINED" ? "Stock did not propose a trade. " : stockTrade.hold === "RELEASED" ? "Stock allocation was released. " : null}The Stock proposal did not receive execution authority. Only an authorized, reserved Stock action has a testnet settlement path.</p>
+          <p className="mw-kicker">{blocked ? "Blocked" : "Trade decision"}</p>
+          <p className="mw-proof__main">{blocked ? "Blocked" : "No authorized Stock trade"}</p>
+          <p className="mw-fine">{stockTrade.hold === "ABSTAINED" ? "Stock did not propose a trade. " : stockTrade.hold === "RELEASED" ? "Stock allocation was released. " : blocked ? "Stock Agent proposed an action outside this mandate. " : null}The Stock proposal did not receive execution authority. Only an authorized, reserved Stock action has a testnet settlement path.</p>
+          {blocked && stockTrade.blockCode !== null ? <p className="mw-fine">Reason: {reasonLabel(stockTrade.blockCode)}</p> : null}
+          {blocked ? <p className="mw-fine">Wallet request: none. Transaction: none.</p> : null}
         </div>
       </section>
     );
@@ -254,42 +288,56 @@ function SettlementProof(props: {
     );
   }
   const detail = settlement.detail !== "" && (settlement.stage === "FAILED" || settlement.stage === "SPINE_READY" || settlement.stage === "SIMULATION_FAILED" || settlement.stage === "PREFLIGHT_FAILED") ? settlement.detail : "";
+  const failed = failureLine(detail);
+  const noteName = stockTrade.candidate ?? "Stock";
   return (
     <section className="mw-proof" aria-label="Settlement">
       <div className="mw-proof__decision">
-        <p className="mw-kicker">Trade decision</p>
-        <p className="mw-proof__main">{stockTrade.candidate ?? "Stock"}</p>
-        <p className="mw-fine">Authorized allocation {stockTrade.amount === null ? "—" : usd(stockTrade.amount)}</p>
+        <p className="mw-kicker">{settlement.settled ? "Settled" : "Trade decision"}</p>
+        <p className="mw-proof__main">{noteName}</p>
+        {stockTrade.candidateId === null ? null : <p className="mw-fine">Agent selected <code>{stockTrade.candidateId}</code></p>}
+        <p className="mw-fine">Authorized capital {stockTrade.amount === null ? settlement.decisionNotional === null ? "—" : `${settlement.decisionNotional} USDC` : usd(stockTrade.amount)}</p>
       </div>
       <div className="mw-proof__chain">
         <p className="mw-kicker">Settlement proof</p>
+        <p className="mw-fine">Testnet settlement proof</p>
         {settlement.present ? (
           <>
             <p className="mw-proof__main">{settlement.network || "Robinhood Chain Testnet"} <Pill tone={settlement.settled ? "good" : settlement.stage === "FAILED" || settlement.stage === "NEEDS_REVIEW" || settlement.stage === "RELEASED" ? "bad" : "warn"}>{proofLabel(settlement)}</Pill></p>
             <SessionLine sessionId={props.sessionId} />
-            <p className="mw-fine">Fixture execution{settlement.fixtureIn === null ? "" : ` · ${settlement.fixtureIn} → ${settlement.fixtureOut ?? "—"}`}</p>
-            {settlement.txHash === null ? null : <p className="mw-hash"><code title={settlement.txHash}>{shortHash(settlement.txHash)}</code>{settlement.block === null ? null : <span>Block {settlement.block}</span>}</p>}
+            {settlement.fixtureIn === null ? null : <p className="mw-fine">{settlement.fixtureIn} → {settlement.fixtureOut ?? "—"}</p>}
+            {settlement.txHash === null ? null : <p className="mw-hash">Transaction <code title={settlement.txHash}>{shortHash(settlement.txHash)}</code>{settlement.block === null ? null : <span>Confirmed in block {settlement.block}</span>}</p>}
+            {settlement.gasUsed === null ? null : <p className="mw-fine">Gas {settlement.gasUsed}</p>}
             {settlement.explorerUrl === null ? null : <a className="mw-soft-button" href={settlement.explorerUrl} target="_blank" rel="noreferrer noopener">View transaction ↗</a>}
-            {settlement.stage === "SUBMITTED" ? <p className="mw-fine">A transaction hash is not settlement. LIVE_TESTNET requires a confirmed receipt.</p> : null}
-            {settlement.stage === "FAILED" ? <p className="mw-fine">Failed receipt. Never presented as LIVE_TESTNET.</p> : null}
-            {detail === "" ? null : <p className="mw-fine">{detail}</p>}
-            {settlement.stage === "READY_FOR_SEND" ? <p className="mw-fine">Dry run passed for this session&rsquo;s reservation. Broadcast is disabled in this milestone: nothing was sent.</p> : null}
-            {settlement.stage === "SPINE_READY" && !stale ? <p className="mw-fine">Simulation passed. Nothing was broadcast.</p> : null}
-            {stale ? <p className="mw-fine">This simulation has expired. It is not current. Dry-run again. Nothing was broadcast.</p> : null}
-            {settlement.stage === "RECONCILING" ? <p className="mw-fine">Checking settlement status… Nothing is resent.</p> : null}
+            {settlement.stage === "SUBMITTED" ? <p className="mw-fine">Transaction submitted. A transaction hash is not settlement. Confirming…</p> : null}
+            {settlement.stage === "SIMULATION_FAILED" ? <p className="mw-fine">Simulation failed. Nothing was sent.</p> : null}
+            {settlement.stage === "FAILED" ? <p className="mw-fine">Failed receipt. Never presented as LIVE_TESTNET. {failed || "Nothing was sent."}</p> : null}
+            {settlement.stage === "READY_FOR_SEND" ? <p className="mw-fine">Broadcast is disabled in this milestone: nothing was sent.</p> : null}
+            {settlement.stage === "PREFLIGHT_FAILED" ? <p className="mw-fine">{failed || "Nothing was sent."}</p> : null}
+            {detail !== "" && settlement.stage !== "FAILED" && settlement.stage !== "PREFLIGHT_FAILED" ? <p className="mw-fine">{detail}</p> : null}
+            {settlement.stage === "RECONCILING" ? <p className="mw-fine">Confirming… Nothing is resent.</p> : null}
             {settlement.stage === "NEEDS_REVIEW" ? <p className="mw-fine">Settlement needs review. No retry was sent.</p> : null}
             {settlement.stage === "RELEASED" ? <p className="mw-fine">Transaction failed or never executed. The reservation was released only after the gate deadline passed with nothing recorded onchain.</p> : null}
-            {settlement.consumed ? <p className="mw-fine">Reservation consumed in the durable ledger: it can never authorize another execution.</p> : null}
+            {settlement.settled ? (
+              <ul className="mw-rows">
+                <li>Mandate verified</li>
+                <li>Exact execution authorized</li>
+                {settlement.commitmentRecorded ? <li>Execution commitment recorded onchain</li> : null}
+                {settlement.consumed ? <li>Reservation consumed</li> : null}
+                <li>Evidence {settlement.evidence ?? "recorded"}</li>
+              </ul>
+            ) : null}
+            {settlement.consumed && !settlement.settled ? <p className="mw-fine">Already settled. Nothing is resent.</p> : null}
             <AuthorityLines settlement={settlement} />
-            {settlement.stage === "SPINE_READY" ? <TechnicalDetails settlement={settlement} /> : null}
-            <SettleActions settlement={settlement} offer={props.offer} busy={props.busy} capable={stockTrade.settlementCapable} stale={stale} onDryRun={props.onDryRun} />
+            {settlement.stage === "SPINE_READY" || settlement.settled ? <TechnicalDetails settlement={settlement} /> : null}
+            <SettleActions settlement={settlement} offer={props.offer} busy={props.busy} capable={stockTrade.settlementCapable} walletOk={props.walletOk} onExecute={props.onExecute} />
           </>
         ) : (
           <>
             <p className="mw-proof__main">Not settled in this session</p>
             <SessionLine sessionId={props.sessionId} />
-            <p className="mw-fine">The browser never sends transactions. The operator runs the session-bound testnet settlement for this session; its events appear here.</p>
-            <SettleActions settlement={settlement} offer={props.offer} busy={props.busy} capable={stockTrade.settlementCapable} stale={stale} onDryRun={props.onDryRun} />
+            <p className="mw-fine">The browser never sends transactions. Execution stays on the local server. This page does not build the transaction.</p>
+            <SettleActions settlement={settlement} offer={props.offer} busy={props.busy} capable={stockTrade.settlementCapable} walletOk={props.walletOk} onExecute={props.onExecute} />
           </>
         )}
         <p className="mw-proof__qualify">{FIXTURE_QUALIFICATION}</p>
@@ -304,8 +352,8 @@ export function ReceiptStage(props: {
   readonly stockTrade: AuthorizedStockTrade;
   readonly sessionId: string | null;
   readonly offer: SettlementOffer;
-  readonly now: number;
-  readonly onDryRun: () => void;
+  readonly walletOk: boolean;
+  readonly onExecute: () => void;
   readonly onDetails: () => void;
   readonly onRoom: (() => void) | null;
   readonly onStress: () => void;
@@ -314,11 +362,11 @@ export function ReceiptStage(props: {
   readonly busy: boolean;
 }): ReactNode {
   const { review, settlement } = props;
-  const title = settlement.settled ? "Trade complete" : settlement.stage === "FAILED" || settlement.stage === "SIMULATION_FAILED" || settlement.stage === "PREFLIGHT_FAILED" || settlement.stage === "RELEASED" ? "Settlement failed" : settlement.stage === "NEEDS_REVIEW" ? "Settlement needs review" : settlement.stage === "SPINE_READY" ? "Dry run ready" : "Portfolio authorized";
+  const title = settlement.settled ? "Settled" : settlement.stage === "FAILED" || settlement.stage === "SIMULATION_FAILED" || settlement.stage === "PREFLIGHT_FAILED" || settlement.stage === "RELEASED" ? "Settlement failed" : settlement.stage === "NEEDS_REVIEW" ? "Settlement needs review" : settlement.stage === "SUBMITTED" || settlement.stage === "RECONCILING" ? "Confirming" : "Portfolio authorized";
   return (
     <div className="mw-receipt">
       <header className="mw-stage-head">
-        <Pill tone={title === "Settlement failed" || title === "Settlement needs review" ? "bad" : title === "Dry run ready" ? "warn" : "good"}>{title === "Settlement failed" ? "✕ Not settled" : title === "Settlement needs review" ? "! Needs review" : settlement.settled ? "✓ Settled" : title === "Dry run ready" ? "READY · NOT SENT" : "✓ Authorized"}</Pill>
+        <Pill tone={title === "Settlement failed" || title === "Settlement needs review" ? "bad" : title === "Confirming" ? "warn" : "good"}>{title === "Settlement failed" ? "✕ Not settled" : title === "Settlement needs review" ? "! Needs review" : settlement.settled ? "✓ Settled" : title === "Confirming" ? "Confirming" : "✓ Authorized"}</Pill>
         <h2>{title}</h2>
         <p>{review.authorizedCount} of {review.evaluated} agents authorized{review.reserved === null ? "" : ` · ${usd(review.reserved)} reserved`}.{settlement.settled ? "" : " Reserved is not settled."}</p>
       </header>
@@ -348,7 +396,7 @@ export function ReceiptStage(props: {
         )}
       </div>
 
-      <SettlementProof settlement={settlement} stockTrade={props.stockTrade} sessionId={props.sessionId} offer={props.offer} busy={props.busy} now={props.now} onDryRun={props.onDryRun} />
+      <SettlementProof settlement={settlement} stockTrade={props.stockTrade} sessionId={props.sessionId} offer={props.offer} busy={props.busy} walletOk={props.walletOk} onExecute={props.onExecute} />
 
       <footer className="mw-stage-foot mw-stage-foot--receipt">
         <button type="button" className="mw-cta" onClick={props.onDetails}>Review details</button>

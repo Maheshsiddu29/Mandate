@@ -93,12 +93,12 @@ advances on a timer. Equal authoritative event timestamps stay grouped.
 wallet. The demo principal key remains, and it still needs the exact
 `AUTHORIZE MANDATE V<n>` phrase. That key cannot settle on V2.
 
-Dry-run from the page, after a wallet-authorized run, when `npm run agents:lab`
-is the server: **Dry-run testnet settlement**. If the wallet is not the
-manifest principal, **Sign execution authorization** asks the wallet for
-`MandateAuthorization` before simulation. That signature is not a
-transaction. The receipt shows the session id and READY · NOT SENT. This
-page does not broadcast. See docs/v2/real-browser-execution-spine.md.
+After a wallet-authorized Stock reservation, when `npm run agents:lab` is
+the server: **Execute on Robinhood Testnet**. That is one `SEND` through
+the existing spine. The wallet signs `MandateAuthorization` once for that
+exact execution. The server simulates that call and broadcasts it once.
+The receipt keeps the semantic Stock candidate first and shows MDUSD → MDEMO
+as the testnet proof. See docs/demo/c1-browser-complete-settlement.md.
 
 The landing hero renders React Bits
 [Pattern Waves](https://www.reactbits.dev/backgrounds/pattern-waves) with

@@ -165,19 +165,20 @@ test('the review step signs with a real wallet, or with the labelled demo key �
   // The wallet path: a server challenge, the wallet's EIP-712 signature, server verification; the browser sends only id and signature.
   assert.match(lab, /call\("POST", "\/wallet\/challenge", \{ address, spine: "V2" \}\)/);
   assert.match(lab, /api\(SERVER, "GET", "\/settlement"\)/);
-  assert.match(lab, /mode: "DRY_RUN"/);
+  assert.match(lab, /mode: "SEND", intent: "EXECUTE_ROBINHOOD_TESTNET"/);
   assert.match(lab, /gateSignature: signed\.value/);
   assert.match(lab, /cancel: true/);
-  assert.match(lab, /gate\.mode !== "DRY_RUN"/);
-  assert.doesNotMatch(lab, /sendAuthorization|mode: "SEND"/);
+  assert.match(lab, /gate\.mode !== "SEND"/);
+  assert.doesNotMatch(lab, /sendAuthorization|tokenIn:|calldata/);
   assert.match(lab, /npm run agents:lab/);
   assert.match(outcome, /Sign stock authorization/);
   assert.match(outcome, /Sign execution authorization/);
   assert.match(outcome, /Nothing is broadcast\./);
-  assert.match(outcome, /Nothing was broadcast\./);
-  assert.match(outcome, /Broadcast is unavailable in this milestone/);
+  assert.match(outcome, /Execute on Robinhood Testnet/);
+  assert.match(outcome, /Testnet settlement proof/);
+  assert.match(outcome, /\{settlement\.fixtureIn\} → \{settlement\.fixtureOut/);
+  assert.doesNotMatch(outcome, /MDEMO → MDUSD/);
   assert.doesNotMatch(outcome, /Send testnet transaction/);
-  assert.match(outcome, /Dry-run testnet settlement/);
   assert.doesNotMatch(browserSources, /live-settlement|eth_sendTransaction|sendTransaction/);
   assert.match(lab, /w\.signTypedData\(address, challenge\.typedData\)/);
   assert.match(lab, /call\("POST", "\/wallet\/authorize", \{ challenge: str\(challenge\.challenge\), signature: signed\.value \}\)/);

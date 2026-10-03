@@ -292,6 +292,8 @@ export interface SettlementView {
   readonly initialAllocationDigest: string | null;
   readonly currentPlanDigest: string | null;
   readonly walletPrincipal: string | null;
+  readonly receiptDigest: string | null;
+  readonly commitmentRecorded: boolean;
 }
 
 export interface LivePresentation {
@@ -732,6 +734,8 @@ export function deriveSettlement(events: readonly LiveEvent[]): SettlementView {
     initialAllocationDigest: null,
     currentPlanDigest: null,
     walletPrincipal: null,
+    receiptDigest: null,
+    commitmentRecorded: false,
   };
   let view = base;
   for (const event of events) {
@@ -836,6 +840,13 @@ export function deriveSettlement(events: readonly LiveEvent[]): SettlementView {
         decisionNotional: textField(authorized, "notionalUsdc"),
         fixtureIn: tokenLabel(tokenIn) ?? textField(authorized, "debit"),
         fixtureOut: tokenLabel(tokenOut) ?? textField(authorized, "quantity"),
+        candidateId: textField(data, "candidateId") ?? view.candidateId,
+        mandateDigest: textField(data, "mandateDigest") ?? view.mandateDigest,
+        reservationId: textField(data, "reservation") ?? view.reservationId,
+        walletPrincipal: textField(data, "principal") ?? view.walletPrincipal,
+        gate: textField(data, "target") ?? view.gate,
+        receiptDigest: textField(data, "receiptDigest") ?? view.receiptDigest,
+        commitmentRecorded: rec(data.postconditions).commitmentRecordedOnchain === true || view.commitmentRecorded,
       });
     }
   }

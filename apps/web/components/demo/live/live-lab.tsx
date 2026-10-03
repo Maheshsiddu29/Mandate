@@ -433,10 +433,10 @@ export function LiveLab(): ReactNode {
     return result.body;
   }
 
-  async function dryRun(): Promise<void> {
+  async function execute(): Promise<void> {
     setSigning(true);
     setError("");
-    await postSettle({ mode: "DRY_RUN" });
+    await postSettle({ mode: "SEND", intent: "EXECUTE_ROBINHOOD_TESTNET" });
     setSigning(false);
   }
 
@@ -448,8 +448,8 @@ export function LiveLab(): ReactNode {
       setError("Connect the wallet that signed this mandate. Nothing was broadcast.");
       return;
     }
-    if (gate.mode !== "DRY_RUN") {
-      setError("This page does not broadcast. Nothing was sent.");
+    if (gate.mode !== "SEND") {
+      setError("This signature is not for the execution that is open. Nothing was sent.");
       return;
     }
     const chain = await w.getChainId();
@@ -463,7 +463,7 @@ export function LiveLab(): ReactNode {
     if (!signed.ok) {
       await api(SERVER, "POST", `/sessions/${sessionId}/settle`, { mode: gate.mode, cancel: true });
       setSigning(false);
-      setError(`${signed.error.message} Nothing was broadcast.`);
+      setError("Signature cancelled. Nothing was sent.");
       return;
     }
     await postSettle({ mode: gate.mode, gateSignature: signed.value });
@@ -625,9 +625,9 @@ export function LiveLab(): ReactNode {
           stockTrade={stockTrade}
           sessionId={sessionId}
           offer={settlementOffer}
-          now={now}
+          walletOk={wallet.address !== null && wallet.chainId === APPROVAL_CHAIN.chainId && (str(authorization.principal) === "—" || wallet.address === str(authorization.principal).toLowerCase()) && (authorization.method === "WALLET_PRINCIPAL_V2" || authorization.method === "WALLET_PRINCIPAL_V2_PLAN")}
           busy={task !== null || signing}
-          onDryRun={() => void dryRun()}
+          onExecute={() => void execute()}
           onDetails={() => setSheet("review")}
           onRoom={roomSeen ? () => setSheet("room") : null}
           onStress={() => setSheet("stress")}

@@ -189,27 +189,24 @@ Dry-run from the page:
    `PortfolioMandateV2` (`POST …/wallet/challenge` with `{ "spine": "V2" }`).
    The demo principal key still works for a run. It cannot settle on V2
    (`SPINE_METHOD_REQUIRED`). `reverifySpine` is not skipped.
-3. After the portfolio is authorized, the receipt offers **Dry-run testnet
-   settlement**. That is `POST …/settle` with `{ "mode": "DRY_RUN" }`, the
-   same `settleSpine` as the CLI. The fixture stays MDEMO/MDUSD. Registry
-   matching is unchanged.
+3. After the portfolio is authorized, the receipt offers **Execute on
+   Robinhood Testnet** when Stock is reserved and the wallet is the V2
+   principal. The fixture stays MDUSD → MDEMO. Registry matching is unchanged.
 4. If the wallet is not the manifest principal, the page moves to **Sign
-   stock authorization** before simulation. Phantom signs
+   execution authorization** before simulation. The wallet signs
    `MandateAuthorization` (`eth_signTypedData_v4` only). That signature is
-   not a gas transaction. The deployer key broadcasts. A wallet rejection
-   cancels the parked run. The wait is 180 seconds; after that the run stops
-   and nothing is broadcast.
-5. The receipt then shows the session id and **READY · NOT SENT**. Nothing
-   was broadcast. The page does not collect the operator phrase and does not
-   post `SEND`. Broadcast from this page is unavailable. See
-   [the browser execution spine](../v2/real-browser-execution-spine.md).
+   not a gas transaction. A rejection cancels the parked run. The wait is
+   180 seconds; after that the run stops and nothing is broadcast.
+5. **Execute on Robinhood Testnet** posts one `SEND` with intent
+   `EXECUTE_ROBINHOOD_TESTNET`. The wallet signs `MandateAuthorization`
+   once. That same artifact is simulated and, if the simulation passes,
+   broadcast once. See
+   [C1](c1-browser-complete-settlement.md).
 
-`npm run agents:settle:v2 -- --send` still exists for a later, explicit
-broadcast decision. It is not wired to the page. `--send` still builds a new
-mandate digest, so a different-address wallet is asked to sign
-`MandateAuthorization` again. The deployer would pay gas. A stub session
-cannot live-send. A transaction hash is not CONFIRMED; only `LIVE_TESTNET`
-evidence is. The wallet must hold the MDUSD debit and have approved the gate.
+`npm run agents:settle:v2 -- --send` still dry-runs first and then sends,
+so it asks for a second gate signature. A stub session cannot live-send.
+A transaction hash is not CONFIRMED; only `LIVE_TESTNET` evidence is. The
+wallet must hold the MDUSD debit and have approved the gate.
 
 If the receipt says to start `npm run agents:lab`, the page is talking to
 `agents:serve`. Settlement routes are absent there on purpose.

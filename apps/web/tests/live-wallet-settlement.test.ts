@@ -108,9 +108,10 @@ test('a V2 dry run ends READY · NOT SENT, and the gate signature is a step befo
   assert.match(outcome, /Sign stock authorization/);
   assert.match(outcome, /Sign execution authorization/);
   assert.match(outcome, /This signs execution authority\. It is not a transaction\./);
-  assert.match(outcome, /Broadcast is unavailable in this milestone\. Nothing was broadcast\./);
-  assert.match(outcome, /This simulation has expired/);
-  assert.match(outcome, /Technical details/);
+  assert.match(outcome, /Execute on Robinhood Testnet/);
+  assert.match(outcome, /Technical proof/);
+  assert.match(outcome, /Agent selected/);
+  assert.match(lab, /Signature cancelled\. Nothing was sent\./);
   assert.doesNotMatch(outcome, /Send testnet transaction/);
   const proved = after(['SPINE_DRY_RUN_READY', { broadcast: false, evidenceClass: 'DRY_RUN', candidateId: 'nvda-note-a', mandateDigest: '0xabc', gasEstimate: '21000', simulationDeadline: '90', reservation: '0xres', initialAllocationDigest: '0xalloc', principal: '0xwallet', gate: '0xgate' }]);
   const proof = derivePresentation(proved).settlement;

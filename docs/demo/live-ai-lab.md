@@ -769,7 +769,7 @@ The server (`packages/live-agents/src/server/`):
 | `POST …/draft/fill`, `…/draft/field`, `…/draft/resolve` | fill unset fields from a preset; set one field; resolve one interpretation issue |
 | `POST …/wallet/challenge` | `{ address, spine?: "V2" }` → a one-time EIP-712 approval. Omitted spine is the B.5.3 `PortfolioMandateApproval`. `"V2"` is the plan-bound `PortfolioMandateAuthorizationV2` and returns `initialAllocationDigest` |
 | `GET /api/live/settlement` | on `agents:lab` only: spine V2 is available, the operator phrase, gas payer `DEPLOYER`. `agents:serve` answers 404. A missing manifest or key answers 503 |
-| `POST …/settle` | on `agents:lab` only: `{ mode: "DRY_RUN" \| "SEND", gateSignature?, sendAuthorization?, cancel? }` — the same spine as `agents:settle:v2`. The wallet does not broadcast. The Live Lab page posts `DRY_RUN` only and stops at READY · NOT SENT |
+| `POST …/settle` | on `agents:lab` only: `{ mode: "DRY_RUN" \| "SEND", intent?: "EXECUTE_ROBINHOOD_TESTNET", gateSignature?, sendAuthorization?, cancel? }` — the same spine as `agents:settle:v2`. The page's Execute action is one `SEND` with that intent. The wallet does not broadcast |
 | `POST …/wallet/authorize` | `{ challenge, signature }` — the server rebuilds the message and verifies the recovered signer (B.5.3) |
 | `POST …/authorize`, `…/pause` | need the exact confirmation text (the demo key path; pause) |
 | `POST …/run`, `…/policy-stress` | start in the background; progress is the event stream |
