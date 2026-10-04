@@ -6,9 +6,18 @@
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import { bytesToHex } from '@mandate/kernel';
 import { representationIdFor } from '@mandate/execution-gate';
-import { parseUsdc, type V3ChallengeHost, type V3IssueInput, type V3IssueResult, type V3PublicScope } from '@mandate/live-agents';
+import {
+  parseUsdc,
+  type MandateDraft,
+  type V3ChallengeHost,
+  type V3IssueInput,
+  type V3IssueResult,
+  type V3PublicScope,
+  type V3SetupPreviewResult,
+} from '@mandate/live-agents';
 import type { ReviewedMarket } from '@mandate/evm-robinhood';
-import { deriveV3StockFixtureCap } from './cap.ts';
+import type { PortfolioMandate } from '@mandate/portfolio';
+import { deriveV3StockFixtureCap, type V3CapResult } from './cap.ts';
 import { createExecutionDelegate, restoredExecutionDelegate, type ExecutionDelegate } from './execution-delegate.ts';
 import { AutonomousSettlementGate } from './autonomous-gate.ts';
 
@@ -16,6 +25,19 @@ function atomsOrNull(usdc: string | null): string | null {
   if (usdc === null || usdc === '') return null;
   const atoms = parseUsdc(usdc);
   return atoms === null ? null : atoms.toString();
+}
+
+function stockCap(draft: MandateDraft, market: ReviewedMarket): V3CapResult {
+  const stock = draft.agents.stock;
+  return deriveV3StockFixtureCap({
+    stock: {
+      enabled: stock.enabled,
+      budget: atomsOrNull(stock.budget),
+      maxAllocation: atomsOrNull(stock.maxAllocation),
+    },
+    autoReallocate: draft.portfolio.autoReallocate === true,
+    market,
+  });
 }
 
 const utf8 = new TextEncoder();
@@ -66,16 +88,7 @@ export class LiveV3ChallengeHost implements V3ChallengeHost {
       return { ok: true, scope: existing.scope };
     }
 
-    const stock = input.draft.agents.stock;
-    const cap = deriveV3StockFixtureCap({
-      stock: {
-        enabled: stock.enabled,
-        budget: atomsOrNull(stock.budget),
-        maxAllocation: atomsOrNull(stock.maxAllocation),
-      },
-      autoReallocate: input.draft.portfolio.autoReallocate === true,
-      market: this.#cfg.market,
-    });
+    const cap = stockCap(input.draft, this.#cfg.market);
     if (!cap.ok) return { ok: false, code: cap.reason, message: `V3 fixture debit cap refused: ${cap.reason}.` };
 
     const delegate = createExecutionDelegate();
@@ -103,6 +116,29 @@ export class LiveV3ChallengeHost implements V3ChallengeHost {
     const autonomous = new AutonomousSettlementGate();
     this.#bySession.set(input.sessionId, { delegate, scope, autonomous });
     return { ok: true, scope };
+  }
+
+  previewSettlementSetup(input: {
+    readonly principal: string;
+    readonly draft: MandateDraft;
+    readonly mandate: PortfolioMandate;
+  }): V3SetupPreviewResult {
+    if (this.#cfg.chainId !== 46_630n) return { ok: false, code: 'V3_CHAIN', message: 'V3 is Robinhood Chain testnet only.' };
+    if (input.principal.toLowerCase() !== input.mandate.principal.value.toLowerCase()) {
+      return { ok: false, code: 'V3_PRINCIPAL', message: 'V3 setup principal must match the compiled mandate.' };
+    }
+    const cap = stockCap(input.draft, this.#cfg.market);
+    if (!cap.ok) return { ok: false, code: cap.reason, message: `V3 fixture debit cap refused: ${cap.reason}.` };
+    return {
+      ok: true,
+      plan: {
+        chainId: Number(this.#cfg.chainId),
+        gate: this.#cfg.gate.toLowerCase(),
+        fundingToken: this.#cfg.fundingToken.toLowerCase(),
+        requiredAllowanceAtoms: cap.cumulativeDebitLimit.toString(),
+        basis: cap.basis,
+      },
+    };
   }
 
   /** After a verified V3 principal authorization is active in-process. */

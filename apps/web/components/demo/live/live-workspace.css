@@ -1405,6 +1405,16 @@ button.mw-signer__option { width: 100%; color: inherit; font: inherit; text-alig
 button.mw-signer__option:disabled { cursor: not-allowed; }
 button.mw-signer__option:focus-visible { outline: 2px solid rgba(169, 166, 255, 0.6); outline-offset: 2px; }
 .mw-signer__actions { display: grid; gap: 0.5rem; justify-items: start; margin-top: 0.2rem; }
+.mw-settlement-setup {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.85rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid rgba(169, 166, 255, 0.18);
+  border-radius: 14px;
+  background: rgba(99, 102, 241, 0.05);
+}
+.mw-settlement-setup .mw-authority-review__title { margin: 0; }
 .mw-evidence--compact { gap: 0.4rem; margin-top: 0.6rem; font-size: 0.8rem; }
 
 /* Mandate Room V2: agent selection, allocation and the Planning Room (docs/v2/mandate-room-v2.md §15–17). */

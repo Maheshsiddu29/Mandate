@@ -21,7 +21,6 @@ import {
   LiveV3ChallengeHost,
   RobinhoodTestnetRpc,
   SettlementJournal,
-  V3_GATE_PLACEHOLDER,
   parseDeployment,
   reconcileAttempts,
   settleSpine,
@@ -29,6 +28,7 @@ import {
   type TestnetDeployment,
 } from '../src/index.ts';
 import { SpineUi, type LabRouteResponse, type V3UiHost } from '../src/ui-settle.ts';
+import { loadLiveV3Gate } from './live-gate.ts';
 import { readRpcConfig } from './rpc-config.ts';
 
 const { values } = parseArgs({ options: { 'dev-chaos': { type: 'boolean', default: false } }, strict: true });
@@ -50,7 +50,13 @@ function asApi(r: LabRouteResponse): ApiResponse {
 }
 
 function buildV3(d: TestnetDeployment, agentAddress: string): { readonly host: LiveV3ChallengeHost; readonly ui: V3UiHost } | null {
-  const gate = V3_GATE_PLACEHOLDER;
+  // Live Gate from human deployment evidence — never invent, never use V2 Gate.
+  const live = loadLiveV3Gate();
+  if (!live.ok) {
+    process.stdout.write(`V3 Gate unavailable: ${live.reason}. V3 spine off until contracts/deploy/robinhood-testnet-delegated-live.json is present.\n`);
+    return null;
+  }
+  const gate = live.gate;
   const host = new LiveV3ChallengeHost({
     chainId: d.chainId,
     gate,
@@ -69,7 +75,7 @@ function buildV3(d: TestnetDeployment, agentAddress: string): { readonly host: L
       gate: {
         address: gate,
         domainSeparator: delegatedDomainSeparator(d.chainId, gate as never),
-        runtimeCodeHash: `0x${'cd'.repeat(32)}`,
+        runtimeCodeHash: live.runtimeCodeHash ?? `0x${'00'.repeat(32)}`,
       },
       nextNonce: (sessionId) => nonces.get(sessionId) ?? 1n,
       markNonceUsed: (sessionId, nonce) => {

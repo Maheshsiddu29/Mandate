@@ -3,17 +3,27 @@
  * EIP-1193 provider (`window.ethereum`).
  *
  * It can connect, read the account and the chain, ask the wallet to switch
- * to Robinhood Chain testnet, and sign EIP-712 typed data the local server
- * built. That is all: every request goes through one allowlist, and it has
- * no way to send, sign a transaction or sign raw bytes. Both signatures it
- * collects are typed data: PortfolioMandateAuthorizationV2 for the portfolio, and
- * MandateAuthorization for one stock execution. Neither broadcasts. The
- * deployer pays gas. A wallet signature never delegates onchain execution
- * authority.
+ * to Robinhood Chain testnet, sign EIP-712 typed data the local server built,
+ * and — only for V3 settlement setup — submit one bounded ERC-20
+ * `approve(V3Gate, amount)` transaction. Raw signing and unlimited approvals
+ * are refused. Settlement broadcasts still use the lab submitter, never this
+ * wallet, except that one-time principal MDUSD approval.
  */
 
+import { UINT256_MAX, type TrustedSettlementPlan, boundedApproveTx } from "./settlement-setup.ts";
+
 /** The only wallet methods this app ever calls. */
-export const WALLET_METHODS = ["eth_requestAccounts", "eth_accounts", "eth_chainId", "wallet_switchEthereumChain", "wallet_addEthereumChain", "eth_signTypedData_v4"] as const;
+export const WALLET_METHODS = [
+  "eth_requestAccounts",
+  "eth_accounts",
+  "eth_chainId",
+  "wallet_switchEthereumChain",
+  "wallet_addEthereumChain",
+  "eth_signTypedData_v4",
+  "eth_sendTransaction",
+  "eth_call",
+  "eth_getTransactionReceipt",
+] as const;
 type WalletMethod = (typeof WALLET_METHODS)[number];
 
 /** Robinhood Chain testnet: where wallet approvals are bound (the server's EIP-712 domain). */
@@ -42,6 +52,13 @@ export interface WalletAdapter {
   getChainId(): Promise<WalletResult<number>>;
   switchChain(): Promise<WalletResult<true>>;
   signTypedData(address: string, typedData: unknown): Promise<WalletResult<string>>;
+  /**
+   * One-time bounded MDUSD.approve(V3Gate, amount) from the trusted plan.
+   * Refuses wrong chain, principal mismatch, and unlimited amounts.
+   */
+  sendBoundedErc20Approve(plan: TrustedSettlementPlan): Promise<WalletResult<string>>;
+  ethCall(to: string, data: string): Promise<WalletResult<string>>;
+  waitForReceipt(txHash: string, timeoutMs?: number): Promise<WalletResult<"SUCCESS" | "REVERTED">>;
 }
 
 function failure(e: unknown): WalletError {
@@ -62,6 +79,7 @@ export function walletAvailable(): boolean {
 }
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+const TX_HASH = /^0x[0-9a-fA-F]{64}$/;
 
 /** A wallet adapter over the injected provider, or null when there is none. */
 export function injectedWallet(provider: Eip1193 | null = injected()): WalletAdapter | null {
@@ -104,6 +122,52 @@ export function injectedWallet(provider: Eip1193 | null = injected()): WalletAda
       const r = await call("eth_signTypedData_v4", [address, JSON.stringify(typedData)]);
       if (!r.ok) return r;
       return typeof r.value === "string" && /^0x[0-9a-fA-F]{130}$/.test(r.value) ? { ok: true, value: r.value } : { ok: false, error: { code: "FAILED", message: "The wallet returned no signature." } };
+    },
+    async sendBoundedErc20Approve(plan) {
+      if (plan.chainId !== APPROVAL_CHAIN.chainId) {
+        return { ok: false, error: { code: "WRONG_CHAIN", message: "Settlement setup only runs on Robinhood Chain testnet." } };
+      }
+      const chain = await this.getChainId();
+      if (!chain.ok) return chain;
+      if (chain.value !== APPROVAL_CHAIN.chainId) {
+        return { ok: false, error: { code: "WRONG_CHAIN", message: "Switch your wallet to Robinhood Chain testnet before enabling settlement." } };
+      }
+      const amount = BigInt(plan.requiredAllowanceAtoms);
+      if (amount <= 0n || amount >= UINT256_MAX) {
+        return { ok: false, error: { code: "FAILED", message: "Unlimited or zero approval is refused." } };
+      }
+      const built = boundedApproveTx(plan, plan.principal);
+      if (!built.ok) return { ok: false, error: { code: "FAILED", message: built.reason } };
+      const r = await call("eth_sendTransaction", [built.tx]);
+      if (!r.ok) return r;
+      return typeof r.value === "string" && TX_HASH.test(r.value)
+        ? { ok: true, value: r.value.toLowerCase() }
+        : { ok: false, error: { code: "FAILED", message: "The wallet returned no transaction hash." } };
+    },
+    async ethCall(to, data) {
+      if (!ADDRESS.test(to) || !/^0x[0-9a-fA-F]*$/.test(data)) {
+        return { ok: false, error: { code: "FAILED", message: "Invalid eth_call." } };
+      }
+      const r = await call("eth_call", [{ to, data }, "latest"]);
+      if (!r.ok) return r;
+      return typeof r.value === "string" && /^0x[0-9a-fA-F]*$/.test(r.value)
+        ? { ok: true, value: r.value }
+        : { ok: false, error: { code: "FAILED", message: "eth_call returned no data." } };
+    },
+    async waitForReceipt(txHash, timeoutMs = 120_000) {
+      if (!TX_HASH.test(txHash)) return { ok: false, error: { code: "FAILED", message: "Invalid transaction hash." } };
+      const until = Date.now() + timeoutMs;
+      while (Date.now() < until) {
+        const r = await call("eth_getTransactionReceipt", [txHash]);
+        if (!r.ok) return r;
+        if (r.value !== null && typeof r.value === "object") {
+          const status = (r.value as { status?: unknown }).status;
+          if (status === "0x1" || status === 1 || status === "1") return { ok: true, value: "SUCCESS" };
+          if (status === "0x0" || status === 0 || status === "0") return { ok: true, value: "REVERTED" };
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1_000));
+      }
+      return { ok: false, error: { code: "FAILED", message: "Timed out waiting for the approval transaction." } };
     },
   };
 }

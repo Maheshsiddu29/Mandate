@@ -19,6 +19,14 @@ import { ApproveStage, ConfigureStage, draftAccess, mandateSummary, PermissionsB
 import { AuthorizedStage, FailedStage, ReceiptStage, SettlingStage, VerifyStage, type SettlementOffer } from "./stage-outcome";
 import { executionRetry, settlementRefusal, type SettlementRefusal } from "./settlement-refusal";
 import { executeOffered, parseRestored, restoreSettlement } from "./settlement-restore";
+import {
+  decodeUint256Word,
+  encodeAllowanceCalldata,
+  parseTrustedSettlementPlan,
+  readinessAfterAllowance,
+  type SettlementSetupStatus,
+  type TrustedSettlementPlan,
+} from "./settlement-setup";
 import { APPROVAL_CHAIN, injectedWallet, shortAddress } from "./wallet";
 import { Sheet } from "./workspace-ui";
 import "./live-workspace.css";
@@ -124,6 +132,10 @@ export function LiveLab(): ReactNode {
   const [signing, setSigning] = useState(false);
   const [settlementOffer, setSettlementOffer] = useState<SettlementOffer>({ kind: "loading" });
   const [planOpen, setPlanOpen] = useState(false);
+  const [setupStatus, setSetupStatus] = useState<SettlementSetupStatus>("IDLE");
+  const [setupPlan, setSetupPlan] = useState<TrustedSettlementPlan | null>(null);
+  const [setupBusy, setSetupBusy] = useState(false);
+  const [setupDetail, setSetupDetail] = useState("");
   const lastSequence = useRef(-1);
   const stageRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
@@ -266,6 +278,19 @@ export function LiveLab(): ReactNode {
     settlement,
   });
   const phase = flow.phase;
+
+  useEffect(() => {
+    if (phase !== "APPROVE" || !isV3Spine) return;
+    if (wallet.address === null || wallet.chainId !== APPROVAL_CHAIN.chainId) {
+      setSetupStatus("IDLE");
+      setSetupPlan(null);
+      return;
+    }
+    void loadSettlementSetup();
+    // Intentionally tied to review entry + wallet identity, not every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, isV3Spine, wallet.address, wallet.chainId, sessionId]);
+
   const pending = presentation.agents.some((agent) => agent.phase === "PENDING" || agent.phase === "RESPONDING");
   const versions = arr(view.versions).map(rec);
   const activeRecord = versions.find((item) => item.version === activeVersion) ?? null;
@@ -375,7 +400,102 @@ export function LiveLab(): ReactNode {
     await readWallet();
   }
 
-  /** The wallet path: a server-issued challenge, signed in the wallet, verified by the server. Never a transaction. */
+  const isV3Spine =
+    rec(rec(status?.principalAuthorization).spineV3).available === true
+    || (settlementOffer.kind === "ready" && settlementOffer.spine === "V3");
+
+  /** Read MDUSD.allowance(principal, V3Gate) at latest via the wallet provider. */
+  async function refreshAllowance(plan: TrustedSettlementPlan): Promise<"NEED_ENABLE" | "READY" | "FAILED"> {
+    const w = injectedWallet();
+    if (w === null) return "FAILED";
+    const data = encodeAllowanceCalldata(plan.principal, plan.gate);
+    if (data === null) return "FAILED";
+    const r = await w.ethCall(plan.fundingToken, data);
+    if (!r.ok) {
+      setSetupDetail(r.error.message);
+      return "FAILED";
+    }
+    const have = decodeUint256Word(r.value);
+    if (have === null) {
+      setSetupDetail("Could not read MDUSD allowance.");
+      return "FAILED";
+    }
+    setSetupDetail("");
+    return readinessAfterAllowance(have, plan.requiredAllowanceAtoms);
+  }
+
+  /** Load trusted V3 setup plan and check allowance before the mandate signature. */
+  async function loadSettlementSetup(): Promise<void> {
+    const address = wallet.address;
+    if (!isV3Spine || address === null || wallet.chainId !== APPROVAL_CHAIN.chainId || sessionId === null) {
+      setSetupStatus("IDLE");
+      setSetupPlan(null);
+      return;
+    }
+    setSetupStatus("LOADING");
+    setSetupDetail("");
+    const body = await call("POST", "/wallet/settlement-setup", { address });
+    if (body === null) {
+      setSetupStatus("FAILED");
+      setSetupDetail("Settlement setup plan unavailable.");
+      return;
+    }
+    const parsed = parseTrustedSettlementPlan(body, address);
+    if (!parsed.ok) {
+      setSetupStatus("FAILED");
+      setSetupDetail(parsed.reason);
+      setSetupPlan(null);
+      return;
+    }
+    setSetupPlan(parsed.plan);
+    const next = await refreshAllowance(parsed.plan);
+    setSetupStatus(next === "FAILED" ? "FAILED" : next);
+  }
+
+  async function enableSettlement(): Promise<void> {
+    const w = injectedWallet();
+    const plan = setupPlan;
+    if (w === null || plan === null || wallet.address === null) return;
+    setSetupBusy(true);
+    setSetupDetail("");
+    setError("");
+    const chain = await w.getChainId();
+    if (!chain.ok || chain.value !== APPROVAL_CHAIN.chainId) {
+      setSetupBusy(false);
+      setSetupStatus("FAILED");
+      setSetupDetail("Switch your wallet to Robinhood Chain testnet before enabling settlement.");
+      await readWallet();
+      return;
+    }
+    setSetupStatus("SUBMITTING");
+    const sent = await w.sendBoundedErc20Approve(plan);
+    if (!sent.ok) {
+      setSetupBusy(false);
+      setSetupStatus("NEED_ENABLE");
+      setSetupDetail(sent.error.message);
+      return;
+    }
+    setSetupStatus("CONFIRMING");
+    setSetupDetail(`Approval submitted · ${sent.value.slice(0, 10)}…`);
+    const receipt = await w.waitForReceipt(sent.value);
+    if (!receipt.ok || receipt.value !== "SUCCESS") {
+      setSetupBusy(false);
+      setSetupStatus("NEED_ENABLE");
+      setSetupDetail(receipt.ok ? "Approval transaction reverted. Settlement is not ready." : receipt.error.message);
+      return;
+    }
+    const next = await refreshAllowance(plan);
+    setSetupBusy(false);
+    if (next !== "READY") {
+      setSetupStatus("NEED_ENABLE");
+      setSetupDetail("Allowance is still below the required bounded amount after confirmation.");
+      return;
+    }
+    setSetupStatus("READY");
+    setSetupDetail("");
+  }
+
+  /** The wallet path: a server-issued challenge, signed in the wallet, verified by the server. V3 requires settlement setup first. */
   async function authorizeWithWallet(): Promise<void> {
     const w = injectedWallet();
     const address = wallet.address;
@@ -396,6 +516,11 @@ export function LiveLab(): ReactNode {
       return;
     }
     const preferV3 = statusV3 || (settlementOffer.kind === "ready" && settlementOffer.spine === "V3");
+    if (preferV3 && setupStatus !== "READY") {
+      setAuthorizing(false);
+      setError("Enable settlement before authorizing the autonomous mandate. No mandate was activated.");
+      return;
+    }
     const challenge = await call("POST", "/wallet/challenge", { address, spine: preferV3 ? "V3" : "V2" });
     if (challenge === null) {
       setAuthorizing(false);
@@ -656,12 +781,22 @@ export function LiveLab(): ReactNode {
           authorizing={authorizing}
           error={error}
           wallet={wallet}
-          spine={rec(rec(status?.principalAuthorization).spineV3).available === true || (settlementOffer.kind === "ready" && settlementOffer.spine === "V3") ? "V3" : "V2"}
+          spine={isV3Spine ? "V3" : "V2"}
+          settlementSetup={
+            isV3Spine
+              ? { status: setupStatus, plan: setupPlan, busy: setupBusy, detail: setupDetail }
+              : undefined
+          }
           onConnect={() => void connectWallet()}
           onSwitchChain={() => void switchChain()}
+          onEnableSettlement={() => void enableSettlement()}
           onSignWallet={() => {
             if (!authorityReview.canAuthorize) {
               setError(authorityReview.blockerSummary || "Resolve open items before authorizing.");
+              return;
+            }
+            if (isV3Spine && setupStatus !== "READY") {
+              setError("Enable settlement before authorizing the autonomous mandate.");
               return;
             }
             void authorizeWithWallet();

@@ -88,7 +88,7 @@ import { ChallengeBook, MAX_SIGNATURE_FAILURES, draftKey, type WalletChallenge }
 import { keccakHex, recoverAddress } from './wallet/eip712.ts';
 import { spineAuthority, spineTypedData } from './wallet/spine.ts';
 import { spineAuthorityV3, spineTypedDataV3 } from './wallet/spine-v3.ts';
-import type { V3ChallengeHost, V3PublicScope } from './wallet/v3-host.ts';
+import type { V3ChallengeHost, V3PublicScope, V3SettlementSetupPlan } from './wallet/v3-host.ts';
 
 export interface SessionOptions {
   readonly provider: AgentModelProvider;
@@ -545,6 +545,34 @@ export class LiveSession {
       },
     });
     return { ok: true, challenge: id, version: p.prepared.version, digest: p.prepared.digest, initialAllocationDigest: allocation.digest, principal, validUntil: deadline.toString(), typedData: spineTypedData(p.prepared.mandate, this.id, allocation.digest) };
+  }
+
+  /**
+   * Trusted V3 settlement-setup plan for the connected wallet principal.
+   * Derives the bounded MDUSD allowance from the same fixture-cap path as
+   * issueScope, without creating a delegate or consuming a challenge.
+   */
+  previewV3SettlementSetup(
+    draft: MandateDraft,
+    address: string,
+  ): { readonly ok: true; readonly plan: V3SettlementSetupPlan; readonly principal: string } | { readonly ok: false; readonly code: string; readonly message: string } {
+    if (this.restored) return { ok: false, code: 'SESSION_RESTORED', message: 'A restored session authorizes nothing new. Start a new session.' };
+    if (typeof address !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(address)) {
+      return { ok: false, code: 'WALLET_ADDRESS_INVALID', message: 'The wallet address must be a 0x-prefixed 20-byte hex address.' };
+    }
+    const host = this.#o.v3Host;
+    if (host === undefined) {
+      return { ok: false, code: 'SPINE_SIGNATURE_INVALID', message: 'V3 delegated authorization is not available on this server. Start the settlement lab with a V3 host.' };
+    }
+    const principal = address.toLowerCase();
+    const p = this.versions.prepare(draft, this.protocolNow(), { kind: 'eip155-address', value: principal });
+    if (!p.ok) return { ok: false, code: p.code, message: p.message };
+    if (p.prepared.mandate.principal.value !== principal) {
+      return { ok: false, code: 'WALLET_ADDRESS_INVALID', message: 'The mandate principal is not the wallet address.' };
+    }
+    const preview = host.previewSettlementSetup({ principal, draft, mandate: p.prepared.mandate });
+    if (!preview.ok) return { ok: false, code: 'DRAFT_INVALID', message: preview.message };
+    return { ok: true, plan: preview.plan, principal };
   }
 
   /**

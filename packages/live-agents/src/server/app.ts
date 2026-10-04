@@ -273,6 +273,8 @@ export class LiveLab {
         return this.#walletChallenge(entry, body);
       case 'wallet/authorize':
         return this.#walletAuthorize(entry, body);
+      case 'wallet/settlement-setup':
+        return this.#walletSettlementSetup(entry, body);
       case 'pause':
         return this.#pause(entry, body);
       case 'plan':
@@ -511,6 +513,28 @@ export class LiveLab {
       validUntil: r.validUntil,
       typedData: r.typedData,
       spine: spine === 'V3' ? 'V3' : spine === 'V2' ? 'V2' : 'V1',
+      ...this.#view(entry),
+    });
+  }
+
+  /** Trusted V3 MDUSD allowance plan for the connected wallet. Read-only server-side; no challenge. */
+  #walletSettlementSetup(entry: Entry, body: JsonObject): ApiResponse {
+    if (entry.draft === null) return refuse(409, 'NO_DRAFT', 'Create a draft first.');
+    if (draftIssuesBlockAuthorize(entry.draft)) {
+      return refuse(409, 'REVIEW_BLOCKED', 'Resolve conflicts, ambiguities and unsupported instructions on Review before enabling settlement.');
+    }
+    const address = body['address'];
+    if (typeof address !== 'string' || address.length > 42) return refuse(400, 'BAD_REQUEST', 'address must be the connected wallet address.');
+    const r = entry.session.previewV3SettlementSetup(entry.draft, address);
+    if (!r.ok) return { status: 409, body: safe({ error: r.code, message: r.message, ...this.#view(entry) }) };
+    return ok({
+      principal: r.principal,
+      chainId: r.plan.chainId,
+      gate: r.plan.gate,
+      fundingToken: r.plan.fundingToken,
+      requiredAllowanceAtoms: r.plan.requiredAllowanceAtoms,
+      basis: r.plan.basis,
+      note: 'One-time bounded MDUSD.approve(V3Gate, amount). Not a Mandate signature. Not unlimited.',
       ...this.#view(entry),
     });
   }

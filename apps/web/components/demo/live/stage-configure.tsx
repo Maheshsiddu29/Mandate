@@ -5,6 +5,7 @@ import { useState, type ReactNode } from "react";
 import { type AuthorityReviewModel } from "./authority-review";
 import { arr, rec, str, type Json, type JsonRecord } from "./live-client";
 import { allocationSummary, ROLE_DESCRIPTORS, ROLE_TITLES, ROLES, usd, type RoleName } from "./live-model";
+import { formatMdusdAtoms, type SettlementSetupStatus, type TrustedSettlementPlan } from "./settlement-setup";
 import { APPROVAL_CHAIN, shortAddress } from "./wallet";
 import { AgentGlyph, Pill } from "./workspace-ui";
 
@@ -259,8 +260,16 @@ export function ApproveStage(props: {
   readonly wallet: WalletState;
   /** When "V3", disclose autonomous settlement before the one Mandate signature. */
   readonly spine?: "V2" | "V3";
+  /** V3 only: one-time bounded MDUSD allowance to the live Gate. */
+  readonly settlementSetup?: {
+    readonly status: SettlementSetupStatus;
+    readonly plan: TrustedSettlementPlan | null;
+    readonly busy: boolean;
+    readonly detail: string;
+  };
   readonly onConnect: () => void;
   readonly onSwitchChain: () => void;
+  readonly onEnableSettlement?: () => void;
   readonly onSignWallet: () => void;
   readonly onAuthorize: (confirmation: string) => void;
   readonly onCancel: () => void;
@@ -278,10 +287,13 @@ export function ApproveStage(props: {
   const rightChain = wallet.chainId === APPROVAL_CHAIN.chainId;
   const reviewClean = props.review.canAuthorize;
   const signingMethod = v3 ? "wallet" : method;
-  const walletReady = signingMethod === "wallet" && connected && rightChain && reviewClean;
+  const setup = props.settlementSetup;
+  const setupReady = !v3 || setup?.status === "READY";
+  const walletReady = signingMethod === "wallet" && connected && rightChain && reviewClean && setupReady;
   const demoReady = matches && reviewClean;
   const r = props.review;
   const groups = [...new Set(r.advanced.map((row) => row.group))];
+  const allowanceLabel = setup?.plan !== null && setup?.plan !== undefined ? formatMdusdAtoms(setup.plan.requiredAllowanceAtoms) : null;
   return (
     <div className="mw-approve">
       <header className="mw-stage-head">
@@ -544,10 +556,51 @@ export function ApproveStage(props: {
             {v3 ? (
               <section className="mw-authority-review__group" aria-label="Automatic execution">
                 <h4>Automatic execution</h4>
-                <p className="mw-fine">Enabled for the Stock testnet settlement path. Recipient is your wallet. Bounded by the derived MDUSD fixture debit cap disclosed in technical details after signing.</p>
+                <p className="mw-fine">Enabled for the Stock testnet settlement path. Recipient is your wallet. Bounded by the derived MDUSD fixture debit cap disclosed below.</p>
               </section>
             ) : null}
           </div>
+        ) : null}
+        {v3 && connected && rightChain ? (
+          <section className="mw-settlement-setup" aria-label="Settlement setup">
+            <h3 className="mw-authority-review__title">Settlement setup</h3>
+            {setup === undefined || setup.status === "IDLE" || setup.status === "LOADING" ? (
+              <p className="mw-fine">Checking MDUSD allowance for this mandate…</p>
+            ) : null}
+            {setup?.status === "NEED_ENABLE" || setup?.status === "SUBMITTING" || setup?.status === "CONFIRMING" || setup?.status === "FAILED" ? (
+              <>
+                <p className="mw-notice mw-notice--warn" role="status">
+                  <strong>One-time setup required</strong>
+                  <br />
+                  Mandate needs permission to use up to {allowanceLabel ?? "the derived MDUSD fixture cap"} for this testnet mandate.
+                </p>
+                <p className="mw-fine">
+                  This is a one-time bounded ERC-20 approval to the Mandate V3 Gate.
+                  It is not a Mandate authorization and it is not required for every trade.
+                </p>
+                <button
+                  type="button"
+                  className="mw-soft-button"
+                  disabled={props.authorizing || setup.busy || setup.status === "SUBMITTING" || setup.status === "CONFIRMING"}
+                  onClick={props.onEnableSettlement}
+                >
+                  {setup.status === "SUBMITTING" || setup.status === "CONFIRMING" ? "Confirming settlement setup…" : "Enable settlement"}
+                </button>
+                {setup.detail !== "" ? <p className="mw-fine" role="status">{setup.detail}</p> : null}
+              </>
+            ) : null}
+            {setup?.status === "READY" ? (
+              <p className="mw-notice" role="status">
+                ✓ Settlement enabled
+                {allowanceLabel === null ? null : (
+                  <>
+                    <br />
+                    Up to {allowanceLabel}
+                  </>
+                )}
+              </p>
+            ) : null}
+          </section>
         ) : null}
         {signingMethod === "demo" ? (
           <label className="mw-confirm">
@@ -560,7 +613,11 @@ export function ApproveStage(props: {
       {props.authorizing ? <div className="mw-inline-status" aria-live="polite"><LatticeLoader label={signingMethod === "wallet" ? "Waiting for your wallet" : `Signing mandate ${version}`} status="working" pattern="orbit" showTimer={false} /></div> : null}
       {props.error === "" ? null : <p className="mw-notice mw-notice--bad" role="alert">{props.error}</p>}
       {reviewClean ? (
-        <p className="mw-fine mw-approve__promise">Your wallet signs this authority. Agents cannot exceed it.</p>
+        <p className="mw-fine mw-approve__promise">
+          {v3 && !setupReady
+            ? "Enable settlement before authorizing the autonomous mandate."
+            : "Your wallet signs this authority. Agents cannot exceed it."}
+        </p>
       ) : (
         <p className="mw-notice mw-notice--warn" role="status">
           Authorize is disabled until every item above is resolved. The wallet will not be asked to sign a blocked draft.
@@ -570,7 +627,7 @@ export function ApproveStage(props: {
       <footer className="mw-stage-foot">
         {signingMethod === "wallet" ? (
           <button type="button" className="mw-cta" disabled={!walletReady || props.authorizing} onClick={props.onSignWallet}>
-            Authorize mandate
+            {v3 ? "Authorize autonomous mandate" : "Authorize mandate"}
           </button>
         ) : (
           <button type="button" className="mw-cta" disabled={!demoReady || props.authorizing} onClick={() => props.onAuthorize(confirmation)}>
