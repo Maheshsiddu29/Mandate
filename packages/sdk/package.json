@@ -1,0 +1,22 @@
+{
+  "name": "@mandate/sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Thin developer SDK over the existing Mandate authorization boundary. Facade only: compile, review, V3 delegated authorization preparation, proposal screening, reservation, execution preparation and reconciliation — with no second authority implementation and no surprise broadcasts.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "dependencies": {
+    "@mandate/control": "0.1.0",
+    "@mandate/core": "0.1.0",
+    "@mandate/kernel": "0.1.0",
+    "@mandate/ledger": "0.1.0",
+    "@mandate/live-agents": "0.1.0",
+    "@mandate/live-settlement": "0.1.0",
+    "@mandate/portfolio": "0.1.0"
+  }
+}
