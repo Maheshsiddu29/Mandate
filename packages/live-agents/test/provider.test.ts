@@ -1,13 +1,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { OpenAIProvider, type FetchLike } from '../src/runtime/openai-provider.ts';
+import { OpenAIProvider, OUTPUT_TOKEN_BUDGET, outputTokenBudget, type FetchLike } from '../src/runtime/openai-provider.ts';
 import { callModel } from '../src/runtime/agent-runtime.ts';
 import { realClock } from '../src/runtime/clock.ts';
 import { describeFailure, ProviderError } from '../src/runtime/errors.ts';
 import { LatencyChaosProvider, parseChaosSpec } from '../src/runtime/latency-chaos.ts';
 import { StubProvider } from '../src/runtime/stub-provider.ts';
-import type { DecisionRequest, NegotiationRequest } from '../src/runtime/provider.ts';
+import type { DecisionRequest, NegotiationRequest, OpportunityRequest, PolicyStressRequest } from '../src/runtime/provider.ts';
 import { parseDecision, parseNegotiation } from '../src/runtime/schemas.ts';
+import { draftRequest } from '../src/authoring/prompt-to-draft.ts';
 import { readConfig, describeConfig } from '../src/config.ts';
 import { ScriptedProvider, json } from './support/providers.ts';
 
@@ -50,19 +51,58 @@ function sse(events: readonly unknown[]): Response {
   return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
 }
 
+const opportunity: OpportunityRequest = {
+  kind: 'OPPORTUNITY',
+  role: 'stock',
+  objective: 'Allocate.',
+  principalIntent: null,
+  purpose: 'INITIAL_ALLOCATION',
+  authority: decision.authority,
+  pool: { poolAtoms: '2000000000', participants: ['stock', 'yield'] },
+  candidates: decision.candidates,
+  research: [],
+};
+
+const policy: PolicyStressRequest = {
+  kind: 'POLICY_STRESS',
+  role: 'swap',
+  task: 'test',
+  authority: decision.authority,
+  cases: [{ caseId: 'COMPLIANT_CONTROL', description: 'control' }, { caseId: 'ABSTAIN', description: 'abstain' }],
+  history: [],
+  attempt: 1,
+  maxAttempts: 4,
+};
+
 describe('OpenAI Responses provider (offline, fake network)', () => {
   it('sends strict structured output, streamed, not stored — and never the key in the body', () => {
     const p = new OpenAIProvider({ apiKey: KEY, model: 'test-model' });
-    const body = JSON.parse(p.body(decision)) as { model: string; stream: boolean; store: boolean; text: { format: { type: string; strict: boolean; schema: { additionalProperties: boolean; properties: { candidateId: { enum: unknown[] } } } } }; input: string };
+    const body = JSON.parse(p.body(decision)) as { model: string; stream: boolean; store: boolean; max_output_tokens: number; text: { format: { type: string; strict: boolean; schema: { additionalProperties: boolean; properties: { candidateId: { enum: unknown[] } } } } }; input: string };
     assert.equal(body.model, 'test-model');
     assert.equal(body.stream, true);
     assert.equal(body.store, false);
+    assert.equal(body.max_output_tokens, OUTPUT_TOKEN_BUDGET.DECISION);
     assert.equal(body.text.format.type, 'json_schema');
     assert.equal(body.text.format.strict, true);
     assert.equal(body.text.format.schema.additionalProperties, false);
     assert.deepEqual(body.text.format.schema.properties.candidateId.enum, ['route-a', 'route-b', null]);
     assert.doesNotMatch(p.body(decision), /FAKEKEY/);
     assert.doesNotMatch(JSON.stringify(p), /FAKEKEY/);
+  });
+
+  it('bounds max_output_tokens by request kind; DRAFT is larger than DECISION', () => {
+    const p = new OpenAIProvider({ apiKey: KEY, model: 'm' });
+    const tokens = (r: DecisionRequest | NegotiationRequest | OpportunityRequest | PolicyStressRequest | ReturnType<typeof draftRequest>) =>
+      (JSON.parse(p.body(r)) as { max_output_tokens: number }).max_output_tokens;
+    assert.equal(tokens(draftRequest('I have $5k.')), 4_000);
+    assert.equal(tokens(opportunity), 2_400);
+    assert.equal(tokens(negotiation), 2_000);
+    assert.equal(tokens(decision), 1_600);
+    assert.equal(tokens(policy), 1_200);
+    assert.ok(tokens(draftRequest('x')) > tokens(decision));
+    assert.equal(outputTokenBudget('DRAFT'), 4_000);
+    const capped = new OpenAIProvider({ apiKey: KEY, model: 'm', maxOutputTokens: 900 });
+    assert.equal((JSON.parse(capped.body(draftRequest('x'))) as { max_output_tokens: number }).max_output_tokens, 900);
   });
 
   it('reads the stream, times the first chunk once, and prefers the final text', async () => {
@@ -119,6 +159,36 @@ describe('OpenAI Responses provider (offline, fake network)', () => {
     assert.doesNotMatch(describeConfig(c), /FAKEKEY/);
     assert.equal(readConfig({}).openaiApiKey, null);
     assert.equal(describeFailure(new Error(KEY)), 'provider error');
+  });
+
+  it('response.incomplete still fails closed; the key never appears in the error', async () => {
+    const p = new OpenAIProvider({
+      apiKey: KEY,
+      model: 'm',
+      fetch: async () => sse([{ type: 'response.incomplete', response: { incomplete_details: { reason: 'max_output_tokens' } } }]),
+    });
+    const out = await callModel({ provider: p, request: decision, parse: (t) => parseDecision(t, decision), timeoutMs: 1_000, clock: realClock });
+    assert.equal(out.status, 'FAILED');
+    if ('error' in out) {
+      assert.match(out.error, /INCOMPLETE|incomplete/);
+      assert.match(out.error, /max_output_tokens/);
+      assert.doesNotMatch(out.error, /FAKEKEY/);
+    }
+  });
+
+  it('MAX_STREAM_BYTES remains enforced', async () => {
+    const huge = 'x'.repeat(300_000);
+    const p = new OpenAIProvider({
+      apiKey: KEY,
+      model: 'm',
+      fetch: async () => new Response(`event: x\ndata: ${JSON.stringify({ type: 'response.output_text.delta', delta: huge })}\n\n`, { status: 200, headers: { 'content-type': 'text/event-stream' } }),
+    });
+    const out = await callModel({ provider: p, request: decision, parse: (t) => parseDecision(t, decision), timeoutMs: 1_000, clock: realClock });
+    assert.equal(out.status, 'FAILED');
+    if ('error' in out) {
+      assert.match(out.error, /size bound|MALFORMED_STREAM/);
+      assert.doesNotMatch(out.error, /FAKEKEY/);
+    }
   });
 });
 
