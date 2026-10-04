@@ -65,6 +65,7 @@ describe('live-agents structural boundary', () => {
   });
 
   it('nothing in the protocol, the judge demo or the browser app depends on it', () => {
+    // @mandate/sdk sits above this package and may depend on it; lower packages may not.
     for (const p of ['kernel', 'core', 'registry', 'ledger', 'control', 'ledger-sqlite', 'execution-gate', 'evm-robinhood', 'perp-lighter', 'portfolio', 'judge-demo', 'router', 'jev', 'adapter-robinhood']) {
       assert.doesNotMatch(readFileSync(new URL(`packages/${p}/package.json`, REPO), 'utf8'), /@mandate\/live-agents/, p);
       const dir = fileURLToPath(new URL(`packages/${p}/src/`, REPO));

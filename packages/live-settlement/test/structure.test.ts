@@ -80,6 +80,7 @@ describe('live-settlement structural boundary', () => {
   });
 
   it('nothing depends on it: not the protocol, the portfolio layer, the judge demo, the Live AI package or the browser app', () => {
+    // @mandate/sdk sits above this package and may depend on it; lower packages may not.
     for (const p of ['kernel', 'core', 'registry', 'ledger', 'control', 'ledger-sqlite', 'execution-gate', 'evm-robinhood', 'perp-lighter', 'portfolio', 'judge-demo', 'live-agents', 'router', 'jev', 'adapter-robinhood']) {
       assert.doesNotMatch(readFileSync(new URL(`packages/${p}/package.json`, REPO), 'utf8'), /@mandate\/live-settlement/, p);
       for (const { file, text } of sources(fileURLToPath(new URL(`packages/${p}/src/`, REPO)))) assert.doesNotMatch(text, /live-settlement/, `${p}/${file}`);

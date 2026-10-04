@@ -24,7 +24,9 @@ export {
 export { DRAFT_FIELD_PATHS, parseFieldValue } from './authoring/draft-fields.ts';
 export { CATALOG, CATALOG_SETS, AGENT_DOMAINS, REVIEWED_BOUNDS } from './authoring/catalog.ts';
 export { PAUSE_CONFIRMATION, AUTHORIZATION_METHODS, type VersionRecord, type AuthorizeResult, type ActiveMandate, type PrincipalAuthorization, type AuthorizationMethod } from './authoring/mandate-versioning.ts';
-export type { DraftValidation, GuardrailRow } from './authoring/draft-validator.ts';
+export { validateDraft, type DraftValidation, type GuardrailRow, type ValidationContext } from './authoring/draft-validator.ts';
+export { classifyAllocation, draftDeployable, type AllocationView, type AllocationIntent, type PlanningState } from './allocation/intent.ts';
+export { sessionBindings, runProtocol, FixedProposalStrategy, type ProtocolRun } from './mandate/portfolio-adapter.ts';
 export { DOMAIN_AGENTS, actionableCandidates, assessCandidate, STATIC_SCOPE_CODES, type CandidateEligibility, type CandidateUniverse, type EligibilityFilter } from './agents/index.ts';
 export {
   LIVE_LAB_SETTLEMENT_PROFILE,
