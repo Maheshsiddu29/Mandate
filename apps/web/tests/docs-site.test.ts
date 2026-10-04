@@ -147,9 +147,14 @@ describe("Mandate documentation site", () => {
     assert.match(css, /\.docs-code__pre\s*\{[^}]*overflow-x:\s*auto/s);
     assert.match(css, /min-width:\s*0/);
     assert.match(css, /\.docs-table-wrap\s*\{[^}]*overflow-x:\s*auto/s);
-    assert.match(read("components/docs/docs-code.tsx"), /aria-label=\{copied \? "Copied" : "Copy code"\}/);
-    assert.match(read("components/docs/docs-hash.tsx"), /aria-label=\{copied \? `Copied/);
+    assert.match(css, /\.docs-article__body\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s);
+    assert.match(css, /\.mandate-docs \.docs-flow\s*\{[^}]*min-width:\s*0/s);
+    assert.match(read("components/docs/docs-code.tsx"), /Copy failed/);
+    assert.match(read("components/docs/docs-hash.tsx"), /Copy failed/);
+    assert.match(read("components/docs/copy-text.ts"), /document\.execCommand\("copy"\)/);
     assert.match(read("components/docs/docs-sidebar.tsx"), /aria-controls=\{panelId\}/);
+    assert.match(read("components/docs/docs-sidebar.tsx"), /querySelector<HTMLAnchorElement>\("a"\)\?\.focus\(\)/);
+    assert.match(read("components/docs/docs-sidebar.tsx"), /toggleRef\.current\?\.focus\(\)/);
   });
 
   it("sitemap and primary nav include Docs routes", () => {
