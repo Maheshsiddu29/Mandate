@@ -1,21 +1,23 @@
 /**
- * Browser client for the local Live AI Lab server (`npm run agents:serve`).
+ * Browser client for the Live AI Lab server.
  *
  * The browser never talks to a model provider and never holds a key. It
- * talks only to the loopback server, which calls the provider server-side
- * and streams MANDATE_LIVE_AI.V1 events. A configured server URL that is
- * not loopback is refused.
+ * talks only to the build-time configured server and streams
+ * MANDATE_LIVE_AI.V1 events. Local development stays on loopback; a remote
+ * deployment must be one exact HTTPS origin.
  */
 
 export const DEFAULT_LIVE_SERVER = "http://127.0.0.1:8787";
 
-/** The local server's base URL, or null when the configured one is not a loopback http URL. */
+/** The server origin, restricted to loopback HTTP or one build-time HTTPS origin. */
 export function liveServerUrl(configured: string | undefined): string | null {
   const raw = configured === undefined || configured.trim() === "" ? DEFAULT_LIVE_SERVER : configured.trim();
   try {
     const url = new URL(raw);
-    if (url.protocol !== "http:") return null;
-    if (url.hostname !== "127.0.0.1" && url.hostname !== "localhost") return null;
+    if (url.username !== "" || url.password !== "") return null;
+    if (url.pathname !== "/" || url.search !== "" || url.hash !== "") return null;
+    const loopback = url.hostname === "127.0.0.1" || url.hostname === "localhost";
+    if (loopback ? url.protocol !== "http:" : url.protocol !== "https:") return null;
     return url.origin;
   } catch {
     return null;
@@ -55,7 +57,7 @@ export async function api(base: string, method: "GET" | "POST", path: string, bo
     const record = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? (parsed as JsonRecord) : {};
     return { ok: res.ok, status: res.status, body: record };
   } catch {
-    return { ok: false, status: 0, body: { error: "SERVER_UNREACHABLE", message: "The local Live AI Lab server is not reachable. Start it with npm run agents:serve." } };
+    return { ok: false, status: 0, body: { error: "SERVER_UNREACHABLE", message: "The Mandate Live API is not reachable." } };
   }
 }
 

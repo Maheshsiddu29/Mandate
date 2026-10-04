@@ -54,8 +54,8 @@ export function PromptStage(props: {
       </div>
       {offline ? (
         <div className="mw-notice mw-notice--warn" role="alert">
-          <strong>The local Live Demo server isn&apos;t running.</strong>
-          <span>Start it from the repository root with <code>npm run agents:lab</code> (in-page dry-run) or <code>npm run agents:serve</code>, then reload. Or watch the <Link href="/demo">Protocol Replay</Link>.</span>
+          <strong>The Mandate Live API is not reachable.</strong>
+          <span>Try again in a moment, or watch the <Link href="/demo">Protocol Replay</Link>.</span>
         </div>
       ) : props.error !== "" ? (
         <p className="mw-notice mw-notice--bad" role="alert">{props.error}</p>

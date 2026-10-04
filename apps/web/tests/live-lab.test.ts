@@ -24,18 +24,37 @@ test('the browser holds no key and never talks to a model provider', () => {
     // B.5.3: the wallet adapter may ask a wallet for an EIP-712 signature (eth_signTypedData_v4) and nothing else that signs.
     assert.doesNotMatch(text, /sendTransaction|signTransaction|eth_sign(?!TypedData_v4)|personal_sign|privateKey/i, file);
   }
-  // The only public configuration is the local server's URL.
+  // The only public configuration is the build-time Live API URL.
   const env = liveSources.flatMap(({ text }) => [...text.matchAll(/process\.env\.([A-Z_]+)/g)].map((m) => m[1]));
   assert.deepEqual([...new Set(env)], ['NEXT_PUBLIC_LIVE_AGENTS_URL']);
   // Network access goes through the one client module.
   for (const { file, text } of liveSources) if (file !== 'live-client.ts') assert.doesNotMatch(text, /\bfetch\(|new EventSource/, file);
 });
 
-test('the browser talks only to a loopback server', () => {
+test('the browser accepts loopback HTTP and one exact build-time HTTPS origin', () => {
   assert.equal(liveServerUrl(undefined), 'http://127.0.0.1:8787');
   assert.equal(liveServerUrl(''), 'http://127.0.0.1:8787');
   assert.equal(liveServerUrl('http://localhost:9000/'), 'http://localhost:9000');
-  for (const bad of ['https://api.openai.com', 'http://evil.example:8787', 'https://127.0.0.1:8787', 'file:///etc/passwd', 'not a url', 'http://127.0.0.1.evil.example']) assert.equal(liveServerUrl(bad), null, bad);
+  assert.equal(liveServerUrl('http://127.0.0.1:8787'), 'http://127.0.0.1:8787');
+  assert.equal(liveServerUrl('https://mandate-api-production.up.railway.app'), 'https://mandate-api-production.up.railway.app');
+  for (const bad of [
+    'http://mandate-api-production.up.railway.app',
+    'https://user:password@mandate-api-production.up.railway.app',
+    'https://mandate-api-production.up.railway.app/api',
+    'https://mandate-api-production.up.railway.app?target=other',
+    'https://mandate-api-production.up.railway.app#fragment',
+    'https://127.0.0.1:8787',
+    'file:///etc/passwd',
+    'not a url',
+    'http://127.0.0.1.evil.example',
+  ]) assert.equal(liveServerUrl(bad), null, bad);
+});
+
+test('production-unreachable copy does not instruct users to start localhost', () => {
+  const client = read('../components/demo/live/live-client.ts');
+  const compose = read('../components/demo/live/stage-compose.tsx');
+  for (const source of [client, compose]) assert.match(source, /The Mandate Live API is not reachable\./);
+  assert.doesNotMatch(compose, /npm run agents:(?:lab|serve)|local Live Demo server/);
 });
 
 test('the policy stress panel uses neutral wording and shows the real result', () => {

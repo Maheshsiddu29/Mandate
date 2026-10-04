@@ -526,7 +526,7 @@ export function LiveLab(): ReactNode {
     return (
       <main className="mw" id="main-content">
         <div className="mw-stage" data-phase="PROMPT">
-          <p className="mw-notice mw-notice--bad" role="alert">NEXT_PUBLIC_LIVE_AGENTS_URL must be a loopback http URL (127.0.0.1 or localhost). The browser talks only to the local Live Demo server.</p>
+          <p className="mw-notice mw-notice--bad" role="alert">NEXT_PUBLIC_LIVE_AGENTS_URL must be either a loopback HTTP origin or one exact HTTPS origin.</p>
         </div>
       </main>
     );
