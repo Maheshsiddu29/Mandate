@@ -18,11 +18,16 @@ import {
   V3_CONFIG_PATH,
   V3_LIVE_MANIFEST_PATH,
   assertAllowedChainId,
+  assertContractCodePresent,
   forgeArgsIncludeBroadcast,
+  forgeArgsIncludeForkBlockNumber,
   forgeScriptArgs,
+  forgeVerifyScriptArgs,
+  isNonArchiveForkError,
   loadDelegatedConfig,
   parseChainIdHex,
   parseGateAddressFromForgeOutput,
+  parseVerifyGateArg,
   resolveDeployMode,
   resolveRpcUrl,
   validateDelegatedConfig,
@@ -174,5 +179,55 @@ describe('C2.3 V3 delegated deploy tooling', () => {
     const out = 'MandateDelegatedExecutionGate 0xAbCdEf0123456789aBcdEF0123456789aBCDef01\n';
     assert.equal(parseGateAddressFromForgeOutput(out), '0xabcdef0123456789abcdef0123456789abcdef01');
     assert.equal(parseGateAddressFromForgeOutput('no address'), null);
+  });
+
+  it('V3 verify forge args never pin --fork-block-number and never broadcast', () => {
+    const args = forgeVerifyScriptArgs('0x5cf0621ab974d100fd5df225dab046bf35fa7519', 'https://rpc.testnet.chain.robinhood.com');
+    assert.equal(forgeArgsIncludeForkBlockNumber(args), false);
+    assert.equal(forgeArgsIncludeBroadcast(args), false);
+    assert.ok(!args.some((a) => a === '--fork-block-number' || /^\d+$/.test(a) && args[args.indexOf(a) - 1] === '--fork-block-number'));
+    assert.ok(args.includes('--sig'));
+    assert.ok(args.includes('verify(address)'));
+    assert.doesNotMatch(args.join(' '), /latest\s*-\s*\d/);
+  });
+
+  it('public-RPC verify wrapper is read-only latest-state and does not invoke forge', () => {
+    const verifyTs = readFileSync(fileURLToPath(new URL('../scripts/verify-delegated.ts', import.meta.url)), 'utf8');
+    const code = verifyTs.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    assert.doesNotMatch(code, /fork-block-number/);
+    assert.doesNotMatch(code, /--broadcast/);
+    assert.doesNotMatch(code, /execFileSync/);
+    assert.doesNotMatch(code, /\bforge\b/);
+    assert.doesNotMatch(code, /block\.value\.number/);
+    assert.match(code, /'latest'/);
+    assert.match(code, /broadcasts: none|broadcasts: 0/);
+    assert.match(code, /assertContractCodePresent|eth_getCode/);
+  });
+
+  it('verify gate arg parsing and empty-code refusal', () => {
+    assert.equal(parseVerifyGateArg([]).ok, false);
+    assert.equal(parseVerifyGateArg(['--gate', 'nope']).ok, false);
+    const g = parseVerifyGateArg(['--gate', '0x5CF0621AB974D100FD5DF225DAB046BF35FA7519']);
+    assert.equal(g.ok, true);
+    if (g.ok) assert.equal(g.gate, '0x5cf0621ab974d100fd5df225dab046bf35fa7519');
+    assert.equal(assertContractCodePresent('0x').ok, false);
+    assert.equal(assertContractCodePresent('0x6080').ok, true);
+    assert.equal(assertAllowedChainId(1).ok, false);
+    assert.equal(assertAllowedChainId(46_630).ok, true);
+  });
+
+  it('recognizes non-archive Foundry fork errors without suggesting historical pins', () => {
+    assert.equal(isNonArchiveForkError('It looks like you\'re trying to fork from an older block with a non-archive node'), true);
+    assert.equal(isNonArchiveForkError('failed to get block number: 128517346'), true);
+    assert.equal(isNonArchiveForkError('ordinary revert'), false);
+  });
+
+  it('V2 deployment/verify tooling paths are unchanged by V3 verify helpers', () => {
+    const v2Verify = readFileSync(join(REPO, 'packages/evm-robinhood/scripts/verify.ts'), 'utf8');
+    const v2Deploy = readFileSync(join(REPO, 'packages/evm-robinhood/scripts/deploy.ts'), 'utf8');
+    assert.match(v2Verify, /robinhood:testnet:verify|verify-contract/);
+    assert.match(v2Deploy, /MandateExecutionGate/);
+    assert.doesNotMatch(v2Verify, /forgeVerifyScriptArgs|verify-delegated/);
+    assert.doesNotMatch(v2Deploy, /forgeVerifyScriptArgs/);
   });
 });
