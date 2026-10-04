@@ -63,6 +63,7 @@ export interface LocalV3Evm {
   onchainDelegationDigest(fields: DelegationFields): Promise<string>;
   revokeDelegation(fields: DelegationFields): Promise<string>;
   drainVenueInventory(): Promise<void>;
+  seedVenueInventory(amount: bigint): Promise<void>;
   setAllowance(amount: bigint): Promise<void>;
   tokenBalance(token: string, owner: string): Promise<bigint>;
   ethCall(to: string, data: string, from?: string): Promise<{ ok: true; data: string } | { ok: false; revert: string }>;
@@ -340,32 +341,22 @@ export async function openLocalV3Evm(): Promise<LocalV3Evm> {
       return r.txHash;
     },
     async drainVenueInventory() {
-      // Transfer all MDEMO out of the venue via anvil storage is fragile; mint 0 path:
-      // move inventory to deployer by pranking as venue is impossible. Use deal:
-      await jsonRpc.request('anvil_setStorageAt', [
-        mdemo,
-        // slot for ERC20 balances is implementation-dependent; use deal cheat if available
-        '0x0',
-        '0x0',
-      ]);
-      // Prefer Foundry-style deal via anvil_setBalance is ETH only. Use token transfer from venue
-      // by impersonating the venue.
+      // Local proof only: impersonate the fixture venue and transfer its full
+      // inventory back to the disposable deployer. No storage mutation.
       await jsonRpc.request('anvil_impersonateAccount', [venue]);
       await jsonRpc.request('anvil_setBalance', [venue, '0x56BC75E2D63100000']);
       const bal = await chain.erc20Balance(mdemo as Address, venue as Address);
       if (!bal.ok) throw new Error(bal.error);
       if (bal.value > 0n) {
-        const venueSender = {
-          address: venue,
-          // Impersonated sends need eth_sendTransaction from anvil, not TxSender.
-        };
-        void venueSender;
         const transfer = erc20.transfer(SUBMITTER, bal.value);
         const sent = await jsonRpc.request<string>('eth_sendTransaction', [{ from: venue, to: mdemo, data: transfer, gas: '0x100000' }]);
         if (!sent.ok) throw new Error(`drain venue: ${sent.error}`);
         await jsonRpc.request('evm_mine', []);
       }
       await jsonRpc.request('anvil_stopImpersonatingAccount', [venue]);
+    },
+    async seedVenueInventory(amount: bigint) {
+      await mined(chain, deployer, mdemo, erc20.transfer(venue, amount), 'seed stock venue');
     },
     async setAllowance(amount: bigint) {
       await mined(chain, principal, mdusd, erc20.approve(gate, amount), 'setAllowance');

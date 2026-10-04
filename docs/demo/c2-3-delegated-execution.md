@@ -331,6 +331,7 @@ Anvil (`packages/live-settlement/test/v3-local-evm.test.ts` +
 | TS ↔ Solidity digests | `delegationDigest` via onchain view; approval struct hash via live `DELEGATED_EXECUTION_APPROVAL_TYPEHASH()` |
 | Journal / reconcile | PREPARED → SUBMITTED → SETTLED/CONSUMED; second reconcile does not resend |
 | Allowance | Insufficient → `V3_GATE_ALLOWANCE_REQUIRED` (zero send); sufficient → execute |
+| Fixture inventory | Fresh venue at zero → exact `ERC20InsufficientBalance(venue, 0, required)`; bounded local seed → the **same calldata** simulates and executes |
 | Adversarial onchain | Replay, modified execution, wrong/agent-as-delegate sig, wrong recipient, mutated delegation field, expired, revoked, drained venue rollback |
 | Solidity source changed | **No** (gate treated as frozen) |
 | External / Robinhood testnet / mainnet broadcasts | **0** |

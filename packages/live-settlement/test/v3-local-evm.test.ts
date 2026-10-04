@@ -26,6 +26,7 @@ import { ManualClock } from '../../live-agents/src/runtime/clock.ts';
 import { ScriptedProvider } from '../../live-agents/test/support/providers.ts';
 import { TestTime } from '../../live-agents/test/support/world.ts';
 import { encodeDelegatedExecute } from '../src/v3/calldata.ts';
+import { decodeErc20InsufficientBalance } from '../src/v3/revert.ts';
 import { LiveV3ChallengeHost, SettlementJournal, reconcileAttempts, settleSpineV3 } from '../src/index.ts';
 import { AGENT, AGENT_KEY, KEYS, PRINCIPAL, PRINCIPAL_KEY, SUBMITTER, abstain, propose } from './support/world.ts';
 import { assertRealGate, openLocalV3Evm, type LocalV3Evm } from './support/local-v3-evm.ts';
@@ -477,7 +478,7 @@ describe('C2.3.2 settleSpineV3 on real local MandateDelegatedExecutionGate', () 
 
       const dir2 = mkdtempSync(join(tmpdir(), 'mandate-v3-anvil-fail-'));
       try {
-        const again = await authorizeAndRun(evm, 'lab-v3-anvil-fail', dir2);
+        const again = await authorizeAndRun(evm, 'lab-v3-anvil-fail', dir2, 800);
         const j2 = SettlementJournal.open(join(dir2, 'settlement.db'));
         const dig2 = delegationStructHash(delegationFieldsOf(again.session));
         const dry = await settleSpineV3({
@@ -495,8 +496,20 @@ describe('C2.3.2 settleSpineV3 on real local MandateDelegatedExecutionGate', () 
         assert.equal(dry.status, 'READY', dry.status === 'INELIGIBLE' ? `${dry.stage}:${dry.reason}` : dry.status);
         if (dry.status !== 'READY') return;
         await evm.drainVenueInventory();
+        const venue = evm.deployment.venue.address;
+        assert.equal(await evm.tokenBalance(evm.deployment.mdemo.address, venue), 0n);
+        const rawEmpty = await evm.ethCall(evm.v3Gate.address, dry.prepared.calldata, SUBMITTER);
+        assert.equal(rawEmpty.ok, false);
+        if (rawEmpty.ok) return;
+        const decoded = decodeErc20InsufficientBalance(rawEmpty.revert);
+        assert.ok(decoded);
+        assert.equal(decoded.sender, venue);
+        assert.equal(decoded.balance, 0n);
+        assert.equal(decoded.needed, 6_400_000_000_000_000_000n);
+        assert.equal(decoded.needed, dry.prepared.candidate.quantity.atoms);
+
         const balBefore = await evm.tokenBalance(evm.deployment.mdusd.address, PRINCIPAL);
-        const sent = await settleSpineV3({
+        const refused = await settleSpineV3({
           session: again.session,
           journal: j2,
           deployment: evm.deployment,
@@ -508,19 +521,32 @@ describe('C2.3.2 settleSpineV3 on real local MandateDelegatedExecutionGate', () 
           ledgerPath: join(dir2, 'ledger-fail.db'),
           nextExecutionNonce: 1n,
         });
-        if (sent.status === 'INELIGIBLE') {
-          assert.match(sent.reason, /SIMULATION|REVERT|FIXTURE|ESTIMATE/i);
-        } else if (sent.status === 'SENT') {
-          // If broadcast landed, receipt must not have committed nonce/debit.
-          assert.equal(await evm.nonceUsed(dig2, 1n), false);
-        } else {
-          assert.fail(`unexpected ${sent.status}`);
-        }
+        assert.equal(refused.status, 'INELIGIBLE');
+        if (refused.status === 'INELIGIBLE') assert.equal(refused.reason, 'V3_FIXTURE_INVENTORY_REQUIRED');
         assert.equal(await evm.nonceUsed(dig2, 1n), false);
         assert.equal(await evm.usedDebitOf(dig2), 0n);
         assert.equal(await evm.tokenBalance(evm.deployment.mdusd.address, PRINCIPAL), balBefore);
-        // Direct eth_call of the dry-run calldata also fails after drain.
-        assert.equal((await evm.ethCall(evm.v3Gate.address, dry.prepared.calldata)).ok, false);
+
+        // Seed exactly what the same prepared execution needs. The identical
+        // calldata now simulates successfully; no protocol change is involved.
+        await evm.seedVenueInventory(decoded.needed);
+        assert.equal(await evm.tokenBalance(evm.deployment.mdemo.address, venue), decoded.needed);
+        const rawSeeded = await evm.ethCall(evm.v3Gate.address, dry.prepared.calldata, SUBMITTER);
+        assert.equal(rawSeeded.ok, true);
+        const sent = await settleSpineV3({
+          session: again.session,
+          journal: j2,
+          deployment: evm.deployment,
+          v3Gate: evm.v3Gate,
+          rpc: evm.rpc,
+          keys: KEYS,
+          mode: 'SEND',
+          host: again.host,
+          ledgerPath: join(dir2, 'ledger-seeded.db'),
+          nextExecutionNonce: 1n,
+        });
+        assert.equal(sent.status, 'SENT', sent.status === 'INELIGIBLE' ? `${sent.stage}:${sent.reason}` : sent.status);
+        if (sent.status === 'SENT') assert.equal(sent.broadcasts, 1);
         j2.close();
         again.session.close();
       } finally {
