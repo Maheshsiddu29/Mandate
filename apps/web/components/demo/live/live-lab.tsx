@@ -279,18 +279,6 @@ export function LiveLab(): ReactNode {
   });
   const phase = flow.phase;
 
-  useEffect(() => {
-    if (phase !== "APPROVE" || !isV3Spine) return;
-    if (wallet.address === null || wallet.chainId !== APPROVAL_CHAIN.chainId) {
-      setSetupStatus("IDLE");
-      setSetupPlan(null);
-      return;
-    }
-    void loadSettlementSetup();
-    // Intentionally tied to review entry + wallet identity, not every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, isV3Spine, wallet.address, wallet.chainId, sessionId]);
-
   const pending = presentation.agents.some((agent) => agent.phase === "PENDING" || agent.phase === "RESPONDING");
   const versions = arr(view.versions).map(rec);
   const activeRecord = versions.find((item) => item.version === activeVersion) ?? null;
@@ -451,6 +439,20 @@ export function LiveLab(): ReactNode {
     const next = await refreshAllowance(parsed.plan);
     setSetupStatus(next === "FAILED" ? "FAILED" : next);
   }
+
+  useEffect(() => {
+    if (phase !== "APPROVE" || !isV3Spine) return undefined;
+    let live = true;
+    // Defer so allowance reads stay off the effect's synchronous path.
+    void Promise.resolve().then(() => {
+      if (live) void loadSettlementSetup();
+    });
+    return () => {
+      live = false;
+    };
+    // Intentionally tied to review entry + wallet identity, not every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, isV3Spine, wallet.address, wallet.chainId, sessionId]);
 
   async function enableSettlement(): Promise<void> {
     const w = injectedWallet();
@@ -782,11 +784,16 @@ export function LiveLab(): ReactNode {
           error={error}
           wallet={wallet}
           spine={isV3Spine ? "V3" : "V2"}
-          settlementSetup={
-            isV3Spine
-              ? { status: setupStatus, plan: setupPlan, busy: setupBusy, detail: setupDetail }
-              : undefined
-          }
+          {...(isV3Spine
+            ? {
+                settlementSetup: {
+                  status: setupStatus,
+                  plan: setupPlan,
+                  busy: setupBusy,
+                  detail: setupDetail,
+                },
+              }
+            : {})}
           onConnect={() => void connectWallet()}
           onSwitchChain={() => void switchChain()}
           onEnableSettlement={() => void enableSettlement()}
