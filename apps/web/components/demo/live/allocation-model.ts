@@ -129,8 +129,51 @@ export function checkBudgets(input: {
     if (role === "nft" && decimal(input.illiquidCap ?? null) !== null && v > (decimal(input.illiquidCap ?? null) as number)) issues.push(`NFT is above the illiquid limit ($${input.illiquidCap}).`);
   }
   const deployable = decimal(input.deployable);
-  if (deployable !== null && total > deployable + 1e-9) issues.push(`The budgets add up to $${total}; at most $${deployable} may be deployed.`);
+  if (deployable !== null && total > deployable + 1e-9) issues.push(`The budgets add up to $${total}; at most $${deployable} may be deployed (deployable ceiling).`);
   return { ok: issues.length === 0, issues, total, kept: deployable === null ? null : Math.max(0, deployable - total) };
+}
+
+/**
+ * Header copy for the allocation panel.
+ * The deployable portfolio ceiling is never labelled "available" — that word
+ * is reserved for genuinely unallocated / flexible-pool capital.
+ */
+export function allocationHeader(state: AllocationState): {
+  readonly label: string;
+  readonly amount: string | null;
+  readonly amountSuffix: string | null;
+} {
+  const poolNames = state.pool.map((r) => ROLE_TITLES[r].replace(" Agent", "")).join(", ");
+  if (state.intent === "FIXED") {
+    return { label: "Your allocation", amount: state.deployable, amountSuffix: state.deployable === null ? null : "deployable" };
+  }
+  if (state.intent === "HYBRID" && state.fixed.length > 0) {
+    if (state.planning === "COMPLETE") {
+      return { label: "Current plan", amount: state.deployable, amountSuffix: state.deployable === null ? null : "deployable" };
+    }
+    if (state.pooled !== null) {
+      return {
+        label: poolNames === ""
+          ? "Part of the allocation is fixed; agents may propose for the remainder."
+          : `Part of the allocation is fixed; ${poolNames} may propose for the remainder.`,
+        amount: state.pooled,
+        amountSuffix: `remains for ${poolNames || "the flexible pool"}`,
+      };
+    }
+    return {
+      label: "Part of the allocation is fixed; agents may propose for the remainder.",
+      amount: state.deployable,
+      amountSuffix: state.deployable === null ? null : "deployable",
+    };
+  }
+  if (state.planning === "COMPLETE") {
+    return { label: "Current plan", amount: state.deployable, amountSuffix: state.deployable === null ? null : "deployable" };
+  }
+  return {
+    label: "You left the split to the agents",
+    amount: state.deployable,
+    amountSuffix: state.deployable === null ? null : "in the flexible pool",
+  };
 }
 
 /** A proposed split as the server summarized it (view.lastPlan). */

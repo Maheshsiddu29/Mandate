@@ -2,7 +2,7 @@
 
 import { LatticeLoader } from "@/components/react-bits/lattice-loader";
 import { useState, type ReactNode } from "react";
-import { budgetRows, canAskForPlan, checkBudgets, roomCopy, type AllocationState, type PlanningCard, type PlanView } from "./allocation-model";
+import { allocationHeader, budgetRows, canAskForPlan, checkBudgets, roomCopy, type AllocationState, type PlanningCard, type PlanView } from "./allocation-model";
 import type { Json } from "./live-client";
 import { ROLE_DESCRIPTORS, ROLE_TITLES, ROLES, usd, type RoleName } from "./live-model";
 import type { DraftAccess } from "./stage-configure";
@@ -58,11 +58,12 @@ export function AllocationPanel(props: {
   const planned = rows.every((r) => r.amount !== null);
   const ask = canAskForPlan(state);
   const showPlanVsMax = planned && state.intent !== "FIXED";
+  const header = allocationHeader(state);
   return (
     <section className="mw-allocation" aria-label={showPlanVsMax ? "Current plan" : "Your allocation"}>
       <div className="mw-allocation__row">
-        <span className="mw-allocation__label">{state.intent === "FIXED" ? "Your allocation" : planned ? "Current plan" : "You left the split to the agents"}</span>
-        {state.deployable === null ? null : <span className="mw-allocation__value"><strong>{usd(state.deployable)}</strong> available</span>}
+        <span className="mw-allocation__label">{header.label}</span>
+        {header.amount === null ? null : <span className="mw-allocation__value"><strong>{usd(header.amount)}</strong>{header.amountSuffix === null ? null : ` ${header.amountSuffix}`}</span>}
       </div>
       {planned || state.fixed.length > 0 ? (
         <ul className="mw-rows">

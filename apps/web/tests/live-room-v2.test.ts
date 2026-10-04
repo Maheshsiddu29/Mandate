@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import type { JsonRecord, LiveEvent } from '../components/demo/live/live-client.ts';
-import { allocationState, authorizedStockTrade, budgetRows, canAskForPlan, checkBudgets, planView, planningCards, roomCopy, serverCompatible, ROOM_PURPOSE_COPY } from '../components/demo/live/allocation-model.ts';
+import { allocationHeader, allocationState, authorizedStockTrade, budgetRows, canAskForPlan, checkBudgets, planView, planningCards, roomCopy, serverCompatible, ROOM_PURPOSE_COPY } from '../components/demo/live/allocation-model.ts';
 import { deriveFlow, type FlowInput } from '../components/demo/live/live-flow.ts';
 import { deriveAgents, deriveRoomChat } from '../components/demo/live/live-model.ts';
 
@@ -61,6 +61,28 @@ test('37. an edited allocation is validated immediately', () => {
   const plan = planView({ roomId: 'plan-1-1', roomPurpose: 'INITIAL_ALLOCATION', pool: { amount: '2000' }, fixed: [], budgets: [{ role: 'stock', budget: { amount: '750' }, zero: null, rationale: 'r', candidate: 'NVDA', action: 'PROPOSE' }], allocated: { amount: '750' }, unallocated: { amount: '1250' }, explanation: 'why' });
   assert.equal(plan?.budgets[0]?.amount, '750');
   assert.equal(plan?.unallocated, '1250');
+});
+
+test('37b. Scenario C hybrid header never calls deployable capital "available"', () => {
+  const hybrid = allocationState(allocation({
+    intent: 'HYBRID',
+    planning: 'REQUIRED',
+    enabled: ['stock', 'swap', 'yield'],
+    undecided: [],
+    fixed: ['stock', 'yield'],
+    pool: ['swap'],
+    autoReallocate: false,
+    deployableAtoms: '5000000000',
+    poolAtoms: '2000000000',
+  }));
+  assert.ok(hybrid);
+  const header = allocationHeader(hybrid!);
+  assert.match(header.label, /Part of the allocation is fixed/);
+  assert.equal(header.amount, '2000');
+  assert.match(header.amountSuffix ?? '', /remains for Swap/);
+  assert.doesNotMatch(`${header.label} ${header.amountSuffix}`, /available/i);
+  assert.match(planning, /allocationHeader/);
+  assert.doesNotMatch(planning, /\$\{usd\(state\.deployable\)\}<\/strong> available/);
 });
 
 test('38. the signed review shows the budgets the draft holds after editing, with who set them', () => {
