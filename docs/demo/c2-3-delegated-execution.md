@@ -271,21 +271,21 @@ no agent live broadcast during implementation.
 
 ## 16. Deployment plan (human only)
 
-Separate artifacts (do not overwrite V2):
+Separate artifacts (do not overwrite V2 `contracts/deploy/robinhood-testnet.json`):
 
-- `contracts/deploy/robinhood-testnet-delegated.json`
-- `docs/demo/v3-deployment-manifest.json` (after human deploy)
+- `contracts/deploy/robinhood-testnet-delegated.json` — immutable fixture plan (committed)
+- `contracts/script/DeployDelegatedV3.s.sol` — typed Foundry deploy (hardcoded MDEMO/MDUSD)
+- `contracts/deploy/robinhood-testnet-delegated-live.json` — written only after human SEND
 
 Commands (never under `npm run check`; refuse mainnet; chain 46630 only):
 
 ```bash
 npm run robinhood:v3:testnet:deploy -- --dry-run
-npm run robinhood:v3:testnet:verify
-npm run robinhood:v3:testnet:demo -- --dry-run
+npm run robinhood:v3:testnet:deploy -- --send --confirm-testnet-46630
+npm run robinhood:v3:testnet:verify -- --gate <V3_GATE>
 ```
 
-**Agent broadcasts: 0.** User reviews this report, then manually deploys and
-runs one controlled acceptance execution.
+**Agent broadcasts: 0.** The owner runs the confirmed SEND command after review.
 
 ## 17. Phase order
 
@@ -340,14 +340,62 @@ deployment-readiness proof.
 
 ## 19. Operator runbook (human only)
 
+### 19.1 Deploy MandateDelegatedExecutionGate (testnet 46630)
+
+Double chain guard: the Node wrapper queries `eth_chainId` and requires `46630`;
+the Solidity script independently `require`s `block.chainid == 46630`. Known
+mainnets and unknown chain IDs refuse. Signer is Foundry `--interactive` (or a
+keystore via `--account`); the script never reads `PRIVATE_KEY`.
+
 1. Verify clean commit on `cursor/c2-3-delegated-execution`.
-2. Run full local validation (`npm run check`, contracts, web, audit/credentials/junk).
-3. `npm run robinhood:v3:testnet:deploy -- --dry-run` (default is dry-run; no broadcast).
-4. Fund deployer if necessary (human wallet; never commit keys).
-5. Explicit V3 testnet Foundry deploy of `MandateDelegatedExecutionGate` (chain 46630 only).
-6. Verify deployed bytecode / domain separator / fixture market.
-7. One-time principal MDUSD `approve(V3Gate, amount)` — **setup tx, not a Mandate signature**.
-8. Start lab: `npm run agents:lab` (V3 host when manifest + keys present).
+2. Run full local validation (`npm run check`, `forge test`, web, audit/credentials/junk).
+3. Dry-run (simulation against Robinhood testnet RPC — **never broadcasts**):
+
+```bash
+npm run robinhood:v3:testnet:deploy -- --dry-run
+```
+
+Expect: `DRY_RUN`, `NO BROADCAST`, chainId `46630`, one FIXTURE market
+(MDEMO / MDUSD @ 10 MDUSD per MDEMO). Optional RPC override:
+`ROBINHOOD_TESTNET_RPC_URL` (public default or QuickNode; URL never printed).
+
+4. Fund the deployment signer if necessary (human wallet / Foundry keystore —
+   never commit keys; never pass a raw private key to the wrapper).
+5. Live deploy (**only** this exact command broadcasts; agent must not run it):
+
+```bash
+npm run robinhood:v3:testnet:deploy -- \
+  --send \
+  --confirm-testnet-46630
+```
+
+`--send` without `--confirm-testnet-46630` is **REFUSED**. Foundry prompts
+for the interactive signer. Capture from the output / live manifest:
+
+- V3 Gate address
+- deployment tx hash
+- chainId `46630`
+- block number (when present)
+- runtime code hash (via verify)
+
+Live evidence file (never overwrites V2):
+`contracts/deploy/robinhood-testnet-delegated-live.json`.
+
+6. Verify the deployed gate:
+
+```bash
+npm run robinhood:v3:testnet:verify -- --gate <V3_GATE>
+```
+
+Checks: chainId `46630`, code present, `CHAIN_ID() == 46630`, nonzero
+`domainSeparator()`, fixture market MDEMO/MDUSD, `MARKET_FIXTURE`, fixture
+price `10_000_000` @ 6 decimals, runtime code hash, plus
+`DeployDelegatedV3.verify(gate)`.
+
+7. Principal performs a **separate**, one-time **bounded** MDUSD approval to
+   the V3 Gate (`approve(V3Gate, amount)`). Not a Mandate signature. Not
+   unlimited. Not sent by deploy tooling.
+8. Start lab: `npm run agents:lab`.
 9. Open the Live Lab browser UI.
 10. Start a **new** V3 session (not a restored one).
 11. Connect wallet on Robinhood Chain testnet.
@@ -357,15 +405,10 @@ deployment-readiness proof.
 15. Inspect receipt: wallet approval for this trade = None; bounded V3 delegation.
 16. Optionally prove a second trade locally (same delegation, next nonce) — not required live.
 
-**Allowance setup (V3 Gate).** One-time testnet: principal must `approve(MandateDelegatedExecutionGate, amount)` for MDUSD. Not a Mandate signature. Not auto-sent by agent tests. Complete this **before** recording a judge/video flow.
-
-**Manual deploy (human only, after review):**
-
-```bash
-npm run robinhood:v3:testnet:deploy -- --dry-run
-# then human Foundry deploy against chain 46630 only; never mainnet
-# then principal: MDUSD.approve(V3Gate, amount)
-```
+**Allowance setup (V3 Gate).** One-time testnet: principal must
+`approve(MandateDelegatedExecutionGate, amount)` for MDUSD — bounded, not
+unlimited. Not a Mandate signature. Not auto-sent by deploy or agent tests.
+Complete this **before** recording a judge/video flow.
 
 ## 20. Manual live acceptance plan (do not run in agent work)
 
