@@ -3,6 +3,18 @@
 > **One authority layer. Many agents. Multiple markets.**  
 > **Agents propose. Mandate authorizes. Markets settle.**
 
+> [!IMPORTANT]
+> **Public demo settlement disclaimer**
+>
+> The hosted demo at `https://mandateai.vercel.app` runs the full **live AI → multi-agent planning → Mandate Room → deterministic authorization → portfolio reservation** flow, but it does **not broadcast a new blockchain transaction from the public Railway server**.
+>
+> This is intentional and security-driven — **not a failed transaction and not a limitation of Mandate's settlement protocol**. The public API runs in `MANDATE_PUBLIC_DEMO=1`, which keeps settlement composition disabled with `PUBLIC_DEMO_WRITE_DISABLED`. We chose not to expose testnet signing/custody keys behind a public internet-facing endpoint during the final buildathon deployment window.
+>
+> The repository contains the separate Robinhood Chain testnet settlement implementation in `packages/live-settlement`, and Mandate has already executed confirmed valueless testnet transactions through its execution-gate path. Those historical onchain proofs are documented in [`docs/phase-7e/robinhood-demo.md`](docs/phase-7e/robinhood-demo.md).
+>
+> **So when the hosted UI shows `AUTHORIZED` / `Reserved is not settled`, no transaction has reverted — no transaction was constructed, signed, or broadcast in that hosted session.**
+
+
 Mandate is an authorization and execution control plane for autonomous financial agents.
 
 AI agents can already discover opportunities, compare markets, negotiate with one another, and generate transactions. The harder problem is deciding whether a particular action is actually inside the authority granted by the human or institution behind the agent.
