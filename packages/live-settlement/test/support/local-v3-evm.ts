@@ -385,7 +385,7 @@ export async function openLocalV3Evm(): Promise<LocalV3Evm> {
       return { txHash: r.txHash, status: r.receipt.status };
     },
     async approvalTypehash() {
-      const data = calldata('DELEGATED_EXECUTION_APPROVAL_TYPEHASH()', []);
+      const data = calldata('DELEGATED_EXECUTION_APPROVAL_TYPEHASH()', [], []);
       return (await wordCall(data)).toLowerCase();
     },
     async receiptLogs(txHash: string) {
