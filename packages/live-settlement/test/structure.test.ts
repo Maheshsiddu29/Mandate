@@ -32,7 +32,7 @@ const SCRIPTS = sources(fileURLToPath(new URL('scripts/', ROOT)));
 const only = (pattern: RegExp, allowed: readonly string[], set = SRC) => {
   for (const { file, text } of set) if (!allowed.includes(file)) assert.doesNotMatch(text, pattern, file);
 };
-const DEPS = ['@mandate/control', '@mandate/core', '@mandate/evm-robinhood', '@mandate/execution-gate', '@mandate/kernel', '@mandate/ledger', '@mandate/ledger-sqlite', '@mandate/live-agents', '@mandate/portfolio'];
+const DEPS = ['@mandate/control', '@mandate/core', '@mandate/evm-robinhood', '@mandate/execution-gate', '@mandate/kernel', '@mandate/ledger', '@mandate/ledger-sqlite', '@mandate/live-agents', '@mandate/portfolio', '@noble/curves', '@noble/hashes'];
 
 describe('live-settlement structural boundary', () => {
   it('depends only on the packages it uses', () => {
@@ -47,7 +47,9 @@ describe('live-settlement structural boundary', () => {
   it('holds the RPC client and the gas payer’s key in rpc.ts, and the principal and agent keys only on their way to custody in domain-leg.ts', () => {
     only(/\b(ChainClient|JsonRpcClient|TxSender|readGateMarkets)\b/, ['rpc.ts']);
     only(/\b(LocalGateCustody|LocalAgentSigner|keyAddress|GateSigner)\b/, ['domain-leg.ts']);
-    only(/secp256k1|signTransaction|signPrehash|demoKey/, ['rpc.ts']);
+    // C2.3: the ephemeral Mandate execution delegate signs exact approvals in
+    // v3/execution-delegate.ts; the gas payer remains in rpc.ts.
+    only(/secp256k1|signTransaction|signPrehash|demoKey/, ['rpc.ts', 'v3/execution-delegate.ts']);
     only(/\bfetch\s*\(|WebSocket|node:https?|node:net/, []);
     only(/\bfetch\s*\(|WebSocket|node:https?|node:net/, [], SCRIPTS);
   });

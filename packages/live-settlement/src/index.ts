@@ -36,3 +36,12 @@ export { domainPolicy, type DomainKeys } from './domain-leg.ts';
 export { reverifySpine, SPINE_CHAIN_ID, type SpineCheck, type SpineFacts } from './spine.ts';
 export { settleSpine, type SpineHold, type SpineSettlementInput, type SpineSettlementResult } from './spine-settlement.ts';
 export { durableSettlement, SETTLEMENT_STATUSES, type DurableSettlement, type SettlementStatus, type PendingSettlement } from './settlement-state.ts';
+export {
+  createExecutionDelegate,
+  restoredExecutionDelegate,
+  VerifiedDelegatedExecution,
+  type ExecutionDelegate,
+  type ExecutionDelegatePublic,
+} from './v3/execution-delegate.ts';
+export { deriveV3StockFixtureCap, type V3CapInput, type V3CapResult } from './v3/cap.ts';
+export { AutonomousSettlementGate, type AutonomousGateState } from './v3/autonomous-gate.ts';

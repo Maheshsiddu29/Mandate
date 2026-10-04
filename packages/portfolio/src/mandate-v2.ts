@@ -29,6 +29,7 @@
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import { recoverSigner } from '@mandate/execution-gate';
 import { portfolioMandateDigest, type PortfolioMandate } from './mandate.ts';
+import type { PortfolioAuthorityV3 } from './mandate-v3.ts';
 
 export const PORTFOLIO_MANDATE_V2_NAME = 'Mandate';
 export const PORTFOLIO_MANDATE_V2_VERSION = '2';
@@ -64,7 +65,7 @@ export interface PortfolioAuthorityV2Plan {
   readonly initialAllocationDigest: string;
 }
 
-export type PortfolioAuthority = PortfolioAuthorityV1 | PortfolioAuthorityV2 | PortfolioAuthorityV2Plan;
+export type PortfolioAuthority = PortfolioAuthorityV1 | PortfolioAuthorityV2 | PortfolioAuthorityV2Plan | PortfolioAuthorityV3;
 
 export interface PortfolioMandateV2Message {
   readonly statement: string;

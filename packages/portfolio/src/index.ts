@@ -21,6 +21,7 @@ export * from './scope.ts';
 export * from './mandate.ts';
 export * from './initial-allocation.ts';
 export * from './mandate-v2.ts';
+export * from './mandate-v3.ts';
 export * from './candidate.ts';
 export * from './proposal.ts';
 export * from './release.ts';
