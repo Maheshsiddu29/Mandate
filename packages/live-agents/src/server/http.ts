@@ -2,7 +2,8 @@
  * The HTTP binding of the local Live AI Lab API — the only module in this
  * package that listens on a socket.
  *
- * - Binds to 127.0.0.1 only.
+ * - Binds to 127.0.0.1 by default; explicit public-demo mode may bind to
+ *   0.0.0.0 with exact-origin CORS.
  * - Refuses a request whose Host is not this loopback address (a DNS
  *   rebinding page cannot reach it) and one whose Origin is not on the
  *   allowlist; CORS answers only allowlisted origins.
@@ -29,6 +30,7 @@ const EVENTS = /^\/api\/live\/sessions\/([A-Za-z0-9-]{1,64})\/events$/;
 export interface HttpOptions {
   readonly port: number;
   readonly allowedOrigins: readonly string[];
+  readonly publicDemo?: boolean;
   /**
    * Handled before the lab, after the loopback and origin checks. Return
    * null to fall through. The lab itself never settles; an explicit
@@ -88,6 +90,7 @@ export function loopbackHost(host: string | undefined, port: number): boolean {
 export const SYNC_MS = 400;
 
 export function createLabServer(lab: LiveLab, o: HttpOptions): Server {
+  if (o.publicDemo && o.allowedOrigins.some((origin) => origin.includes('*'))) throw new Error('Wildcard CORS is forbidden in public-demo mode.');
   const sweeper = setInterval(() => lab.sweep(), 60_000);
   sweeper.unref();
   const syncer = setInterval(() => lab.syncEvents(), SYNC_MS);
@@ -98,9 +101,13 @@ export function createLabServer(lab: LiveLab, o: HttpOptions): Server {
       const allowed = origin !== undefined && o.allowedOrigins.includes(origin);
       const cors: { readonly [k: string]: string } = allowed ? { 'access-control-allow-origin': origin, vary: 'Origin' } : {};
       const port = (server.address() as AddressInfo | null)?.port ?? o.port;
-      if (!loopbackHost(req.headers.host, port)) return send(res, { status: 421, body: { error: 'HOST_NOT_ALLOWED', message: 'This server answers on 127.0.0.1 only.' } }, {});
-      if (origin !== undefined && !allowed) return send(res, { status: 403, body: { error: 'ORIGIN_NOT_ALLOWED', message: 'This origin is not on the allowlist (LIVE_ALLOWED_ORIGINS).' } }, {});
+      if (!o.publicDemo && !loopbackHost(req.headers.host, port)) return send(res, { status: 421, body: { error: 'HOST_NOT_ALLOWED', message: 'This server answers on 127.0.0.1 only.' } }, {});
+      if (origin !== undefined && !allowed) return send(res, { status: 403, body: { error: 'ORIGIN_NOT_ALLOWED', message: 'This origin is not on the configured exact-origin allowlist.' } }, {});
       const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
+
+      if (req.method === 'GET' && url.pathname === '/health') {
+        return send(res, { status: 200, body: { ok: true, service: 'mandate-live-api' } }, cors);
+      }
 
       if (req.method === 'OPTIONS') {
         res.writeHead(allowed ? 204 : 403, { ...cors, 'access-control-allow-methods': 'GET, POST', 'access-control-allow-headers': 'content-type', 'access-control-max-age': '600' });
@@ -150,11 +157,11 @@ export function createLabServer(lab: LiveLab, o: HttpOptions): Server {
   return server;
 }
 
-/** Listen on 127.0.0.1 only. */
-export function listen(server: Server, port: number): Promise<void> {
+/** Listen on loopback unless explicit public-demo configuration supplies 0.0.0.0. */
+export function listen(server: Server, port: number, host: '127.0.0.1' | '0.0.0.0' = '127.0.0.1'): Promise<void> {
   return new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(port, '127.0.0.1', () => {
+    server.listen(port, host, () => {
       server.off('error', reject);
       resolve();
     });

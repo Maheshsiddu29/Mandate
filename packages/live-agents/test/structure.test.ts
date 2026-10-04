@@ -84,12 +84,12 @@ describe('live-agents structural boundary', () => {
     only(/node:child_process|\bexec(Sync)?\s*\(|spawn(Sync)?\s*\(/, [], SCRIPTS);
   });
 
-  it('has one network client (the model provider) and one listening socket (the local server)', () => {
+  it('has one network client (the model provider) and one explicitly configured listening socket', () => {
     only(/\bfetch\s*\(|api\.openai\.com/, ['runtime/openai-provider.ts']);
     only(/node:http|node:net|node:https|node:dgram|node:tls|WebSocket|createServer/, ['server/http.ts']);
     const http = SRC.find((s) => s.file === 'server/http.ts')?.text ?? '';
-    assert.match(http, /listen\(port, '127\.0\.0\.1'/);
-    assert.doesNotMatch(http, /0\.0\.0\.0|'::'/);
+    assert.match(http, /host: '127\.0\.0\.1' \| '0\.0\.0\.0' = '127\.0\.0\.1'/);
+    assert.doesNotMatch(http, /'::'/);
   });
 
   it('reads clocks in one module, schedules timers only there and in the server, and reads randomness in one module', () => {

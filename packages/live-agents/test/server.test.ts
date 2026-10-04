@@ -189,3 +189,52 @@ describe('the HTTP binding', () => {
     assert.match(stream.text, /^id: 0\nevent: live\ndata: \{"schema":"MANDATE_LIVE_AI\.V1"/);
   });
 });
+
+describe('the public-demo HTTP binding', () => {
+  let server: Server;
+  let port = 0;
+  const publicOrigin = 'https://mandateai.vercel.app';
+
+  before(async () => {
+    server = createLabServer(lab(false), { port: 0, allowedOrigins: [publicOrigin], publicDemo: true });
+    await listen(server, 0, '0.0.0.0');
+    port = (server.address() as AddressInfo).port;
+  });
+  after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
+
+  function raw(origin?: string): Promise<{ status: number; headers: { [k: string]: string | string[] | undefined }; text: string }> {
+    return new Promise((resolve, reject) => {
+      const r = request({ host: '127.0.0.1', port, method: 'GET', path: '/health', headers: { host: 'mandate-api.example', ...(origin === undefined ? {} : { origin }) } }, (res) => {
+        let text = '';
+        res.setEncoding('utf8');
+        res.on('data', (c: string) => { text += c; });
+        res.on('end', () => resolve({ status: res.statusCode ?? 0, headers: res.headers, text }));
+      });
+      r.on('error', reject);
+      r.end();
+    });
+  }
+
+  it('binds publicly and answers health without requiring a loopback Host or Origin', async () => {
+    assert.equal((server.address() as AddressInfo).address, '0.0.0.0');
+    const health = await raw();
+    assert.equal(health.status, 200);
+    assert.deepEqual(JSON.parse(health.text), { ok: true, service: 'mandate-live-api' });
+    assert.equal(health.headers['access-control-allow-origin'], undefined);
+  });
+
+  it('allows only the configured browser origin and never emits wildcard CORS', async () => {
+    const allowed = await raw(publicOrigin);
+    assert.equal(allowed.status, 200);
+    assert.equal(allowed.headers['access-control-allow-origin'], publicOrigin);
+    assert.notEqual(allowed.headers['access-control-allow-origin'], '*');
+
+    const rejected = await raw('https://evil.example');
+    assert.equal(rejected.status, 403);
+    assert.equal(rejected.headers['access-control-allow-origin'], undefined);
+    assert.throws(() => createLabServer(lab(false), { port: 0, allowedOrigins: ['*'], publicDemo: true }), /Wildcard CORS/);
+  });
+});

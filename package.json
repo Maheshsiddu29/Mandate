@@ -24,6 +24,7 @@
     "packages/live-settlement"
   ],
   "scripts": {
+    "start": "npm run agents:serve",
     "audit:security": "npm audit --audit-level=high",
     "check": "npm run typecheck && npm test && npm run robinhood:fixtures:validate && npm run mainnet-replay:validate && npm run mainnet-routing:validate && npm run robinhood:cross-surface && npm run jev:fixtures:validate && npm run credentials:scan && npm run repository:junk",
     "contracts:build": "forge build --sizes",
