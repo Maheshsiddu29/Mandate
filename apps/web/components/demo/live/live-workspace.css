@@ -1416,6 +1416,22 @@ button.mw-signer__option:focus-visible { outline: 2px solid rgba(169, 166, 255, 
 }
 .mw-settlement-setup .mw-authority-review__title { margin: 0; }
 .mw-evidence--compact { gap: 0.4rem; margin-top: 0.6rem; font-size: 0.8rem; }
+.mw-tech--nested { margin-top: 0.7rem; }
+.mw-proof-value { display: flex; align-items: center; gap: 0.45rem; min-width: 0; }
+.mw-proof-value code { overflow-wrap: anywhere; }
+.mw-proof-copy {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--mw-muted);
+  font: inherit;
+  font-size: 0.68rem;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.mw-proof-copy:hover { color: var(--mw-text); }
+.mw-proof-copy:focus-visible { outline: 2px solid rgba(169, 166, 255, 0.6); outline-offset: 2px; }
 
 /* Mandate Room V2: agent selection, allocation and the Planning Room (docs/v2/mandate-room-v2.md §15–17). */
 .mw-stage[data-phase="PLANNING"] { --mw-width: 820px; }

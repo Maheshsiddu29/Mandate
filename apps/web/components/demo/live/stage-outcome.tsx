@@ -315,6 +315,51 @@ function SettleActions(props: {
 }
 
 function TechnicalDetails({ settlement }: { readonly settlement: SettlementView }): ReactNode {
+  const v3 = settlement.v3Proof;
+  if (v3 !== null) {
+    const primary: readonly (readonly [string, string, string | null])[] = [
+      ["Candidate", v3.candidateId, null],
+      ["Wallet principal", v3.walletPrincipal, null],
+      ["V3 Gate", v3.gate, null],
+      ["Execution nonce", v3.executionNonce, null],
+      ["Transaction", v3.transactionHash, v3.explorerUrl],
+      ["Block", v3.blockNumber, null],
+      ["Gas used", v3.gasUsed, null],
+      ["Consumed capacity", capacity(v3.cumulativeDebit, v3.capacityDecimals, v3.capacityUnit), null],
+      ["Remaining capacity", capacity(v3.remainingCapacity, v3.capacityDecimals, v3.capacityUnit), null],
+      ["Evidence", v3.evidence, null],
+    ];
+    const expanded = [
+      ["Execution delegate", v3.delegate],
+      ["Delegation digest", v3.delegationDigest],
+      ["Reservation", v3.reservation],
+      ["Initial authorized capacity", capacity(v3.initialCapacity, v3.capacityDecimals, v3.capacityUnit)],
+      ["Receipt digest", v3.receiptDigest],
+      ["Session", v3.sessionId],
+      ["Gate candidate digest", v3.gateCandidateDigest],
+      ["Execution approval digest", v3.executionApprovalDigest],
+      ["Execution commitment", v3.executionCommitment],
+      ["Initial allocation digest", v3.initialAllocationDigest],
+      ["Gate agent", v3.agent],
+      ["Chain ID", v3.chainId],
+      ["Gas estimate", v3.gasEstimate],
+      ["Broadcast", "Yes"],
+    ].filter((row): row is [string, string] => row[1] !== null);
+    return (
+      <details className="mw-tech">
+        <summary>Technical proof</summary>
+        <dl className="mw-evidence mw-evidence--compact">
+          {primary.map(([label, value, href]) => <ProofRow key={label} label={label} value={value} href={href} />)}
+        </dl>
+        <details className="mw-tech mw-tech--nested">
+          <summary>Expanded proof</summary>
+          <dl className="mw-evidence mw-evidence--compact">
+            {expanded.map(([label, value]) => <ProofRow key={label} label={label} value={value} />)}
+          </dl>
+        </details>
+      </details>
+    );
+  }
   const rows: readonly (readonly [string, string])[] = [
     ["Candidate", settlement.candidateId ?? "—"],
     ["Wallet principal", settlement.walletPrincipal ?? "—"],
@@ -334,6 +379,35 @@ function TechnicalDetails({ settlement }: { readonly settlement: SettlementView 
         {rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd><code>{value}</code></dd></div>)}
       </dl>
     </details>
+  );
+}
+
+function capacity(atoms: string, decimals: number, unit: string): string {
+  try {
+    const value = BigInt(atoms);
+    const scale = 10n ** BigInt(decimals);
+    const whole = value / scale;
+    const fraction = (value - whole * scale).toString().padStart(decimals, "0").replace(/0+$/, "");
+    return `${whole.toString()}${fraction === "" ? "" : `.${fraction}`} ${unit} (${atoms} atoms)`;
+  } catch {
+    return `${atoms} ${unit} atoms`;
+  }
+}
+
+function ProofRow({ label, value, href = null }: { readonly label: string; readonly value: string; readonly href?: string | null }): ReactNode {
+  const abbreviated = /^0x[0-9a-fA-F]{16,}$/.test(value) ? shortHash(value) : value;
+  const shown = href === null
+    ? <code title={value}>{abbreviated}</code>
+    : <a href={href} target="_blank" rel="noreferrer noopener"><code title={value}>{abbreviated}</code></a>;
+  const copyable = abbreviated !== value;
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd className="mw-proof-value">
+        {shown}
+        {copyable ? <button type="button" className="mw-proof-copy" aria-label={`Copy ${label}`} onClick={() => { void navigator.clipboard.writeText(value); }}>Copy</button> : null}
+      </dd>
+    </div>
   );
 }
 

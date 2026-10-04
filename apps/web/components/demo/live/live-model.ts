@@ -253,6 +253,41 @@ export interface PrincipalBinding {
   readonly domainAddress: string;
 }
 
+/** Server-normalized V3 proof. Nullable digests are omitted from the UI when older durable evidence lacks them. */
+export interface V3TechnicalProofView {
+  readonly version: "V3";
+  readonly sessionId: string;
+  readonly candidateId: string;
+  readonly walletPrincipal: string;
+  readonly gate: string;
+  readonly delegate: string;
+  readonly agent: string;
+  readonly delegationDigest: string;
+  readonly gateMandateDigest: string | null;
+  readonly gateCandidateDigest: string | null;
+  readonly executionApprovalDigest: string | null;
+  readonly executionCommitment: string | null;
+  readonly executionNonce: string;
+  readonly reservation: string;
+  readonly initialAllocationDigest: string;
+  readonly initialCapacity: string;
+  readonly cumulativeDebit: string;
+  readonly remainingCapacity: string;
+  readonly capacityUnit: string;
+  readonly capacityDecimals: number;
+  readonly gasEstimate: string | null;
+  readonly transactionHash: string;
+  readonly blockNumber: string;
+  readonly gasUsed: string;
+  readonly transactionStatus: string;
+  readonly transactionTo: string;
+  readonly chainId: string;
+  readonly receiptDigest: string;
+  readonly explorerUrl: string | null;
+  readonly evidence: "LIVE_TESTNET";
+  readonly broadcast: true;
+}
+
 export interface SettlementView {
   readonly present: boolean;
   /**
@@ -296,6 +331,7 @@ export interface SettlementView {
   readonly walletPrincipal: string | null;
   readonly receiptDigest: string | null;
   readonly commitmentRecorded: boolean;
+  readonly v3Proof: V3TechnicalProofView | null;
 }
 
 export interface LivePresentation {
@@ -705,6 +741,52 @@ function textField(data: JsonRecord, key: string): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
+function v3ProofFromEvent(data: JsonRecord): V3TechnicalProofView | null {
+  if (textField(data, "spine") !== "V3" || textField(data, "evidence") !== "LIVE_TESTNET" || data.transactions !== 1) return null;
+  const sessionId = textField(data, "sessionId");
+  const candidateId = textField(data, "candidateId");
+  const walletPrincipal = textField(data, "principal");
+  const gate = textField(data, "target");
+  const delegate = textField(data, "mandateDelegate");
+  const agent = textField(data, "agentAddress") ?? textField(data, "gateAgent");
+  const delegationDigest = textField(data, "delegationDigest");
+  const executionNonce = textField(data, "executionNonce");
+  const reservation = textField(data, "reservation");
+  const initialAllocationDigest = textField(data, "initialAllocationDigest");
+  const initialCapacity = textField(data, "initialCapacity");
+  const cumulativeDebit = textField(data, "cumulativeDebit");
+  const remainingCapacity = textField(data, "remainingCapacity");
+  const capacityUnit = textField(data, "capacityUnit");
+  const transactionHash = textField(data, "txHash");
+  const blockNumber = textField(data, "block");
+  const gasUsed = textField(data, "gasUsed");
+  const transactionStatus = textField(data, "status");
+  const transactionTo = textField(data, "target");
+  const chainId = textField(data, "chainId");
+  const receiptDigest = textField(data, "receiptDigest");
+  const capacityDecimals = data.capacityDecimals;
+  if (
+    sessionId === null || candidateId === null || walletPrincipal === null || gate === null || delegate === null
+    || agent === null || delegationDigest === null || executionNonce === null || reservation === null
+    || initialAllocationDigest === null || initialCapacity === null || cumulativeDebit === null
+    || remainingCapacity === null || capacityUnit === null || transactionHash === null || blockNumber === null
+    || gasUsed === null || transactionStatus !== "SUCCESS" || transactionTo === null || chainId === null
+    || receiptDigest === null || typeof capacityDecimals !== "number" || !Number.isInteger(capacityDecimals)
+    || capacityDecimals < 0 || capacityDecimals > 38
+  ) return null;
+  return {
+    version: "V3", sessionId, candidateId, walletPrincipal, gate, delegate, agent, delegationDigest,
+    gateMandateDigest: textField(data, "mandateDigest"),
+    gateCandidateDigest: textField(data, "candidateDigest"),
+    executionApprovalDigest: textField(data, "executionApprovalDigest"),
+    executionCommitment: textField(data, "executionCommitment"),
+    executionNonce, reservation, initialAllocationDigest, initialCapacity, cumulativeDebit, remainingCapacity,
+    capacityUnit, capacityDecimals, gasEstimate: textField(data, "gasEstimate"), transactionHash, blockNumber,
+    gasUsed, transactionStatus, transactionTo, chainId, receiptDigest,
+    explorerUrl: textField(data, "explorerUrl"), evidence: "LIVE_TESTNET", broadcast: true,
+  };
+}
+
 export function deriveSettlement(events: readonly LiveEvent[]): SettlementView {
   const base: SettlementView = {
     present: false,
@@ -738,6 +820,7 @@ export function deriveSettlement(events: readonly LiveEvent[]): SettlementView {
     walletPrincipal: null,
     receiptDigest: null,
     commitmentRecorded: false,
+    v3Proof: null,
   };
   let view = base;
   for (const event of events) {
@@ -828,6 +911,7 @@ export function deriveSettlement(events: readonly LiveEvent[]): SettlementView {
       const authorized = rec(data.authorized);
       const tokenIn = rec(data.tokenIn);
       const tokenOut = rec(data.tokenOut);
+      const v3Proof = event.kind === "DOMAIN_EXECUTION_SETTLED" ? v3ProofFromEvent(data) : null;
       touch({
         stage: confirmed ? "SETTLED" : view.stage,
         settled: confirmed,
@@ -849,6 +933,7 @@ export function deriveSettlement(events: readonly LiveEvent[]): SettlementView {
         gate: textField(data, "target") ?? view.gate,
         receiptDigest: textField(data, "receiptDigest") ?? view.receiptDigest,
         commitmentRecorded: rec(data.postconditions).commitmentRecordedOnchain === true || view.commitmentRecorded,
+        v3Proof: v3Proof ?? view.v3Proof,
       });
     }
   }
