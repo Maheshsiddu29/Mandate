@@ -365,9 +365,10 @@ contract MandateDelegatedExecutionGate is ReentrancyGuard {
 
         (actualDebit, actualCredit) = _settle(plan, mandate.principal, terms);
 
-        // slither-disable-next-line reentrancy-no-eth
         // nonReentrant blocks execute reentry; measured debit is bounded by the
-        // pre-checked fundingLimit, so recording it here cannot exceed the cap.
+        // pre-checked fundingLimit, the nonce was consumed before interaction,
+        // and any later failure reverts the call and every state write.
+        // slither-disable-next-line reentrancy-no-eth
         _usedDebit[plan.delegationDigest] += actualDebit;
 
         uint256 cumulativeUsed = _usedDebit[plan.delegationDigest];
@@ -389,6 +390,11 @@ contract MandateDelegatedExecutionGate is ReentrancyGuard {
         return (plan.executionCommitment, actualDebit, actualCredit);
     }
 
+    // This flat verifier intentionally keeps every independent refusal visible
+    // in one review surface. Its only timestamp comparison is the signed
+    // execution deadline against chain time. Splitting it this late would add
+    // call and data-flow risk without changing the authorization decision.
+    // slither-disable-next-line cyclomatic-complexity,timestamp
     function _authorize(
         Delegation calldata delegation,
         bytes calldata principalSignature,
@@ -463,6 +469,9 @@ contract MandateDelegatedExecutionGate is ReentrancyGuard {
         );
         if (!_signedBy(approvalStruct, delegateSignature, delegation.delegate)) revert DelegateSignatureInvalid();
 
+        // The signed execution deadline is chain-time authority; miner timestamp
+        // latitude can only shorten or extend acceptance by the normal bounded
+        // block-time tolerance, never remove the signed deadline.
         // forge-lint: disable-next-line(block-timestamp)
         if (block.timestamp > terms.deadline) revert ExecutionDeadlinePassed();
         if (_usedNonce[plan.delegationDigest][executionNonce]) revert ExecutionNonceAlreadyUsed();
