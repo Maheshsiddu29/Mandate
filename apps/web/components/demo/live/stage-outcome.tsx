@@ -578,6 +578,9 @@ export function ReceiptStage(props: {
   readonly conflict: SettlementRefusal | null;
   readonly retry: boolean;
   readonly onDetails: () => void;
+  /** Opens the existing offchain Policy Stress sheet. Never settlement. */
+  readonly onFirewall: () => void;
+  readonly firewallAvailable: boolean;
   readonly onStartNew: () => void;
   readonly busy: boolean;
   readonly restored: RestoredSettlement | null;
@@ -669,6 +672,11 @@ export function ReceiptStage(props: {
         <button type="button" className="mw-text-button" onClick={props.onDetails}>
           Review details
         </button>
+        {props.firewallAvailable ? (
+          <button type="button" className="mw-soft-button" disabled={props.busy} onClick={props.onFirewall}>
+            Test the firewall
+          </button>
+        ) : null}
       </footer>
     </div>
   );

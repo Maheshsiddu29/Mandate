@@ -243,6 +243,8 @@ export interface StressAttempt {
   readonly identity: JsonRecord;
   readonly note: string;
   readonly sameSigner: boolean;
+  /** From POLICY_STRESS_PROPOSAL_BLOCKED when present; never inferred for AUTHORIZED. */
+  readonly ledgerUnchanged: boolean | null;
 }
 
 /** Who authorized what, as settlement events state it: the portfolio principal is never the domain signer by implication. */
@@ -702,6 +704,7 @@ export function deriveStress(events: readonly LiveEvent[]): { started: boolean; 
         identity: {},
         note: "",
         sameSigner: false,
+        ledgerUnchanged: null,
       });
     } else {
       const index = attempts.findIndex((item) => item.attempt === str(data.attempt));
@@ -712,7 +715,13 @@ export function deriveStress(events: readonly LiveEvent[]): { started: boolean; 
           attempts[index] = { ...attempt, identity, sameSigner: identity.sameSignerAsSwapAgent === true };
         }
         if (event.kind === "POLICY_STRESS_PROPOSAL_BLOCKED") {
-          attempts[index] = { ...attempt, outcome: "REFUSED", reasons: reasonsOf(data.reasons), screening: str(rec(data.screening).verdict) };
+          attempts[index] = {
+            ...attempt,
+            outcome: "REFUSED",
+            reasons: reasonsOf(data.reasons),
+            screening: str(rec(data.screening).verdict),
+            ledgerUnchanged: data.ledgerUnchanged === true ? true : data.ledgerUnchanged === false ? false : null,
+          };
         }
         if (event.kind === "POLICY_STRESS_PROPOSAL_AUTHORIZED") {
           attempts[index] = {
@@ -721,6 +730,7 @@ export function deriveStress(events: readonly LiveEvent[]): { started: boolean; 
             note: str(data.note) === "—" ? "" : str(data.note),
             screening: str(rec(data.screening).verdict),
             sameSigner: data.sameIdentityAsRefusedAttempts === true || attempt.sameSigner,
+            ledgerUnchanged: null,
           };
         }
       }

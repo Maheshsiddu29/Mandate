@@ -194,40 +194,70 @@ function caseTitle(caseId: string): string {
   return caseId.replaceAll("_", " ").toLowerCase().replace(/^./, (letter) => letter.toUpperCase());
 }
 
-/** The security demo: the same valid Swap agent, different actions, different authorization results. */
+/** The security demo: the same valid Swap agent, different actions, different authorization results. Offchain only — never settlement. */
 export function StressBody(props: { readonly attempts: readonly StressAttempt[]; readonly started: boolean; readonly running: boolean; readonly canRun: boolean; readonly onRun: () => void }): ReactNode {
   const identity = props.attempts.find((attempt) => Object.keys(attempt.identity).length > 0)?.identity ?? {};
+  const sameSigner = props.attempts.some((attempt) => attempt.sameSigner);
   return (
     <div className="mw-stress">
       <p className="mw-stress__thesis">VALID AGENT ≠ VALID ACTION</p>
-      <p>The same authorized Swap agent submits a series of actions. Its identity, membership, delegation and signature stay valid throughout. Mandate judges each action, not the agent&apos;s reputation.</p>
-      <button type="button" className="mw-cta" disabled={!props.canRun || props.running} onClick={props.onRun}>{props.running ? "Testing…" : props.started ? "Run the test again" : "Try an unauthorized action"}</button>
+      <p>
+        The agent identity and signature remain valid. Mandate changes only the proposed action and checks whether it still fits the signed authority.
+      </p>
+      <p className="mw-fine">
+        A valid agent signature proves who proposed the action. It does not prove the action is authorized.
+      </p>
+      <button type="button" className="mw-cta" disabled={!props.canRun || props.running} onClick={props.onRun}>
+        {props.running ? "Testing…" : props.started ? "Run the test again" : "Try an unauthorized action"}
+      </button>
       {props.started ? (
         <>
+          <h3 className="mw-review__h">Same valid agent</h3>
           <dl className="mw-identity">
             {IDENTITY_ROWS.map(([key, label, fallback]) => (
               <div key={key}><dt>{label}</dt><dd><Pill tone="good">{str(identity[key] ?? fallback)}</Pill></dd></div>
             ))}
+            <div><dt>Agent</dt><dd><Pill tone="good">Swap</Pill></dd></div>
+            {sameSigner ? <div><dt>Signer</dt><dd><Pill tone="good">Same signer as Swap agent</Pill></dd></div> : null}
           </dl>
           <ol className="mw-attempts" aria-live="polite">
-            {props.attempts.map((attempt, index) => (
-              <li key={attempt.attempt} data-outcome={attempt.outcome}>
-                <span className="mw-attempts__n">{String(index + 1).padStart(2, "0")}</span>
-                <div>
-                  <p className="mw-attempts__case">{caseTitle(attempt.caseId)}</p>
-                  <p className="mw-fine">{attempt.reasons.length > 0 ? explainReasons(attempt.reasons).headline || "Refused" : attempt.outcome === "AUTHORIZED" ? "Compliant control" : attempt.outcome === "PENDING" ? "Evaluating…" : "Not submitted"}</p>
-                  {attempt.outcome === "REFUSED" ? (
-                    <p className="mw-fine">Valid agent · action outside authority · Wallet request: None · Settlement transaction: None · Mandate stopped it before execution.</p>
-                  ) : null}
-                  {attempt.rationale === "" ? null : <details className="mw-disclosure mw-disclosure--inline"><summary>Declared rationale</summary><p>{attempt.rationale}</p></details>}
-                  <MandateReasons reasons={attempt.reasons} />
-                </div>
-                {attempt.outcome === "PENDING" ? <LatticeLoader label="Evaluating" status="working" pattern="ripple" showTimer={false} /> : <Pill tone={attempt.outcome === "AUTHORIZED" ? "good" : attempt.outcome === "REFUSED" ? "bad" : "neutral"}>{attempt.outcome === "REFUSED" ? "BLOCKED" : attempt.outcome}</Pill>}
-              </li>
-            ))}
+            {props.attempts.map((attempt, index) => {
+              const headline = attempt.reasons.length > 0
+                ? explainReasons(attempt.reasons).headline || "Refused"
+                : attempt.outcome === "AUTHORIZED"
+                  ? "Compliant control"
+                  : attempt.outcome === "PENDING"
+                    ? "Evaluating…"
+                    : "Not submitted";
+              return (
+                <li key={attempt.attempt} data-outcome={attempt.outcome}>
+                  <span className="mw-attempts__n">{String(index + 1).padStart(2, "0")}</span>
+                  <div>
+                    <p className="mw-attempts__case">{caseTitle(attempt.caseId)}</p>
+                    <p className="mw-fine">VALID AGENT</p>
+                    <p className="mw-fine">{headline}</p>
+                    {attempt.outcome === "REFUSED" ? (
+                      <dl className="mw-evidence mw-evidence--compact">
+                        <div><dt>Settlement</dt><dd>NOT STARTED</dd></div>
+                        <div><dt>Transaction</dt><dd>None</dd></div>
+                        <div><dt>Broadcasts</dt><dd>0</dd></div>
+                        <div><dt>Ledger unchanged</dt><dd>{attempt.ledgerUnchanged === true ? "Yes" : attempt.ledgerUnchanged === false ? "No" : "—"}</dd></div>
+                        <div><dt>Evidence</dt><dd>OFFCHAIN authorization test · not LIVE_TESTNET</dd></div>
+                      </dl>
+                    ) : null}
+                    {attempt.outcome === "AUTHORIZED" ? (
+                      <p className="mw-fine">Authorization evidence only. No settlement. Broadcasts: 0.</p>
+                    ) : null}
+                    {attempt.rationale === "" ? null : <details className="mw-disclosure mw-disclosure--inline"><summary>Declared rationale</summary><p>{attempt.rationale}</p></details>}
+                    <MandateReasons reasons={attempt.reasons} />
+                  </div>
+                  {attempt.outcome === "PENDING" ? <LatticeLoader label="Evaluating" status="working" pattern="ripple" showTimer={false} /> : <Pill tone={attempt.outcome === "AUTHORIZED" ? "good" : attempt.outcome === "REFUSED" ? "bad" : "neutral"}>{attempt.outcome === "REFUSED" ? "REFUSED" : attempt.outcome}</Pill>}
+                </li>
+              );
+            })}
           </ol>
           <p className="mw-stress__foot"><span>SAME AGENT</span><span>DIFFERENT ACTION</span><strong>DIFFERENT AUTHORIZATION RESULT</strong></p>
-          <p className="mw-fine">A refused case is not a failed transaction. Nothing was sent; the reservation ledger is unchanged.</p>
+          <p className="mw-fine">A refused case is not a failed transaction. Nothing was sent; the reservation ledger is unchanged. Policy Stress is not settlement evidence.</p>
         </>
       ) : null}
     </div>

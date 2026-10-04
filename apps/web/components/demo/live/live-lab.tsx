@@ -878,6 +878,13 @@ export function LiveLab(): ReactNode {
           onReconcile={() => void reconcile()}
           onExecute={() => void execute()}
           onDetails={() => setSheet("review")}
+          firewallAvailable={activeVersion !== null && view.paused !== true}
+          onFirewall={() => {
+            setSheet("stress");
+            if (activeVersion !== null && task === null && view.paused !== true && !stress.started) {
+              void call("POST", "/policy-stress", {});
+            }
+          }}
           onStartNew={() => {
             rememberSession(null);
             window.location.assign(window.location.pathname);
@@ -1012,7 +1019,7 @@ export function LiveLab(): ReactNode {
       <Sheet open={sheet === "room"} onClose={() => setSheet(null)} title="Room conversation" kicker="Real Room events, in order">
         <RoomChat messages={chat} awaiting={awaiting} lines={presentation.room.lines} live={false} reduced={reduced} compact />
       </Sheet>
-      <Sheet open={sheet === "stress"} onClose={() => setSheet(null)} title="Security demo" kicker="Try an unauthorized action" wide>
+      <Sheet open={sheet === "stress"} onClose={() => setSheet(null)} title="Security test" kicker="VALID AGENT ≠ VALID ACTION" wide>
         <StressBody attempts={stress.attempts} started={stress.started} running={task === "POLICY_STRESS"} canRun={activeVersion !== null && task === null && view.paused !== true} onRun={() => void call("POST", "/policy-stress", {})} />
       </Sheet>
       <Sheet open={sheet === "events"} onClose={() => setSheet(null)} title="Event log" kicker="Developer details" wide>
