@@ -136,6 +136,11 @@ describe('Scenario C — untouched authority resolution', () => {
     assert.equal(filled.agents.yield.maxAllocation, '800');
     assert.equal(filled.provenance['agents.stock.maxAllocation'], 'PRESET');
     assert.equal(filled.provenance['agents.yield.maxAllocation'], 'PRESET');
+    // Balanced preset's Swap $500 must not apply when the prompt has an
+    // unsupported per-trade of $500 — that would look like per-trade leaked
+    // into Swap's aggregate ceiling.
+    assert.notEqual(filled.agents.swap.maxAllocation, '500');
+    assert.equal(filled.agents.swap.budget, null);
 
     const view = classifyAllocation(filled);
     assert.equal(view.deployableAtoms, USDC(5000));
@@ -148,7 +153,93 @@ describe('Scenario C — untouched authority resolution', () => {
     assert.ok(validation.issues.some((i) => i.code === 'ALLOCATION_EXCEEDS_AGENT_MAX' && /Yield requested \$1000/.test(i.message) && /ceiling is \$800/.test(i.message)));
     assert.ok(validation.issues.some((i) => i.code === 'ALLOCATION_PLAN_REQUIRED' && /Part of the allocation is fixed/.test(i.message) && /2000 USDC/.test(i.message)));
     assert.equal(validation.issues.some((i) => i.code === 'ALLOCATION_EXCEEDS_TOTAL' && /2500/.test(i.message)), false);
+    assert.equal(validation.issues.some((i) => i.code === 'ALLOCATION_EXCEEDS_AGENT_MAX' && /Swap requested \$3400/.test(i.message)), false);
     assert.equal(validation.mandate, null, 'conflict remains unsigned — no authority is expanded');
+  });
+
+  it('a model that clips budgets to ceilings and dumps remainder onto Swap is undone', () => {
+    const invented = parseDraftInterpretation(JSON.stringify({
+      portfolio: {
+        totalCapital: '5000',
+        minUnallocated: '0',
+        maxDeployed: '5000',
+        deployAll: false,
+        maxDerivative: '0',
+        maxIlliquid: '0',
+        validityMinutes: '60',
+        autoReallocate: false,
+      },
+      agents: [
+        { role: 'stock', enabled: true, maxAllocation: '800', maxExposure: '800', budget: '800' },
+        { role: 'swap', enabled: true, maxAllocation: '500', maxExposure: null, budget: '3400' },
+        { role: 'nft', enabled: false, maxAllocation: null, maxExposure: null, budget: null },
+        { role: 'yield', enabled: true, maxAllocation: '800', maxExposure: null, budget: '800' },
+        { role: 'perps', enabled: false, maxAllocation: null, maxExposure: null, budget: null },
+      ],
+      market: {
+        assets: null,
+        issuers: null,
+        representations: null,
+        venues: ['swap-router'],
+        chains: null,
+        maxLeverage: null,
+        maxSlippageBps: '100',
+        maxQuoteAgeSeconds: '300',
+        syntheticExposure: 'FORBIDDEN',
+      },
+      execution: { recipients: null },
+      issues: [],
+      notes: ['clipped to ceilings'],
+    }));
+    assert.equal(invented.ok, true);
+    if (!invented.ok) return;
+    const merged = preferExplicitPrompt(invented.value, PROMPT);
+    assert.equal(merged.agents.find((a) => a.role === 'stock')?.budget, '2000', 'requested Stock budget is not clipped to 800');
+    assert.equal(merged.agents.find((a) => a.role === 'yield')?.budget, '1000', 'requested Yield budget is not clipped to 800');
+    assert.equal(merged.agents.find((a) => a.role === 'swap')?.budget, null, 'Swap remainder stays delegated — not expanded to 3400');
+    assert.equal(merged.agents.find((a) => a.role === 'swap')?.maxAllocation, null, 'per-trade $500 must not become Swap maxAllocation');
+
+    let draft = draftFromInterpretation(merged, 'MODEL_EXTRACTED');
+    const local = draftFromInterpretation(interpretLocally(PROMPT), 'EXPLICIT_PROMPT');
+    for (const path of Object.keys(local.provenance)) {
+      const v = fieldAt(local, path);
+      if (v !== null && v !== undefined) draft = withField(draft, path, v, 'EXPLICIT_PROMPT');
+    }
+    for (const a of interpretLocally(PROMPT).agents) {
+      if (a.budget === null && fieldAt(draft, `agents.${a.role}.budget`) !== null) {
+        draft = withField(draft, `agents.${a.role}.budget`, null, 'EXPLICIT_PROMPT');
+      }
+    }
+    draft = { ...draft, issues: [...local.issues, ...draft.issues] };
+    const filled = applyPreset(draft, 'balanced', true).draft;
+
+    assert.equal(filled.agents.stock.budget, '2000');
+    assert.equal(filled.agents.yield.budget, '1000');
+    assert.equal(filled.agents.swap.budget, null);
+    assert.equal(filled.agents.stock.maxAllocation, '800');
+    assert.equal(filled.agents.yield.maxAllocation, '800');
+    assert.notEqual(filled.agents.swap.maxAllocation, '500');
+    assert.equal(classifyAllocation(filled).poolAtoms, USDC(2000));
+    assert.ok(filled.issues.some((i) => i.kind === 'UNSUPPORTED' && /per-trade/i.test(i.text)));
+
+    const validation = validateDraft(filled, ctx);
+    assert.equal(validation.ok, false);
+    assert.ok(validation.issues.some((i) => i.code === 'ALLOCATION_EXCEEDS_AGENT_MAX' && /Stock requested \$2000/.test(i.message)));
+    assert.ok(validation.issues.some((i) => i.code === 'ALLOCATION_EXCEEDS_AGENT_MAX' && /Yield requested \$1000/.test(i.message)));
+    assert.equal(validation.issues.some((i) => /Swap requested \$3400/.test(i.message)), false);
+    assert.equal(draftIssuesBlockAuthorize(filled), true);
+  });
+
+  it('"Swap remainder, no trade above $500" never mutates aggregate agent authority', () => {
+    const phrase = 'Swap remainder, no trade above $500';
+    const { draft } = compileLocalPrompt(phrase);
+    assert.equal(draft.agents.swap.enabled, true);
+    assert.equal(draft.agents.swap.budget, null);
+    assert.equal(draft.agents.swap.maxAllocation, null);
+    assert.ok(draft.issues.some((i) => i.kind === 'UNSUPPORTED' && /per-trade cap \(500 USDC\)/i.test(i.text)));
+    const filled = applyPreset(draft, 'balanced', true).draft;
+    assert.notEqual(filled.agents.swap.maxAllocation, '500', 'per-trade must not become Swap aggregate via balanced fill');
+    assert.equal(filled.agents.swap.budget, null);
   });
 
   it('raising the Stock/Yield/Swap ceilings clears the preset conflict without inventing capital', () => {

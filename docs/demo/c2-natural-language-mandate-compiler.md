@@ -153,7 +153,14 @@ Five roles: `stock`, `swap`, `nft`, `yield`, `perps`.
 - Agent `budget` (planned) and `maxAllocation` (signed Up to) stay distinct.
   `"Stock $2k"` sets the planned budget only; balanced fill may still apply
   an $800 preset ceiling, which blocks signing until the principal raises
-  the ceiling or reduces the budget — authority is never expanded silently.
+  the ceiling or reduces the budget — authority is never expanded silently,
+  and a preset conflict must not clip the requested budget or dump the
+  freed remainder onto a delegated agent (Scenario C: Stock/Yield stay
+  $2k/$1k with Swap remainder $2k, never Stock/Yield $800 and Swap $3,400).
+- An unsupported per-trade amount never becomes any agent's
+  `maxAllocation` / `maxExposure`. Fill-from-preset also skips a ceiling
+  whose value equals that unsupported per-trade amount (so balanced
+  Swap `$500` cannot masquerade as `"no trade above $500"`).
 
 ---
 
@@ -166,7 +173,10 @@ Five roles: `stock`, `swap`, `nft`, `yield`, `perps`.
   never enable unnamed agents; report issues.
 - Offline / tests: `interpretLocally` regex parser → same admission path.
 - `preferExplicitPrompt`: local explicit amounts and agent choices overlay
-  the model so a model cannot replace `"$800"` with a preset-shaped `$2,500`.
+  the model so a model cannot replace `"$800"` with a preset-shaped `$2,500`,
+  clip a stated budget to a ceiling, invent a fixed budget for a delegated
+  remainder agent, or turn an unsupported per-trade amount into an
+  aggregate ceiling.
 
 ---
 
