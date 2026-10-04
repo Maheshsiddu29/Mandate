@@ -65,6 +65,8 @@ test('Settlement progress, held, receipt hierarchy, start new mandate', () => {
   assert.match(outcome, /Confirmed/);
   assert.match(outcome, /Execute on Robinhood Testnet/);
   assert.match(outcome, /Testnet settlement proof/);
+  assert.match(outcome, /Agent outcomes/);
+  assert.match(outcome, /Settlement evidence/);
   assert.match(outcome, /Start new mandate/);
   assert.match(outcome, /Review details/);
   assert.doesNotMatch(outcome, />Run again</);

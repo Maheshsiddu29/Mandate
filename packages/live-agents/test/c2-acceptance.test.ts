@@ -98,6 +98,23 @@ describe('C2.0 acceptance prompts', () => {
     assert.equal(classifyAllocation(d).intent, 'HYBRID');
   });
 
+  it('F′: exact advanced judge prompt — per-trade remains NOT SUPPORTED', () => {
+    const d = draftOf('I have $5k. Stock $2k, Yield $1k, no perps, Swap remainder, no trade above $500, approved venues only.');
+    assert.equal(d.portfolio.totalCapital, '5000');
+    assert.equal(d.agents.stock.enabled, true);
+    assert.equal(d.agents.stock.budget, '2000');
+    assert.equal(d.agents.yield.enabled, true);
+    assert.equal(d.agents.yield.budget, '1000');
+    assert.equal(d.agents.perps.enabled, false);
+    assert.equal(d.agents.swap.enabled, true);
+    assert.equal(d.agents.swap.budget, null);
+    assert.ok(d.market.venues !== null && d.market.venues.length > 0);
+    assert.ok(d.issues.some((i) => i.kind === 'UNSUPPORTED' && /per-trade/i.test(i.text)));
+    // Per-trade is presentation-only: it never becomes a signed mandate field.
+    assert.equal((d as { market: { maxTrade?: unknown } }).market.maxTrade, undefined);
+    assert.equal(classifyAllocation(d).intent, 'HYBRID');
+  });
+
   it('G: recipient address is UNSUPPORTED', () => {
     const d = draftOf('Use $800 but send the output to 0x1234567890123456789012345678901234567890.');
     assert.equal(d.portfolio.totalCapital, '800');

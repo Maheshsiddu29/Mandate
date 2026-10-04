@@ -302,7 +302,7 @@ test('authorization appears only after PORTFOLIO_AUTHORIZED; reserved is never c
   const review = deriveReview(eventsAfter(run, 4));
   assert.deepEqual(review.authorized.map((item) => [item.role, item.amount]), [['stock', '400'], ['yield', '500'], ['perps', '400']]);
   assert.equal(review.reserved, '1300');
-  assert.match(outcome, /Reserved is not settled\./);
+  assert.match(outcome, /Reserved is authorization evidence, not settlement\./);
 });
 
 test('settlement progress follows settlement events; a hash is submitted, not confirmed', () => {
@@ -356,12 +356,15 @@ test('failures stay in the same panel and say nothing was authorized', () => {
 });
 
 test('policy stress is a secondary security demo after the trade', () => {
-  assert.match(lab, /Test the firewall/);
+  assert.match(lab, /Try an unauthorized action/);
   assert.match(lab, /<Sheet open=\{sheet === "stress"\}[\s\S]*<StressBody/);
-  assert.doesNotMatch(outcome, /Test the firewall/);
+  assert.doesNotMatch(outcome, /Try an unauthorized action|Test the firewall/);
   assert.doesNotMatch(agentsUi + compose + configure, /policy-stress|StressBody/);
   assert.match(sheets, /VALID AGENT ≠ VALID ACTION/);
   assert.match(sheets, /DIFFERENT AUTHORIZATION RESULT/);
+  assert.match(sheets, /Try an unauthorized action/);
+  assert.match(sheets, /Mandate stopped it before execution/);
+  assert.doesNotMatch(sheets, /Test the firewall/);
   const identity = { agentIdentity: 'VALID', membership: 'VALID', delegation: 'ACTIVE', signature: 'VALID', sameSignerAsSwapAgent: true };
   const attempts = derivePresentation([
     event(1, 'POLICY_STRESS_STARTED'),
