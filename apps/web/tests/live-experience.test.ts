@@ -187,7 +187,8 @@ test('the review step signs with a real wallet, or with the labelled demo key �
   assert.match(outcome, /Nothing is broadcast\./);
   assert.match(outcome, /Execute on Robinhood Testnet/);
   assert.match(outcome, /Testnet settlement proof/);
-  assert.match(outcome, /\{settlement\.fixtureIn\} → \{settlement\.fixtureOut/);
+  assert.match(outcome, /Fixture debit \{settlement\.fixtureIn\}/);
+  assert.match(outcome, /Fixture output \{settlement\.fixtureOut\}/);
   assert.doesNotMatch(outcome, /MDEMO → MDUSD/);
   assert.doesNotMatch(outcome, /Send testnet transaction/);
   assert.doesNotMatch(browserSources, /@mandate\/live-settlement|packages\/live-settlement/);

@@ -210,9 +210,14 @@ test('multi-agent receipt: Stock LIVE_TESTNET, Yield OFFCHAIN_ONLY, no fake Yiel
   assert.equal(review.settlementsConfirmed, 1);
   assert.equal(classifyAgentSettlement('yield', { settled: true, evidence: 'LIVE_TESTNET' }).settlementEvidence, 'OFFCHAIN_ONLY');
   assert.doesNotMatch(outcome, /\?\? "LIVE_TESTNET"/);
-  assert.match(outcome, /Settlement evidence: \{item\.settlementEvidence\}/);
+  assert.match(outcome, /Settlement evidence/);
+  assert.match(outcome, /\{item\.settlementEvidence\}/);
+  assert.match(outcome, /Authorized capital/);
+  assert.match(outcome, /Fixture debit/);
   assert.match(outcome, /Only Stock has a live testnet settlement connector/);
+  assert.match(outcome, /Authorization evidence is not settlement evidence/);
   assert.match(modelSrc, /no live settlement connector in this build/);
+  assert.match(modelSrc, /Fixture settlement · not authorized capital/);
   assert.match(sheets, /Stock settlement evidence/);
   assert.doesNotMatch(sheets, /settlement\.settled \? "LIVE_TESTNET"/);
   assert.doesNotMatch(outcome, /0xyield/);

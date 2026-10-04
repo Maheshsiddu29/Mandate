@@ -65,8 +65,9 @@ describe('C2.3 delegated execution UX contracts', () => {
 
   it('V3 receipt discloses bounded delegation and no per-trade wallet approval', () => {
     assert.match(outcome, /Bounded V3 delegation/);
-    assert.match(outcome, /Wallet approval for this trade: None/);
+    assert.match(outcome, /Per-trade wallet approval: None/);
     assert.match(outcome, /One reusable bounded mandate signature/);
+    assert.doesNotMatch(outcome, /Wallet approval for this trade/);
   });
 
   it('hydrates confirmed V3 proof from the durable session DTO and preserves every actual receipt field', () => {

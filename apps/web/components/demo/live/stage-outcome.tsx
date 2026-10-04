@@ -106,13 +106,23 @@ function AuthorizedList({ review }: { readonly review: TradeReview }): ReactNode
   );
 }
 
-function OutcomeRow({ item }: { readonly item: ReviewItem }): ReactNode {
+function OutcomeRow({ item, fixtureDebit = null }: { readonly item: ReviewItem; readonly fixtureDebit?: string | null }): ReactNode {
+  const settledStock = item.outcome === "SETTLED" && item.role === "stock";
   return (
     <Row role={item.role}>
       <span className="mw-outcome-stack">
         <strong>{item.outcome}</strong>
-        {item.amount === "—" ? null : <span>{usd(item.amount)}</span>}
-        {item.settlementEvidence === "NONE" ? null : <span className="mw-muted">Settlement evidence: {item.settlementEvidence}</span>}
+        {item.amount === "—" ? null : (
+          <span>{settledStock ? <>Authorized capital {usd(item.amount)}</> : usd(item.amount)}</span>
+        )}
+        {settledStock && fixtureDebit !== null && fixtureDebit !== "" ? (
+          <span className="mw-muted">Fixture debit {fixtureDebit}</span>
+        ) : null}
+        {item.settlementEvidence === "NONE" ? null : (
+          <span className="mw-muted">
+            {settledStock ? "Evidence" : "Settlement evidence"}: {item.settlementEvidence}
+          </span>
+        )}
         {item.settlementNote === null ? (item.reason === "" ? null : <span className="mw-muted">{item.reason}</span>) : <span className="mw-muted">{item.settlementNote}</span>}
       </span>
     </Row>
@@ -476,7 +486,13 @@ function SettlementProof(props: {
           {stockTrade.amount === null ? (settlement.decisionNotional === null ? "—" : `${settlement.decisionNotional} USDC`) : usd(stockTrade.amount)}
         </p>
         {settlement.settled && settlement.fixtureIn !== null ? (
-          <p className="mw-fine">Executed test amount shown in the settlement proof below.</p>
+          <p className="mw-fine">Fixture debit {settlement.fixtureIn}</p>
+        ) : null}
+        {settlement.settled && settlement.fixtureOut !== null ? (
+          <p className="mw-fine">Fixture output {settlement.fixtureOut}</p>
+        ) : null}
+        {settlement.settled && settlement.evidence !== null ? (
+          <p className="mw-fine">Evidence {settlement.evidence}</p>
         ) : null}
       </div>
       <div className="mw-proof__chain">
@@ -491,7 +507,8 @@ function SettlementProof(props: {
             </p>
             {settlement.fixtureIn === null ? null : (
               <p className="mw-proof__fixture">
-                {settlement.fixtureIn} → {settlement.fixtureOut ?? "—"}
+                Fixture debit {settlement.fixtureIn}
+                {settlement.fixtureOut === null ? null : <> → Fixture output {settlement.fixtureOut}</>}
               </p>
             )}
             {settlement.txHash === null ? null : (
@@ -601,7 +618,13 @@ export function ReceiptStage(props: {
               <p className="mw-fine">Nothing.</p>
             ) : (
               <ul className="mw-rows">
-                {review.authorized.map((item) => <OutcomeRow key={`auth-${item.role}`} item={item} />)}
+                {review.authorized.map((item) => (
+                  <OutcomeRow
+                    key={`auth-${item.role}`}
+                    item={item}
+                    fixtureDebit={item.role === "stock" && settlement.settled ? settlement.fixtureIn : null}
+                  />
+                ))}
                 {review.blockedItems.map((item) => <OutcomeRow key={`block-${item.role}`} item={item} />)}
                 {review.quiet.map((item) => <OutcomeRow key={`quiet-${item.role}`} item={item} />)}
               </ul>
@@ -615,7 +638,7 @@ export function ReceiptStage(props: {
         <section className="mw-authority-review" aria-label="V3 execution authority">
           <h3 className="mw-authority-review__title">Execution authority</h3>
           <p>Bounded V3 delegation</p>
-          <p className="mw-fine">Wallet approval for this trade: None</p>
+          <p className="mw-fine">Per-trade wallet approval: None</p>
           <p className="mw-fine">Principal authorization: One reusable bounded mandate signature</p>
           <p className="mw-fine">Evidence: LIVE_TESTNET · Stock fixture only</p>
         </section>

@@ -97,7 +97,8 @@ test('progress cue and reduced-motion stage transitions remain', () => {
 });
 
 test('MDUSD → MDEMO direction and fixture qualification stay honest', () => {
-  assert.match(outcome, /fixtureIn\} → \{settlement\.fixtureOut/);
+  assert.match(outcome, /Fixture debit \{settlement\.fixtureIn\}/);
+  assert.match(outcome, /Fixture output \{settlement\.fixtureOut\}/);
   assert.match(outcome, /FIXTURE_QUALIFICATION|valueless demo assets|not an NVDA trade/i);
   assert.doesNotMatch(outcome, /Buy NVDA|Robinhood Stock Token trade/i);
 });

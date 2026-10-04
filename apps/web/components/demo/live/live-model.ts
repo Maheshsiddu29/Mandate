@@ -1203,7 +1203,7 @@ export function classifyAgentSettlement(
   settlement: Pick<SettlementView, "settled" | "evidence">,
 ): { readonly outcome: "AUTHORIZED" | "SETTLED"; readonly settlementEvidence: AgentSettlementEvidence; readonly settlementNote: string | null } {
   if (role === "stock" && settlement.settled && settlement.evidence === "LIVE_TESTNET") {
-    return { outcome: "SETTLED", settlementEvidence: "LIVE_TESTNET", settlementNote: "LIVE_TESTNET settlement" };
+    return { outcome: "SETTLED", settlementEvidence: "LIVE_TESTNET", settlementNote: "Fixture settlement · not authorized capital" };
   }
   if (agentSettlementCapability(role) === "OFFCHAIN_ONLY") {
     return {
