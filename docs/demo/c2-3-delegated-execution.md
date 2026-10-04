@@ -381,16 +381,19 @@ for the interactive signer. Capture from the output / live manifest:
 Live evidence file (never overwrites V2):
 `contracts/deploy/robinhood-testnet-delegated-live.json`.
 
-6. Verify the deployed gate:
+6. Verify the deployed gate (read-only, `"latest"` state — no historical fork
+   pin; safe on Robinhood's non-archive public RPC):
 
 ```bash
 npm run robinhood:v3:testnet:verify -- --gate <V3_GATE>
 ```
 
-Checks: chainId `46630`, code present, `CHAIN_ID() == 46630`, nonzero
-`domainSeparator()`, fixture market MDEMO/MDUSD, `MARKET_FIXTURE`, fixture
-price `10_000_000` @ 6 decimals, runtime code hash, plus
-`DeployDelegatedV3.verify(gate)`.
+Checks: `eth_chainId == 46630`, code present at latest, `CHAIN_ID() == 46630`,
+nonzero `domainSeparator()`, fixture market MDEMO/MDUSD, `MARKET_FIXTURE`,
+fixture price `10_000_000` @ 6 decimals, fee `0`, runtime code hash.
+Does not broadcast. Does not invoke `forge script` against the public RPC
+(Foundry's numeric fork fails on non-archive endpoints); Solidity
+`DeployDelegatedV3.verify` remains for archive/local nodes only.
 
 7. Principal performs a **separate**, one-time **bounded** MDUSD approval to
    the V3 Gate (`approve(V3Gate, amount)`). Not a Mandate signature. Not

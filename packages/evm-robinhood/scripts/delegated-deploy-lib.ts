@@ -227,3 +227,49 @@ export function parseGateAddressFromForgeOutput(out: string): string | null {
   const m = /MandateDelegatedExecutionGate\s+(0x[0-9a-fA-F]{40})/.exec(out);
   return m?.[1]?.toLowerCase() ?? null;
 }
+
+/**
+ * Optional archive/local Solidity verify argv. Never includes `--fork-block-number`
+ * or `--broadcast`. The public-RPC Node verifier does not invoke forge: Foundry
+ * still forks at a numeric height internally, which fails on Robinhood's
+ * non-archive load-balanced endpoints.
+ */
+export function forgeVerifyScriptArgs(gate: string, rpcUrl: string): readonly string[] {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(gate)) {
+    throw new Error('REFUSED: forge verify requires a 20-byte gate address');
+  }
+  return ['script', FORGE_SCRIPT, '--sig', 'verify(address)', gate, '--rpc-url', rpcUrl];
+}
+
+export function forgeArgsIncludeForkBlockNumber(args: readonly string[]): boolean {
+  return args.includes('--fork-block-number');
+}
+
+/** Parse `--gate 0x…` from verify argv. */
+export function parseVerifyGateArg(argv: readonly string[]): { readonly ok: true; readonly gate: string } | { readonly ok: false; readonly reason: string } {
+  const i = argv.indexOf('--gate');
+  if (i < 0) return { ok: false, reason: 'REFUSED: require --gate 0x… (40 hex chars)' };
+  const v = argv[i + 1];
+  if (v === undefined || !/^0x[0-9a-fA-F]{40}$/.test(v)) {
+    return { ok: false, reason: 'REFUSED: require --gate 0x… (40 hex chars)' };
+  }
+  return { ok: true, gate: v.toLowerCase() };
+}
+
+/** Refuse empty runtime code (eth_getCode == 0x). */
+export function assertContractCodePresent(code: string | null | undefined): ChainCheck {
+  if (code === undefined || code === null || code === '' || code === '0x') {
+    return { ok: false, reason: 'REFUSED: no contract code at gate' };
+  }
+  if (!/^0x[0-9a-fA-F]*$/.test(code) || code.length % 2 !== 0) {
+    return { ok: false, reason: 'REFUSED: malformed contract code at gate' };
+  }
+  return { ok: true };
+}
+
+/** True when forge/RPC error text is the non-archive historical fork race. */
+export function isNonArchiveForkError(text: string): boolean {
+  return /fork from an older block with a non-archive node/i.test(text)
+    || /historical state .* is not available/i.test(text)
+    || /failed to get block number/i.test(text);
+}

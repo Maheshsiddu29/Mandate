@@ -25,9 +25,13 @@ import {MandateCodec} from "../src/libraries/MandateCodec.sol";
 ///   forge script contracts/script/DeployDelegatedV3.s.sol:DeployDelegatedV3 \
 ///     --rpc-url <rpc> --broadcast --interactive
 ///
-/// Post-deploy read-only check:
+/// Post-deploy read-only check (archive / local nodes only):
 ///   forge script contracts/script/DeployDelegatedV3.s.sol:DeployDelegatedV3 \
 ///     --sig "verify(address)" <gate> --rpc-url <rpc>
+/// Do not pass `--fork-block-number`. Foundry still forks at a numeric height,
+/// so this Solidity verify path fails on Robinhood's non-archive public RPC.
+/// Canonical public-RPC verification is the Node wrapper at `"latest"`:
+///   npm run robinhood:v3:testnet:verify -- --gate <addr>
 contract DeployDelegatedV3 is Script {
     uint256 internal constant ROBINHOOD_TESTNET_CHAIN_ID = 46_630;
 

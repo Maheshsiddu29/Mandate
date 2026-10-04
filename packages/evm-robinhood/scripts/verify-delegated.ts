@@ -6,40 +6,39 @@
  *   npm run robinhood:v3:testnet:verify -- --gate 0x...
  *
  * Read-only. Never broadcasts. Never approves MDUSD. Never overwrites V2.
+ *
+ * All immutable checks run against JSON-RPC `"latest"` state. This path does
+ * NOT invoke `forge script`: Foundry forks at a numeric block height, which
+ * fails on Robinhood's non-archive load-balanced public RPC. Solidity
+ * `DeployDelegatedV3.verify(address)` remains available for archive/local use
+ * via `forgeVerifyScriptArgs` (no `--fork-block-number`, no `--broadcast`).
  */
 
-import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import { ChainClient, JsonRpcClient, ROBINHOOD_TESTNET_CHAIN_ID, representationIdOf } from '../src/index.ts';
 import { calldata, hexBytes, toHex } from '../src/abi.ts';
 import {
   FIXTURE,
-  FORGE_SCRIPT,
-  REPO,
   V2_MANIFEST_PATH,
   assertAllowedChainId,
+  assertContractCodePresent,
   parseChainIdHex,
+  parseVerifyGateArg,
   resolveRpcUrl,
 } from './delegated-deploy-lib.ts';
 
 const log = (s: string) => process.stdout.write(`${s}\n`);
 const err = (s: string) => process.stderr.write(`${s}\n`);
-
-function parseGateArg(argv: readonly string[]): string | null {
-  const i = argv.indexOf('--gate');
-  if (i < 0) return null;
-  const v = argv[i + 1];
-  if (v === undefined || !/^0x[0-9a-fA-F]{40}$/.test(v)) return null;
-  return v.toLowerCase();
-}
+const ZERO32 = '0x0000000000000000000000000000000000000000000000000000000000000000';
 
 async function main(): Promise<void> {
-  const gate = parseGateArg(process.argv.slice(2));
-  if (gate === null) {
-    err('REFUSED: require --gate 0x… (40 hex chars)');
+  const gateArg = parseVerifyGateArg(process.argv.slice(2));
+  if (!gateArg.ok) {
+    err(gateArg.reason);
     process.exit(2);
   }
+  const gate = gateArg.gate;
 
   const rpc = resolveRpcUrl();
   if (!rpc.ok) {
@@ -50,7 +49,10 @@ async function main(): Promise<void> {
   log('C2.3 MandateDelegatedExecutionGate verification');
   log(`  gate: ${gate}`);
   log(`  RPC: ${rpc.label}`);
+  log('  state: latest (immutable deployment checks; no historical fork pin)');
+  log('  Solidity script verify: skipped on public RPC (non-archive)');
   log(`  does not overwrite: ${V2_MANIFEST_PATH}`);
+  log('  broadcasts: none');
 
   const client = new JsonRpcClient(rpc.url, rpc.isQuickNode ? { operatorEndpoint: 'QUICKNODE' } : {});
   const chain = new ChainClient(client, ROBINHOOD_TESTNET_CHAIN_ID);
@@ -75,17 +77,23 @@ async function main(): Promise<void> {
     err(chainOk.reason);
     process.exit(2);
   }
-  log(`  [PASS] chainId == ${ROBINHOOD_TESTNET_CHAIN_ID}`);
+  log(`  [PASS] eth_chainId == ${ROBINHOOD_TESTNET_CHAIN_ID}`);
 
-  const code = await chain.code(gate);
-  if (!code.ok || code.value === '0x') {
-    err('REFUSED: no contract code at gate');
+  const code = await chain.code(gate, 'latest');
+  if (!code.ok) {
+    err(`REFUSED: eth_getCode failed: ${code.error}`);
+    process.exit(2);
+  }
+  const codeOk = assertContractCodePresent(code.value);
+  if (!codeOk.ok) {
+    err(codeOk.reason);
     process.exit(2);
   }
   const runtimeCodeHash = toHex(keccak_256(hexBytes(code.value.toLowerCase())));
-  log(`  [PASS] contract code exists (runtimeCodeHash ${runtimeCodeHash})`);
+  const runtimeBytes = (code.value.length - 2) / 2;
+  log(`  [PASS] eth_getCode(gate, latest) present (${runtimeBytes} bytes, runtimeCodeHash ${runtimeCodeHash})`);
 
-  const chainIdCall = await chain.call(gate, calldata('CHAIN_ID()', [], []));
+  const chainIdCall = await chain.call(gate, calldata('CHAIN_ID()', [], []), 'latest');
   if (!chainIdCall.ok) {
     err(`REFUSED: CHAIN_ID() failed: ${chainIdCall.revert}`);
     process.exit(2);
@@ -97,19 +105,20 @@ async function main(): Promise<void> {
   }
   log(`  [PASS] CHAIN_ID() == ${ROBINHOOD_TESTNET_CHAIN_ID}`);
 
-  const domain = await chain.domainSeparator(gate);
-  if (!domain.ok || domain.value === '0x0000000000000000000000000000000000000000000000000000000000000000') {
+  const domain = await chain.domainSeparator(gate, 'latest');
+  if (!domain.ok || domain.value === ZERO32) {
     err('REFUSED: domainSeparator() missing or zero');
     process.exit(2);
   }
   log(`  [PASS] domainSeparator() nonzero (${domain.value})`);
 
-  const block = await chain.block('latest');
-  if (!block.ok) {
-    err(`REFUSED: latest block unreadable: ${block.error}`);
-    process.exit(2);
-  }
-  const snap = await chain.gateMarket(gate, representationIdOf(ROBINHOOD_TESTNET_CHAIN_ID, FIXTURE.representation), block.value.number);
+  // Immutable market config: read at "latest". Do not pin a numeric block —
+  // Robinhood's public RPC is load-balanced / non-archive for historical state.
+  const snap = await chain.gateMarket(
+    gate,
+    representationIdOf(ROBINHOOD_TESTNET_CHAIN_ID, FIXTURE.representation),
+    'latest',
+  );
   if (!snap.ok) {
     err(`REFUSED: marketOf fixture failed: ${snap.error}`);
     process.exit(2);
@@ -135,40 +144,41 @@ async function main(): Promise<void> {
     process.exit(2);
   }
   log('  [PASS] fixture price == 10_000_000 atoms @ 6 decimals (10 MDUSD / MDEMO)');
+  if (m.feeBps !== 0) {
+    err(`REFUSED: fixture feeBps ${m.feeBps} != 0`);
+    process.exit(2);
+  }
+  log('  [PASS] fixture feeBps == 0');
   if (m.synthetic) {
     err('REFUSED: synthetic flag unexpected');
     process.exit(2);
   }
   log('  [PASS] synthetic == false');
+  if (m.venue === '0x0000000000000000000000000000000000000000') {
+    err('REFUSED: fixture venue missing');
+    process.exit(2);
+  }
+  log(`  [PASS] fixture venue present (${m.venue})`);
+  log(`  [INFO] adapter: ${m.adapter}`);
   log(`  [INFO] canonicalAssetHash (constructor-pinned; string fields not readable onchain): ${m.canonicalAssetHash}`);
   log(`  [INFO] issuerHash: ${m.issuerHash}`);
   log(`  [INFO] venueHash: ${m.venueHash}`);
-  log(`  [INFO] adapter: ${m.adapter}`);
-  log(`  [INFO] venue: ${m.venue}`);
-  log(`  [INFO] feeBps: ${m.feeBps}`);
-
-  log('  running Solidity DeployDelegatedV3.verify(gate)…');
-  try {
-    execFileSync(
-      'forge',
-      ['script', FORGE_SCRIPT, '--sig', 'verify(address)', gate, '--rpc-url', rpc.url],
-      { cwd: REPO, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' },
-    );
-    log('  [PASS] DeployDelegatedV3.verify(gate)');
-  } catch (e) {
-    const ex = e as { stderr?: string; stdout?: string };
-    err(ex.stdout ?? '');
-    err(ex.stderr ?? '');
-    err('REFUSED: DeployDelegatedV3.verify(gate) failed');
-    process.exit(2);
-  }
 
   log('---');
   log('VERIFICATION PASS');
   log(`  gate: ${gate}`);
   log(`  chainId: ${ROBINHOOD_TESTNET_CHAIN_ID}`);
   log(`  domainSeparator: ${domain.value}`);
+  log(`  runtimeBytes: ${runtimeBytes}`);
   log(`  runtimeCodeHash: ${runtimeCodeHash}`);
+  log(`  representation: ${m.representation}`);
+  log(`  fundingToken: ${m.fundingToken}`);
+  log(`  classification: MARKET_FIXTURE (${m.classification})`);
+  log(`  fixturePriceAtoms: ${m.fixturePriceAtoms.toString()}`);
+  log(`  fixturePriceDecimals: ${m.fixturePriceDecimals}`);
+  log(`  feeBps: ${m.feeBps}`);
+  log('  transactions: 0');
+  log('  broadcasts: 0');
   log('Next (human, separate setup tx — NOT performed by this tool):');
   log('  principal performs one-time bounded MDUSD.approve(V3Gate, amount)');
   log('  Do NOT use unlimited allowance.');
