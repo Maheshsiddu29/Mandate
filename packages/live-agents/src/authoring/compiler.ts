@@ -189,12 +189,18 @@ function overlayPromptWins(localDraft: MandateDraft, modelDraft: MandateDraft, l
     if (v === null || v === undefined) continue;
     out = withField(out, path, v, 'EXPLICIT_PROMPT', localDraft.evidence[path]?.sourceText);
   }
-  // Local agent enablements for roles the local parser mentioned.
+  // Local agent fields for roles the local parser mentioned. When the prompt
+  // fixed some budgets, a null local budget is a delegated remainder and
+  // clears any model-invented fixed amount for that agent.
+  const localFixedBudgets = local.agents.some((a) => a.budget !== null);
   for (const a of local.agents) {
     if (a.enabled !== null) out = withField(out, `agents.${a.role}.enabled`, a.enabled, 'EXPLICIT_PROMPT');
     if (a.maxAllocation !== null) out = withField(out, `agents.${a.role}.maxAllocation`, a.maxAllocation, 'EXPLICIT_PROMPT');
-    if (a.budget !== null) out = withField(out, `agents.${a.role}.budget`, a.budget, 'EXPLICIT_PROMPT');
     if (a.maxExposure !== null) out = withField(out, `agents.${a.role}.maxExposure`, a.maxExposure, 'EXPLICIT_PROMPT');
+    if (a.budget !== null) out = withField(out, `agents.${a.role}.budget`, a.budget, 'EXPLICIT_PROMPT');
+    else if (localFixedBudgets && fieldAt(out, `agents.${a.role}.budget`) !== null) {
+      out = withField(out, `agents.${a.role}.budget`, null, 'EXPLICIT_PROMPT');
+    }
   }
   return { ...out, issues: issues.slice(0, 12), notes };
 }
