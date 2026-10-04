@@ -115,7 +115,7 @@ authorization.
 
 The dependency directions are `adapter → registry → kernel`,
 `router → registry → kernel`, `jev → router → registry → kernel`,
-`execution-gate → kernel`, `core → kernel`, `ledger → core → kernel`, `control → ledger → core → kernel`, `ledger-sqlite → ledger → core` and `perp-lighter → control, ledger-sqlite, ledger, core, kernel` and `evm-robinhood → control, ledger-sqlite, ledger, core, execution-gate, kernel` and `portfolio → evm-robinhood, perp-lighter, control, ledger, registry, execution-gate, core, kernel` and `judge-demo → portfolio, core, kernel` and `live-agents → portfolio, control, ledger, core, kernel` (and, from its `scripts/` composition root only, `jev` — the Room V2 Score client; no `src/` file imports it) and `live-settlement → live-agents, portfolio, evm-robinhood, execution-gate, ledger-sqlite, control, ledger, core, kernel`, never the reverse, and it is enforced by structural tests
+`execution-gate → kernel`, `core → kernel`, `ledger → core → kernel`, `control → ledger → core → kernel`, `ledger-sqlite → ledger → core` and `perp-lighter → control, ledger-sqlite, ledger, core, kernel` and `evm-robinhood → control, ledger-sqlite, ledger, core, execution-gate, kernel` and `portfolio → evm-robinhood, perp-lighter, control, ledger, registry, execution-gate, core, kernel` and `judge-demo → portfolio, core, kernel` and `live-agents → portfolio, control, ledger, core, kernel` (and, from its `scripts/` composition root only, `jev` — the Room V2 Score client; no `src/` file imports it) and `live-settlement → live-agents, portfolio, evm-robinhood, execution-gate, ledger-sqlite, control, ledger, core, kernel` and `sdk → live-settlement, live-agents, portfolio, control, ledger, core, kernel` (thin developer facade; no second authority implementation), never the reverse, and it is enforced by structural tests
 ([ADR 0004](docs/adr/0004-registry-package-boundary.md),
 [ADR 0012](docs/adr/0012-jev-closed-set-authority-boundary.md)). The kernel,
 registry and router perform no I/O; the Robinhood adapter and the Jev client
@@ -439,6 +439,14 @@ operator phrase, only when that wallet is the manifest principal. Only
 (`ROBINHOOD_TESTNET_RPC_URL`, an optional QuickNode endpoint whose URL is
 never printed); `npm run agents:rpc:smoke` is read-only.
 `structure.test.ts` enforces the boundary.
+
+`packages/sdk` (C3 thin developer facade, [docs/demo/sdk.md](docs/demo/sdk.md))
+sits above `live-agents`, `portfolio`, `control`, `ledger` and optional
+`live-settlement` adapters. It exposes compile, review, V3 authorization
+preparation (wallet signs), proposal screening, reservation, execution
+preparation and reconciliation through existing APIs — no second authority
+implementation, no principal private key, no surprise broadcast. Lower
+packages must not import it. See [packages/sdk/README.md](packages/sdk/README.md).
 
 `jev:characterize` is the only command that contacts TypeSafe. It refuses to
 run without a credential and exits with code 2, so a blocked run is never

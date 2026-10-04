@@ -17,6 +17,11 @@
 > deployed. The one explicit Robinhood Chain testnet settlement path for a
 > reserved Stock decision (B.5.2) is a separate package and separate
 > commands: [live-testnet-settlement.md](live-testnet-settlement.md).
+>
+> **External agents:** Mandate isn't limited to the bundled demo agents.
+> The same authorization boundary is available through
+> [`@mandate/sdk`](sdk.md) (C3 thin facade — no second authority
+> implementation).
 
 ```text
 Humans define authority.  Agents operate autonomously.  Mandate decides what may settle.
