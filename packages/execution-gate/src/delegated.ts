@@ -21,19 +21,16 @@ export const DELEGATED_PORTFOLIO_AUTHORIZATION_V3_TYPE =
 export const DELEGATED_EXECUTION_APPROVAL_TYPE =
   'DelegatedExecutionApproval(bytes32 delegationDigest,bytes32 mandateDigest,bytes32 candidateDigest,address recipient,uint256 fundingLimit,uint64 deadline,bytes32 executionDataHash,uint64 executionNonce)';
 
-export const EXECUTION_AUTHORIZATION_TYPE =
-  'ExecutionAuthorization(bytes32 mandateDigest,bytes32 candidateDigest,address recipient,uint256 fundingLimit,uint64 deadline,bytes executionData)';
-
 const DOMAIN_TYPE = 'EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)';
 
 export interface DelegationFields {
-  readonly portfolioMandateDigest: Bytes32;
-  readonly initialAllocationDigest: Bytes32;
-  readonly sessionDigest: Bytes32;
+  readonly portfolioMandateDigest: string;
+  readonly initialAllocationDigest: string;
+  readonly sessionDigest: string;
   readonly principal: Address;
   readonly delegate: Address;
   readonly agent: Address;
-  readonly representationIdHash: Bytes32;
+  readonly representationIdHash: string;
   readonly fundingToken: Address;
   readonly cumulativeDebitLimit: bigint;
   readonly validAfter: bigint;
@@ -42,13 +39,13 @@ export interface DelegationFields {
 }
 
 export interface DelegatedExecutionApprovalFields {
-  readonly delegationDigest: Bytes32;
-  readonly mandateDigest: Bytes32;
-  readonly candidateDigest: Bytes32;
+  readonly delegationDigest: string;
+  readonly mandateDigest: string;
+  readonly candidateDigest: string;
   readonly recipient: Address;
   readonly fundingLimit: bigint;
   readonly deadline: bigint;
-  readonly executionDataHash: Bytes32;
+  readonly executionDataHash: string;
   readonly executionNonce: bigint;
 }
 

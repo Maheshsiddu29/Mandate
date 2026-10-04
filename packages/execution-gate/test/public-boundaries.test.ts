@@ -148,11 +148,17 @@ test('exports are classified: two class-A boundaries, everything else a typed in
   const functions = Object.entries(gate).filter(([, v]) => typeof v === 'function').map(([k]) => k).sort();
   assert.deepEqual(functions, [
     'admitAttemptUnderReservation', // A
+    'applyDelegatedExecution', // C2.3 V3 reference model
     'authorizeExecution', // B: typed reference model; the gate's ABI decoder is the execution boundary
     'caip2',
     'ceilToScale',
     'decodeGateCandidate',
     'decodeGateMandate',
+    'delegatedDomainSeparator',
+    'delegatedExecutionApprovalHash',
+    'delegatedExecutionApprovalStructHash',
+    'delegatedPortfolioAuthorizationHash',
+    'delegationStructHash',
     'eip712Hash',
     'encodeGateCandidate',
     'encodeGateMandate',
@@ -166,6 +172,7 @@ test('exports are classified: two class-A boundaries, everything else a typed in
     'recoverSigner',
     'reject',
     'representationIdFor',
+    'revokeDelegationState',
     'selectorOf',
     'settleExecution', // B
     'toGateCandidate',

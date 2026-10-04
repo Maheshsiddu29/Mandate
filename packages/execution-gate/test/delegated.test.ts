@@ -3,12 +3,12 @@ import { createHash } from 'node:crypto';
 import { describe, it } from 'node:test';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import { bytesToHex } from '@mandate/kernel';
+import { EXECUTION_AUTHORIZATION_TYPE } from '../src/commitment.ts';
 import {
   DELEGATED_EXECUTION_APPROVAL_TYPE,
   DELEGATED_PORTFOLIO_AUTHORIZATION_V3_TYPE,
   DELEGATED_VECTORS,
   EMPTY_DELEGATED_STATE,
-  EXECUTION_AUTHORIZATION_TYPE,
   applyDelegatedExecution,
   delegationStructHash,
   revokeDelegationState,

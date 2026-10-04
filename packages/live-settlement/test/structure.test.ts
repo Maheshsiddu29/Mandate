@@ -49,7 +49,7 @@ describe('live-settlement structural boundary', () => {
     only(/\b(LocalGateCustody|LocalAgentSigner|keyAddress|GateSigner)\b/, ['domain-leg.ts']);
     // C2.3: the ephemeral Mandate execution delegate signs exact approvals in
     // v3/execution-delegate.ts; the gas payer remains in rpc.ts.
-    only(/secp256k1|signTransaction|signPrehash|demoKey/, ['rpc.ts', 'v3/execution-delegate.ts']);
+    only(/secp256k1|signTransaction|signPrehash|demoKey/, ['rpc.ts', 'v3/execution-delegate.ts', 'v3/host.ts']);
     only(/\bfetch\s*\(|WebSocket|node:https?|node:net/, []);
     only(/\bfetch\s*\(|WebSocket|node:https?|node:net/, [], SCRIPTS);
   });

@@ -48,6 +48,17 @@ export interface ScratchLedger {
   readonly cleanup: () => void;
 }
 
+export interface V3UiHost {
+  readonly host: import('./v3/host.ts').LiveV3ChallengeHost;
+  readonly settle: (input: import('./v3/settlement.ts').V3SettlementInput) => Promise<import('./v3/settlement.ts').V3SettlementResult>;
+  readonly gate: { readonly address: string; readonly domainSeparator: string; readonly runtimeCodeHash: string };
+  /** Next execution nonce per session (starts at 1). */
+  readonly nextNonce: (sessionId: string) => bigint;
+  readonly markNonceUsed: (sessionId: string, nonce: bigint) => void;
+  readonly usedDebit: (sessionId: string) => bigint;
+  readonly addDebit: (sessionId: string, debit: bigint) => void;
+}
+
 export interface SpineUiHost {
   readonly openSession: (id: string) => Promise<LiveSession | null>;
   readonly taskOf: (id: string) => 'RUN' | 'POLICY_STRESS' | 'PLAN' | null;
@@ -63,6 +74,8 @@ export interface SpineUiHost {
   /** Arm a timer. Return a function that cancels it. No timer lives in this module. */
   readonly schedule: (ms: number, fn: () => void) => () => void;
   readonly signatureWaitMs: number;
+  /** When set, V3 sessions settle autonomously through this host. */
+  readonly v3?: V3UiHost;
 }
 
 interface Job {
@@ -217,14 +230,18 @@ export class SpineUi {
     const read = SESSION_READ.exec(path);
     if (method === 'GET' && read !== null && lab !== undefined) return this.#sessionRead(read[1] as string, await lab());
     if (method === 'GET' && path === '/api/live/settlement') {
+      const v3 = this.#host.v3 !== undefined;
       return ok({
         available: true,
-        spine: 'V2',
+        spine: v3 ? 'V3' : 'V2',
+        spines: v3 ? ['V2', 'V3'] : ['V2'],
         chainId: this.#host.deployment.chainId.toString(),
         sendAuthorization: SEND_AUTHORIZATION_PHRASE,
-        reverify: 'EIP-712 PortfolioMandateV2',
+        reverify: v3 ? 'EIP-712 DelegatedPortfolioAuthorizationV3 or PortfolioMandateV2' : 'EIP-712 PortfolioMandateV2',
         gasPayer: 'DEPLOYER',
         walletBroadcasts: false,
+        autonomousV3: v3,
+        v3Gate: v3 ? this.#host.v3!.gate.address : null,
       });
     }
     const match = SETTLE_PATH.exec(path);
@@ -254,6 +271,14 @@ export class SpineUi {
     const session = await this.#host.openSession(id);
     if (session === null) return refuse(404, 'SESSION_NOT_FOUND', 'No such session.');
     if (body.mode === 'RECONCILE') return this.#reconcile(session);
+
+    const versions = session.versions;
+    const activeAuth = versions === undefined || versions.active === null
+      ? null
+      : versions.records.find((r) => r.version === versions.active!.version)?.authorization.method ?? null;
+    if (activeAuth === 'WALLET_PRINCIPAL_V3_DELEGATED') {
+      return this.#settleV3(session, body);
+    }
 
     const gate = new SendGate();
     // The phrase and the browser intent are different surfaces. The browser path never types the phrase.
@@ -344,6 +369,118 @@ export class SpineUi {
       return this.#finish(session, first.result);
     } catch {
       return refuse(500, 'INTERNAL', 'The settlement could not be completed. Nothing further was broadcast.');
+    }
+  }
+
+  /**
+   * V3 autonomous path: no SendGate, no browser Gate signature, no Execute
+   * intent. Authority is the reusable DelegatedPortfolioAuthorizationV3.
+   */
+  async #settleV3(session: LiveSession, body: ParsedBody): Promise<LabRouteResponse> {
+    const v3 = this.#host.v3;
+    if (v3 === undefined) return refuse(409, 'V3_UNAVAILABLE', 'V3 autonomous settlement is not configured on this lab.');
+    if (body.mode !== 'DRY_RUN' && body.mode !== 'SEND') {
+      return refuse(409, 'BAD_REQUEST', 'V3 settlement mode must be DRY_RUN or SEND.');
+    }
+    const mode = body.mode;
+    if (body.browserExecute) {
+      return refuse(409, 'V3_NO_BROWSER_EXECUTE', 'V3 does not use Execute on Robinhood Testnet. Settlement proceeds under the signed delegated authority.');
+    }
+    if (body.gateSignature !== null) {
+      return refuse(409, 'V3_NO_GATE_SIGNATURE', 'V3 does not accept a per-trade wallet Gate signature.');
+    }
+    if (session.restored) return refuse(409, 'SESSION_RESTORED', 'A restored session is evidence only. Start a fresh V3 mandate.');
+    if (session.versions.paused) return refuse(409, 'MANDATE_PAUSED', 'The mandate is paused. Autonomous settlement is stopped.');
+
+    // Restore public delegate evidence if the process restarted mid-session.
+    const auth = session.versions.records.find((r) => r.version === session.versions.active?.version)?.authorization;
+    const w = auth?.wallet;
+    if (auth?.method === 'WALLET_PRINCIPAL_V3_DELEGATED' && w?.delegate !== undefined && w.domain.verifyingContract !== undefined
+      && w.agent !== undefined && w.representationIdHash !== undefined && w.fundingToken !== undefined
+      && w.cumulativeDebitLimit !== undefined && w.generation !== undefined && w.initialAllocationDigest !== undefined) {
+      if (v3.host.sessionOf(session.id) === null) {
+        v3.host.restorePublic(session.id, {
+          verifyingContract: w.domain.verifyingContract,
+          delegate: w.delegate,
+          agent: w.agent,
+          representationIdHash: w.representationIdHash,
+          fundingToken: w.fundingToken,
+          cumulativeDebitLimit: w.cumulativeDebitLimit,
+          validAfter: w.validAfter,
+          validUntil: w.validUntil,
+          generation: w.generation,
+        });
+      }
+    }
+    v3.host.arm(session.id);
+
+    let journal: SettlementJournal;
+    try {
+      journal = this.#host.journalFor(session);
+    } catch {
+      return refuse(500, 'INTERNAL', 'The settlement journal could not be opened. Nothing was broadcast.');
+    }
+    const scratch = mode === 'DRY_RUN' ? this.#host.scratch() : null;
+    try {
+      const nonce = v3.nextNonce(session.id);
+      const result = await v3.settle({
+        session,
+        journal,
+        deployment: this.#host.deployment,
+        v3Gate: v3.gate,
+        rpc: this.#host.rpc,
+        keys: this.#host.keys,
+        mode,
+        host: v3.host,
+        ledgerPath: scratch === null ? this.#host.ledgerPath(session) : scratch.path,
+        nextExecutionNonce: nonce,
+        usedDebit: v3.usedDebit(session.id),
+      });
+      if (result.status === 'INELIGIBLE') {
+        return denied(result.reason, `V3 autonomous settlement refused at ${result.stage}.`, {
+          stage: result.stage,
+          transactions: 0,
+          txHash: null,
+        });
+      }
+      if (result.status === 'READY') {
+        // Dry-run advances lab nonce/debit so a second trade cannot reuse nonce 1 offline.
+        v3.markNonceUsed(session.id, result.executionNonce);
+        v3.addDebit(session.id, BigInt(result.debit));
+        return ok({
+          status: 'READY',
+          sessionId: session.id,
+          mode,
+          spine: 'V3',
+          executionNonce: result.executionNonce.toString(),
+          wouldSend: asJson(result.wouldSend),
+          transactions: 0,
+          message: 'V3 dry-run complete. Exact delegated execute simulated. Nothing was broadcast.',
+          ...stockEvidence(session),
+        });
+      }
+      if (result.status === 'SENT') {
+        v3.markNonceUsed(session.id, result.executionNonce);
+        v3.addDebit(session.id, BigInt(result.debit));
+        return ok({
+          status: 'SENT',
+          sessionId: session.id,
+          spine: 'V3',
+          executionNonce: result.executionNonce.toString(),
+          txHash: result.txHash,
+          transactions: result.broadcasts,
+          remainingCapacity: result.remainingCapacity,
+          executionAuthority: 'BOUNDED_V3_DELEGATION',
+          walletApprovalForTrade: 'NONE',
+          message: result.broadcasts === 0 ? 'Nothing was broadcast.' : 'V3 autonomous settlement submitted under the signed delegation.',
+        });
+      }
+      return ok({ status: result.status, sessionId: session.id, spine: 'V3', transactions: 0, attempt: asJson(result.attempt) });
+    } catch {
+      return refuse(500, 'INTERNAL', 'V3 settlement could not be completed. Nothing further was broadcast.');
+    } finally {
+      journal.close();
+      scratch?.cleanup();
     }
   }
 

@@ -149,10 +149,19 @@ export class ModelRpc implements TestnetRpc {
     const snapshot = reviewedSnapshot(46_630n, GATE, MARKET);
     return { status: 'OK', block: b.value, snapshots: [snapshot], states: [gateMarketState(policy, snapshot, b.value.timestamp)] };
   }
+  /**
+   * When set, `simulateExecute`/`broadcast` skip the V2 ModelChain for that
+   * gate address (V3 delegated calldata is not executable on the V2 model).
+   */
+  v3PassthroughGate: string | null = null;
+
   async simulateExecute(gate: Address, call: GateCall): Promise<Simulation> {
     this.executeTargets.push(gate);
     this.simulations += 1;
     if (this.simulateRevert !== null) return { ok: false, revert: this.simulateRevert };
+    if (this.v3PassthroughGate !== null && gate.toLowerCase() === this.v3PassthroughGate.toLowerCase()) {
+      return { ok: true, returnData: '0x' };
+    }
     return this.chain.simulate(call);
   }
   async estimateExecute(gate: Address): Promise<Read<bigint>> {
@@ -170,16 +179,26 @@ export class ModelRpc implements TestnetRpc {
   async broadcast(tx: PreparedTx): Promise<BroadcastResult> {
     this.broadcasts += 1;
     this.beforeMine?.();
+    const v3 = this.v3PassthroughGate !== null && tx.to.toLowerCase() === this.v3PassthroughGate.toLowerCase();
     switch (this.broadcastBehaviour) {
       case 'ERROR_NOT_SENT':
         return { kind: 'ERROR', error: 'NETWORK.TimeoutError' };
       case 'RPC_REJECTED':
         return { kind: 'ERROR', error: 'RPC_-32000:nonce too low' };
-      case 'ERROR_BUT_MINED':
-        this.#mined.set(tx.hash, this.chain.mine(tx.call));
+      case 'ERROR_BUT_MINED': {
+        const mined = v3
+          ? { txHash: tx.hash, call: tx.call, result: 'SUCCESS' as const, revert: null, block: (this.chain.block += 1n) }
+          : this.chain.mine(tx.call);
+        this.#mined.set(tx.hash, mined);
         return { kind: 'ERROR', error: 'NETWORK.TimeoutError' };
+      }
       default:
-        this.#mined.set(tx.hash, this.chain.mine(tx.call));
+        if (v3) {
+          this.chain.block += 1n;
+          this.#mined.set(tx.hash, { txHash: tx.hash, call: tx.call, result: 'SUCCESS', revert: null, block: this.chain.block });
+        } else {
+          this.#mined.set(tx.hash, this.chain.mine(tx.call));
+        }
         return { kind: 'ACCEPTED', hash: tx.hash };
     }
   }

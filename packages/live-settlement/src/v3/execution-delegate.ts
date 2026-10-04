@@ -1,13 +1,20 @@
 /**
  * Ephemeral Mandate execution delegate (C2.3). Memory-only private key.
+ * Also holds the tiny helper that signs agent ExecutionAuthorization under
+ * the V3 gate domain (version "3") — same package boundary as other keys.
  */
 
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { keccak_256 } from '@noble/hashes/sha3.js';
-import { bytesToHex } from '@mandate/kernel';
+import { bytesToHex, hexToBytes } from '@mandate/kernel';
 import {
   delegatedExecutionApprovalHash,
+  eip712Hash,
+  executionCommitment,
   type DelegatedExecutionApprovalFields,
+  type GateCandidate,
+  type GateMandate,
+  type GateTerms,
 } from '@mandate/execution-gate';
 
 const ADDRESS = /^0x[0-9a-f]{40}$/;
@@ -91,4 +98,36 @@ export function restoredExecutionDelegate(address: string): ExecutionDelegate {
       throw new Error('DELEGATE_KEY_UNAVAILABLE');
     },
   };
+}
+
+function signPrehashed(hash: Uint8Array, privateKey: string): string {
+  const key = hexToBytes(privateKey);
+  if (key === undefined || key.length !== 32) throw new Error('INVALID_AGENT_KEY');
+  const sig = secp256k1.sign(hash, key, { prehash: false, format: 'recovered', lowS: true });
+  const out = new Uint8Array(65);
+  out.set(sig.subarray(1), 0);
+  out[64] = (sig[0] as number) + 27;
+  return bytesToHex(out);
+}
+
+/** Agent `ExecutionAuthorization` under the V3 gate domain (version "3"). */
+export function signV3AgentExecution(
+  privateKey: string,
+  chainId: bigint,
+  gate: string,
+  mandate: GateMandate,
+  candidate: GateCandidate,
+  terms: GateTerms,
+  mandateDigest: string,
+  candidateDigest: string,
+): string {
+  const commitment = executionCommitment({
+    mandateDigest: mandateDigest as never,
+    candidateDigest: candidateDigest as never,
+    terms,
+  });
+  const hash = eip712Hash({ name: 'Mandate', version: '3', chainId, verifyingContract: gate }, commitment);
+  void mandate;
+  void candidate;
+  return signPrehashed(hash, privateKey);
 }
