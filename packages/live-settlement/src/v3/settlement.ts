@@ -42,6 +42,7 @@ import { signV3AgentExecution, VerifiedDelegatedExecution, type ExecutionDelegat
 import type { LiveV3ChallengeHost } from './host.ts';
 import { reverifySpineV3 } from './reverify.ts';
 import type { AutonomousSettlementGate } from './autonomous-gate.ts';
+import { classifyV3SimulationRevert } from './revert.ts';
 
 /** Exact execute artifact produced by settleSpineV3 (never a hand-built bypass). */
 export interface V3PreparedExecution {
@@ -214,9 +215,44 @@ export async function settleSpineV3(i: V3SettlementInput): Promise<V3SettlementR
   const used = i.usedDebit ?? 0n;
   if (used + s.debit > check.cumulativeDebitLimit) return refuse('CAPACITY', 'CUMULATIVE_CAPACITY_EXHAUSTED', reports);
 
-  const allowance = await rpc.allowance(d.mdusd.address, check.principal, i.v3Gate.address);
+  const planGate = i.v3Gate.address.toLowerCase();
+  const simulationExpectedGate = rpc.boundGate.toLowerCase();
+  if (simulationExpectedGate !== planGate) {
+    session.events.emit('TESTNET_SIMULATION_FAILED', {
+      agent: 'stock',
+      data: {
+        reason: 'TARGET_NOT_THE_GATE',
+        spine: 'V3',
+        planGate,
+        simulationExpectedGate,
+        transactionTo: planGate,
+        sessionId: session.id,
+        transactions: 0,
+      },
+    });
+    return refuse('SIMULATION', 'SIMULATION_REVERT.TARGET_NOT_THE_GATE', reports);
+  }
+
+  // Principal allowance and venue inventory are separate setup dimensions.
+  // This inventory read is operational readiness only; Gate simulation below
+  // remains authoritative and catches any state change after the read.
+  const [allowance, liveMarket] = await Promise.all([
+    rpc.allowance(d.mdusd.address, check.principal, i.v3Gate.address),
+    rpc.gateMarket(i.v3Gate.address as never, d.mdemo.address),
+  ]);
   if (!allowance.ok) return refuse('PREFLIGHT', `CHAIN_STATE_UNKNOWN.${allowance.error}`, reports);
   if (allowance.value < s.debit) return refuse('PREFLIGHT', 'V3_GATE_ALLOWANCE_REQUIRED', reports);
+  if (!liveMarket.ok) return refuse('PREFLIGHT', `CHAIN_STATE_UNKNOWN.${liveMarket.error}`, reports);
+  if (
+    liveMarket.value.representation !== d.mdemo.address
+    || liveMarket.value.fundingToken !== d.mdusd.address
+    || liveMarket.value.venue === '0x0000000000000000000000000000000000000000'
+  ) {
+    return refuse('PREFLIGHT', 'V3_FIXTURE_MARKET_MISMATCH', reports);
+  }
+  const venueInventory = await rpc.tokenBalance(d.mdemo.address, liveMarket.value.venue);
+  if (!venueInventory.ok) return refuse('PREFLIGHT', `CHAIN_STATE_UNKNOWN.${venueInventory.error}`, reports);
+  if (venueInventory.value < s.quantity) return refuse('PREFLIGHT', 'V3_FIXTURE_INVENTORY_REQUIRED', reports);
 
   const chainId = await rpc.chainId();
   if (!chainId.ok || chainId.value !== 46_630n) return refuse('PREFLIGHT', 'CHAIN_STATE_UNKNOWN', reports);
@@ -340,8 +376,6 @@ export async function settleSpineV3(i: V3SettlementInput): Promise<V3SettlementR
   );
   const call: GateCall = { calldata, attempt: null as never };
 
-  const planGate = i.v3Gate.address.toLowerCase();
-  const simulationExpectedGate = rpc.boundGate.toLowerCase();
   session.events.emit('TESTNET_SIMULATION_STARTED', {
     agent: 'stock',
     data: {
@@ -354,27 +388,19 @@ export async function settleSpineV3(i: V3SettlementInput): Promise<V3SettlementR
       sessionId: session.id,
     },
   });
-  if (simulationExpectedGate !== planGate) {
-    session.events.emit('TESTNET_SIMULATION_FAILED', {
-      agent: 'stock',
-      data: {
-        reason: 'TARGET_NOT_THE_GATE',
-        spine: 'V3',
-        planGate,
-        simulationExpectedGate,
-        transactionTo: planGate,
-        sessionId: session.id,
-        transactions: 0,
-      },
-    });
-    return refuse('SIMULATION', 'SIMULATION_REVERT.TARGET_NOT_THE_GATE', reports);
-  }
   const sim = await rpc.simulateExecute(i.v3Gate.address as never, call);
   if (!sim.ok) {
+    const failure = classifyV3SimulationRevert(sim.revert, check.principal, liveMarket.value.venue);
     session.events.emit('TESTNET_SIMULATION_FAILED', {
       agent: 'stock',
       data: {
-        reason: sim.revert,
+        reason: failure.code,
+        rawRevert: sim.revert,
+        erc20InsufficientBalance: failure.detail === null ? null : {
+          sender: failure.detail.sender,
+          balance: failure.detail.balance.toString(),
+          needed: failure.detail.needed.toString(),
+        },
         spine: 'V3',
         planGate,
         simulationExpectedGate,
@@ -383,7 +409,7 @@ export async function settleSpineV3(i: V3SettlementInput): Promise<V3SettlementR
         transactions: 0,
       },
     });
-    return refuse('SIMULATION', `SIMULATION_REVERT.${sim.revert}`, reports);
+    return refuse('SIMULATION', failure.code, reports);
   }
   const gas = await rpc.estimateExecute(i.v3Gate.address as never, call);
   if (!gas.ok) return refuse('SIMULATION', `ESTIMATE_FAILED.${gas.error}`, reports);

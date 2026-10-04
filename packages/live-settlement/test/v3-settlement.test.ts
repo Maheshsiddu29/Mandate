@@ -26,6 +26,8 @@ import {
   AGENT,
   ALL_TEST_KEYS,
   KEYS,
+  MARKET,
+  MDEMO,
   MDUSD,
   ModelRpc,
   PRINCIPAL,
@@ -36,6 +38,11 @@ import {
 } from './support/world.ts';
 
 const SPINE_TIMEOUTS = { agentTimeoutMs: 1_000, roomRoundTimeoutMs: 1_000 } as const;
+
+function erc20InsufficientBalance(sender: string, balance: bigint, needed: bigint): string {
+  const addressWord = sender.slice(2).padStart(64, '0');
+  return `0xe450d38c${addressWord}${balance.toString(16).padStart(64, '0')}${needed.toString(16).padStart(64, '0')}`;
+}
 
 function v3Gate(d: ReturnType<typeof testDeployment>) {
   return {
@@ -226,6 +233,36 @@ describe('settleSpineV3 autonomous settlement', () => {
       }
 
       {
+        // Allowance is sufficient, but venue inventory is a separate check.
+        const rpc = new ModelRpc();
+        fundV3(rpc, BigInt(auth.scope.validAfter));
+        const candidate = session.reservedExecutions.find((x) => x.role === 'stock')?.verified.candidate;
+        assert.equal(candidate?.kind, 'STOCK_BUY');
+        if (candidate?.kind !== 'STOCK_BUY') return;
+        const required = candidate.quantity;
+        assert.ok(required > 0n);
+
+        rpc.chain.setBalance(MDEMO, MARKET.venue, 0n);
+        const empty = await settleSpineV3({ ...base, rpc, ledgerPath: join(dir, 'ledger-inventory-empty.db') });
+        assert.equal(empty.status, 'INELIGIBLE');
+        if (empty.status === 'INELIGIBLE') assert.equal(empty.reason, 'V3_FIXTURE_INVENTORY_REQUIRED');
+        assert.equal(rpc.simulations, 0);
+        assert.equal(rpc.broadcasts, 0);
+
+        rpc.chain.setBalance(MDEMO, MARKET.venue, required - 1n);
+        const below = await settleSpineV3({ ...base, rpc, ledgerPath: join(dir, 'ledger-inventory-below.db') });
+        assert.equal(below.status, 'INELIGIBLE');
+        if (below.status === 'INELIGIBLE') assert.equal(below.reason, 'V3_FIXTURE_INVENTORY_REQUIRED');
+        assert.equal(rpc.broadcasts, 0);
+
+        rpc.chain.setBalance(MDEMO, MARKET.venue, required);
+        const exact = await settleSpineV3({ ...base, rpc, mode: 'DRY_RUN', ledgerPath: join(dir, 'ledger-inventory-exact.db') });
+        assert.equal(exact.status, 'READY', exact.status === 'INELIGIBLE' ? exact.reason : exact.status);
+        assert.equal(rpc.simulations, 1);
+        assert.equal(rpc.broadcasts, 0);
+      }
+
+      {
         const rpc = new ModelRpc();
         fundV3(rpc, BigInt(auth.scope.validAfter));
         rpc.chain.time = BigInt(auth.scope.validUntil) + 1n;
@@ -242,6 +279,23 @@ describe('settleSpineV3 autonomous settlement', () => {
         const r = await settleSpineV3({ ...base, rpc, ledgerPath: join(dir, 'ledger-sim.db') });
         assert.equal(r.status, 'INELIGIBLE');
         if (r.status === 'INELIGIBLE') assert.match(r.reason, /SIMULATION_REVERT/);
+        assert.equal(rpc.broadcasts, 0);
+      }
+
+      {
+        // A race after readiness still fails at authoritative simulation and
+        // is classified by the ERC-6093 sender as venue inventory, not user balance.
+        const rpc = new ModelRpc();
+        fundV3(rpc, BigInt(auth.scope.validAfter));
+        const candidate = session.reservedExecutions.find((x) => x.role === 'stock')?.verified.candidate;
+        assert.equal(candidate?.kind, 'STOCK_BUY');
+        if (candidate?.kind !== 'STOCK_BUY') return;
+        const required = candidate.quantity;
+        rpc.simulateRevert = erc20InsufficientBalance(MARKET.venue, 0n, required);
+        const r = await settleSpineV3({ ...base, rpc, ledgerPath: join(dir, 'ledger-sim-inventory.db') });
+        assert.equal(r.status, 'INELIGIBLE');
+        if (r.status === 'INELIGIBLE') assert.equal(r.reason, 'V3_FIXTURE_INVENTORY_INSUFFICIENT');
+        assert.equal(rpc.simulations, 1);
         assert.equal(rpc.broadcasts, 0);
       }
 

@@ -395,29 +395,71 @@ Does not broadcast. Does not invoke `forge script` against the public RPC
 (Foundry's numeric fork fails on non-archive endpoints); Solidity
 `DeployDelegatedV3.verify` remains for archive/local nodes only.
 
-7. Start lab: `npm run agents:lab` (loads V3 Gate from
+7. Check the existing Gate's created fixture venue and inventory (**read only**):
+
+```bash
+npm run robinhood:v3:testnet:inventory -- --gate <V3_GATE>
+```
+
+The command derives `FixtureVenueAdapter` and `FixtureVenue` from the Gate's
+onchain market getters; it does not infer CREATE addresses or trust a copied
+venue address. It prints both token balances, the immutable fixture price and
+the canonical 6.4 MDEMO requirement, sends nothing, and exits nonzero with
+`INSUFFICIENT_FIXTURE_INVENTORY` when the venue cannot deliver that amount.
+
+8. If inventory is insufficient, the **human fixture operator**, not the
+   principal, may top up the already-deployed venue to a fixed 64 MDEMO target:
+
+```bash
+npm run robinhood:v3:testnet:seed-inventory -- \
+  --gate <V3_GATE> \
+  --send \
+  --confirm-testnet-46630
+```
+
+Without both SEND flags the command is plan-only and broadcasts zero
+transactions. It rechecks `eth_chainId == 46630`, resolves the venue from the
+Gate, computes only the deficit to the fixed target, verifies the original
+fixture deployer owns it, and invokes `cast send --interactive` from that
+deployer. No raw private key is accepted on the command line or persisted by
+the tool. Mainnets and unknown chains refuse.
+
+The 64 MDEMO target is deliberate: ten canonical 6.4 MDEMO fixture settlements.
+It is bounded, valueless testnet fixture inventory. It is neither user
+authority nor a market/liquidity claim. `MandateDemoToken` cannot mint after
+construction, so this uses the same normal ERC-20 transfer mechanism as V2's
+original 1,000 MDEMO venue setup. Re-run the read-only command after the human
+transaction and require `FIXTURE_INVENTORY_READY` before recording a demo.
+
+9. Start lab: `npm run agents:lab` (loads V3 Gate from
    `contracts/deploy/robinhood-testnet-delegated-live.json`).
-8. Open the Live Lab browser UI.
-9. Start a **new** V3 session (not a restored one; do not resume a session that
+10. Open the Live Lab browser UI.
+11. Start a **new** V3 session (not a restored one; do not resume a session that
    already failed with `V3_GATE_ALLOWANCE_REQUIRED`).
-10. Connect wallet on Robinhood Chain testnet — that address is the principal.
-11. On Review, complete **Settlement setup** if shown:
+12. Connect wallet on Robinhood Chain testnet — that address is the principal.
+13. On Review, complete **Settlement setup** if shown:
     - Browser reads `MDUSD.allowance(principal, V3Gate)` at latest.
     - If insufficient: **Enable settlement** → wallet sends one bounded
       `MDUSD.approve(V3Gate, amount)` where `amount` is the derived fixture
       debit cap (same path as `deriveV3StockFixtureCap` / settleSpineV3).
     - Never unlimited. Never a Mandate signature. Not counted as a Mandate sig.
-12. Sign **one** V3 mandate authorization (`DelegatedPortfolioAuthorizationV3`).
-13. Allow the Stock agent to run; observe **zero** further wallet signatures.
-14. Observe **one** settlement transaction submitted by the existing submitter.
-15. Inspect receipt: wallet approval for this trade = None; bounded V3 delegation.
-16. Optionally prove a second trade locally (same delegation, next nonce) — not required live.
+14. Sign **one** V3 mandate authorization (`DelegatedPortfolioAuthorizationV3`).
+15. Allow the Stock agent to run; observe **zero** further wallet signatures.
+16. Observe **one** settlement transaction submitted by the existing submitter.
+17. Inspect receipt: wallet approval for this trade = None; bounded V3 delegation.
+18. Optionally prove a second trade locally (same delegation, next nonce) — not required live.
 
 **Allowance setup (V3 Gate).** Wallet-native on Review: connected EVM address is
 the principal; Gate and MDUSD come from trusted lab/deployment state; amount is
 the deterministic V3 fixture cap. Rejected/reverted approvals leave setup NOT
 READY. Complete setup **before** the Mandate signature and before recording a
 judge/video flow.
+
+**These are two different setup concepts.** Principal allowance is a bounded
+`MDUSD.approve(V3Gate, amount)` authorizing the Gate to pull the principal's
+fixture MDUSD. Venue inventory is a fixture-operator MDEMO transfer that lets
+the venue deliver output. The principal is never asked to fund the venue, and
+venue inventory is never described as user authorization.
 
 ## 20. Manual live acceptance plan (do not run in agent work)
 
@@ -433,3 +475,40 @@ I. Receipt: wallet approval for this trade = None; execution authority = bounded
 J. Optional second action (local/fork): still no new principal signature.
 
 Agent broadcasts during this milestone: **0**.
+
+## 21. C2.3 live inventory diagnosis (2026-10-04)
+
+The first live V3 acceptance after fixing the Gate target reached the real Gate
+simulation and failed closed. Durable session evidence contains the complete
+revert:
+
+```text
+0xe450d38c
+000000000000000000000000fb6d93beb3e800f44d4253a0805af257ca0e9855
+0000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000058d15e1762800000
+```
+
+Decoded as `ERC20InsufficientBalance(address,uint256,uint256)`:
+
+- sender: `0xfb6d93beb3e800f44d4253a0805af257ca0e9855`
+- balance: `0`
+- needed: `6_400_000_000_000_000_000` atoms = 6.4 MDEMO
+
+Read-only Gate getters independently identify that sender as the V3-created
+`FixtureVenue`; `marketOf` identifies adapter
+`0xa805946d9dede44a5d3c9e7c5427aeed8e0e3037`. Live `balanceOf` reads confirm
+the venue holds zero MDEMO and zero MDUSD. The 6.4 MDEMO requirement is exactly
+the canonical $800 fixture quantity: 64 MDUSD at 10 MDUSD/MDEMO.
+
+**Verdict:** deployment/operator setup omitted venue inventory. The deployed V3
+Gate is valid and must not be redeployed. Production Solidity and V2 are
+unchanged. Settlement now checks this operational readiness before simulation
+and returns `V3_FIXTURE_INVENTORY_REQUIRED`; if inventory changes after the
+check, authoritative simulation still runs and decodes the raw ERC-6093 revert
+as `V3_FIXTURE_INVENTORY_INSUFFICIENT`, preserving sender, balance, needed and
+the raw bytes in technical event data.
+
+Status at this entry: live V3 venue remains unfunded; agent broadcasts **0**;
+the bounded human-only seed is awaiting owner review and execution. C3 has not
+started.

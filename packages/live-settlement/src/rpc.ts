@@ -34,7 +34,7 @@
  * hash. There is no resend.
  */
 
-import { ChainClient, JsonRpcClient, TxSender, encodeBlockTag, pause, readGateMarkets, type Address, type BlockRef, type GateCall, type GateSpotPolicy, type GateStateRead, type Read, type Receipt, type Simulation } from '@mandate/evm-robinhood';
+import { ChainClient, JsonRpcClient, ROBINHOOD_TESTNET_CHAIN_ID, TxSender, encodeBlockTag, pause, readGateMarkets, representationIdOf, type Address, type BlockRef, type GateCall, type GateMarketSnapshot, type GateSpotPolicy, type GateStateRead, type Read, type Receipt, type Simulation } from '@mandate/evm-robinhood';
 import { ROBINHOOD_TESTNET } from './deployment.ts';
 import type { Transport } from './evidence.ts';
 
@@ -81,6 +81,8 @@ export interface ChainReader {
   nativeBalance(address: Address): Promise<Read<bigint>>;
   tokenBalance(token: Address, owner: Address, block?: bigint): Promise<Read<bigint>>;
   allowance(token: Address, owner: Address, spender: Address): Promise<Read<bigint>>;
+  /** Operational identity of the bound Gate's created fixture venue/adapter. */
+  gateMarket(gate: Address, representation: Address): Promise<Read<GateMarketSnapshot>>;
   executionCommitmentOf(gate: Address, mandateDigest: string, block?: bigint): Promise<Read<string>>;
   gateMarkets(policy: GateSpotPolicy): Promise<GateStateRead>;
   /** `eth_call` of `execute(call)` on the gate. */
@@ -229,6 +231,11 @@ export class RobinhoodTestnetReader implements ChainReader {
 
   allowance(token: Address, owner: Address, spender: Address): Promise<Read<bigint>> {
     return this.#read((c) => c.erc20Allowance(token, owner, spender));
+  }
+
+  gateMarket(gate: Address, representation: Address): Promise<Read<GateMarketSnapshot>> {
+    if (gate !== this.#gate) return Promise.resolve({ ok: false, error: 'TARGET_NOT_THE_GATE' });
+    return this.#read((c) => c.gateMarket(gate, representationIdOf(ROBINHOOD_TESTNET_CHAIN_ID, representation), 'latest'));
   }
 
   executionCommitmentOf(gate: Address, mandateDigest: string, block?: bigint): Promise<Read<string>> {

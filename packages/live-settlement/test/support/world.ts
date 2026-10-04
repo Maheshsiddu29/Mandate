@@ -10,7 +10,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { keccak256 } from '@mandate/kernel';
-import { gateMarketState, keyAddress, reviewedSnapshot, type Address, type BlockRef, type GateCall, type GateSpotPolicy, type GateStateRead, type Read, type Receipt, type Simulation } from '@mandate/evm-robinhood';
+import { gateMarketState, keyAddress, reviewedSnapshot, type Address, type BlockRef, type GateCall, type GateMarketSnapshot, type GateSpotPolicy, type GateStateRead, type Read, type Receipt, type Simulation } from '@mandate/evm-robinhood';
 import { LiveSession, presetDraft, type AgentModelProvider, type EligibilityFilter, type LiveEvent, type LiveEventKind, type SettlementProfile } from '@mandate/live-agents';
 import { AGENT, AGENT_KEY, DOMAIN_SEPARATOR, GATE, GATE_CODEHASH, MARKET, MDEMO, MDUSD, ModelChain, PRINCIPAL, PRINCIPAL_KEY, SUBMITTER_KEY, T, type ModelTx } from '../../../evm-robinhood/test/support/world.ts';
 import { ScriptedProvider, json } from '../../../live-agents/test/support/providers.ts';
@@ -33,7 +33,7 @@ export class JournaledSettlement extends LiveSettlement {
   }
 }
 
-export { AGENT, AGENT_KEY, GATE, MDEMO, MDUSD, PRINCIPAL, PRINCIPAL_KEY, SUBMITTER_KEY };
+export { AGENT, AGENT_KEY, GATE, MARKET, MDEMO, MDUSD, PRINCIPAL, PRINCIPAL_KEY, SUBMITTER_KEY };
 export const SUBMITTER = keyAddress(SUBMITTER_KEY);
 export const KEYS = { principal: PRINCIPAL_KEY, agent: AGENT_KEY } as const;
 /** Every private key in the world: none may ever appear in an event. */
@@ -141,6 +141,11 @@ export class ModelRpc implements TestnetRpc {
   }
   async allowance(token: Address, owner: Address, spender: Address): Promise<Read<bigint>> {
     return { ok: true, value: this.chain.allowance(token, owner, spender) };
+  }
+  async gateMarket(gate: Address, representation: Address): Promise<Read<GateMarketSnapshot>> {
+    if (gate.toLowerCase() !== this.boundGate.toLowerCase()) return { ok: false, error: 'TARGET_NOT_THE_GATE' };
+    if (representation !== MDEMO) return { ok: false, error: 'MARKET_NOT_LISTED' };
+    return { ok: true, value: reviewedSnapshot(46_630n, gate, MARKET) };
   }
   executionCommitmentOf(_gate: Address, mandateDigest: string): Promise<Read<string>> {
     return this.chain.executionCommitmentOf(mandateDigest);
