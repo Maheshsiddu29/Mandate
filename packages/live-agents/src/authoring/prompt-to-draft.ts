@@ -762,8 +762,14 @@ export function unsupportedPerTradeAmounts(issues: readonly DraftIssue[]): Reado
  * with a preset-shaped total, clip a stated budget to a ceiling, or dump the
  * freed remainder onto a delegated agent. When the local parser mentioned an
  * agent and left its budget null ("Swap remainder"), that null wins — the
- * model must not invent a fixed budget. Unsupported per-trade amounts never
- * become an aggregate maxAllocation / maxExposure.
+ * model must not invent a fixed budget.
+ *
+ * Unsupported per-trade amounts are a separate dimension. At this stage every
+ * agent ceiling still comes from the *model* (PRESET fill is later and is
+ * never suppressed by per-trade equality). A model ceiling equal to an
+ * unsupported per-trade amount, when the local parser did not name that
+ * ceiling, is discarded as model-inferred-from-unsupported — not because the
+ * numbers match a future preset.
  */
 export function preferExplicitPrompt(model: DraftInterpretation, prompt: string): DraftInterpretation {
   const local = interpretLocally(prompt);
@@ -779,6 +785,17 @@ export function preferExplicitPrompt(model: DraftInterpretation, prompt: string)
   // silently reallocate into Swap.
   const localFixedBudgets = local.agents.some((a) => a.budget !== null);
   const byRole = new Map(model.agents.map((item) => [item.role, { ...item }] as const));
+  // Ceilings the model alone supplied (local left null): candidates for
+  // discarding when they equal an unsupported per-trade amount.
+  const modelOnlyCeiling = new Map<Role, { readonly max: boolean; readonly exposure: boolean }>();
+  for (const role of ROLES) {
+    const localAgent = local.agents.find((a) => a.role === role);
+    const modelAgent = byRole.get(role);
+    modelOnlyCeiling.set(role, {
+      max: (localAgent?.maxAllocation ?? null) === null && (modelAgent?.maxAllocation ?? null) !== null,
+      exposure: (localAgent?.maxExposure ?? null) === null && (modelAgent?.maxExposure ?? null) !== null,
+    });
+  }
   for (const item of local.agents) {
     const current = byRole.get(item.role) ?? { role: item.role, enabled: null, maxAllocation: null, maxExposure: null, budget: null };
     const budget =
@@ -788,29 +805,22 @@ export function preferExplicitPrompt(model: DraftInterpretation, prompt: string)
     byRole.set(item.role, {
       role: item.role,
       enabled: item.enabled ?? current.enabled,
-      // Local named a ceiling → keep it; otherwise allow a model fill for now
-      // (per-trade amounts are stripped below).
       maxAllocation: item.maxAllocation ?? current.maxAllocation,
       maxExposure: item.maxExposure ?? current.maxExposure,
       budget,
     });
   }
+  // Provenance: strip only model-only ceilings that match unsupported per-trade.
   const blocked = unsupportedPerTradeAmounts(local.issues);
   if (blocked.size > 0) {
     for (const role of ROLES) {
       const current = byRole.get(role);
       if (current === undefined) continue;
-      const localAgent = local.agents.find((a) => a.role === role);
+      const only = modelOnlyCeiling.get(role) ?? { max: false, exposure: false };
       byRole.set(role, {
         ...current,
-        maxAllocation:
-          current.maxAllocation !== null && blocked.has(current.maxAllocation) && (localAgent?.maxAllocation ?? null) === null
-            ? null
-            : current.maxAllocation,
-        maxExposure:
-          current.maxExposure !== null && blocked.has(current.maxExposure) && (localAgent?.maxExposure ?? null) === null
-            ? null
-            : current.maxExposure,
+        maxAllocation: only.max && current.maxAllocation !== null && blocked.has(current.maxAllocation) ? null : current.maxAllocation,
+        maxExposure: only.exposure && current.maxExposure !== null && blocked.has(current.maxExposure) ? null : current.maxExposure,
       });
     }
   }

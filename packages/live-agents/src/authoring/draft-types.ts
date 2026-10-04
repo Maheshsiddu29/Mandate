@@ -248,39 +248,20 @@ export const HUMAN_FIELD_SOURCES: ReadonlySet<FieldSource> = new Set(['INTERPRET
  */
 export const AUTHORITY_CHOICES: readonly string[] = [...ROLES.map((r) => `agents.${r}.enabled`), 'portfolio.autoReallocate'];
 
-/** Decimal USDC amounts named in draft UNSUPPORTED per-trade issues. */
-function unsupportedPerTradeAmounts(d: MandateDraft): ReadonlySet<string> {
-  const out = new Set<string>();
-  for (const issue of d.issues) {
-    if (issue.kind !== 'UNSUPPORTED') continue;
-    const hit = /per-trade cap \((\d+(?:\.\d+)?) USDC\)/i.exec(issue.text);
-    if (hit?.[1] !== undefined) out.add(hit[1]);
-  }
-  return out;
-}
-
 /**
  * Apply a preset: to every field (`onlyUnset = false`, an explicit choice of
  * the whole preset) or only to fields no one has set — never to an
- * authority choice (AUTHORITY_CHOICES). Fill never writes agent budgets, and
- * never fills a maxAllocation / maxExposure equal to an unsupported per-trade
- * amount (so "no trade above $500" cannot become Swap's aggregate ceiling via
- * the balanced preset's coincident $500).
+ * authority choice (AUTHORITY_CHOICES). Fill never writes agent budgets.
+ * Preset ceilings are independent of unsupported per-trade amounts: a
+ * balanced Swap maxAllocation of $500 is still filled when the prompt has
+ * "no trade above $500" — those are different authority dimensions that
+ * happen to share a number.
  */
 export function applyPreset(d: MandateDraft, p: Preset, onlyUnset: boolean): { readonly draft: MandateDraft; readonly filled: readonly string[] } {
   let out = d;
   const filled: string[] = [];
-  const blockedTrade = onlyUnset ? unsupportedPerTradeAmounts(d) : new Set<string>();
   for (const [path, value] of Object.entries(presetFields(p))) {
     if (onlyUnset && (fieldAt(out, path) !== null || AUTHORITY_CHOICES.includes(path))) continue;
-    if (
-      onlyUnset
-      && typeof value === 'string'
-      && (path.endsWith('.maxAllocation') || path.endsWith('.maxExposure'))
-      && blockedTrade.has(value)
-    ) {
-      continue;
-    }
     out = withField(out, path, onlyUnset ? withinStatedCapital(out, path, value) : value, 'PRESET');
     filled.push(path);
   }
