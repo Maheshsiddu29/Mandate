@@ -665,6 +665,21 @@ export function interpretLocally(prompt: string): DraftInterpretation {
       if (portfolio['maxDeployed'] === null) portfolio['maxDeployed'] = amount;
     }
   }
+  // "I have $5k" with no separate deploy cap: deployable equals stated capital minus any
+  // stated reserve. Never leave maxDeployed unset for a model or balanced fill to invent
+  // a smaller envelope (the Scenario C $2,500 regression).
+  if (portfolio['totalCapital'] !== null && portfolio['maxDeployed'] === null && portfolio['deployAll'] !== true) {
+    const totalAtoms = parseUsdc(portfolio['totalCapital'] as string);
+    const reserveAtoms = portfolio['minUnallocated'] === null ? 0n : parseUsdc(portfolio['minUnallocated'] as string);
+    if (totalAtoms !== null && reserveAtoms !== null && reserveAtoms <= totalAtoms) {
+      portfolio['maxDeployed'] = usdcText(totalAtoms - reserveAtoms);
+      notes.push(
+        reserveAtoms === 0n
+          ? 'No separate deploy cap was stated: maximum deployed equals total capital.'
+          : `No separate deploy cap was stated: maximum deployed is total capital minus the ${usdcText(reserveAtoms)} USDC reserve.`,
+      );
+    }
+  }
   // "Stock only" / "NFT only"
   const onlyRole = /\b(stocks?|swaps?|nfts?|yield|perps?|equities)\s+only\b/.exec(p);
   if (onlyRole !== null) {

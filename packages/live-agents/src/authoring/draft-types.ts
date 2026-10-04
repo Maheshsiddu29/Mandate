@@ -266,17 +266,18 @@ export function applyPreset(d: MandateDraft, p: Preset, onlyUnset: boolean): { r
 }
 
 /**
- * A filled maximum deployed never exceeds what the principal said they have:
- * "$2,000 across …" with a preset of 2,500 deploys at most the 2,000, less
- * any reserve. Every other value is the preset's own.
+ * A filled maximum deployed follows the principal's stated capital, not a
+ * smaller preset envelope. "$2,000 across …" with a balanced preset of 2,500
+ * deploys at most 2,000 (less reserve). "I have $5k" with the same fill
+ * deploys up to 5,000 — never a silent $2,500 ceiling from the preset.
+ * When total capital is unset, the preset's own maxDeployed is kept.
  */
 function withinStatedCapital(d: MandateDraft, path: string, value: string | boolean | readonly string[]): string | boolean | readonly string[] {
   if (path !== 'portfolio.maxDeployed' || typeof value !== 'string' || d.portfolio.deployAll === true) return value;
   const total = d.portfolio.totalCapital === null ? null : parseUsdc(d.portfolio.totalCapital);
   const reserve = d.portfolio.minUnallocated === null ? 0n : parseUsdc(d.portfolio.minUnallocated);
-  const preset = parseUsdc(value);
-  if (total === null || reserve === null || preset === null || reserve > total) return value;
-  return preset > total - reserve ? usdcText(total - reserve) : value;
+  if (total === null || reserve === null || reserve > total) return value;
+  return usdcText(total - reserve);
 }
 
 export function presetDraft(p: Preset): MandateDraft {

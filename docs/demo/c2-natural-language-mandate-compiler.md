@@ -143,8 +143,17 @@ Five roles: `stock`, `swap`, `nft`, `yield`, `perps`.
 - `maxAllocation` → signed ceiling; without `autoReallocate`, signed max ≈ budget.
 - Fill-from-preset **never** sets `AUTHORITY_CHOICES`
   (`agents.*.enabled`, `portfolio.autoReallocate`).
-- `withinStatedCapital` caps a filled `maxDeployed` to stated total − reserve
-  (the $800 vs balanced $2,500 regression).
+- When total capital is stated and no separate deploy cap is named, the
+  compiler derives `maxDeployed = total − reserve` so a model or balanced
+  fill cannot invent a smaller deployable envelope (Scenario C: "$5k" must
+  not become "$2,500 available").
+- `withinStatedCapital` fills `maxDeployed` from stated total − reserve when
+  the principal already named total capital (the $800 vs balanced $2,500
+  regression, and the inverse $5k vs balanced $2,500 case).
+- Agent `budget` (planned) and `maxAllocation` (signed Up to) stay distinct.
+  `"Stock $2k"` sets the planned budget only; balanced fill may still apply
+  an $800 preset ceiling, which blocks signing until the principal raises
+  the ceiling or reduces the budget — authority is never expanded silently.
 
 ---
 
