@@ -16,10 +16,15 @@ import {
   type GateCall,
 } from '@mandate/evm-robinhood';
 import {
+  delegatedExecutionApprovalStructHash,
   delegationStructHash,
   encodeGateCandidate,
   encodeGateMandate,
+  type DelegatedExecutionApprovalFields,
   type DelegationFields,
+  type GateCandidate,
+  type GateMandate,
+  type GateTerms,
 } from '@mandate/execution-gate';
 import { portfolioMandateDigest, type PortfolioMandate } from '@mandate/portfolio';
 import type { LiveSession } from '@mandate/live-agents';
@@ -38,11 +43,53 @@ import type { LiveV3ChallengeHost } from './host.ts';
 import { reverifySpineV3 } from './reverify.ts';
 import type { AutonomousSettlementGate } from './autonomous-gate.ts';
 
+/** Exact execute artifact produced by settleSpineV3 (never a hand-built bypass). */
+export interface V3PreparedExecution {
+  readonly calldata: string;
+  readonly delegation: DelegationFields;
+  readonly mandate: GateMandate;
+  readonly candidate: GateCandidate;
+  readonly terms: GateTerms;
+  readonly delegationDigest: string;
+  readonly mandateDigest: string;
+  readonly candidateDigest: string;
+  readonly executionNonce: bigint;
+  readonly debit: string;
+  readonly recipient: string;
+  readonly fundingLimit: string;
+  readonly deadline: string;
+  readonly executionDataHash: string;
+  readonly approvalStructHash: string;
+  readonly delegateSignature: string;
+  readonly agentSignature: string;
+  readonly principalSignature: string;
+  readonly delegate: string;
+  readonly agent: string;
+  readonly approval: DelegatedExecutionApprovalFields;
+}
+
 export type V3SettlementResult =
   | { readonly status: 'RECONCILED_ONLY'; readonly reports: readonly ReconcileReport[]; readonly attempt: AttemptRecord }
   | { readonly status: 'INELIGIBLE'; readonly stage: string; readonly reason: string; readonly reports: readonly ReconcileReport[]; readonly broadcasts: 0 }
-  | { readonly status: 'READY'; readonly reports: readonly ReconcileReport[]; readonly executionNonce: bigint; readonly broadcasts: 0; readonly wouldSend: { readonly gate: string; readonly debit: string }; readonly debit: string }
-  | { readonly status: 'SENT'; readonly reports: readonly ReconcileReport[]; readonly txHash: string | null; readonly executionNonce: bigint; readonly broadcasts: number; readonly remainingCapacity: string; readonly debit: string };
+  | {
+      readonly status: 'READY';
+      readonly reports: readonly ReconcileReport[];
+      readonly executionNonce: bigint;
+      readonly broadcasts: 0;
+      readonly wouldSend: { readonly gate: string; readonly debit: string };
+      readonly debit: string;
+      readonly prepared: V3PreparedExecution;
+    }
+  | {
+      readonly status: 'SENT';
+      readonly reports: readonly ReconcileReport[];
+      readonly txHash: string | null;
+      readonly executionNonce: bigint;
+      readonly broadcasts: number;
+      readonly remainingCapacity: string;
+      readonly debit: string;
+      readonly prepared: V3PreparedExecution;
+    };
 
 export interface V3SettlementInput {
   readonly session: LiveSession;
@@ -301,6 +348,39 @@ export async function settleSpineV3(i: V3SettlementInput): Promise<V3SettlementR
   if (!gas.ok) return refuse('SIMULATION', `ESTIMATE_FAILED.${gas.error}`, reports);
 
   const remaining = (check.cumulativeDebitLimit - used - s.debit).toString();
+  const approval: DelegatedExecutionApprovalFields = {
+    delegationDigest,
+    mandateDigest: artifact.mandateDigest,
+    candidateDigest: artifact.candidateDigest,
+    recipient: check.principal,
+    fundingLimit: artifact.terms.fundingLimit,
+    deadline: artifact.terms.deadline,
+    executionDataHash: execDataHash,
+    executionNonce: i.nextExecutionNonce,
+  };
+  const preparedProof: V3PreparedExecution = {
+    calldata,
+    delegation,
+    mandate: artifact.mandate,
+    candidate: artifact.candidate,
+    terms: artifact.terms,
+    delegationDigest,
+    mandateDigest: artifact.mandateDigest,
+    candidateDigest: artifact.candidateDigest,
+    executionNonce: i.nextExecutionNonce,
+    debit: s.debit.toString(),
+    recipient: check.principal,
+    fundingLimit: artifact.terms.fundingLimit.toString(),
+    deadline: artifact.terms.deadline.toString(),
+    executionDataHash: execDataHash,
+    approvalStructHash: delegatedExecutionApprovalStructHash(approval),
+    delegateSignature: delegateSig,
+    agentSignature: agentSig,
+    principalSignature: held.signature,
+    delegate: check.delegate,
+    agent: check.agent,
+    approval,
+  };
   if (i.mode === 'DRY_RUN') {
     session.events.emit('DOMAIN_EXECUTION_READY', {
       agent: 'stock',
@@ -321,6 +401,7 @@ export async function settleSpineV3(i: V3SettlementInput): Promise<V3SettlementR
       broadcasts: 0,
       wouldSend: { gate: i.v3Gate.address, debit: s.debit.toString() },
       debit: s.debit.toString(),
+      prepared: preparedProof,
     };
   }
 
@@ -344,12 +425,12 @@ export async function settleSpineV3(i: V3SettlementInput): Promise<V3SettlementR
   const broadcast = await rpc.broadcast(prepared.value);
   if (broadcast.kind !== 'ACCEPTED') {
     journal.transition(x.reservation, 'RECONCILIATION_REQUIRED', { quarantine: 'AMBIGUOUS_BROADCAST' }, `broadcast ${broadcast.kind}`);
-    return { status: 'SENT', reports, txHash: prepared.value.hash, executionNonce: i.nextExecutionNonce, broadcasts: 1, remainingCapacity: remaining, debit: s.debit.toString() };
+    return { status: 'SENT', reports, txHash: prepared.value.hash, executionNonce: i.nextExecutionNonce, broadcasts: 1, remainingCapacity: remaining, debit: s.debit.toString(), prepared: preparedProof };
   }
   journal.transition(x.reservation, 'SUBMITTED', {}, 'broadcast ACCEPTED');
   const receipt = await rpc.receipt(prepared.value.hash);
   if (!receipt.ok || receipt.value === null || receipt.value.status !== 'SUCCESS') {
-    return { status: 'SENT', reports, txHash: prepared.value.hash, executionNonce: i.nextExecutionNonce, broadcasts: 1, remainingCapacity: remaining, debit: s.debit.toString() };
+    return { status: 'SENT', reports, txHash: prepared.value.hash, executionNonce: i.nextExecutionNonce, broadcasts: 1, remainingCapacity: remaining, debit: s.debit.toString(), prepared: preparedProof };
   }
   const receiptDigest = keccak256(new TextEncoder().encode(`${prepared.value.hash}:${receipt.value.blockNumber}`)) as unknown as Digest32;
   const receiptFacts = {
@@ -398,5 +479,6 @@ export async function settleSpineV3(i: V3SettlementInput): Promise<V3SettlementR
     broadcasts: 1,
     remainingCapacity: remaining,
     debit: s.debit.toString(),
+    prepared: preparedProof,
   };
 }

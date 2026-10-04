@@ -47,7 +47,7 @@ export { deriveV3StockFixtureCap, type V3CapInput, type V3CapResult } from './v3
 export { AutonomousSettlementGate, type AutonomousGateState } from './v3/autonomous-gate.ts';
 export { LiveV3ChallengeHost, type V3HostConfig, type V3SessionDelegate } from './v3/host.ts';
 export { reverifySpineV3, SPINE_V3_CHAIN_ID, type V3SpineCheck, type V3SpineFacts } from './v3/reverify.ts';
-export { settleSpineV3, type V3SettlementInput, type V3SettlementResult } from './v3/settlement.ts';
+export { settleSpineV3, type V3PreparedExecution, type V3SettlementInput, type V3SettlementResult } from './v3/settlement.ts';
 export { encodeDelegatedExecute } from './v3/calldata.ts';
 
 /** Fixture address used for local V3 wiring before human deployment. */
