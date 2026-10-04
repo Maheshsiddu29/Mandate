@@ -215,6 +215,10 @@ describe('C2.3.2 settleSpineV3 on real local MandateDelegatedExecutionGate', () 
       assert.equal(t1.broadcasts, 1);
       assert.ok(t1.txHash !== null);
       assert.equal(t1.executionNonce, 1n);
+      // Same builder Live Lab uses: outer tx target is the local V3 Gate, not V2/adapter/venue.
+      assert.equal(evm.rpc.boundGate.toLowerCase(), evm.v3Gate.address.toLowerCase());
+      assert.equal(t1.prepared.to.toLowerCase(), evm.v3Gate.address.toLowerCase());
+      assert.equal(scope.verifyingContract.toLowerCase(), evm.v3Gate.address.toLowerCase());
       assert.equal(await evm.nonceUsed(tsDigest, 1n), true);
       const used1 = await evm.usedDebitOf(tsDigest);
       assert.equal(used1, BigInt(t1.debit));

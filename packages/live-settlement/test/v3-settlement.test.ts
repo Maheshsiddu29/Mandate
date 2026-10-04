@@ -75,6 +75,7 @@ async function authorizeV3(session: LiveSession, host: LiveV3ChallengeHost): Pro
 }
 
 function fundV3(rpc: ModelRpc, validAfter: bigint): void {
+  rpc.boundGate = V3_GATE_PLACEHOLDER as ModelRpc['boundGate'];
   rpc.v3PassthroughGate = V3_GATE_PLACEHOLDER;
   rpc.chain.time = validAfter + 1n;
   rpc.chain.fund(MDUSD, PRINCIPAL, 700_000_000n);
@@ -213,6 +214,7 @@ describe('settleSpineV3 autonomous settlement', () => {
 
       {
         const rpc = new ModelRpc();
+        rpc.boundGate = V3_GATE_PLACEHOLDER as ModelRpc['boundGate'];
         rpc.v3PassthroughGate = V3_GATE_PLACEHOLDER;
         rpc.chain.time = BigInt(auth.scope.validAfter) + 1n;
         rpc.chain.fund(MDUSD, PRINCIPAL, 700_000_000n);
