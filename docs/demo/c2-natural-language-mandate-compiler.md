@@ -158,9 +158,11 @@ Five roles: `stock`, `swap`, `nft`, `yield`, `perps`.
   freed remainder onto a delegated agent (Scenario C: Stock/Yield stay
   $2k/$1k with Swap remainder $2k, never Stock/Yield $800 and Swap $3,400).
 - An unsupported per-trade amount never becomes any agent's
-  `maxAllocation` / `maxExposure`. Fill-from-preset also skips a ceiling
-  whose value equals that unsupported per-trade amount (so balanced
-  Swap `$500` cannot masquerade as `"no trade above $500"`).
+  `maxAllocation` / `maxExposure` from the *model*. Preset ceilings are a
+  separate source: balanced Swap `$500` is still filled under
+  `"no trade above $500"` (provenance `PRESET`), and the per-trade note
+  remains an independent `UNSUPPORTED` signing blocker. Numeric equality
+  alone must not suppress or invent aggregate authority.
 
 ---
 
@@ -175,8 +177,8 @@ Five roles: `stock`, `swap`, `nft`, `yield`, `perps`.
 - `preferExplicitPrompt`: local explicit amounts and agent choices overlay
   the model so a model cannot replace `"$800"` with a preset-shaped `$2,500`,
   clip a stated budget to a ceiling, invent a fixed budget for a delegated
-  remainder agent, or turn an unsupported per-trade amount into an
-  aggregate ceiling.
+  remainder agent, or (model-only) turn an unsupported per-trade amount into
+  an aggregate ceiling. Preset fill is not value-gated by per-trade.
 
 ---
 
