@@ -1,8 +1,10 @@
 # C2.3 — Bounded Delegated Execution Authority
 
-> **Status: C2.3.1 local integration complete; awaiting human deploy.**
+> **Status: C2.3.2 local deployment-readiness proof complete; awaiting human deploy.**
 > Testnet-only. Stock fixture settlement path only. The agent does **not**
 > deploy or broadcast. Old V2 `MandateExecutionGate` remains frozen and available.
+> C2.3.2 proves `settleSpineV3` against real `MandateDelegatedExecutionGate`
+> bytecode on local Anvil (chain id 46630) — not ModelRpc passthrough.
 
 **Judge sentence.** *"I didn't approve that trade. I approved the rules.
 Mandate approved the trade because it satisfied those rules."*
@@ -310,6 +312,31 @@ runs one controlled acceptance execution.
 | 6 Browser one-signature UX | Done — AUTHORIZE AUTONOMOUS MANDATE; no Execute; auto SEND |
 | 7 Recovery / revoke / allowance | Done — restore evidence-only; `V3_GATE_ALLOWANCE_REQUIRED`; onchain revoke in contract |
 | 8 Fork dry-run / Slither / full `npm run check` | Run locally before human deploy |
+| C2.3.2 Real local-EVM readiness | Done — Anvil + real V3 Gate bytecode via `settleSpineV3` |
+
+## 18a. C2.3.2 — Real EVM deployment-readiness proof
+
+**Residual risk closed:** V3 SEND tests previously used ModelRpc passthrough.
+They now also exercise the compiled `MandateDelegatedExecutionGate` on local
+Anvil (`packages/live-settlement/test/v3-local-evm.test.ts` +
+`test/support/local-v3-evm.ts`).
+
+| Proof | Result |
+| --- | --- |
+| Runtime | Local Anvil `--chain-id 46630` only (`127.0.0.1`) |
+| Contract | Actual Foundry artifact `MandateDelegatedExecutionGate` |
+| Orchestration | Real `settleSpineV3` (no hand-built bypass calldata path) |
+| Principal wallet signatures | **1** for authorize; **0** per trade |
+| Two successful local txs | Nonces 1 then 2; cumulative `usedDebit` = sum of measured debits |
+| TS ↔ Solidity digests | `delegationDigest` via onchain view; approval struct hash via live `DELEGATED_EXECUTION_APPROVAL_TYPEHASH()` |
+| Journal / reconcile | PREPARED → SUBMITTED → SETTLED/CONSUMED; second reconcile does not resend |
+| Allowance | Insufficient → `V3_GATE_ALLOWANCE_REQUIRED` (zero send); sufficient → execute |
+| Adversarial onchain | Replay, modified execution, wrong/agent-as-delegate sig, wrong recipient, mutated delegation field, expired, revoked, drained venue rollback |
+| Solidity source changed | **No** (gate treated as frozen) |
+| External / Robinhood testnet / mainnet broadcasts | **0** |
+
+ModelRpc V3 tests remain for fast offline refusal paths; they are not the
+deployment-readiness proof.
 
 ## 19. Operator runbook (human only)
 
