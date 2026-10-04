@@ -21,11 +21,18 @@ export function mandateSummary(access: DraftAccess, signed: boolean): string {
   const total = access.text("portfolio.totalCapital");
   const enabled = ROLES.filter((role) => access.enabled(role) === true);
   const head = `${total === "" ? "—" : usd(total)} ${signed ? "authorized" : "draft"} · ${enabled.length} ${enabled.length === 1 ? "agent" : "agents"}`;
+  // Prefer the current plan (budget) over the envelope ceiling so the trail never calls a maximum "allocated".
   const distinct = enabled
-    .map((role) => ({ role, amount: access.text(`agents.${role}.maxAllocation`) || access.text(`agents.${role}.budget`) }))
-    .filter((item) => item.amount !== "" && item.amount !== total);
+    .map((role) => {
+      const plan = access.text(`agents.${role}.budget`);
+      const max = access.text(`agents.${role}.maxAllocation`);
+      if (plan !== "") return { role, amount: plan, kind: "planned" as const };
+      if (max !== "") return { role, amount: max, kind: "max" as const };
+      return null;
+    })
+    .filter((item): item is { role: RoleName; amount: string; kind: "planned" | "max" } => item !== null && item.amount !== total);
   if (distinct.length === 0) return head;
-  return `${head} · ${distinct.map((item) => `${ROLE_TITLES[item.role]} ${usd(item.amount)} allocated`).join(", ")}`;
+  return `${head} · ${distinct.map((item) => `${ROLE_TITLES[item.role]} ${usd(item.amount)} ${item.kind === "planned" ? "planned" : "max"}`).join(", ")}`;
 }
 
 export function draftAccess(draft: JsonRecord): DraftAccess {
@@ -84,19 +91,22 @@ function FieldInput({ value, label, prefix, placeholder, disabled, onCommit, inp
 function AgentConfigRow({ role, access, busy, onField }: { readonly role: RoleName; readonly access: DraftAccess; readonly busy: boolean; readonly onField: (path: string, value: Json) => void }): ReactNode {
   const enabled = access.enabled(role);
   const max = access.text(`agents.${role}.maxAllocation`);
+  const plan = access.text(`agents.${role}.budget`);
+  const showPlan = plan !== "" && plan !== max;
   return (
     <li className="mw-agent-config" data-role={role} data-enabled={enabled === true ? "on" : enabled === false ? "off" : "unset"}>
       <span className="mw-glyph"><AgentGlyph role={role} /></span>
       <span className="mw-agent-config__name">
         <strong>{ROLE_TITLES[role]}</strong>
         <span>{enabled === false ? "No authority · cannot propose" : ROLE_DESCRIPTORS[role]}</span>
+        {enabled === true && showPlan ? <span className="mw-agent-config__plan">{usd(plan)} planned</span> : null}
       </span>
       {enabled === false ? (
         <span className="mw-agent-config__off">—</span>
       ) : (
         <span className="mw-agent-config__amount">
           <span className="mw-agent-config__hint" aria-hidden="true">Up to</span>
-          <FieldInput key={max} value={max} label={`${ROLE_TITLES[role]} agent maximum allocation in USDC`} prefix="$" disabled={busy} onCommit={(value) => onField(`agents.${role}.maxAllocation`, value)} />
+          <FieldInput key={max} value={max} label={`${ROLE_TITLES[role]} maximum authority in USDC`} prefix="$" disabled={busy} onCommit={(value) => onField(`agents.${role}.maxAllocation`, value)} />
         </span>
       )}
       <button
@@ -388,7 +398,7 @@ export function ApproveStage(props: {
           ))}
         </ul>
 
-        <h3 className="mw-authority-review__title">Allocation</h3>
+        <h3 className="mw-authority-review__title">{r.allocation.headline === "Current plan" ? "Current plan" : "Allocation"}</h3>
         <p className="mw-authority-review__alloc">
           <strong>{r.allocation.headline}</strong>
           <span>{r.allocation.detail}</span>
@@ -396,12 +406,25 @@ export function ApproveStage(props: {
         {r.allocation.lines.length === 0 ? null : (
           <ul className="mw-authority-review__alloc-lines">
             {r.allocation.lines.map((line) => (
-              <li key={line.label}>
+              <li key={`plan-${line.label}`}>
                 <span>{line.label}</span>
                 <strong>{line.value}</strong>
               </li>
             ))}
           </ul>
+        )}
+        {r.allocation.maxLines.length === 0 ? null : (
+          <>
+            <h3 className="mw-authority-review__title">Maximum authority</h3>
+            <ul className="mw-authority-review__alloc-lines">
+              {r.allocation.maxLines.map((line) => (
+                <li key={`max-${line.label}`}>
+                  <span>{line.label}</span>
+                  <strong>{line.value}</strong>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
         {r.allocation.planningNote === null ? null : <p className="mw-fine">{r.allocation.planningNote}</p>}
 

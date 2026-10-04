@@ -71,7 +71,11 @@ export interface BudgetRow {
   readonly source: "YOU" | "AGENTS" | "AGENTS, EDITED BY YOU" | null;
 }
 
-/** Every enabled agent's budget from the draft, as the review shows it. The signed maxima are derived from exactly these. */
+/**
+ * Every enabled agent's current-plan budget from the draft.
+ * Distinct from `maxAllocation` (signed envelope ceiling). With
+ * `autoReallocate=false`, signing derives hard maxima from these budgets.
+ */
 export function budgetRows(draft: JsonRecord, enabled: readonly RoleName[]): BudgetRow[] {
   const agents = rec(draft.agents);
   const provenance = rec(draft.provenance);

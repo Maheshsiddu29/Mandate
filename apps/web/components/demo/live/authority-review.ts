@@ -18,7 +18,10 @@ export interface AgentReviewRow {
   readonly state: AgentEnableState;
   readonly stateLabel: string;
   readonly authorityLabel: string;
+  /** Accepted / principal-set plan amount (draft budget), when present. */
+  readonly currentPlan: string | null;
   readonly fixedBudget: string | null;
+  /** Signed envelope ceiling (draft maxAllocation), when present. */
   readonly maxAuthority: string | null;
   readonly dynamicPool: boolean;
   readonly provenanceLabel: string | null;
@@ -29,7 +32,10 @@ export interface AllocationReview {
   readonly headline: string;
   readonly detail: string;
   readonly planningNote: string | null;
+  /** Current plan rows (budgets / available). Distinct from maximum authority. */
   readonly lines: readonly { readonly label: string; readonly value: string }[];
+  /** Per-agent signed maxima when they differ from, or accompany, the current plan. */
+  readonly maxLines: readonly { readonly label: string; readonly value: string }[];
 }
 
 export interface AdvancedRow {
@@ -127,9 +133,40 @@ function issueCards(issues: readonly JsonRecord[]): ReviewIssueCard[] {
   });
 }
 
+function agentBudget(agents: JsonRecord, role: RoleName): string | null {
+  const value = rec(agents[role]).budget;
+  return typeof value === "string" ? value : null;
+}
+
+function agentMax(agents: JsonRecord, role: RoleName): string | null {
+  const value = rec(agents[role]).maxAllocation;
+  return typeof value === "string" ? value : null;
+}
+
+function maxAuthorityLines(agents: JsonRecord, roles: readonly RoleName[]): readonly { readonly label: string; readonly value: string }[] {
+  return roles.flatMap((role) => {
+    const max = agentMax(agents, role);
+    return max === null ? [] : [{ label: ROLE_TITLES[role].replace(" Agent", ""), value: `up to ${money(max)}` }];
+  });
+}
+
+/** Compact label: current plan stays distinct from the signed maximum. */
+export function planAuthorityLabel(budget: string | null, max: string | null, mode: "fixed" | "dynamic" | "enabled"): string {
+  if (mode === "fixed" && budget !== null) return `Fixed allocation ${money(budget)}`;
+  if (budget !== null && max !== null) return `${money(budget)} planned · up to ${money(max)}`;
+  if (budget !== null) return `${money(budget)} planned`;
+  if (mode === "dynamic") return max !== null ? `Dynamic remainder · up to ${money(max)}` : "Dynamic remainder";
+  if (max !== null) return `Up to ${money(max)}`;
+  return "Enabled · ceiling unset";
+}
+
 function allocationReview(allocation: AllocationState | null, draft: JsonRecord): AllocationReview {
   const intent = allocation?.intent ?? "UNKNOWN";
   const agents = rec(draft.agents);
+  const planNote =
+    allocation?.autoReallocate === true
+      ? "Agents may reallocate unused capital only within their signed maximums."
+      : "Current allocations may be lower than each agent's signed maximum.";
   if (intent === "NEEDS_AGENT_SELECTION") {
     return {
       intent,
@@ -137,12 +174,14 @@ function allocationReview(allocation: AllocationState | null, draft: JsonRecord)
       detail: "Choose which agents may use this capital.",
       planningNote: "Authorization is blocked until agents are selected.",
       lines: [],
+      maxLines: [],
     };
   }
   if (intent === "FIXED") {
-    const lines = (allocation?.fixed ?? []).map((role) => ({
+    const roles = allocation?.fixed ?? [];
+    const lines = roles.map((role) => ({
       label: ROLE_TITLES[role].replace(" Agent", ""),
-      value: money(typeof rec(agents[role]).budget === "string" ? String(rec(agents[role]).budget) : ""),
+      value: money(agentBudget(agents, role) ?? ""),
     }));
     return {
       intent,
@@ -150,25 +189,73 @@ function allocationReview(allocation: AllocationState | null, draft: JsonRecord)
       detail: "Each enabled agent has a principal-set budget.",
       planningNote: "No Planning Room is required for the initial split.",
       lines,
+      maxLines: maxAuthorityLines(agents, roles),
     };
   }
   if (intent === "DYNAMIC") {
+    const pool = allocation?.pool ?? [];
+    const planned = allocation?.planning === "COMPLETE" && pool.every((role) => agentBudget(agents, role) !== null);
+    if (planned) {
+      let used = 0;
+      const lines = pool.map((role) => {
+        const amount = agentBudget(agents, role) ?? "";
+        if (/^\d+(\.\d+)?$/.test(amount)) used += Number(amount);
+        return { label: ROLE_TITLES[role].replace(" Agent", ""), value: money(amount) };
+      });
+      const deployable = allocation?.deployable;
+      if (deployable !== null && deployable !== undefined && /^\d+(\.\d+)?$/.test(deployable)) {
+        const available = Math.max(0, Number(deployable) - used);
+        lines.push({ label: "Available", value: money(String(available)) });
+      }
+      return {
+        intent,
+        headline: "Current plan",
+        detail: planNote,
+        planningNote: null,
+        lines,
+        maxLines: maxAuthorityLines(agents, pool),
+      };
+    }
     return {
       intent,
       headline: "Agents decide the split",
-      detail: `${money(allocation?.deployable ?? "")} available to ${allocation?.pool.map((r) => ROLE_TITLES[r].replace(" Agent", "")).join(", ") || "selected agents"}.`,
+      detail: `${money(allocation?.deployable ?? "")} available to ${pool.map((r) => ROLE_TITLES[r].replace(" Agent", "")).join(", ") || "selected agents"}.`,
       planningNote:
         allocation?.planning === "REQUIRED" || allocation?.planning === "OPTIONAL"
-          ? (allocation.pool.length === 1 ? "The agent will propose how much of its available capital to use before authorization." : "Planning Room will propose the allocation before authorization.")
+          ? (pool.length === 1 ? "The agent will propose how much of its available capital to use before authorization." : "Planning Room will propose the allocation before authorization.")
           : null,
-      lines: (allocation?.pool ?? []).map((role) => ({ label: ROLE_TITLES[role].replace(" Agent", ""), value: "In the flexible pool" })),
+      lines: pool.map((role) => ({ label: ROLE_TITLES[role].replace(" Agent", ""), value: "In the flexible pool" })),
+      maxLines: maxAuthorityLines(agents, pool),
     };
   }
   if (intent === "HYBRID") {
+    const pool = allocation?.pool ?? [];
+    const fixed = allocation?.fixed ?? [];
+    const poolPlanned = allocation?.planning === "COMPLETE" && pool.every((role) => agentBudget(agents, role) !== null);
+    if (poolPlanned) {
+      const lines = [
+        ...fixed.map((role) => ({
+          label: `${ROLE_TITLES[role].replace(" Agent", "")} fixed`,
+          value: money(agentBudget(agents, role) ?? ""),
+        })),
+        ...pool.map((role) => ({
+          label: ROLE_TITLES[role].replace(" Agent", ""),
+          value: money(agentBudget(agents, role) ?? ""),
+        })),
+      ];
+      return {
+        intent,
+        headline: "Current plan",
+        detail: planNote,
+        planningNote: null,
+        lines,
+        maxLines: maxAuthorityLines(agents, [...fixed, ...pool]),
+      };
+    }
     const lines = [
-      ...(allocation?.fixed ?? []).map((role) => ({
+      ...fixed.map((role) => ({
         label: `${ROLE_TITLES[role].replace(" Agent", "")} fixed`,
-        value: money(typeof rec(agents[role]).budget === "string" ? String(rec(agents[role]).budget) : ""),
+        value: money(agentBudget(agents, role) ?? ""),
       })),
       { label: "Flexible pool", value: money(allocation?.pooled ?? "") },
     ];
@@ -178,9 +265,10 @@ function allocationReview(allocation: AllocationState | null, draft: JsonRecord)
       detail: "Planning Room allocates only the flexible pool.",
       planningNote: "Review the proposed pool split before authorizing.",
       lines,
+      maxLines: maxAuthorityLines(agents, [...fixed, ...pool]),
     };
   }
-  return { intent, headline: intent, detail: "", planningNote: null, lines: [] };
+  return { intent, headline: intent, detail: "", planningNote: null, lines: [], maxLines: [] };
 }
 
 function advancedRows(draft: JsonRecord, notes: readonly string[]): AdvancedRow[] {
@@ -263,11 +351,9 @@ export function buildAuthorityReview(input: {
     const dynamicPool = state === "ENABLED" && pool.has(role);
     let authorityLabel = "—";
     if (state === "ENABLED") {
-      if (fixed.has(role) && budget !== null) authorityLabel = `Fixed allocation ${money(budget)}`;
-      else if (dynamicPool) authorityLabel = max !== null ? `Dynamic remainder · ceiling ${money(max)}` : "Dynamic remainder";
-      else if (max !== null) authorityLabel = `Maximum ${money(max)}`;
-      else if (budget !== null) authorityLabel = `Up to ${money(budget)}`;
-      else authorityLabel = "Enabled · ceiling unset";
+      if (fixed.has(role) && budget !== null) authorityLabel = planAuthorityLabel(budget, max, "fixed");
+      else if (dynamicPool) authorityLabel = planAuthorityLabel(budget, max, "dynamic");
+      else authorityLabel = planAuthorityLabel(budget, max, "enabled");
     } else if (state === "DISABLED") authorityLabel = "No authority";
     else authorityLabel = "Not selected";
     return {
@@ -276,6 +362,7 @@ export function buildAuthorityReview(input: {
       state,
       stateLabel: state === "ENABLED" ? "Enabled" : state === "DISABLED" ? "Disabled" : "Not selected",
       authorityLabel,
+      currentPlan: state === "ENABLED" ? budget : null,
       fixedBudget: fixed.has(role) ? budget : null,
       maxAuthority: max,
       dynamicPool,

@@ -568,6 +568,9 @@
 .mw-agent-config__name { display: grid; gap: 0.1rem; min-width: 0; }
 .mw-agent-config__name strong { font-size: 0.98rem; font-weight: 700; }
 .mw-agent-config__name span { color: var(--mw-text-3); font-size: 0.8rem; }
+.mw-agent-config__plan { color: var(--mw-text-2); font-size: 0.78rem; }
+.mw-outcome-stack { display: grid; gap: 0.12rem; justify-items: end; text-align: right; }
+.mw-outcome-stack strong { font-size: 0.82rem; letter-spacing: 0.04em; }
 .mw-agent-config__amount { display: inline-flex; align-items: center; gap: 0.5rem; }
 .mw-agent-config__hint { color: var(--mw-text-3); font-size: 0.76rem; }
 .mw-agent-config__off { color: var(--mw-text-3); }

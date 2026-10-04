@@ -40,7 +40,7 @@ export function AgentSelection(props: { readonly undecided: readonly RoleName[];
 /**
  * Who decides the split, shown in the Configure stage:
  * FIXED → "Your allocation"; DYNAMIC/HYBRID → ask the agents for a split; a
- * plan in place → its budgets, editable. Budgets are maxima, never targets.
+ * plan in place → current plan budgets (editable), distinct from maximum authority.
  */
 export function AllocationPanel(props: {
   readonly state: AllocationState;
@@ -57,21 +57,26 @@ export function AllocationPanel(props: {
   const kept = state.deployable === null ? null : Math.max(0, Number(state.deployable) - total);
   const planned = rows.every((r) => r.amount !== null);
   const ask = canAskForPlan(state);
+  const showPlanVsMax = planned && state.intent !== "FIXED";
   return (
-    <section className="mw-allocation" aria-label="Your allocation">
+    <section className="mw-allocation" aria-label={showPlanVsMax ? "Current plan" : "Your allocation"}>
       <div className="mw-allocation__row">
-        <span className="mw-allocation__label">{state.intent === "FIXED" ? "Your allocation" : planned ? "Allocation" : "You left the split to the agents"}</span>
+        <span className="mw-allocation__label">{state.intent === "FIXED" ? "Your allocation" : planned ? "Current plan" : "You left the split to the agents"}</span>
         {state.deployable === null ? null : <span className="mw-allocation__value"><strong>{usd(state.deployable)}</strong> available</span>}
       </div>
       {planned || state.fixed.length > 0 ? (
         <ul className="mw-rows">
-          {rows.map((r) => (
-            <Row key={r.role} role={r.role} sub={r.source === "AGENTS" ? "proposed by the agents" : r.source === "YOU" && state.fixed.includes(r.role) ? "set by you" : ""}>
-              {editing ? (
-                <input className="mw-input mw-input--inline" aria-label={`${ROLE_TITLES[r.role]} budget in USDC`} defaultValue={r.amount ?? ""} inputMode="decimal" disabled={props.busy} onBlur={(e) => { if (e.target.value.trim() !== (r.amount ?? "")) props.onField(`agents.${r.role}.budget`, e.target.value.trim() === "" ? null : e.target.value.trim()); }} />
-              ) : r.amount === null ? <span className="mw-muted">agents propose</span> : usd(r.amount)}
-            </Row>
-          ))}
+          {rows.map((r) => {
+            const max = access.text(`agents.${r.role}.maxAllocation`);
+            const maxNote = showPlanVsMax && max !== "" && max !== (r.amount ?? "") ? ` · up to ${usd(max)}` : "";
+            return (
+              <Row key={r.role} role={r.role} sub={r.source === "AGENTS" ? "proposed by the agents" : r.source === "YOU" && state.fixed.includes(r.role) ? "set by you" : ""}>
+                {editing ? (
+                  <input className="mw-input mw-input--inline" aria-label={`${ROLE_TITLES[r.role]} current plan in USDC`} defaultValue={r.amount ?? ""} inputMode="decimal" disabled={props.busy} onBlur={(e) => { if (e.target.value.trim() !== (r.amount ?? "")) props.onField(`agents.${r.role}.budget`, e.target.value.trim() === "" ? null : e.target.value.trim()); }} />
+                ) : r.amount === null ? <span className="mw-muted">agents propose</span> : <>{usd(r.amount)}{maxNote === "" ? null : <small className="mw-muted">{maxNote}</small>}</>}
+              </Row>
+            );
+          })}
         </ul>
       ) : (
         <p className="mw-allocation__note">{state.pool.map((r) => ROLE_TITLES[r].replace(" Agent", "")).join(", ")} will analyze their opportunities and propose a split of {state.pooled === null ? "the pool" : usd(state.pooled)}. You review and can edit it before signing.</p>
@@ -79,7 +84,13 @@ export function AllocationPanel(props: {
       {planned || state.fixed.length > 0 ? (
         <p className="mw-total"><span>Total</span><strong>{usd(String(total))}</strong></p>
       ) : null}
-      {kept !== null && planned ? <p className="mw-allocation__note">Invested up to {usd(String(total))} · kept in wallet {usd(String(kept))}. Budgets are maxima: agents may use less, or nothing. Unused capital stays in your wallet.</p> : null}
+      {kept !== null && planned ? (
+        <p className="mw-allocation__note">
+          {showPlanVsMax
+            ? `${usd(String(total))} planned · ${usd(String(kept))} available. Current allocations may be lower than each agent&apos;s signed maximum.`
+            : `Invested up to ${usd(String(total))} · kept in wallet ${usd(String(kept))}. Budgets are maxima: agents may use less, or nothing. Unused capital stays in your wallet.`}
+        </p>
+      ) : null}
       <div className="mw-allocation__actions">
         {planned || state.intent === "FIXED" ? <button type="button" className="mw-text-button" disabled={props.busy} onClick={() => setEditing((e) => !e)}>{editing ? "Done" : "Edit"}</button> : null}
         {ask ? <button type="button" className={planned ? "mw-text-button" : "mw-soft-button"} disabled={props.busy || props.blockedOtherwise} onClick={props.onAskPlan}>{planned ? "Ask the agents again" : "Ask agents for a split"}</button> : null}
@@ -87,7 +98,7 @@ export function AllocationPanel(props: {
       {ask && props.blockedOtherwise && !planned ? <p className="mw-fine">Resolve the other open choices first; the agents analyze under the limits you are about to sign.</p> : null}
       <label className="mw-toggle">
         <input type="checkbox" checked={state.autoReallocate} disabled={props.busy} onChange={(e) => props.onField("portfolio.autoReallocate", e.target.checked)} />
-        <span>Allow automatic reallocation <small>After signing, capital an agent leaves unused may move to other agents, only inside each agent&apos;s signed maximum.</small></span>
+        <span>Allow automatic reallocation <small>Agents may reallocate unused capital only within their signed maximums.</small></span>
       </label>
     </section>
   );
