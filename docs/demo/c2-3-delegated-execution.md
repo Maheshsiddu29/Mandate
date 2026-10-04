@@ -395,23 +395,29 @@ Does not broadcast. Does not invoke `forge script` against the public RPC
 (Foundry's numeric fork fails on non-archive endpoints); Solidity
 `DeployDelegatedV3.verify` remains for archive/local nodes only.
 
-7. Principal performs a **separate**, one-time **bounded** MDUSD approval to
-   the V3 Gate (`approve(V3Gate, amount)`). Not a Mandate signature. Not
-   unlimited. Not sent by deploy tooling.
-8. Start lab: `npm run agents:lab`.
-9. Open the Live Lab browser UI.
-10. Start a **new** V3 session (not a restored one).
-11. Connect wallet on Robinhood Chain testnet.
+7. Start lab: `npm run agents:lab` (loads V3 Gate from
+   `contracts/deploy/robinhood-testnet-delegated-live.json`).
+8. Open the Live Lab browser UI.
+9. Start a **new** V3 session (not a restored one; do not resume a session that
+   already failed with `V3_GATE_ALLOWANCE_REQUIRED`).
+10. Connect wallet on Robinhood Chain testnet — that address is the principal.
+11. On Review, complete **Settlement setup** if shown:
+    - Browser reads `MDUSD.allowance(principal, V3Gate)` at latest.
+    - If insufficient: **Enable settlement** → wallet sends one bounded
+      `MDUSD.approve(V3Gate, amount)` where `amount` is the derived fixture
+      debit cap (same path as `deriveV3StockFixtureCap` / settleSpineV3).
+    - Never unlimited. Never a Mandate signature. Not counted as a Mandate sig.
 12. Sign **one** V3 mandate authorization (`DelegatedPortfolioAuthorizationV3`).
 13. Allow the Stock agent to run; observe **zero** further wallet signatures.
 14. Observe **one** settlement transaction submitted by the existing submitter.
 15. Inspect receipt: wallet approval for this trade = None; bounded V3 delegation.
 16. Optionally prove a second trade locally (same delegation, next nonce) — not required live.
 
-**Allowance setup (V3 Gate).** One-time testnet: principal must
-`approve(MandateDelegatedExecutionGate, amount)` for MDUSD — bounded, not
-unlimited. Not a Mandate signature. Not auto-sent by deploy or agent tests.
-Complete this **before** recording a judge/video flow.
+**Allowance setup (V3 Gate).** Wallet-native on Review: connected EVM address is
+the principal; Gate and MDUSD come from trusted lab/deployment state; amount is
+the deterministic V3 fixture cap. Rejected/reverted approvals leave setup NOT
+READY. Complete setup **before** the Mandate signature and before recording a
+judge/video flow.
 
 ## 20. Manual live acceptance plan (do not run in agent work)
 
