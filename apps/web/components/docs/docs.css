@@ -134,11 +134,13 @@
 
 .docs-article__body {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0;
   min-width: 0;
 }
 
 .docs-section {
+  min-width: 0;
   padding: 1.85rem 0;
   scroll-margin-top: 6.2rem;
   border-top: 1px solid var(--mandate-border);
@@ -227,6 +229,7 @@
 
 .docs-home {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 2rem;
   min-width: 0;
 }
@@ -322,6 +325,7 @@
 }
 
 .docs-home__flow {
+  min-width: 0;
   padding: 1.2rem 1.25rem;
   border: 1px solid var(--mandate-border);
   border-radius: var(--mandate-radius);
@@ -336,9 +340,11 @@
   letter-spacing: -0.02em;
 }
 
-.docs-flow {
+.mandate-docs .docs-flow {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.35rem;
+  min-width: 0;
   margin: 0;
   padding: 0;
   list-style: none;
