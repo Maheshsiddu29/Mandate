@@ -4,7 +4,7 @@ import { LatticeLoader } from "@/components/react-bits/lattice-loader";
 import type { ReactNode } from "react";
 import type { Failure } from "./live-flow";
 import type { AuthorizedStockTrade } from "./allocation-model";
-import { ROLE_TITLES, reasonLabel, usd, type RoleName, type SettlementView, type TradeReview } from "./live-model";
+import { ROLE_TITLES, reasonLabel, usd, type ReviewItem, type RoleName, type SettlementView, type TradeReview } from "./live-model";
 import { holdNote, proofStatus, receiptHeading, type SettlementRefusal } from "./settlement-refusal";
 import { heldCopy, reconcileOffered, type RestoredSettlement } from "./settlement-restore";
 import { shortAddress } from "./wallet";
@@ -101,8 +101,21 @@ function AuthorizedList({ review }: { readonly review: TradeReview }): ReactNode
     <>
       <ul className="mw-rows">{review.authorized.map((item) => <Row key={item.role} role={item.role}>{usd(item.amount)}</Row>)}</ul>
       {review.reserved === null ? null : <p className="mw-total"><span>Total reserved</span><strong>{usd(review.reserved)}</strong></p>}
-      <p className="mw-fine">Reserved is not settled.</p>
+      <p className="mw-fine">Reserved is authorization evidence, not settlement.</p>
     </>
+  );
+}
+
+function OutcomeRow({ item }: { readonly item: ReviewItem }): ReactNode {
+  return (
+    <Row role={item.role}>
+      <span className="mw-outcome-stack">
+        <strong>{item.outcome}</strong>
+        {item.amount === "—" ? null : <span>{usd(item.amount)}</span>}
+        {item.settlementEvidence === "NONE" ? null : <span className="mw-muted">Settlement evidence: {item.settlementEvidence}</span>}
+        {item.settlementNote === null ? (item.reason === "" ? null : <span className="mw-muted">{item.reason}</span>) : <span className="mw-muted">{item.settlementNote}</span>}
+      </span>
+    </Row>
   );
 }
 
@@ -412,7 +425,7 @@ function SettlementProof(props: {
                 <li>Exact execution authorized</li>
                 {settlement.commitmentRecorded ? <li>Execution commitment recorded onchain</li> : null}
                 {settlement.consumed ? <li>Reservation consumed</li> : null}
-                <li>Evidence {settlement.evidence ?? "LIVE_TESTNET"}</li>
+                {settlement.evidence === null ? null : <li>Evidence {settlement.evidence}</li>}
               </ul>
             ) : null}
             {settlement.consumed && !settlement.settled ? <p className="mw-fine">Already settled. Nothing is resent.</p> : null}
@@ -468,42 +481,27 @@ export function ReceiptStage(props: {
             : heading.title === "Execution held"
               ? "Mandate signed the exact execution, but chain state could not be verified. Nothing was sent."
               : settlement.settled
-                ? "Semantic action above. Testnet settlement proof below."
+                ? "Authorization evidence above. Stock testnet settlement proof below when present."
                 : `${review.authorizedCount} of ${review.evaluated} agents authorized${review.reserved === null ? "" : ` · ${usd(review.reserved)} authorized`}.`}
         </p>
       </header>
 
-      <details className="mw-disclosure mw-receipt__agents">
+      <details className="mw-disclosure mw-receipt__agents" open={review.authorized.length + review.blockedItems.length + review.quiet.length > 1}>
         <summary>Agent outcomes</summary>
         <div className="mw-receipt__grid">
-          <section aria-label="Authorized">
-            <h3>Authorized</h3>
-            {review.authorized.length === 0 ? <p className="mw-fine">Nothing.</p> : <ul className="mw-rows">{review.authorized.map((item) => <Row key={item.role} role={item.role}>{usd(item.amount)}</Row>)}</ul>}
+          <section aria-label="Agent outcomes list">
+            <h3>Outcomes</h3>
+            {review.authorized.length + review.blockedItems.length + review.quiet.length === 0 ? (
+              <p className="mw-fine">Nothing.</p>
+            ) : (
+              <ul className="mw-rows">
+                {review.authorized.map((item) => <OutcomeRow key={`auth-${item.role}`} item={item} />)}
+                {review.blockedItems.map((item) => <OutcomeRow key={`block-${item.role}`} item={item} />)}
+                {review.quiet.map((item) => <OutcomeRow key={`quiet-${item.role}`} item={item} />)}
+              </ul>
+            )}
+            <p className="mw-fine">Authorization evidence is not settlement evidence. Only Stock has a live testnet settlement connector in this build.</p>
           </section>
-          {review.blockedItems.length === 0 ? null : (
-            <section aria-label="Blocked">
-              <h3>Blocked</h3>
-              <ul className="mw-rows mw-rows--bad">
-                {review.blockedItems.map((item) => (
-                  <Row key={item.role} role={item.role}>
-                    <span title={item.codes.join(", ")}>{item.reason}</span>
-                  </Row>
-                ))}
-              </ul>
-            </section>
-          )}
-          {review.quiet.length === 0 ? null : (
-            <section aria-label="No action">
-              <h3>No action</h3>
-              <ul className="mw-rows mw-rows--muted">
-                {review.quiet.map((item) => (
-                  <Row key={item.role} role={item.role}>
-                    {item.reason}
-                  </Row>
-                ))}
-              </ul>
-            </section>
-          )}
         </div>
       </details>
 

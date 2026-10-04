@@ -78,7 +78,7 @@ export function ReviewBody(props: {
             </>}
             {props.mandate === null ? null : <div><dt>Portfolio authorization</dt><dd>{["WALLET_PRINCIPAL_V2", "WALLET_PRINCIPAL_V2_PLAN"].includes(str(rec(props.mandate.authorization).method)) ? `Wallet principal · ${str(rec(props.mandate.authorization).principal)}` : str(rec(props.mandate.authorization).method) === "WALLET_EIP712" ? `Wallet-signed mandate · ${str(rec(props.mandate.authorization).principal)}` : "Demo principal key (not a wallet signature)"}</dd></div>}
             <div><dt>Domain settlement authority</dt><dd>{props.settlement.principals === null ? "Separate testnet custody (not delegated by the mandate signature)" : props.settlement.principals.domainKind === "SAME_PRINCIPAL" ? `Same address as the wallet · ${props.settlement.principals.domainAddress}` : props.settlement.principals.domainKind === "WALLET_GATE_EIP712" ? `Wallet gate signature, per execution · ${props.settlement.principals.domainAddress}` : `Separate testnet custody · ${props.settlement.principals.domainAddress}`}</dd></div>
-            <div><dt>Settlement evidence</dt><dd>{props.settlement.settled ? "LIVE_TESTNET" : props.settlement.evidence ?? "None in this session"}{props.settlement.consumed ? " · reservation consumed" : ""}{props.settlement.rpcProvider === null ? "" : ` · RPC ${props.settlement.rpcProvider}`}</dd></div>
+            <div><dt>Stock settlement evidence</dt><dd>{props.settlement.evidence ?? "None in this session"}{props.settlement.settled && props.settlement.evidence === "LIVE_TESTNET" ? " · confirmed" : ""}{props.settlement.consumed ? " · reservation consumed" : ""}{props.settlement.rpcProvider === null ? "" : ` · RPC ${props.settlement.rpcProvider}`}</dd></div>
             <div><dt>Events</dt><dd>{props.eventCount} · <button type="button" className="mw-text-button" onClick={props.onEvents}>Open event log</button></dd></div>
           </dl>
         ) : null}
@@ -201,7 +201,7 @@ export function StressBody(props: { readonly attempts: readonly StressAttempt[];
     <div className="mw-stress">
       <p className="mw-stress__thesis">VALID AGENT ≠ VALID ACTION</p>
       <p>The same authorized Swap agent submits a series of actions. Its identity, membership, delegation and signature stay valid throughout. Mandate judges each action, not the agent&apos;s reputation.</p>
-      <button type="button" className="mw-cta" disabled={!props.canRun || props.running} onClick={props.onRun}>{props.running ? "Testing…" : props.started ? "Run the test again" : "Test the firewall"}</button>
+      <button type="button" className="mw-cta" disabled={!props.canRun || props.running} onClick={props.onRun}>{props.running ? "Testing…" : props.started ? "Run the test again" : "Try an unauthorized action"}</button>
       {props.started ? (
         <>
           <dl className="mw-identity">
@@ -216,14 +216,18 @@ export function StressBody(props: { readonly attempts: readonly StressAttempt[];
                 <div>
                   <p className="mw-attempts__case">{caseTitle(attempt.caseId)}</p>
                   <p className="mw-fine">{attempt.reasons.length > 0 ? explainReasons(attempt.reasons).headline || "Refused" : attempt.outcome === "AUTHORIZED" ? "Compliant control" : attempt.outcome === "PENDING" ? "Evaluating…" : "Not submitted"}</p>
+                  {attempt.outcome === "REFUSED" ? (
+                    <p className="mw-fine">Valid agent · action outside authority · Wallet request: None · Settlement transaction: None · Mandate stopped it before execution.</p>
+                  ) : null}
                   {attempt.rationale === "" ? null : <details className="mw-disclosure mw-disclosure--inline"><summary>Declared rationale</summary><p>{attempt.rationale}</p></details>}
                   <MandateReasons reasons={attempt.reasons} />
                 </div>
-                {attempt.outcome === "PENDING" ? <LatticeLoader label="Evaluating" status="working" pattern="ripple" showTimer={false} /> : <Pill tone={attempt.outcome === "AUTHORIZED" ? "good" : attempt.outcome === "REFUSED" ? "bad" : "neutral"}>{attempt.outcome}</Pill>}
+                {attempt.outcome === "PENDING" ? <LatticeLoader label="Evaluating" status="working" pattern="ripple" showTimer={false} /> : <Pill tone={attempt.outcome === "AUTHORIZED" ? "good" : attempt.outcome === "REFUSED" ? "bad" : "neutral"}>{attempt.outcome === "REFUSED" ? "BLOCKED" : attempt.outcome}</Pill>}
               </li>
             ))}
           </ol>
           <p className="mw-stress__foot"><span>SAME AGENT</span><span>DIFFERENT ACTION</span><strong>DIFFERENT AUTHORIZATION RESULT</strong></p>
+          <p className="mw-fine">A refused case is not a failed transaction. Nothing was sent; the reservation ledger is unchanged.</p>
         </>
       ) : null}
     </div>

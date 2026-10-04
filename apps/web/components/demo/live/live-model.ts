@@ -1075,12 +1075,19 @@ export function awaitingReplies(events: readonly LiveEvent[]): RoleName[] {
   return participants.filter((role) => !answered.has(role)).map(asRole).filter((role): role is RoleName => role !== null);
 }
 
+/** Settlement evidence class for one agent outcome. Never invents a chain settlement. */
+export type AgentSettlementEvidence = "LIVE_TESTNET" | "OFFCHAIN_ONLY" | "NONE";
+
 export interface ReviewItem {
   readonly role: RoleName;
   readonly amount: string;
   readonly from: string | null;
   readonly reason: string;
   readonly codes: readonly string[];
+  /** Visual outcome for the receipt: SETTLED only when this agent has real settlement evidence. */
+  readonly outcome: "AUTHORIZED" | "BLOCKED" | "NO ACTION" | "SETTLED";
+  readonly settlementEvidence: AgentSettlementEvidence;
+  readonly settlementNote: string | null;
 }
 
 export interface TradeReview {
@@ -1097,6 +1104,32 @@ export interface TradeReview {
   readonly reserved: string | null;
 }
 
+/**
+ * Live Lab settlement connectors: only Stock has a Robinhood Chain testnet
+ * path. Other domains may be authorized/reserved without onchain settlement.
+ */
+export function agentSettlementCapability(role: RoleName): "LIVE_TESTNET_CAPABLE" | "OFFCHAIN_ONLY" {
+  return role === "stock" ? "LIVE_TESTNET_CAPABLE" : "OFFCHAIN_ONLY";
+}
+
+/** Classify one authorized agent's settlement evidence from the session settlement view. */
+export function classifyAgentSettlement(
+  role: RoleName,
+  settlement: Pick<SettlementView, "settled" | "evidence">,
+): { readonly outcome: "AUTHORIZED" | "SETTLED"; readonly settlementEvidence: AgentSettlementEvidence; readonly settlementNote: string | null } {
+  if (role === "stock" && settlement.settled && settlement.evidence === "LIVE_TESTNET") {
+    return { outcome: "SETTLED", settlementEvidence: "LIVE_TESTNET", settlementNote: "LIVE_TESTNET settlement" };
+  }
+  if (agentSettlementCapability(role) === "OFFCHAIN_ONLY") {
+    return {
+      outcome: "AUTHORIZED",
+      settlementEvidence: "OFFCHAIN_ONLY",
+      settlementNote: "Authorized · no live settlement connector in this build",
+    };
+  }
+  return { outcome: "AUTHORIZED", settlementEvidence: "NONE", settlementNote: "Authorized · not settled in this session" };
+}
+
 /** Counts and lists for the receipt, from the run's events only. Nothing is assumed or hardcoded. */
 export function deriveReview(events: readonly LiveEvent[]): TradeReview {
   const agents = deriveAgents(events);
@@ -1110,7 +1143,18 @@ export function deriveReview(events: readonly LiveEvent[]): TradeReview {
     ? []
     : arr(proposal.data.requests).map(rec).filter((row) => amountOf(row.from) !== amountOf(row.to)).flatMap((row) => {
         const role = asRole(str(row.role));
-        return role === null ? [] : [{ role, amount: amountOf(row.to) ?? "—", from: amountOf(row.from), reason: "", codes: [] }];
+        return role === null
+          ? []
+          : [{
+              role,
+              amount: amountOf(row.to) ?? "—",
+              from: amountOf(row.from),
+              reason: "",
+              codes: [],
+              outcome: "AUTHORIZED" as const,
+              settlementEvidence: "NONE" as const,
+              settlementNote: null,
+            }];
       });
   const resolvedRooms = authorizedEvent === undefined ? 0 : events.filter((event) => event.kind === "ROOM_FINALIZED" && event.data.result === "PROPOSED").length;
   return {
@@ -1119,11 +1163,43 @@ export function deriveReview(events: readonly LiveEvent[]): TradeReview {
     noProposal: agents.filter((agent) => ["ABSTAINED", "TIMED OUT", "FAILED", "INVALID RESPONSE"].includes(agent.phase)).length,
     conflictsResolved: resolvedRooms,
     authorizedCount: agents.filter((agent) => agent.finalOutcome === "RESERVED").length,
-    settlementsConfirmed: settlement.settled ? 1 : 0,
-    authorized: agents.filter((agent) => agent.finalOutcome === "RESERVED").map((agent) => ({ role: agent.role, amount: agent.finalAmount.replace(/ USDC$/, ""), from: null, reason: "", codes: [] })),
-    blockedItems: agents.filter((agent) => agent.phase === "BLOCKED").map((agent) => ({ role: agent.role, amount: agent.requested.replace(/ USDC$/, ""), from: null, reason: explainReasons(agent.reasons).headline || "Blocked", codes: agent.reasons })),
+    settlementsConfirmed: settlement.settled && settlement.evidence === "LIVE_TESTNET" ? 1 : 0,
+    authorized: agents
+      .filter((agent) => agent.finalOutcome === "RESERVED")
+      .map((agent) => {
+        const classified = classifyAgentSettlement(agent.role, settlement);
+        return {
+          role: agent.role,
+          amount: agent.finalAmount.replace(/ USDC$/, ""),
+          from: null,
+          reason: "",
+          codes: [],
+          outcome: classified.outcome,
+          settlementEvidence: classified.settlementEvidence,
+          settlementNote: classified.settlementNote,
+        };
+      }),
+    blockedItems: agents.filter((agent) => agent.phase === "BLOCKED").map((agent) => ({
+      role: agent.role,
+      amount: agent.requested.replace(/ USDC$/, ""),
+      from: null,
+      reason: explainReasons(agent.reasons).headline || "Blocked",
+      codes: agent.reasons,
+      outcome: "BLOCKED" as const,
+      settlementEvidence: "NONE" as const,
+      settlementNote: "Mandate stopped it before execution",
+    })),
     negotiated,
-    quiet: agents.filter((agent) => ["ABSTAINED", "TIMED OUT", "FAILED", "INVALID RESPONSE"].includes(agent.phase)).map((agent) => ({ role: agent.role, amount: "—", from: null, reason: agent.phase === "ABSTAINED" ? "No proposal" : agent.phase === "TIMED OUT" ? "Timed out" : "Couldn't respond", codes: [] })),
+    quiet: agents.filter((agent) => ["ABSTAINED", "TIMED OUT", "FAILED", "INVALID RESPONSE"].includes(agent.phase)).map((agent) => ({
+      role: agent.role,
+      amount: "—",
+      from: null,
+      reason: agent.phase === "ABSTAINED" ? "No proposal" : agent.phase === "TIMED OUT" ? "Timed out" : "Couldn't respond",
+      codes: [],
+      outcome: "NO ACTION" as const,
+      settlementEvidence: "NONE" as const,
+      settlementNote: null,
+    })),
     reserved: authorizedEvent === undefined ? null : amountOf(authorizedEvent.data.reserved),
   };
 }
