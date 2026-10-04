@@ -1,8 +1,8 @@
 # C2.3 — Bounded Delegated Execution Authority
 
-> **Status: design + local implementation in progress.** Testnet-only.
-> Stock fixture settlement path only. The agent does **not** deploy or
-> broadcast. Old V2 `MandateExecutionGate` remains frozen and available.
+> **Status: C2.3.1 local integration complete; awaiting human deploy.**
+> Testnet-only. Stock fixture settlement path only. The agent does **not**
+> deploy or broadcast. Old V2 `MandateExecutionGate` remains frozen and available.
 
 **Judge sentence.** *"I didn't approve that trade. I approved the rules.
 Mandate approved the trade because it satisfied those rules."*
@@ -303,21 +303,54 @@ runs one controlled acceptance execution.
 | --- | --- |
 | 0 Design doc | Done |
 | 1 `MandateDelegatedExecutionGate` | Done — V2 Gate untouched |
-| 2 Foundry unit/fuzz/invariant/differential | Done (51 V3 suite tests + digest vector) |
+| 2 Foundry unit/fuzz/invariant/differential | Done (52 V3 suite tests + digest vector) |
 | 3 TS reference model + vectors | Done (`@mandate/execution-gate` `delegated.ts`) |
-| 4 Portfolio V3 verify + ephemeral delegate | Partial — verify + delegate + cap + autonomous gate; Live Lab challenge/authorize spine wiring incomplete |
-| 5 Autonomous V3 settlement orchestration | Partial — gate + delegate modules; full `settleSpine` V3 path not yet browser-wired |
-| 6 Browser one-signature UX | Partial — acceptance test pins ≤2 `signTypedData` sites; V3 authorize screen not yet primary |
-| 7 Recovery / revoke / allowance docs | Partial — documented; onchain revoke in contract; browser revoke UX not wired |
-| 8 Fork dry-run / Slither / full `npm run check` | Pending human review gate before live deploy |
+| 4 Portfolio V3 verify + ephemeral delegate | Done — Live Lab `spine: "V3"` challenge + one `DelegatedPortfolioAuthorizationV3` |
+| 5 Autonomous V3 settlement orchestration | Done — `settleSpineV3` + `AutonomousSettlementGate` + browser auto-settle |
+| 6 Browser one-signature UX | Done — AUTHORIZE AUTONOMOUS MANDATE; no Execute; auto SEND |
+| 7 Recovery / revoke / allowance | Done — restore evidence-only; `V3_GATE_ALLOWANCE_REQUIRED`; onchain revoke in contract |
+| 8 Fork dry-run / Slither / full `npm run check` | Run locally before human deploy |
 
-**Allowance setup (V3 Gate).** One-time testnet: principal must `approve(MandateDelegatedExecutionGate, amount)` for MDUSD. Not a Mandate signature. Not auto-sent by agent tests.
+## 19. Operator runbook (human only)
+
+1. Verify clean commit on `cursor/c2-3-delegated-execution`.
+2. Run full local validation (`npm run check`, contracts, web, audit/credentials/junk).
+3. `npm run robinhood:v3:testnet:deploy -- --dry-run` (default is dry-run; no broadcast).
+4. Fund deployer if necessary (human wallet; never commit keys).
+5. Explicit V3 testnet Foundry deploy of `MandateDelegatedExecutionGate` (chain 46630 only).
+6. Verify deployed bytecode / domain separator / fixture market.
+7. One-time principal MDUSD `approve(V3Gate, amount)` — **setup tx, not a Mandate signature**.
+8. Start lab: `npm run agents:lab` (V3 host when manifest + keys present).
+9. Open the Live Lab browser UI.
+10. Start a **new** V3 session (not a restored one).
+11. Connect wallet on Robinhood Chain testnet.
+12. Sign **one** V3 mandate authorization (`DelegatedPortfolioAuthorizationV3`).
+13. Allow the Stock agent to run; observe **zero** further wallet signatures.
+14. Observe **one** settlement transaction submitted by the existing submitter.
+15. Inspect receipt: wallet approval for this trade = None; bounded V3 delegation.
+16. Optionally prove a second trade locally (same delegation, next nonce) — not required live.
+
+**Allowance setup (V3 Gate).** One-time testnet: principal must `approve(MandateDelegatedExecutionGate, amount)` for MDUSD. Not a Mandate signature. Not auto-sent by agent tests. Complete this **before** recording a judge/video flow.
 
 **Manual deploy (human only, after review):**
 
 ```bash
 npm run robinhood:v3:testnet:deploy -- --dry-run
 # then human Foundry deploy against chain 46630 only; never mainnet
+# then principal: MDUSD.approve(V3Gate, amount)
 ```
+
+## 20. Manual live acceptance plan (do not run in agent work)
+
+A. Wallet connected on Robinhood Chain testnet.  
+B. New V3 session.  
+C. Prompt: Let the Stock agent manage $800.  
+D. Review: V3 autonomous execution disclosure visible.  
+E. Authorize: exactly **one** wallet EIP-712 signature.  
+F. Agent run: no wallet prompt.  
+G. Mandate authorizes Stock action: no wallet prompt.  
+H. Automatic testnet settlement: one blockchain transaction.  
+I. Receipt: wallet approval for this trade = None; execution authority = bounded V3 delegation; LIVE_TESTNET.  
+J. Optional second action (local/fork): still no new principal signature.
 
 Agent broadcasts during this milestone: **0**.
