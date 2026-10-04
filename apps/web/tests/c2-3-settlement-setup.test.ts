@@ -98,6 +98,17 @@ describe('C2.3.3 wallet-native V3 settlement setup', () => {
     assert.match(wallet, /Unlimited or zero approval is refused/);
   });
 
+  it('settlement-allowance copy is renew-when-insufficient, never one-time forever', () => {
+    assert.match(configure, /Settlement allowance required/);
+    assert.match(configure, /Allow the Mandate V3 Gate to use up to/);
+    assert.match(configure, /This bounded ERC-20 allowance is separate from your Mandate authorization/);
+    assert.match(configure, /Renew it only when the remaining settlement allowance is insufficient/);
+    assert.doesNotMatch(configure, /One-time setup required/);
+    assert.doesNotMatch(configure, /one-time bounded ERC-20 approval/i);
+    assert.doesNotMatch(configure, /not required for every trade/i);
+    assert.doesNotMatch(configure, /permanent approval|one approval forever|forever/i);
+  });
+
   it('trade path still auto-settles without additional wallet signatures', () => {
     assert.match(lab, /v3AutoSettleStarted/);
     assert.match(lab, /postSettle\(\{\s*mode:\s*"SEND"\s*\}/);

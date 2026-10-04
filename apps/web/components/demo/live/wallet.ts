@@ -7,7 +7,7 @@
  * and — only for V3 settlement setup — submit one bounded ERC-20
  * `approve(V3Gate, amount)` transaction. Raw signing and unlimited approvals
  * are refused. Settlement broadcasts still use the lab submitter, never this
- * wallet, except that one-time principal MDUSD approval.
+ * wallet, except the bounded principal MDUSD settlement allowance.
  */
 
 import { UINT256_MAX, type TrustedSettlementPlan, boundedApproveTx } from "./settlement-setup.ts";
@@ -53,7 +53,7 @@ export interface WalletAdapter {
   switchChain(): Promise<WalletResult<true>>;
   signTypedData(address: string, typedData: unknown): Promise<WalletResult<string>>;
   /**
-   * One-time bounded MDUSD.approve(V3Gate, amount) from the trusted plan.
+   * Bounded MDUSD.approve(V3Gate, amount) from the trusted plan. Renew when insufficient.
    * Refuses wrong chain, principal mismatch, and unlimited amounts.
    */
   sendBoundedErc20Approve(plan: TrustedSettlementPlan): Promise<WalletResult<string>>;

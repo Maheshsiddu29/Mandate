@@ -260,7 +260,7 @@ export function ApproveStage(props: {
   readonly wallet: WalletState;
   /** When "V3", disclose autonomous settlement before the one Mandate signature. */
   readonly spine?: "V2" | "V3";
-  /** V3 only: one-time bounded MDUSD allowance to the live Gate. */
+  /** V3 only: bounded MDUSD allowance to the live Gate (renew when insufficient). */
   readonly settlementSetup?: {
     readonly status: SettlementSetupStatus;
     readonly plan: TrustedSettlementPlan | null;
@@ -570,13 +570,13 @@ export function ApproveStage(props: {
             {setup?.status === "NEED_ENABLE" || setup?.status === "SUBMITTING" || setup?.status === "CONFIRMING" || setup?.status === "FAILED" ? (
               <>
                 <p className="mw-notice mw-notice--warn" role="status">
-                  <strong>One-time setup required</strong>
+                  <strong>Settlement allowance required</strong>
                   <br />
-                  Mandate needs permission to use up to {allowanceLabel ?? "the derived MDUSD fixture cap"} for this testnet mandate.
+                  Allow the Mandate V3 Gate to use up to {allowanceLabel ?? "the derived MDUSD fixture cap"} for this testnet mandate.
                 </p>
                 <p className="mw-fine">
-                  This is a one-time bounded ERC-20 approval to the Mandate V3 Gate.
-                  It is not a Mandate authorization and it is not required for every trade.
+                  This bounded ERC-20 allowance is separate from your Mandate authorization.
+                  Renew it only when the remaining settlement allowance is insufficient.
                 </p>
                 <button
                   type="button"

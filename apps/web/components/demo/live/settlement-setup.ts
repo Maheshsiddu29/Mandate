@@ -1,5 +1,5 @@
 /**
- * Pure helpers for one-time bounded V3 MDUSD allowance setup.
+ * Pure helpers for bounded V3 MDUSD settlement-allowance setup.
  * Gate, token and amount come only from the server's trusted plan.
  * The browser never invents those addresses or accepts them as user input.
  */
