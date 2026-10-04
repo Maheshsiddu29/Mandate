@@ -10,7 +10,9 @@ import type { LiveSession } from '@mandate/live-agents';
 import { SEND_AUTHORIZATION_PHRASE } from '../src/send-gate.ts';
 import type { GateExecutionRequest } from '../src/gate-authority.ts';
 import type { SpineSettlementInput, SpineSettlementResult } from '../src/spine-settlement.ts';
-import { SpineUi, type SpineUiHost } from '../src/ui-settle.ts';
+import type { AttemptRecord } from '../src/journal.ts';
+import { SpineUi, v3TechnicalProof, type SpineUiHost } from '../src/ui-settle.ts';
+import { testDeployment } from './support/world.ts';
 
 const SIG = `0x${'ab'.repeat(65)}`;
 const DIGEST = `0x${'11'.repeat(32)}`;
@@ -332,5 +334,68 @@ describe('V2 settlement bridge', () => {
     h.ask = false;
     const retry = await post(h, { mode: 'DRY_RUN' });
     assert.equal(body(retry as NonNullable<typeof retry>)['status'], 'READY');
+  });
+});
+
+describe('V3 technical proof normalization', () => {
+  it('hydrates an older confirmed journal plus signed V3 authority without inventing absent digests', () => {
+    const principal = `0x${'11'.repeat(20)}`;
+    const delegate = `0x${'22'.repeat(20)}`;
+    const agent = `0x${'33'.repeat(20)}`;
+    const gate = `0x${'44'.repeat(20)}`;
+    const txHash = `0x${'55'.repeat(32)}`;
+    const reservation = `0x${'66'.repeat(32)}`;
+    const receiptDigest = `0x${'77'.repeat(32)}`;
+    const session = {
+      id: 'lab-v3-proof',
+      events: { events: [{ kind: 'DOMAIN_EXECUTION_SETTLED', data: { spine: 'V3', txHash, evidence: 'LIVE_TESTNET', executionNonce: '1', remainingCapacity: '0' } }] },
+      versions: {
+        records: [{
+          version: 1,
+          digest: `0x${'88'.repeat(32)}`,
+          authorization: {
+            method: 'WALLET_PRINCIPAL_V3_DELEGATED', principal,
+            wallet: {
+              initialAllocationDigest: `0x${'99'.repeat(32)}`,
+              sessionDigest: `0x${'aa'.repeat(32)}`,
+              delegate, agent,
+              representationIdHash: `0x${'bb'.repeat(32)}`,
+              fundingToken: `0x${'cc'.repeat(20)}`,
+              cumulativeDebitLimit: '64000000', validAfter: '1', validUntil: '100', generation: '1',
+            },
+          },
+        }],
+      },
+    } as unknown as LiveSession;
+    const attempt = {
+      state: 'CONSUMED', principal, gate, reservation, chainId: '46630', evidenceClass: 'ROBINHOOD_TESTNET_RPC',
+      tx: { hash: txHash, to: gate },
+      receipt: { status: 'SUCCESS', blockNumber: '128655452', blockHash: `0x${'dd'.repeat(32)}`, gasUsed: '322661', effectiveGasPrice: '10000000' },
+      observation: receiptDigest,
+      v3Proof: null,
+    } as unknown as AttemptRecord;
+    const proof = v3TechnicalProof(session, attempt, 'nvda-note-a', 1, testDeployment());
+    assert.ok(proof);
+    assert.equal(proof.candidateId, 'nvda-note-a');
+    assert.equal(proof.walletPrincipal, principal);
+    assert.equal(proof.gate, gate);
+    assert.equal(proof.delegate, delegate);
+    assert.equal(proof.agent, agent);
+    assert.equal(proof.executionNonce, '1');
+    assert.equal(proof.initialCapacity, '64000000');
+    assert.equal(proof.cumulativeDebit, '64000000');
+    assert.equal(proof.remainingCapacity, '0');
+    assert.equal(proof.blockNumber, '128655452');
+    assert.equal(proof.gasUsed, '322661');
+    assert.equal(proof.receiptDigest, receiptDigest);
+    assert.equal(proof.evidence, 'LIVE_TESTNET');
+    assert.equal(proof.gateMandateDigest, null);
+    assert.equal(proof.executionApprovalDigest, null);
+    assert.equal(proof.executionCommitment, null);
+    assert.equal(proof.gasEstimate, null);
+    assert.match(proof.delegationDigest, /^0x[0-9a-f]{64}$/);
+    assert.doesNotMatch(JSON.stringify(proof), /privateKey|delegateSignature|agentSignature|principalSignature|"raw"|calldata/i);
+    assert.equal(v3TechnicalProof(session, { ...attempt, state: 'CONFIRMED_REVERT' }, 'nvda-note-a', 1, testDeployment()), null);
+    assert.equal(v3TechnicalProof(session, { ...attempt, tx: null }, 'nvda-note-a', 1, testDeployment()), null);
   });
 });

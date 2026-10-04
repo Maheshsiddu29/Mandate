@@ -34,7 +34,7 @@
  * hash. There is no resend.
  */
 
-import { ChainClient, JsonRpcClient, TxSender, encodeBlockTag, pause, readGateMarkets, type Address, type BlockRef, type GateCall, type GateSpotPolicy, type GateStateRead, type Read, type Receipt, type Simulation } from '@mandate/evm-robinhood';
+import { ChainClient, JsonRpcClient, ROBINHOOD_TESTNET_CHAIN_ID, TxSender, encodeBlockTag, pause, readGateMarkets, representationIdOf, type Address, type BlockRef, type GateCall, type GateMarketSnapshot, type GateSpotPolicy, type GateStateRead, type Read, type Receipt, type Simulation } from '@mandate/evm-robinhood';
 import { ROBINHOOD_TESTNET } from './deployment.ts';
 import type { Transport } from './evidence.ts';
 
@@ -66,6 +66,11 @@ export interface TxLookup {
 /** Bounded reads. Nothing here can authorize: Mandate decided before any of these is asked. */
 export interface ChainReader {
   readonly transport: Transport;
+  /**
+   * The only contract this reader may `eth_call` / `estimateGas` as an execute
+   * target. V2 and V3 spines bind separate clients when their Gates differ.
+   */
+  readonly boundGate: Address;
   /** The endpoint that answered the most recent read. */
   provenance(): RpcProvenance;
   /** A fresh `eth_chainId`, never cached. */
@@ -76,6 +81,8 @@ export interface ChainReader {
   nativeBalance(address: Address): Promise<Read<bigint>>;
   tokenBalance(token: Address, owner: Address, block?: bigint): Promise<Read<bigint>>;
   allowance(token: Address, owner: Address, spender: Address): Promise<Read<bigint>>;
+  /** Operational identity of the bound Gate's created fixture venue/adapter. */
+  gateMarket(gate: Address, representation: Address): Promise<Read<GateMarketSnapshot>>;
   executionCommitmentOf(gate: Address, mandateDigest: string, block?: bigint): Promise<Read<string>>;
   gateMarkets(policy: GateSpotPolicy): Promise<GateStateRead>;
   /** `eth_call` of `execute(call)` on the gate. */
@@ -147,18 +154,21 @@ function endpointsOf(e: RpcEndpoints): { readonly primary: Endpoint; readonly fa
  */
 export class RobinhoodTestnetReader implements ChainReader {
   readonly transport = 'ROBINHOOD_TESTNET_RPC' as const;
+  readonly boundGate: Address;
   readonly #primary: Endpoint;
   readonly #fallback: Endpoint | null;
   readonly #gate: Address;
   #last: RpcProvenance;
 
   /**
-   * `gate` is the manifest's gate: the only contract an `eth_call` or
-   * `estimateGas` may address. `endpoints` are URLs from the operator's
+   * `gate` is the spine's Gate: the only contract an `eth_call` or
+   * `estimateGas` may address. V3 must pass the live delegated Gate — never
+   * the frozen V2 Gate. `endpoints` are URLs from the operator's
    * configuration, or already-built clients (tests: loopback mock nodes).
    */
   constructor(gate: Address, endpoints: RpcEndpoints | { readonly primary: Endpoint; readonly fallback: Endpoint | null } = PUBLIC_ONLY) {
     this.#gate = gate;
+    this.boundGate = gate;
     const e = 'primary' in endpoints ? endpoints : endpointsOf(endpoints);
     this.#primary = e.primary;
     this.#fallback = e.fallback;
@@ -221,6 +231,11 @@ export class RobinhoodTestnetReader implements ChainReader {
 
   allowance(token: Address, owner: Address, spender: Address): Promise<Read<bigint>> {
     return this.#read((c) => c.erc20Allowance(token, owner, spender));
+  }
+
+  gateMarket(gate: Address, representation: Address): Promise<Read<GateMarketSnapshot>> {
+    if (gate !== this.#gate) return Promise.resolve({ ok: false, error: 'TARGET_NOT_THE_GATE' });
+    return this.#read((c) => c.gateMarket(gate, representationIdOf(ROBINHOOD_TESTNET_CHAIN_ID, representation), 'latest'));
   }
 
   executionCommitmentOf(gate: Address, mandateDigest: string, block?: bigint): Promise<Read<string>> {
@@ -387,8 +402,9 @@ export class RobinhoodTestnetRpc extends RobinhoodTestnetReader implements Testn
 
   /**
    * `submitterKey` is the 7E.3 disposable gas-payer key; it is kept in the
-   * `TxSender`'s private field. `gate` is the manifest's gate: the only
+   * `TxSender`'s private field. `gate` is this spine's Gate: the only
    * contract this client will ever address a transaction or `eth_call` to.
+   * Lab V2 uses the frozen V2 Gate; lab V3 must use the live V3 Gate.
    */
   constructor(submitterKey: string, gate: Address, endpoints: RpcEndpoints | { readonly primary: Endpoint; readonly fallback: Endpoint | null } = PUBLIC_ONLY) {
     super(gate, endpoints);

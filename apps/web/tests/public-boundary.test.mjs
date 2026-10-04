@@ -102,6 +102,7 @@ test("the public routes stay on the dark Mandate surface", async () => {
     new URL("demo/judge/judge-experience.tsx", COMPONENT_URL),
     "utf8"
   );
+  const docsLayoutSource = await readFile(new URL("docs/layout.tsx", APP_URL), "utf8");
   const docsSource = await readFile(new URL("docs/page.tsx", APP_URL), "utf8");
   const backdropSource = await readFile(
     new URL("layout/page-backdrop.tsx", COMPONENT_URL),
@@ -114,24 +115,26 @@ test("the public routes stay on the dark Mandate surface", async () => {
 
   assert.doesNotMatch(backdropSource, /grid/);
   assert.match(demoSource, /judge-demo/);
-  assert.match(docsSource, /mandate-docs/);
-  assert.doesNotMatch(`${demoSource}\n${docsSource}`, /StateGuard|Solana/);
+  assert.match(docsLayoutSource, /mandate-docs/);
+  assert.doesNotMatch(`${demoSource}\n${docsSource}\n${docsLayoutSource}`, /StateGuard|Solana/);
   assert.match(visualSystem, /Manrope Variable/);
   assert.match(visualSystem, /--public-gradient-surface/);
 });
 
 test("the docs describe Mandate authority without old product claims", async () => {
   const pageSource = await readFile(new URL("docs/page.tsx", APP_URL), "utf8");
+  const conceptsSource = await readFile(new URL("docs/concepts/page.tsx", APP_URL), "utf8");
+  const proofSource = await readFile(new URL("docs/proof/page.tsx", APP_URL), "utf8");
 
-  for (const section of ["overview", "authority", "pipeline", "assets", "markets", "demo", "build", "limits"]) {
-    assert.match(pageSource, new RegExp(`id="${section}"`));
-  }
-
+  assert.match(pageSource, /Build agents that can act without giving them unlimited authority/);
   assert.match(pageSource, /Authentication is not authorization/);
-  assert.match(pageSource, /A ticker is not an asset identity/);
-  assert.match(pageSource, /not live markets/);
-  assert.match(pageSource, /not evidence of a production deployment/);
-  assert.doesNotMatch(pageSource, /StateGuard|EquityGuard|Solana|19,986/);
+  assert.match(conceptsSource, /ticker is not a canonical asset identity/i);
+  assert.match(proofSource, /LIVE_TESTNET/);
+  assert.match(proofSource, /NOT CLAIMED/);
+  assert.doesNotMatch(
+    `${pageSource}\n${conceptsSource}\n${proofSource}`,
+    /StateGuard|EquityGuard|Solana|19,986/,
+  );
 });
 
 test("the public shell uses the approved final brand assets", async () => {

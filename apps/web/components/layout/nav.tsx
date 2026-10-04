@@ -36,10 +36,7 @@ function isItemActive(pathname: string, hash: string, item: NavItem): boolean {
   if (item.href === "/developers") return pathname.startsWith("/developers");
 
   if (item.href.startsWith("/docs")) {
-    if (!pathname.startsWith("/docs")) {
-      return false;
-    }
-    return itemAnchor === "#build" ? hash === "#build" : hash !== "#build";
+    return pathname === "/docs" || pathname.startsWith("/docs/");
   }
 
   if (pathname !== "/") {

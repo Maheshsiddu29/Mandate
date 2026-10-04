@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, arr, liveServerUrl, rec, str, streamEvents, type Json, type JsonRecord, type LiveEvent } from "./live-client";
-import { deriveFlow, eventsAfter, type Phase } from "./live-flow";
+import { deriveFlow, eventsAfter, progressStep, type Phase } from "./live-flow";
 import { awaitingReplies, derivePresentation, deriveReview, deriveRoomChat, proposedPortfolio, ROLES } from "./live-model";
 import { RoomChat } from "./room-chat";
 import { allocationState, authorizedStockTrade, planningCards, planView, serverCompatible, STALE_SERVER } from "./allocation-model";
@@ -19,6 +19,14 @@ import { ApproveStage, ConfigureStage, draftAccess, mandateSummary, PermissionsB
 import { AuthorizedStage, FailedStage, ReceiptStage, SettlingStage, VerifyStage, type SettlementOffer } from "./stage-outcome";
 import { executionRetry, settlementRefusal, type SettlementRefusal } from "./settlement-refusal";
 import { executeOffered, parseRestored, restoreSettlement } from "./settlement-restore";
+import {
+  decodeUint256Word,
+  encodeAllowanceCalldata,
+  parseTrustedSettlementPlan,
+  readinessAfterAllowance,
+  type SettlementSetupStatus,
+  type TrustedSettlementPlan,
+} from "./settlement-setup";
 import { APPROVAL_CHAIN, injectedWallet, shortAddress } from "./wallet";
 import { Sheet } from "./workspace-ui";
 import "./live-workspace.css";
@@ -124,10 +132,15 @@ export function LiveLab(): ReactNode {
   const [signing, setSigning] = useState(false);
   const [settlementOffer, setSettlementOffer] = useState<SettlementOffer>({ kind: "loading" });
   const [planOpen, setPlanOpen] = useState(false);
+  const [setupStatus, setSetupStatus] = useState<SettlementSetupStatus>("IDLE");
+  const [setupPlan, setSetupPlan] = useState<TrustedSettlementPlan | null>(null);
+  const [setupBusy, setSetupBusy] = useState(false);
+  const [setupDetail, setSetupDetail] = useState("");
   const lastSequence = useRef(-1);
   const stageRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const shownStage = useRef<string | null>(null);
+  const v3AutoSettleStarted = useRef(false);
 
   useEffect(() => {
     if (SERVER === null) return;
@@ -145,11 +158,12 @@ export function LiveLab(): ReactNode {
           setSettlementOffer({ kind: "unavailable", message: message(settlement.body) });
           return;
         }
-        if (str(settlement.body.spine) !== "V2") {
-          setSettlementOffer({ kind: "unavailable", message: "This server is not the V2 settlement spine. Nothing will be sent." });
+        const spine = str(settlement.body.spine);
+        if (spine !== "V2" && spine !== "V3") {
+          setSettlementOffer({ kind: "unavailable", message: "This local settlement server cannot settle from the browser. Nothing will be sent." });
           return;
         }
-        setSettlementOffer({ kind: "ready" });
+        setSettlementOffer({ kind: "ready", spine: spine === "V3" ? "V3" : "V2" });
       });
       // A reload (or a server restart) returns to the same durable session; its events replay from the start.
       const id = rememberedSession();
@@ -264,12 +278,22 @@ export function LiveLab(): ReactNode {
     settlement,
   });
   const phase = flow.phase;
+
   const pending = presentation.agents.some((agent) => agent.phase === "PENDING" || agent.phase === "RESPONDING");
   const versions = arr(view.versions).map(rec);
   const activeRecord = versions.find((item) => item.version === activeVersion) ?? null;
   const roomSeen = runEvents.some((event) => event.kind === "ROOM_OPENED");
   const authorization = rec(activeRecord?.authorization);
-  const authorizedBy = typeof authorization.method !== "string" ? null : authorization.method === "WALLET_PRINCIPAL_V2" || authorization.method === "WALLET_PRINCIPAL_V2_PLAN" ? `wallet principal ${shortAddress(str(authorization.principal))}` : authorization.method === "WALLET_EIP712" ? `authorized by ${shortAddress(str(authorization.principal))}` : "demo principal key";
+  const authorizedBy = typeof authorization.method !== "string"
+    ? null
+    : authorization.method === "WALLET_PRINCIPAL_V3_DELEGATED"
+      ? `V3 autonomous mandate · ${shortAddress(str(authorization.principal))}`
+      : authorization.method === "WALLET_PRINCIPAL_V2" || authorization.method === "WALLET_PRINCIPAL_V2_PLAN"
+        ? `wallet principal ${shortAddress(str(authorization.principal))}`
+        : authorization.method === "WALLET_EIP712"
+          ? `authorized by ${shortAddress(str(authorization.principal))}`
+          : "demo principal key";
+  const v3Active = authorization.method === "WALLET_PRINCIPAL_V3_DELEGATED";
   const provider = rec(view.provider);
   const providerKind = sessionId === null ? (providerChoice === "openai" ? "LIVE" : "STUB") : str(provider.kind);
   const liveAvailable = rec(rec(status?.providers).openai).available === true;
@@ -364,7 +388,116 @@ export function LiveLab(): ReactNode {
     await readWallet();
   }
 
-  /** The wallet path: a server-issued challenge, signed in the wallet, verified by the server. Never a transaction. */
+  const isV3Spine =
+    rec(rec(status?.principalAuthorization).spineV3).available === true
+    || (settlementOffer.kind === "ready" && settlementOffer.spine === "V3");
+
+  /** Read MDUSD.allowance(principal, V3Gate) at latest via the wallet provider. */
+  async function refreshAllowance(plan: TrustedSettlementPlan): Promise<"NEED_ENABLE" | "READY" | "FAILED"> {
+    const w = injectedWallet();
+    if (w === null) return "FAILED";
+    const data = encodeAllowanceCalldata(plan.principal, plan.gate);
+    if (data === null) return "FAILED";
+    const r = await w.ethCall(plan.fundingToken, data);
+    if (!r.ok) {
+      setSetupDetail(r.error.message);
+      return "FAILED";
+    }
+    const have = decodeUint256Word(r.value);
+    if (have === null) {
+      setSetupDetail("Could not read MDUSD allowance.");
+      return "FAILED";
+    }
+    setSetupDetail("");
+    return readinessAfterAllowance(have, plan.requiredAllowanceAtoms);
+  }
+
+  /** Load trusted V3 setup plan and check allowance before the mandate signature. */
+  async function loadSettlementSetup(): Promise<void> {
+    const address = wallet.address;
+    if (!isV3Spine || address === null || wallet.chainId !== APPROVAL_CHAIN.chainId || sessionId === null) {
+      setSetupStatus("IDLE");
+      setSetupPlan(null);
+      return;
+    }
+    setSetupStatus("LOADING");
+    setSetupDetail("");
+    const body = await call("POST", "/wallet/settlement-setup", { address });
+    if (body === null) {
+      setSetupStatus("FAILED");
+      setSetupDetail("Settlement setup plan unavailable.");
+      return;
+    }
+    const parsed = parseTrustedSettlementPlan(body, address);
+    if (!parsed.ok) {
+      setSetupStatus("FAILED");
+      setSetupDetail(parsed.reason);
+      setSetupPlan(null);
+      return;
+    }
+    setSetupPlan(parsed.plan);
+    const next = await refreshAllowance(parsed.plan);
+    setSetupStatus(next === "FAILED" ? "FAILED" : next);
+  }
+
+  useEffect(() => {
+    if (phase !== "APPROVE" || !isV3Spine) return undefined;
+    let live = true;
+    // Defer so allowance reads stay off the effect's synchronous path.
+    void Promise.resolve().then(() => {
+      if (live) void loadSettlementSetup();
+    });
+    return () => {
+      live = false;
+    };
+    // Intentionally tied to review entry + wallet identity, not every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, isV3Spine, wallet.address, wallet.chainId, sessionId]);
+
+  async function enableSettlement(): Promise<void> {
+    const w = injectedWallet();
+    const plan = setupPlan;
+    if (w === null || plan === null || wallet.address === null) return;
+    setSetupBusy(true);
+    setSetupDetail("");
+    setError("");
+    const chain = await w.getChainId();
+    if (!chain.ok || chain.value !== APPROVAL_CHAIN.chainId) {
+      setSetupBusy(false);
+      setSetupStatus("FAILED");
+      setSetupDetail("Switch your wallet to Robinhood Chain testnet before enabling settlement.");
+      await readWallet();
+      return;
+    }
+    setSetupStatus("SUBMITTING");
+    const sent = await w.sendBoundedErc20Approve(plan);
+    if (!sent.ok) {
+      setSetupBusy(false);
+      setSetupStatus("NEED_ENABLE");
+      setSetupDetail(sent.error.message);
+      return;
+    }
+    setSetupStatus("CONFIRMING");
+    setSetupDetail(`Approval submitted · ${sent.value.slice(0, 10)}…`);
+    const receipt = await w.waitForReceipt(sent.value);
+    if (!receipt.ok || receipt.value !== "SUCCESS") {
+      setSetupBusy(false);
+      setSetupStatus("NEED_ENABLE");
+      setSetupDetail(receipt.ok ? "Approval transaction reverted. Settlement is not ready." : receipt.error.message);
+      return;
+    }
+    const next = await refreshAllowance(plan);
+    setSetupBusy(false);
+    if (next !== "READY") {
+      setSetupStatus("NEED_ENABLE");
+      setSetupDetail("Allowance is still below the required bounded amount after confirmation.");
+      return;
+    }
+    setSetupStatus("READY");
+    setSetupDetail("");
+  }
+
+  /** The wallet path: a server-issued challenge, signed in the wallet, verified by the server. V3 requires settlement setup first. */
   async function authorizeWithWallet(): Promise<void> {
     const w = injectedWallet();
     const address = wallet.address;
@@ -378,7 +511,19 @@ export function LiveLab(): ReactNode {
       await readWallet();
       return;
     }
-    const challenge = await call("POST", "/wallet/challenge", { address, spine: "V2" });
+    const statusV3 = rec(rec(status?.principalAuthorization).spineV3).available === true;
+    if (statusV3 && settlementOffer.kind === "loading") {
+      setAuthorizing(false);
+      setError("Waiting for the settlement offer before authorizing a V3 autonomous mandate.");
+      return;
+    }
+    const preferV3 = statusV3 || (settlementOffer.kind === "ready" && settlementOffer.spine === "V3");
+    if (preferV3 && setupStatus !== "READY") {
+      setAuthorizing(false);
+      setError("Enable settlement before authorizing the autonomous mandate. No mandate was activated.");
+      return;
+    }
+    const challenge = await call("POST", "/wallet/challenge", { address, spine: preferV3 ? "V3" : "V2" });
     if (challenge === null) {
       setAuthorizing(false);
       return;
@@ -516,11 +661,26 @@ export function LiveLab(): ReactNode {
     setSigning(false);
   }
 
-  const runAgain = async (): Promise<void> => {
-    setSheet(null);
-    const body = await call("GET", "");
-    await startRun(body ?? view);
-  };
+  // V3: after Mandate authorizes a Stock action, settle automatically — no Execute, no gate signature.
+  useEffect(() => {
+    if (SERVER === null) return;
+    if (authorization.method !== "WALLET_PRINCIPAL_V3_DELEGATED") return;
+    if (settlementOffer.kind !== "ready" || settlementOffer.spine !== "V3") return;
+    if (phase !== "AUTHORIZED" && phase !== "COMPLETE") return;
+    if (settlement.settled || settlement.stage === "SUBMITTED" || settlement.stage === "SIMULATION" || settlement.stage === "PREFLIGHT") return;
+    if (signing || v3AutoSettleStarted.current) return;
+    const trade = authorizedStockTrade(runEvents, arr(view.reservations).map(rec));
+    if (!trade.settlementCapable) return;
+    v3AutoSettleStarted.current = true;
+    void (async () => {
+      setSigning(true);
+      await postSettle({ mode: "SEND" });
+      await refresh();
+      setSigning(false);
+    })();
+    // postSettle/refresh are stable session closures for this effect's SEND arm.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: arm once per authorized V3 stock reservation
+  }, [SERVER, authorization.method, settlementOffer, phase, settlement.settled, settlement.stage, signing, runEvents, view.reservations, refresh]);
 
   if (SERVER === null) {
     return (
@@ -623,11 +783,27 @@ export function LiveLab(): ReactNode {
           authorizing={authorizing}
           error={error}
           wallet={wallet}
+          spine={isV3Spine ? "V3" : "V2"}
+          {...(isV3Spine
+            ? {
+                settlementSetup: {
+                  status: setupStatus,
+                  plan: setupPlan,
+                  busy: setupBusy,
+                  detail: setupDetail,
+                },
+              }
+            : {})}
           onConnect={() => void connectWallet()}
           onSwitchChain={() => void switchChain()}
+          onEnableSettlement={() => void enableSettlement()}
           onSignWallet={() => {
             if (!authorityReview.canAuthorize) {
               setError(authorityReview.blockerSummary || "Resolve open items before authorizing.");
+              return;
+            }
+            if (isV3Spine && setupStatus !== "READY") {
+              setError("Enable settlement before authorizing the autonomous mandate.");
               return;
             }
             void authorizeWithWallet();
@@ -675,6 +851,7 @@ export function LiveLab(): ReactNode {
           walletReady={wallet.address !== null && wallet.chainId === APPROVAL_CHAIN.chainId}
           conflict={settleConflict}
           restored={restored}
+          autonomousV3={authorization.method === "WALLET_PRINCIPAL_V3_DELEGATED"}
           onReconcile={() => void reconcile()}
           onSignStock={() => void signStock()}
           onPrepareWallet={() => {
@@ -692,24 +869,40 @@ export function LiveLab(): ReactNode {
           stockTrade={stockTrade}
           sessionId={sessionId}
           offer={settlementOffer}
-          walletOk={wallet.address !== null && wallet.chainId === APPROVAL_CHAIN.chainId && (str(authorization.principal) === "—" || wallet.address === str(authorization.principal).toLowerCase()) && (authorization.method === "WALLET_PRINCIPAL_V2" || authorization.method === "WALLET_PRINCIPAL_V2_PLAN")}
+          walletOk={wallet.address !== null && wallet.chainId === APPROVAL_CHAIN.chainId && (str(authorization.principal) === "—" || wallet.address === str(authorization.principal).toLowerCase()) && (authorization.method === "WALLET_PRINCIPAL_V2" || authorization.method === "WALLET_PRINCIPAL_V2_PLAN" || authorization.method === "WALLET_PRINCIPAL_V3_DELEGATED")}
           busy={task !== null || signing}
           conflict={settleConflict}
           retry={executionRetry(settleConflict?.code ?? null, settleConflict?.held ?? false) && executeOffered(restored, runEvents)}
           restored={restored}
+          autonomousV3={v3Active}
           onReconcile={() => void reconcile()}
           onExecute={() => void execute()}
           onDetails={() => setSheet("review")}
-          onRoom={roomSeen ? () => setSheet("room") : null}
-          onStress={() => setSheet("stress")}
-          onRunAgain={() => void runAgain()}
-          onAdjust={() => void adjust()}
+          firewallAvailable={activeVersion !== null && view.paused !== true}
+          onFirewall={() => {
+            setSheet("stress");
+            if (activeVersion !== null && task === null && view.paused !== true && !stress.started) {
+              void call("POST", "/policy-stress", {});
+            }
+          }}
+          onStartNew={() => {
+            rememberSession(null);
+            window.location.assign(window.location.pathname);
+          }}
         />
       );
       break;
     case "FAILED":
       stage = (
-        <FailedStage failure={flow.failure ?? "RUN_ERROR"} busy={task !== null} onRunAgain={() => void runAgain()} onAdjust={() => void adjust()} onRoom={roomSeen ? () => setSheet("room") : null}>
+        <FailedStage
+          failure={flow.failure ?? "RUN_ERROR"}
+          busy={task !== null}
+          onStartNew={() => {
+            rememberSession(null);
+            window.location.assign(window.location.pathname);
+          }}
+          onAdjust={() => void adjust()}
+        >
           <AgentSummaryList agents={presentation.agents} enabled={access.enabled} />
         </FailedStage>
       );
@@ -730,6 +923,13 @@ export function LiveLab(): ReactNode {
         <div className="mw-bar__left">
           <span className="mw-bar__title">Live demo</span>
           <span className="mw-bar__status" data-phase={phase} aria-live="polite">{stageStatus}</span>
+          <ol className="mw-progress" aria-label="Demo progress">
+            {(["Define", "Review", "Authorize", "Live", "Receipt"] as const).map((step) => (
+              <li key={step} data-current={progressStep(phase) === step ? "" : undefined}>
+                {step}
+              </li>
+            ))}
+          </ol>
         </div>
         <div className="mw-bar__right">
           <details className="mw-menu" onKeyDown={(event) => { if (event.key === "Escape") closeMenu(event.currentTarget); }}>
@@ -764,10 +964,29 @@ export function LiveLab(): ReactNode {
 
       {showTrail ? (
         <nav className="mw-trail" aria-label="Completed steps">
-          <button type="button" onClick={() => setSheet("permissions")}><span className="mw-trail__k">Mandate V{activeVersion}</span>{mandateSummary(access, activeVersion !== null && !amending)}{authorizedBy === null ? "" : ` · ${authorizedBy}`}</button>
-          <button type="button" onClick={() => setSheet("agents")}><span className="mw-trail__k">Agents</span>{blockedCount} blocked · {allowedCount} allowed</button>
-          {roomSeen && phase !== "ROOM" ? <button type="button" onClick={() => setSheet("room")}><span className="mw-trail__k">Room</span>{presentation.room.noFeasible ? "unresolved" : presentation.room.proposal ? "resolved" : "negotiating"}</button> : null}
+          <button type="button" onClick={() => setSheet("permissions")}>
+            <span className="mw-trail__k">Authority</span>
+            {mandateSummary(access, activeVersion !== null && !amending)}
+            {authorizedBy === null ? "" : ` · ${authorizedBy}`}
+          </button>
+          <button type="button" onClick={() => setSheet("agents")}>
+            <span className="mw-trail__k">Agents</span>
+            {blockedCount} blocked · {allowedCount} allowed
+          </button>
+          {roomSeen && phase !== "ROOM" ? (
+            <button type="button" onClick={() => setSheet("room")}>
+              <span className="mw-trail__k">Coordination</span>
+              {presentation.room.noFeasible ? "unresolved" : presentation.room.proposal ? "resolved" : "negotiating"}
+            </button>
+          ) : null}
         </nav>
+      ) : null}
+
+      {v3Active && activeVersion !== null && view.paused !== true ? (
+        <p className="mw-notice" role="status">
+          MANDATE ACTIVE · AUTONOMOUS EXECUTION ACTIVE — Bounded by your signed authority
+          {typeof activeRecord?.expiresAt === "string" && activeRecord.expiresAt !== "" ? ` · Expires ${activeRecord.expiresAt}` : ""}
+        </p>
       ) : null}
 
       <motion.div ref={stageRef} className="mw-stage" data-phase={phase} layout={reduced ? false : "size"} transition={transition}>
@@ -788,7 +1007,7 @@ export function LiveLab(): ReactNode {
 
       <p className="mw-thesis">Agents propose. Agents negotiate. Mandate authorizes. Markets settle.</p>
 
-      <Sheet open={sheet === "permissions"} onClose={() => setSheet(null)} title="Advanced permissions" kicker={activeVersion !== null && !amending && !reviewing && phase !== "CONFIGURE" ? `Mandate V${activeVersion} · signed` : "Draft"}>
+      <Sheet open={sheet === "permissions"} onClose={() => setSheet(null)} title="Edit permissions" kicker={activeVersion !== null && !amending && !reviewing && phase !== "CONFIGURE" ? "Signed mandate" : "Draft"}>
         <PermissionsBody access={view.draft === null || view.draft === undefined ? null : access} guardrails={arr(validation.guardrails).map(rec)} catalog={rec(status?.catalog)} editable={phase === "CONFIGURE"} busy={task !== null} onField={field} />
       </Sheet>
       <Sheet open={sheet === "review"} onClose={() => setSheet(null)} title="Trade review" kicker="Summary · decisions · evidence" wide>
@@ -800,7 +1019,7 @@ export function LiveLab(): ReactNode {
       <Sheet open={sheet === "room"} onClose={() => setSheet(null)} title="Room conversation" kicker="Real Room events, in order">
         <RoomChat messages={chat} awaiting={awaiting} lines={presentation.room.lines} live={false} reduced={reduced} compact />
       </Sheet>
-      <Sheet open={sheet === "stress"} onClose={() => setSheet(null)} title="Security demo" kicker="Test the firewall" wide>
+      <Sheet open={sheet === "stress"} onClose={() => setSheet(null)} title="Security test" kicker="VALID AGENT ≠ VALID ACTION" wide>
         <StressBody attempts={stress.attempts} started={stress.started} running={task === "POLICY_STRESS"} canRun={activeVersion !== null && task === null && view.paused !== true} onRun={() => void call("POST", "/policy-stress", {})} />
       </Sheet>
       <Sheet open={sheet === "events"} onClose={() => setSheet(null)} title="Event log" kicker="Developer details" wide>

@@ -10,7 +10,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { keccak256 } from '@mandate/kernel';
-import { gateMarketState, keyAddress, reviewedSnapshot, type Address, type BlockRef, type GateCall, type GateSpotPolicy, type GateStateRead, type Read, type Receipt, type Simulation } from '@mandate/evm-robinhood';
+import { gateMarketState, keyAddress, reviewedSnapshot, type Address, type BlockRef, type GateCall, type GateMarketSnapshot, type GateSpotPolicy, type GateStateRead, type Read, type Receipt, type Simulation } from '@mandate/evm-robinhood';
 import { LiveSession, presetDraft, type AgentModelProvider, type EligibilityFilter, type LiveEvent, type LiveEventKind, type SettlementProfile } from '@mandate/live-agents';
 import { AGENT, AGENT_KEY, DOMAIN_SEPARATOR, GATE, GATE_CODEHASH, MARKET, MDEMO, MDUSD, ModelChain, PRINCIPAL, PRINCIPAL_KEY, SUBMITTER_KEY, T, type ModelTx } from '../../../evm-robinhood/test/support/world.ts';
 import { ScriptedProvider, json } from '../../../live-agents/test/support/providers.ts';
@@ -33,7 +33,7 @@ export class JournaledSettlement extends LiveSettlement {
   }
 }
 
-export { AGENT, AGENT_KEY, GATE, MDEMO, MDUSD, PRINCIPAL, PRINCIPAL_KEY, SUBMITTER_KEY };
+export { AGENT, AGENT_KEY, GATE, MARKET, MDEMO, MDUSD, PRINCIPAL, PRINCIPAL_KEY, SUBMITTER_KEY };
 export const SUBMITTER = keyAddress(SUBMITTER_KEY);
 export const KEYS = { principal: PRINCIPAL_KEY, agent: AGENT_KEY } as const;
 /** Every private key in the world: none may ever appear in an event. */
@@ -110,6 +110,8 @@ export class ModelRpc implements TestnetRpc {
   prepared = 0;
   broadcasts = 0;
   readonly #mined = new Map<string, ModelTx>();
+  /** Mirror RobinhoodTestnetRpc.boundGate; tests may rebind for V3. */
+  boundGate: Address = GATE;
 
   constructor() {
     this.chain = new ModelChain(T + 5n);
@@ -140,6 +142,11 @@ export class ModelRpc implements TestnetRpc {
   async allowance(token: Address, owner: Address, spender: Address): Promise<Read<bigint>> {
     return { ok: true, value: this.chain.allowance(token, owner, spender) };
   }
+  async gateMarket(gate: Address, representation: Address): Promise<Read<GateMarketSnapshot>> {
+    if (gate.toLowerCase() !== this.boundGate.toLowerCase()) return { ok: false, error: 'TARGET_NOT_THE_GATE' };
+    if (representation !== MDEMO) return { ok: false, error: 'MARKET_NOT_LISTED' };
+    return { ok: true, value: reviewedSnapshot(46_630n, gate, MARKET) };
+  }
   executionCommitmentOf(_gate: Address, mandateDigest: string): Promise<Read<string>> {
     return this.chain.executionCommitmentOf(mandateDigest);
   }
@@ -149,19 +156,31 @@ export class ModelRpc implements TestnetRpc {
     const snapshot = reviewedSnapshot(46_630n, GATE, MARKET);
     return { status: 'OK', block: b.value, snapshots: [snapshot], states: [gateMarketState(policy, snapshot, b.value.timestamp)] };
   }
+  /**
+   * When set, `simulateExecute`/`broadcast` skip the V2 ModelChain for that
+   * gate address (V3 delegated calldata is not executable on the V2 model).
+   */
+  v3PassthroughGate: string | null = null;
+
   async simulateExecute(gate: Address, call: GateCall): Promise<Simulation> {
     this.executeTargets.push(gate);
     this.simulations += 1;
+    if (gate.toLowerCase() !== this.boundGate.toLowerCase()) return { ok: false, revert: 'TARGET_NOT_THE_GATE' };
     if (this.simulateRevert !== null) return { ok: false, revert: this.simulateRevert };
+    if (this.v3PassthroughGate !== null && gate.toLowerCase() === this.v3PassthroughGate.toLowerCase()) {
+      return { ok: true, returnData: '0x' };
+    }
     return this.chain.simulate(call);
   }
   async estimateExecute(gate: Address): Promise<Read<bigint>> {
     this.executeTargets.push(gate);
     this.estimates += 1;
+    if (gate.toLowerCase() !== this.boundGate.toLowerCase()) return { ok: false, error: 'TARGET_NOT_THE_GATE' };
     return this.estimateError === null ? { ok: true, value: 240_000n } : { ok: false, error: this.estimateError };
   }
   async prepareExecute(gate: Address, call: GateCall, gasLimit: bigint): Promise<Read<PreparedTx>> {
     this.executeTargets.push(gate);
+    if (gate.toLowerCase() !== this.boundGate.toLowerCase()) return { ok: false, error: 'TARGET_NOT_THE_GATE' };
     if (this.prepareError !== null) return { ok: false, error: this.prepareError };
     this.prepared += 1;
     const hash = hashOf(`${call.calldata}:${this.prepared}`);
@@ -170,16 +189,27 @@ export class ModelRpc implements TestnetRpc {
   async broadcast(tx: PreparedTx): Promise<BroadcastResult> {
     this.broadcasts += 1;
     this.beforeMine?.();
+    if (tx.to.toLowerCase() !== this.boundGate.toLowerCase()) return { kind: 'ERROR', error: 'NOT_A_PREPARED_GATE_EXECUTE' };
+    const v3 = this.v3PassthroughGate !== null && tx.to.toLowerCase() === this.v3PassthroughGate.toLowerCase();
     switch (this.broadcastBehaviour) {
       case 'ERROR_NOT_SENT':
         return { kind: 'ERROR', error: 'NETWORK.TimeoutError' };
       case 'RPC_REJECTED':
         return { kind: 'ERROR', error: 'RPC_-32000:nonce too low' };
-      case 'ERROR_BUT_MINED':
-        this.#mined.set(tx.hash, this.chain.mine(tx.call));
+      case 'ERROR_BUT_MINED': {
+        const mined = v3
+          ? { txHash: tx.hash, call: tx.call, result: 'SUCCESS' as const, revert: null, block: (this.chain.block += 1n) }
+          : this.chain.mine(tx.call);
+        this.#mined.set(tx.hash, mined);
         return { kind: 'ERROR', error: 'NETWORK.TimeoutError' };
+      }
       default:
-        this.#mined.set(tx.hash, this.chain.mine(tx.call));
+        if (v3) {
+          this.chain.block += 1n;
+          this.#mined.set(tx.hash, { txHash: tx.hash, call: tx.call, result: 'SUCCESS', revert: null, block: this.chain.block });
+        } else {
+          this.#mined.set(tx.hash, this.chain.mine(tx.call));
+        }
         return { kind: 'ACCEPTED', hash: tx.hash };
     }
   }

@@ -971,6 +971,19 @@ analyzed **20 contracts with 101 detectors and reported 0 results**;
 `--show-ignored-findings` reports **20 reviewed results**: the 12 of 6R.1a plus
 S-13 (8). No suppression was added for any Low, Medium or High detector.
 
+**V3 final-release run.** `MandateDelegatedExecutionGate` added three reviewed
+results. `reentrancy-no-eth` reports `_usedDebit` after the adapter interaction;
+this ordering is required because the debit is a measured post-settlement
+balance delta. `execute` is `nonReentrant`, consumes the execution nonce before
+the call, bounds the planned debit before the call, checks the measured debit
+after it, and EVM revert semantics unwind both nonce and debit on failure. The
+`timestamp` result is the intended inclusive signed execution-deadline check
+against chain time. The `_authorize` complexity result is the flat list of
+independent fail-closed checks; a release-candidate refactor would add risk with
+no semantic benefit. Each is suppressed only on the exact reported line or
+function. No detector is disabled globally, and executable Solidity is
+unchanged by the comment-only disposition.
+
 ## 15. Threat model
 
 | Threat | Control | Evidence |

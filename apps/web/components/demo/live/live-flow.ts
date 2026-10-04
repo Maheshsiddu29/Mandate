@@ -66,20 +66,39 @@ export interface Flow {
 }
 
 const STATUS: Record<Phase, string> = {
-  PROMPT: "Drafting",
-  DRAFTING: "Drafting",
-  CONFIGURE: "Configuring",
-  PLANNING: "Mandate Room",
-  APPROVE: "Approving",
-  AGENTS_WORKING: "Agents working",
-  MANDATE_REVIEW: "Mandate review",
-  ROOM: "Negotiating",
-  VERIFYING: "Verifying",
-  AUTHORIZED: "Authorized",
+  PROMPT: "Define",
+  DRAFTING: "Interpreting",
+  CONFIGURE: "Review",
+  PLANNING: "Planning",
+  APPROVE: "Authorize",
+  AGENTS_WORKING: "Live",
+  MANDATE_REVIEW: "Live",
+  ROOM: "Live",
+  VERIFYING: "Live",
+  AUTHORIZED: "Live",
   SETTLING: "Settling",
-  COMPLETE: "Complete",
+  COMPLETE: "Receipt",
   FAILED: "Stopped",
 };
+
+/** Subtle progress cue for the shell — not a rigid wizard. */
+export function progressStep(phase: Phase): "Define" | "Review" | "Authorize" | "Live" | "Receipt" {
+  switch (phase) {
+    case "PROMPT":
+    case "DRAFTING":
+      return "Define";
+    case "CONFIGURE":
+    case "PLANNING":
+      return "Review";
+    case "APPROVE":
+      return "Authorize";
+    case "COMPLETE":
+    case "FAILED":
+      return "Receipt";
+    default:
+      return "Live";
+  }
+}
 
 const TERMINAL_AGENT = new Set(["BLOCKED", "ADMISSIBLE", "ABSTAINED", "TIMED OUT", "FAILED", "INVALID RESPONSE", "RESERVED", "STALE"]);
 

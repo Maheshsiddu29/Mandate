@@ -110,6 +110,11 @@ describe('allocation intent', () => {
     let c = withField(withField(withField(presetDraft('conservative'), 'portfolio.maxDeployed', null, 'USER'), 'portfolio.totalCapital', '2000', 'INTERPRETED'), 'portfolio.minUnallocated', '500', 'USER');
     c = applyPreset(c, 'conservative', true).draft;
     assert.equal(c.portfolio.maxDeployed, '1500');
+    // Stated capital larger than the balanced envelope: fill follows the statement.
+    let large = withField(withField(presetDraft('balanced'), 'portfolio.maxDeployed', null, 'USER'), 'portfolio.totalCapital', '5000', 'INTERPRETED');
+    large = applyPreset(large, 'balanced', true).draft;
+    assert.equal(large.portfolio.maxDeployed, '5000');
+    assert.notEqual(large.portfolio.maxDeployed, '2500');
   });
 
   it('a plan in which an agent abstains (budget 0) can still be signed: the agent simply cannot act', () => {

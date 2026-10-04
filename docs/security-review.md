@@ -293,3 +293,10 @@ contract was confirmed to fail it. Every finding and its disposition is in
 [execution-gate.md §14](execution-gate.md#14-slither-findings); the gate's threat
 model and residual risks are §15 and §16 there.
 
+The V3 final-release run separately reviewed three findings in
+`MandateDelegatedExecutionGate`: the required post-interaction measured-debit
+write (`reentrancy-no-eth`), the signed deadline's intentional chain-time
+comparison (`timestamp`), and the flat fail-closed `_authorize` review surface
+(`cyclomatic-complexity`). Their exact inline suppressions and safety reasoning
+are recorded in [execution-gate.md §14](execution-gate.md#14-slither-findings).
+No broad detector exclusion or executable Solidity change was made.

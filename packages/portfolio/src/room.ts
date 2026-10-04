@@ -36,6 +36,7 @@ import { headroom, type ResourceAvailability } from './availability.ts';
 import type { DomainBinding, RepresentationDecisionRecord } from './binding.ts';
 import { agentPolicyOf, mandateSignedByPrincipal, portfolioMandateDigest, type PortfolioMandate, type PortfolioMandateDigest } from './mandate.ts';
 import { mandateSignedByPrincipalV2, mandateSignedByPrincipalV2Plan, type PortfolioAuthority } from './mandate-v2.ts';
+import { mandateSignedByPrincipalV3, PORTFOLIO_AUTHORITY_V3 } from './mandate-v3.ts';
 import { proposalDigest, type ProposalDigest, type SignedProposal } from './proposal.ts';
 import { canonicalReasons, reason, type Reason } from './reasons.ts';
 import { releaseDigest, releaseSignedByAgent, type ReleaseDigest, type SignedRelease } from './release.ts';
@@ -126,6 +127,7 @@ export interface RoomOutcome {
 function principalSigned(m: PortfolioMandate, signature: string, authority: PortfolioAuthority | undefined): boolean {
   if (authority === undefined || authority.scheme === 'V1_PREHASH') return mandateSignedByPrincipal(m, signature);
   if (authority.scheme === 'V2_PLAN_EIP712') return mandateSignedByPrincipalV2Plan(m, signature, authority);
+  if (authority.scheme === PORTFOLIO_AUTHORITY_V3) return mandateSignedByPrincipalV3(m, signature, authority);
   return mandateSignedByPrincipalV2(m, signature, authority);
 }
 

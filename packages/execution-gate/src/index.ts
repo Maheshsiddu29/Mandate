@@ -23,3 +23,4 @@ export * from './scale.ts';
 export * from './errors.ts';
 export * from './model.ts';
 export * from './reconciliation.ts';
+export * from './delegated.ts';

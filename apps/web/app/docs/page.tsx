@@ -1,145 +1,102 @@
+import { DocsFlow } from "@/components/docs/docs-flow";
 import { createMetadata } from "@/lib/metadata";
 import type { Metadata } from "next";
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 export const metadata: Metadata = createMetadata({
-  title: "Mandate Docs — Authority for agent-native markets",
+  title: "Mandate Docs — Authorization for autonomous agents",
   description:
-    "How Mandate separates authentication from authorization, how a portfolio mandate constrains agents, and which market connections are live.",
+    "Build agents that can act without giving them unlimited authority. Mandate is the authorization and execution control plane for autonomous financial agents.",
   path: "/docs",
 });
 
-const SECTIONS = [
-  ["overview", "Overview"],
-  ["authority", "Authority"],
-  ["pipeline", "Pipeline"],
-  ["assets", "Canonical assets"],
-  ["markets", "Markets"],
-  ["demo", "Demo boundary"],
-  ["build", "Build"],
-  ["limits", "Limits"],
+const FLOW = [
+  "Principal",
+  "Signed Mandate",
+  "Agents",
+  "Mandate Control",
+  "Reservation",
+  "Execution Gate",
+  "Market",
+  "Receipt",
 ] as const;
 
-export default function DocsPage(): ReactNode {
+export default function DocsHomePage(): ReactNode {
   return (
-    <main id="main-content" className="route-main mandate-docs">
-      <div className="page-container">
-        <header className="mandate-docs__intro">
-          <p className="mandate-kicker">Documentation</p>
-          <h1>One authority layer for many agents.</h1>
-          <p>
-            Mandate is the authorization and execution layer for agent-native
-            financial markets. Agents propose. Mandate authorizes. Markets settle.
-            This page describes the model the site demonstrates. It does not
-            describe a deployed production protocol.
-          </p>
-        </header>
-
-        <div className="mandate-docs__layout">
-          <nav className="mandate-docs__nav" aria-label="Documentation sections">
-            {SECTIONS.map(([id, label], index) => (
-              <a key={id} href={`#${id}`}>
-                <span>{String(index + 1).padStart(2, "0")}</span>
-                {label}
-              </a>
-            ))}
-          </nav>
-
-          <article className="mandate-docs__content">
-            <section id="overview">
-              <h2>Overview</h2>
-              <p>
-                A principal sets a portfolio mandate: a budget and the issuers,
-                venues, representations, and sizes that are allowed. Specialized
-                agents may search and negotiate inside that mandate. They do not
-                receive open-ended control of the assets.
-              </p>
-            </section>
-
-            <section id="authority">
-              <h2>Authentication is not authorization</h2>
-              <p>
-                Authentication answers “this really is the agent.” Authorization
-                answers “the agent may perform this exact action.” A genuine
-                agent can still request a fake same-ticker representation, an
-                unknown venue, an unknown issuer, or a size the portfolio does
-                not allow. Mandate blocks that request.
-              </p>
-            </section>
-
-            <section id="pipeline">
-              <h2>Pipeline</h2>
-              <p>
-                Discovery, reasoning, and negotiation stay offchain: principal,
-                portfolio mandate, agents, mandate room, and portfolio
-                verification. Authorized settlement is onchain: child
-                authorization, execution gate, markets, and receipt.
-              </p>
-              <ol>
-                <li>Principal defines the mandate.</li>
-                <li>Agents propose.</li>
-                <li>Mandate room negotiates.</li>
-                <li>Portfolio verification accepts, blocks, or releases.</li>
-                <li>A child authorization is the only permission to settle.</li>
-                <li>The receipt records what happened.</li>
-              </ol>
-            </section>
-
-            <section id="assets">
-              <h2>A ticker is not an asset identity</h2>
-              <p>
-                Two instruments can share a display ticker and still be
-                different assets. Mandate does not pick the cheaper quote.
-                The unapproved representation is blocked. The eligible asset
-                is the one with a verified canonical underlying, a verified
-                representation, an approved issuer, and an approved chain.
-              </p>
-            </section>
-
-            <section id="markets">
-              <h2>Markets</h2>
-              <p>Integration labels on the site mean only what they say.</p>
-              <ul>
-                <li>Robinhood Chain — live testnet. Not a production venue.</li>
-                <li>Lighter — domain integration for perps exposure.</li>
-                <li>Arbitrum — settlement integration. Not a live fill.</li>
-                <li>NFT Market — fixture.</li>
-                <li>Yield — fixture.</li>
-              </ul>
-              <p>Fixtures are scripted demonstrations. They are not live markets.</p>
-            </section>
-
-            <section id="demo">
-              <h2>Demo boundary</h2>
-              <p>
-                Judge mode plays a deterministic transcript of one Portfolio
-                Mandate. It does not connect a wallet, submit an order, or
-                send a transaction. Historical Robinhood Chain evidence is
-                labelled LIVE_TESTNET. Fixture venues are not live markets.
-              </p>
-            </section>
-
-            <section id="build">
-              <h2>Build</h2>
-              <p>
-                Build agents that propose. Let Mandate handle authority. The
-                integration page describes the boundary a later SDK will harden.
-                This site does not ship that SDK.
-              </p>
-            </section>
-
-            <section id="limits">
-              <h2>Limits</h2>
-              <ul>
-                <li>Mandate does not make two issuers economically identical.</li>
-                <li>Mandate does not choose routes by price.</li>
-                <li>Mandate does not give an agent a standing right to move the whole portfolio.</li>
-                <li>This website is not evidence of a production deployment.</li>
-              </ul>
-            </section>
-          </article>
+    <div className="docs-home">
+      <header className="docs-home__hero">
+        <p className="docs-article__eyebrow">ONE AUTHORITY LAYER · MANY AGENTS · MULTIPLE MARKETS</p>
+        <h1>Build agents that can act without giving them unlimited authority.</h1>
+        <p>
+          Mandate provides a shared authorization boundary for autonomous
+          financial agents. Define portfolio authority once, let agents reason
+          independently, and verify each economic action before execution.
+        </p>
+        <div className="docs-home__actions">
+          <Link className="button button--primary focus-ring" href="/docs/concepts">
+            Get started
+          </Link>
+          <Link className="button button--secondary focus-ring" href="/docs/proof">
+            View live proof
+          </Link>
+          <Link className="button button--secondary focus-ring" href="/docs/sdk">
+            SDK
+          </Link>
         </div>
-      </div>
-    </main>
+      </header>
+
+      <section className="docs-card-grid" aria-label="Documentation paths">
+        <Link className="docs-card focus-ring" href="/docs/concepts">
+          <p className="docs-card__kicker">Understand the model</p>
+          <strong>Authority Model</strong>
+          <p>How principal authority becomes bounded agent authority.</p>
+        </Link>
+        <Link className="docs-card focus-ring" href="/docs/sdk">
+          <p className="docs-card__kicker">Integrate an agent</p>
+          <strong>SDK</strong>
+          <p>Screen external agent proposals through Mandate.</p>
+        </Link>
+        <Link className="docs-card focus-ring" href="/docs/proof">
+          <p className="docs-card__kicker">Inspect the proof</p>
+          <strong>Proof & Evidence</strong>
+          <p>See what is model-generated, offchain, simulated, and live on testnet.</p>
+        </Link>
+      </section>
+
+      <section className="docs-home__flow" aria-labelledby="docs-flow-title">
+        <h2 id="docs-flow-title">Authority path</h2>
+        <p className="docs-lead-line">
+          Agents propose. Mandate authorizes. Markets settle.
+        </p>
+        <DocsFlow steps={FLOW} ariaLabel="Mandate authority path" />
+      </section>
+
+      <section className="docs-section" id="overview" style={{ borderTop: "1px solid var(--mandate-border)" }}>
+        <h2>What Mandate is</h2>
+        <p>
+          Mandate is the authorization and execution control plane for
+          autonomous financial agents. Humans define economic authority once.
+          Agents reason and act inside it. Mandate verifies whether each
+          resulting action is permitted.
+        </p>
+        <p>
+          A wallet or agent signature answers <strong>who proposed this</strong>.
+          Mandate answers <strong>whether this exact economic action is allowed</strong>.
+          Authentication is not authorization.
+        </p>
+        <p>
+          Mandate is not an investment adviser, trading strategy, wallet
+          replacement, brokerage, token issuer, or universal router. It is
+          infrastructure that keeps agent action inside signed economic rules.
+        </p>
+        <p>
+          Continue with the{" "}
+          <Link href="/docs/concepts">Authority Model</Link>,{" "}
+          <Link href="/docs/execution">Autonomous Execution</Link>, or the{" "}
+          <Link href="/docs/sdk">SDK</Link>.
+        </p>
+      </section>
+    </div>
   );
 }

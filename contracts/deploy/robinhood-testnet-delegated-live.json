@@ -1,0 +1,29 @@
+{
+  "label": "ROBINHOOD CHAIN TESTNET (46630) — live MandateDelegatedExecutionGate deployment evidence. Separate from frozen V2 robinhood-testnet.json. Valueless fixture.",
+  "chainId": 46630,
+  "gateKind": "MandateDelegatedExecutionGate",
+  "gate": "0x5cf0621ab974d100fd5df225dab046bf35fa7519",
+  "deploymentTx": "0x0440398d7f9d3ee3ce7cdd4e4cbc22d6e419bc10b0edc51d21a3c0cc18247f95",
+  "blockNumber": "0x7a902a0",
+  "runtimeCodeHash": "0x643c12f71ef77bd9a47c9414b92d356ec3db3edd4598f7bb6168bc110e9b9c28",
+  "fixture": {
+    "representation": "0x5d4c3618f996777baf0e0468884bb7a440f189e1",
+    "fundingToken": "0x53b640b9a573e33c541de5a4917bc4d28d956abf",
+    "canonicalAsset": {
+      "assetClass": "fixture",
+      "idScheme": "mandate-demo",
+      "value": "MDEMO"
+    },
+    "issuer": "issuer.mandate-demo",
+    "venue": "venue.mandate-fixture",
+    "quantityUnit": "TOKEN",
+    "settlementUnit": "MDUSD",
+    "synthetic": false,
+    "classification": "FIXTURE",
+    "fixturePriceDecimals": 6,
+    "fixturePrice": "10000000",
+    "fixtureFeeBps": 0
+  },
+  "writtenAt": "2026-10-04T05:18:41.783Z",
+  "note": "Written only after an explicit human --send --confirm-testnet-46630 broadcast. Never overwrite V2."
+}

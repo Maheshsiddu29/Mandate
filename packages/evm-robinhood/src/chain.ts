@@ -229,8 +229,13 @@ export class ChainClient {
     return r.ok ? { ok: true, value: bytes32At(r.value, 0) } : r;
   }
 
-  /** The gate's market-table entry, its created venue and that venue's fee, all at `block`. */
-  async gateMarket(gate: Address, representationId: string, block: bigint): Promise<Read<GateMarketSnapshot>> {
+  /**
+   * The gate's market-table entry, its created venue and that venue's fee, all at `block`.
+   * Execution paths pass a coherent numeric block. Deployment verification of
+   * immutable config may pass `'latest'` — never use `'latest'` for execution
+   * snapshots that must agree across reads.
+   */
+  async gateMarket(gate: Address, representationId: string, block: bigint | 'latest'): Promise<Read<GateMarketSnapshot>> {
     const key = toHex(keccak_256(new TextEncoder().encode(representationId)));
     const m = await this.#word(gate, calldata('marketOf(bytes32)', [abiBytes32], [key]), block);
     if (!m.ok) return m;

@@ -17,7 +17,23 @@
  */
 
 import type { AuthorizationRecord } from '@mandate/control';
-import { agentPolicyOf, amountOf, encodePortfolioMandate, headroom, portfolioMandateAuthorizationV2Hash, proposalDigest, verificationTranscript, type PortfolioAuthority, type PortfolioMandate, type Reason, type SignedProposal, type VerificationTranscript, type VerifiedChild } from '@mandate/portfolio';
+import {
+  agentPolicyOf,
+  amountOf,
+  encodePortfolioMandate,
+  headroom,
+  mandateSignedByPrincipalV3,
+  portfolioMandateAuthorizationV2Hash,
+  portfolioMandateAuthorizationV3Hash,
+  proposalDigest,
+  verificationTranscript,
+  type PortfolioAuthority,
+  type PortfolioMandate,
+  type Reason,
+  type SignedProposal,
+  type VerificationTranscript,
+  type VerifiedChild,
+} from '@mandate/portfolio';
 import { demoParty } from '@mandate/portfolio/demo';
 import { classifyAllocation, planningPurpose } from './allocation/intent.ts';
 import { initialAllocationOf } from './allocation/commitment.ts';
@@ -32,7 +48,16 @@ import { NoScorer, type OpportunityScorer } from './jev/scorer.ts';
 import type { TrustedCandidate } from './agents/spec.ts';
 import { applyPreset, normalizeDraft, presetDraft, withField, type MandateDraft, type Preset } from './authoring/draft-types.ts';
 import type { DraftValidation } from './authoring/draft-validator.ts';
-import { MandateVersions, SPINE_AUTHORIZATION_LABEL, WALLET_AUTHORIZATION_LABEL, type ActiveMandate, type AuthorizeResult, type PrincipalAuthorization, type RefusalCode } from './authoring/mandate-versioning.ts';
+import {
+  MandateVersions,
+  SPINE_AUTHORIZATION_LABEL,
+  V3_DELEGATED_AUTHORIZATION_LABEL,
+  WALLET_AUTHORIZATION_LABEL,
+  type ActiveMandate,
+  type AuthorizeResult,
+  type PrincipalAuthorization,
+  type RefusalCode,
+} from './authoring/mandate-versioning.ts';
 import { interpretPrompt } from './authoring/prompt-to-draft.ts';
 import { amountViews, enabledRoles } from './context.ts';
 import { actionableCandidates, type EligibilityFilter } from './agents/eligibility.ts';
@@ -62,9 +87,16 @@ import { APPROVAL_CHAIN_ID, APPROVAL_DOMAIN, APPROVAL_ENVIRONMENT, APPROVAL_PRIM
 import { ChallengeBook, MAX_SIGNATURE_FAILURES, draftKey, type WalletChallenge } from './wallet/challenges.ts';
 import { keccakHex, recoverAddress } from './wallet/eip712.ts';
 import { spineAuthority, spineTypedData } from './wallet/spine.ts';
+import { spineAuthorityV3, spineTypedDataV3 } from './wallet/spine-v3.ts';
+import type { V3ChallengeHost, V3PublicScope, V3SettlementSetupPlan } from './wallet/v3-host.ts';
 
 export interface SessionOptions {
   readonly provider: AgentModelProvider;
+  /**
+   * Settlement composition root only: issues V3 public delegation scope
+   * (delegate address, Gate, fixture cap). Absent → spine V3 refused.
+   */
+  readonly v3Host?: V3ChallengeHost;
   /** Interprets prompts into drafts; defaults to `provider`. */
   readonly interpreter?: AgentModelProvider;
   readonly jev?: JevAdvisor;
@@ -119,6 +151,8 @@ export interface RestoreOptions {
   readonly roomRoundTimeoutMs: number;
   /** Who restored it, for the SESSION_RESTORED event: the local server, a settlement command. */
   readonly by: string;
+  /** Present when the lab composition root still has a V3 host (keys never restore). */
+  readonly v3Host?: V3ChallengeHost;
 }
 
 export type WalletChallengeResult =
@@ -358,6 +392,7 @@ export class LiveSession {
         roomRoundTimeoutMs: o.roomRoundTimeoutMs,
         chaos: store.meta.chaos,
         restoredFrom: { store, state, by: o.by },
+        ...(o.v3Host === undefined ? {} : { v3Host: o.v3Host }),
       });
     } catch (e) {
       store.close();
@@ -469,7 +504,7 @@ export class LiveSession {
     if (!p.ok) return { ok: false, code: p.code, message: p.message };
     const id = this.#entropy.bytes32();
     const message = approvalMessage({ mandate: p.prepared.mandate, version: p.prepared.version, principal: address.toLowerCase(), protocolSigner: this.versions.protocolSigner, validAfter: BigInt(Math.floor(this.clock.wallMs() / 1000)), sessionId: this.id, challenge: id });
-    this.challenges.issue({ id, sessionId: this.id, prepared: p.prepared, spine: 'V1', message, initialAllocation: null, initialAllocationDigest: null, issuedAt: message.validAfter, deadline: message.validUntil, draftKey: draftKey(draft), failures: 0, consumed: false });
+    this.challenges.issue({ id, sessionId: this.id, prepared: p.prepared, spine: 'V1', message, initialAllocation: null, initialAllocationDigest: null, v3Scope: null, issuedAt: message.validAfter, deadline: message.validUntil, draftKey: draftKey(draft), failures: 0, consumed: false });
     this.events.emit('MANDATE_WALLET_CHALLENGE_ISSUED', {
       data: { version: p.prepared.version, digest: p.prepared.digest, principal: message.principal, method: 'WALLET_EIP712', chainId: APPROVAL_CHAIN_ID, validUntil: message.validUntil, authority: 'NONE until the wallet signature verifies', note: 'An offchain EIP-712 signature: not a blockchain transaction.' },
     });
@@ -495,7 +530,7 @@ export class LiveSession {
     const id = this.#entropy.bytes32();
     const issuedAt = BigInt(Math.floor(this.clock.wallMs() / 1000));
     const deadline = issuedAt + CHALLENGE_LIFETIME_SECONDS;
-    this.challenges.issue({ id, sessionId: this.id, prepared: p.prepared, spine: 'V2', message: null, initialAllocation: allocation.plan, initialAllocationDigest: allocation.digest, issuedAt, deadline, draftKey: draftKey(draft), failures: 0, consumed: false });
+    this.challenges.issue({ id, sessionId: this.id, prepared: p.prepared, spine: 'V2', message: null, initialAllocation: allocation.plan, initialAllocationDigest: allocation.digest, v3Scope: null, issuedAt, deadline, draftKey: draftKey(draft), failures: 0, consumed: false });
     this.events.emit('MANDATE_WALLET_CHALLENGE_ISSUED', {
       data: {
         version: p.prepared.version,
@@ -510,6 +545,110 @@ export class LiveSession {
       },
     });
     return { ok: true, challenge: id, version: p.prepared.version, digest: p.prepared.digest, initialAllocationDigest: allocation.digest, principal, validUntil: deadline.toString(), typedData: spineTypedData(p.prepared.mandate, this.id, allocation.digest) };
+  }
+
+  /**
+   * Trusted V3 settlement-setup plan for the connected wallet principal.
+   * Derives the bounded MDUSD allowance from the same fixture-cap path as
+   * issueScope, without creating a delegate or consuming a challenge.
+   */
+  previewV3SettlementSetup(
+    draft: MandateDraft,
+    address: string,
+  ): { readonly ok: true; readonly plan: V3SettlementSetupPlan; readonly principal: string } | { readonly ok: false; readonly code: string; readonly message: string } {
+    if (this.restored) return { ok: false, code: 'SESSION_RESTORED', message: 'A restored session authorizes nothing new. Start a new session.' };
+    if (typeof address !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(address)) {
+      return { ok: false, code: 'WALLET_ADDRESS_INVALID', message: 'The wallet address must be a 0x-prefixed 20-byte hex address.' };
+    }
+    const host = this.#o.v3Host;
+    if (host === undefined) {
+      return { ok: false, code: 'SPINE_SIGNATURE_INVALID', message: 'V3 delegated authorization is not available on this server. Start the settlement lab with a V3 host.' };
+    }
+    const principal = address.toLowerCase();
+    const p = this.versions.prepare(draft, this.protocolNow(), { kind: 'eip155-address', value: principal });
+    if (!p.ok) return { ok: false, code: p.code, message: p.message };
+    if (p.prepared.mandate.principal.value !== principal) {
+      return { ok: false, code: 'WALLET_ADDRESS_INVALID', message: 'The mandate principal is not the wallet address.' };
+    }
+    const preview = host.previewSettlementSetup({ principal, draft, mandate: p.prepared.mandate });
+    if (!preview.ok) return { ok: false, code: 'DRAFT_INVALID', message: preview.message };
+    return { ok: true, plan: preview.plan, principal };
+  }
+
+  /**
+   * V3 challenge: one DelegatedPortfolioAuthorizationV3. The host supplies
+   * Gate, delegate address, fixture cap and related scope from trusted state.
+   * The browser may not invent those fields.
+   */
+  spineChallengeV3(draft: MandateDraft, address: string): WalletChallengeResult {
+    if (this.restored) return { ok: false, code: 'SESSION_RESTORED', message: 'A restored session authorizes nothing new. Start a new session.' };
+    if (typeof address !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(address)) return { ok: false, code: 'WALLET_ADDRESS_INVALID', message: 'The wallet address must be a 0x-prefixed 20-byte hex address.' };
+    const host = this.#o.v3Host;
+    if (host === undefined) return { ok: false, code: 'SPINE_SIGNATURE_INVALID', message: 'V3 delegated authorization is not available on this server. Start the settlement lab with a V3 host.' };
+    const principal = address.toLowerCase();
+    const p = this.versions.prepare(draft, this.protocolNow(), { kind: 'eip155-address', value: principal });
+    if (!p.ok) return { ok: false, code: p.code, message: p.message };
+    if (this.planningRecords.some((r) => r.mandateVersion === p.prepared.version && r.status === 'PLAN_STALE') && classifyAllocation(draft).intent !== 'FIXED') {
+      return { ok: false, code: 'DRAFT_INVALID', message: 'The accepted allocation plan is stale. Ask the agents for a fresh split before signing.' };
+    }
+    const allocation = initialAllocationOf(draft, p.prepared.mandate);
+    if (!allocation.ok) return { ok: false, code: 'DRAFT_INVALID', message: `The initial allocation cannot be signed: ${allocation.reason}.` };
+    this.#acceptanceFor(draft, allocation);
+    if (p.prepared.mandate.principal.value !== principal) return { ok: false, code: 'WALLET_ADDRESS_INVALID', message: 'The mandate principal is not the wallet address.' };
+    const issuedAt = BigInt(Math.floor(this.clock.wallMs() / 1000));
+    const scoped = host.issueScope({
+      sessionId: this.id,
+      principal,
+      draft,
+      mandate: p.prepared.mandate,
+      generation: BigInt(p.prepared.version),
+      now: issuedAt,
+      initialAllocationDigest: allocation.digest,
+    });
+    if (!scoped.ok) return { ok: false, code: 'DRAFT_INVALID', message: scoped.message };
+    const id = this.#entropy.bytes32();
+    const deadline = issuedAt + CHALLENGE_LIFETIME_SECONDS;
+    this.challenges.issue({
+      id,
+      sessionId: this.id,
+      prepared: p.prepared,
+      spine: 'V3',
+      message: null,
+      initialAllocation: allocation.plan,
+      initialAllocationDigest: allocation.digest,
+      v3Scope: scoped.scope,
+      issuedAt,
+      deadline,
+      draftKey: draftKey(draft),
+      failures: 0,
+      consumed: false,
+    });
+    this.events.emit('MANDATE_WALLET_CHALLENGE_ISSUED', {
+      data: {
+        version: p.prepared.version,
+        digest: p.prepared.digest,
+        principal,
+        method: 'WALLET_PRINCIPAL_V3_DELEGATED',
+        chainId: APPROVAL_CHAIN_ID,
+        validUntil: deadline,
+        authority: 'NONE until the wallet signature verifies',
+        initialAllocationDigest: allocation.digest,
+        delegate: scoped.scope.delegate,
+        verifyingContract: scoped.scope.verifyingContract,
+        cumulativeDebitLimit: scoped.scope.cumulativeDebitLimit,
+        note: 'EIP-712 DelegatedPortfolioAuthorizationV3. One signature binds portfolio authority and bounded autonomous Stock testnet execution. Not a blockchain transaction.',
+      },
+    });
+    return {
+      ok: true,
+      challenge: id,
+      version: p.prepared.version,
+      digest: p.prepared.digest,
+      initialAllocationDigest: allocation.digest,
+      principal,
+      validUntil: deadline.toString(),
+      typedData: spineTypedDataV3(p.prepared.mandate, this.id, allocation.digest, scoped.scope),
+    };
   }
 
   /**
@@ -533,6 +672,7 @@ export class LiveSession {
     if (c.prepared.version !== this.versions.nextVersion) return refuse('WALLET_CHALLENGE_STALE', `This challenge was for V${c.prepared.version}; the next version is V${this.versions.nextVersion}.`);
     if (draftKey(draft) !== c.draftKey) return refuse('WALLET_DRAFT_CHANGED', 'The draft changed after the challenge was issued. Review it and sign again.');
     if (c.spine === 'V2') return this.#authorizeSpine(c, signature, refuse);
+    if (c.spine === 'V3') return this.#authorizeSpineV3(c, signature, refuse);
     if (c.message === null) return refuse('WALLET_CHALLENGE_UNKNOWN', 'This challenge has no V1 approval to rebuild.');
     // Rebuilt from server state: the mandate prepared at issue, this session, the stored address and challenge.
     const rebuilt = approvalMessage({ mandate: c.prepared.mandate, version: c.prepared.version, principal: c.message.principal, protocolSigner: this.versions.protocolSigner, validAfter: c.message.validAfter, sessionId: this.id, challenge: c.id });
@@ -566,6 +706,60 @@ export class LiveSession {
     const amending = this.versions.active !== null;
     if (amending) this.events.emit('MANDATE_AMENDMENT_STARTED', { data: { from: this.versions.active?.version ?? null, to: this.versions.nextVersion } });
     return this.#authorized(await this.versions.commit(c.prepared, authorization, this.protocolNow()), amending);
+  }
+
+  /** V3: one DelegatedPortfolioAuthorizationV3; activates portfolio + bounded autonomous execution. */
+  async #authorizeSpineV3(c: WalletChallenge, signature: string, refuse: (code: RefusalCode, message: string) => AuthorizeResult): Promise<AuthorizeResult> {
+    const principal = c.prepared.mandate.principal.value;
+    if (c.initialAllocationDigest === null || c.initialAllocation === null || c.v3Scope === null) {
+      return refuse('SPINE_SIGNATURE_INVALID', 'This V3 challenge has no accepted initial allocation or delegation scope.');
+    }
+    const bound = spineAuthorityV3(this.id, c.initialAllocationDigest, c.v3Scope);
+    let hash: Uint8Array;
+    try {
+      hash = portfolioMandateAuthorizationV3Hash(c.prepared.mandate, bound);
+    } catch {
+      return refuse('SPINE_SIGNATURE_INVALID', 'This mandate cannot be signed as a V3 delegated authorization.');
+    }
+    const recovered = typeof signature === 'string' ? recoverAddress(hash, signature) : ({ ok: false, reason: 'SIGNATURE_MALFORMED' } as const);
+    if (!recovered.ok) {
+      this.challenges.failed(c.id);
+      return refuse('WALLET_SIGNATURE_MALFORMED', 'The signature is not a well-formed 65-byte ECDSA signature.');
+    }
+    if (recovered.address !== principal || !mandateSignedByPrincipalV3(c.prepared.mandate, recovered.normalized, bound)) {
+      this.challenges.failed(c.id);
+      return refuse('WALLET_SIGNER_MISMATCH', 'The signature does not recover to the wallet this mandate names as protocol principal over the V3 delegated scope.');
+    }
+    this.challenges.consume(c.id);
+    const scope: V3PublicScope = c.v3Scope;
+    const authorization: PrincipalAuthorization = {
+      method: 'WALLET_PRINCIPAL_V3_DELEGATED',
+      principal,
+      protocolSigner: principal,
+      label: V3_DELEGATED_AUTHORIZATION_LABEL,
+      wallet: {
+        chainId: APPROVAL_CHAIN_ID.toString(),
+        environment: APPROVAL_ENVIRONMENT,
+        domain: { name: 'Mandate', version: '3', chainId: APPROVAL_CHAIN_ID.toString(), verifyingContract: scope.verifyingContract },
+        primaryType: 'DelegatedPortfolioAuthorizationV3',
+        sessionDigest: bound.sessionDigest,
+        initialAllocationDigest: bound.initialAllocationDigest,
+        challengeDigest: keccakHex(c.id),
+        signatureDigest: keccakHex(recovered.normalized),
+        validAfter: scope.validAfter,
+        validUntil: scope.validUntil,
+        delegate: scope.delegate,
+        agent: scope.agent,
+        representationIdHash: scope.representationIdHash,
+        fundingToken: scope.fundingToken,
+        cumulativeDebitLimit: scope.cumulativeDebitLimit,
+        generation: scope.generation,
+      },
+      domainDelegation: 'BOUNDED_DELEGATE',
+    };
+    const amending = this.versions.active !== null;
+    if (amending) this.events.emit('MANDATE_AMENDMENT_STARTED', { data: { from: this.versions.active?.version ?? null, to: this.versions.nextVersion } });
+    return this.#authorized(await this.versions.commit(c.prepared, authorization, this.protocolNow(), recovered.normalized), amending);
   }
 
   /** V2: the wallet signature is checked again, the challenge is consumed, and the demonstration key does not sign. */
@@ -616,6 +810,32 @@ export class LiveSession {
   /** The authority the room must use for this version. Omitted means the V1 prehash check. */
   #authority(version: number): PortfolioAuthority | undefined {
     const record = this.versions.records.find((r) => r.version === version);
+    if (record?.authorization.method === 'WALLET_PRINCIPAL_V3_DELEGATED') {
+      const w = record.authorization.wallet;
+      if (
+        w?.initialAllocationDigest === undefined
+        || w.domain.verifyingContract === undefined
+        || w.delegate === undefined
+        || w.agent === undefined
+        || w.representationIdHash === undefined
+        || w.fundingToken === undefined
+        || w.cumulativeDebitLimit === undefined
+        || w.generation === undefined
+      ) {
+        return undefined;
+      }
+      return spineAuthorityV3(this.id, w.initialAllocationDigest, {
+        verifyingContract: w.domain.verifyingContract,
+        delegate: w.delegate,
+        agent: w.agent,
+        representationIdHash: w.representationIdHash,
+        fundingToken: w.fundingToken,
+        cumulativeDebitLimit: w.cumulativeDebitLimit,
+        validAfter: w.validAfter,
+        validUntil: w.validUntil,
+        generation: w.generation,
+      });
+    }
     if (record?.authorization.method === 'WALLET_PRINCIPAL_V2_PLAN') {
       const digest = record.authorization.wallet?.initialAllocationDigest;
       return digest === undefined ? undefined : spineAuthority(this.id, digest);

@@ -245,17 +245,34 @@ export function validateDraft(d: MandateDraft, ctx: ValidationContext): DraftVal
   const cap0 = numbers === null ? null : deployable(numbers);
   if (plan.planning === 'REQUIRED' && ctx.planning !== true) {
     const missing = plan.pool.filter((r) => d.agents[r].budget === null);
-    issues.push(issue('ALLOCATION_PLAN_REQUIRED', null, `You left the split to the agents (${missing.map((r) => ROLE_LABELS[r]).join(', ')}). Ask them for a proposed allocation, or set each budget yourself, before signing.`));
+    const missingLabels = missing.map((r) => ROLE_LABELS[r].replace(/ Agent$/, '')).join(', ');
+    if (plan.fixed.length > 0 && plan.poolAtoms !== null) {
+      issues.push(issue('ALLOCATION_PLAN_REQUIRED', null, `Part of the allocation is fixed; ${missingLabels} may propose for the remaining ${USDC(plan.poolAtoms)}. Ask for a proposed allocation, or set each remaining budget yourself, before signing.`));
+    } else if (plan.fixed.length > 0) {
+      issues.push(issue('ALLOCATION_PLAN_REQUIRED', null, `Part of the allocation is fixed; ${missingLabels} still need a budget for the remainder. Ask for a proposed allocation, or set each remaining budget yourself, before signing.`));
+    } else {
+      issues.push(issue('ALLOCATION_PLAN_REQUIRED', null, `You left the split to the agents (${missingLabels}). Ask them for a proposed allocation, or set each budget yourself, before signing.`));
+    }
   }
   const budgeted = enabledRoles.filter((r) => budget.has(r));
   const sum = budgeted.reduce((s, r) => s + (budget.get(r) as bigint), 0n);
-  if (cap0 !== null && sum > cap0) issues.push(issue('ALLOCATION_EXCEEDS_TOTAL', null, `The budgets add up to ${USDC(sum)}; at most ${USDC(cap0)} may be deployed.`));
+  if (cap0 !== null && sum > cap0) {
+    const totalLabel = total === null ? null : USDC(total);
+    const deployNote = totalLabel !== null && total !== cap0 ? ` (deployable ceiling; total capital is ${totalLabel})` : '';
+    issues.push(issue('ALLOCATION_EXCEEDS_TOTAL', null, `The budgets add up to ${USDC(sum)}; at most ${USDC(cap0)} may be deployed${deployNote}.`));
+  }
   for (const r of budgeted) {
     const b = budget.get(r) as bigint;
+    const short = ROLE_LABELS[r].replace(/ Agent$/, '');
+    const dollars = (atoms: bigint) => `$${usdcText(atoms)}`;
     const ceiling = maxAllocation.get(r);
-    if (ceiling !== undefined && b > ceiling) issues.push(issue('ALLOCATION_EXCEEDS_AGENT_MAX', `agents.${r}.budget`, `The ${ROLE_LABELS[r]}'s budget (${USDC(b)}) is above its maximum allocation (${USDC(ceiling)}).`));
+    if (ceiling !== undefined && b > ceiling) {
+      issues.push(issue('ALLOCATION_EXCEEDS_AGENT_MAX', `agents.${r}.budget`, `${short} requested ${dollars(b)}, but your current ${short} authority ceiling is ${dollars(ceiling)}. Raise the ceiling or reduce the requested budget.`));
+    }
     const exposure = maxExposure.get(r);
-    if (exposure !== undefined && b > exposure) issues.push(issue('ALLOCATION_EXCEEDS_AGENT_MAX', `agents.${r}.budget`, `The ${ROLE_LABELS[r]}'s budget (${USDC(b)}) is above its own exposure limit (${USDC(exposure)}).`));
+    if (exposure !== undefined && b > exposure) {
+      issues.push(issue('ALLOCATION_EXCEEDS_AGENT_MAX', `agents.${r}.budget`, `${short} requested ${dollars(b)}, but your current ${short} exposure limit is ${dollars(exposure)}. Raise the limit or reduce the requested budget.`));
+    }
   }
   if (budget.has('perps') && (budget.get('perps') as bigint) > maxDerivative) issues.push(issue('ALLOCATION_EXCEEDS_DOMAIN_CAP', 'agents.perps.budget', `The Perps Agent's budget (${USDC(budget.get('perps') as bigint)}) is above the derivative exposure limit (${USDC(maxDerivative)}).`));
   if (budget.has('nft') && (budget.get('nft') as bigint) > maxIlliquid) issues.push(issue('ALLOCATION_EXCEEDS_DOMAIN_CAP', 'agents.nft.budget', `The NFT Agent's budget (${USDC(budget.get('nft') as bigint)}) is above the illiquid exposure limit (${USDC(maxIlliquid)}).`));

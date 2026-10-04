@@ -22,12 +22,26 @@ export const OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses';
 /** Used when `OPENAI_MODEL` is unset. A deployment choice, never a protocol one. */
 export const DEFAULT_OPENAI_MODEL = 'gpt-5.5';
 
+/**
+ * Bounded output budgets by request kind. DRAFT needs room for the nested
+ * mandate schema; smaller decision/negotiation/policy answers stay tighter.
+ * An explicit constructor `maxOutputTokens` still overrides every kind.
+ */
+export const OUTPUT_TOKEN_BUDGET: Readonly<Record<ModelRequest['kind'], number>> = {
+  DRAFT: 4_000,
+  OPPORTUNITY: 2_400,
+  NEGOTIATION: 2_000,
+  DECISION: 1_600,
+  POLICY_STRESS: 1_200,
+};
+
 export type FetchLike = (url: string, init: { method: string; headers: { readonly [k: string]: string }; body: string; signal: AbortSignal }) => Promise<Response>;
 
 export interface OpenAIProviderOptions {
   readonly apiKey: string;
   readonly model: string;
   readonly url?: string;
+  /** When set, overrides the per-kind budget for every request. */
   readonly maxOutputTokens?: number;
   /** For tests: a stand-in for the network. */
   readonly fetch?: FetchLike;
@@ -43,13 +57,17 @@ interface StreamEvent {
 
 const MAX_STREAM_BYTES = 256_000;
 
+export function outputTokenBudget(kind: ModelRequest['kind'], override?: number): number {
+  return override ?? OUTPUT_TOKEN_BUDGET[kind];
+}
+
 export class OpenAIProvider implements AgentModelProvider {
   readonly name = 'openai';
   readonly kind = 'LIVE' as const;
   readonly model: string;
   readonly #apiKey: string;
   readonly #url: string;
-  readonly #maxOutputTokens: number;
+  readonly #maxOutputTokens: number | undefined;
   readonly #fetch: FetchLike;
 
   constructor(o: OpenAIProviderOptions) {
@@ -57,7 +75,7 @@ export class OpenAIProvider implements AgentModelProvider {
     this.model = o.model;
     this.#apiKey = o.apiKey;
     this.#url = o.url ?? OPENAI_RESPONSES_URL;
-    this.#maxOutputTokens = o.maxOutputTokens ?? 1_200;
+    this.#maxOutputTokens = o.maxOutputTokens;
     this.#fetch = o.fetch ?? ((url, init) => fetch(url, init));
   }
 
@@ -71,7 +89,7 @@ export class OpenAIProvider implements AgentModelProvider {
       text: { format: { type: 'json_schema', name, schema, strict: true } },
       stream: true,
       store: false,
-      max_output_tokens: this.#maxOutputTokens,
+      max_output_tokens: outputTokenBudget(r.kind, this.#maxOutputTokens),
     });
   }
 

@@ -243,6 +243,8 @@ export interface StressAttempt {
   readonly identity: JsonRecord;
   readonly note: string;
   readonly sameSigner: boolean;
+  /** From POLICY_STRESS_PROPOSAL_BLOCKED when present; never inferred for AUTHORIZED. */
+  readonly ledgerUnchanged: boolean | null;
 }
 
 /** Who authorized what, as settlement events state it: the portfolio principal is never the domain signer by implication. */
@@ -251,6 +253,41 @@ export interface PrincipalBinding {
   readonly portfolioAddress: string;
   readonly domainKind: string;
   readonly domainAddress: string;
+}
+
+/** Server-normalized V3 proof. Nullable digests are omitted from the UI when older durable evidence lacks them. */
+export interface V3TechnicalProofView {
+  readonly version: "V3";
+  readonly sessionId: string;
+  readonly candidateId: string;
+  readonly walletPrincipal: string;
+  readonly gate: string;
+  readonly delegate: string;
+  readonly agent: string;
+  readonly delegationDigest: string;
+  readonly gateMandateDigest: string | null;
+  readonly gateCandidateDigest: string | null;
+  readonly executionApprovalDigest: string | null;
+  readonly executionCommitment: string | null;
+  readonly executionNonce: string;
+  readonly reservation: string;
+  readonly initialAllocationDigest: string;
+  readonly initialCapacity: string;
+  readonly cumulativeDebit: string;
+  readonly remainingCapacity: string;
+  readonly capacityUnit: string;
+  readonly capacityDecimals: number;
+  readonly gasEstimate: string | null;
+  readonly transactionHash: string;
+  readonly blockNumber: string;
+  readonly gasUsed: string;
+  readonly transactionStatus: string;
+  readonly transactionTo: string;
+  readonly chainId: string;
+  readonly receiptDigest: string;
+  readonly explorerUrl: string | null;
+  readonly evidence: "LIVE_TESTNET";
+  readonly broadcast: true;
 }
 
 export interface SettlementView {
@@ -296,6 +333,7 @@ export interface SettlementView {
   readonly walletPrincipal: string | null;
   readonly receiptDigest: string | null;
   readonly commitmentRecorded: boolean;
+  readonly v3Proof: V3TechnicalProofView | null;
 }
 
 export interface LivePresentation {
@@ -666,6 +704,7 @@ export function deriveStress(events: readonly LiveEvent[]): { started: boolean; 
         identity: {},
         note: "",
         sameSigner: false,
+        ledgerUnchanged: null,
       });
     } else {
       const index = attempts.findIndex((item) => item.attempt === str(data.attempt));
@@ -676,7 +715,13 @@ export function deriveStress(events: readonly LiveEvent[]): { started: boolean; 
           attempts[index] = { ...attempt, identity, sameSigner: identity.sameSignerAsSwapAgent === true };
         }
         if (event.kind === "POLICY_STRESS_PROPOSAL_BLOCKED") {
-          attempts[index] = { ...attempt, outcome: "REFUSED", reasons: reasonsOf(data.reasons), screening: str(rec(data.screening).verdict) };
+          attempts[index] = {
+            ...attempt,
+            outcome: "REFUSED",
+            reasons: reasonsOf(data.reasons),
+            screening: str(rec(data.screening).verdict),
+            ledgerUnchanged: data.ledgerUnchanged === true ? true : data.ledgerUnchanged === false ? false : null,
+          };
         }
         if (event.kind === "POLICY_STRESS_PROPOSAL_AUTHORIZED") {
           attempts[index] = {
@@ -685,6 +730,7 @@ export function deriveStress(events: readonly LiveEvent[]): { started: boolean; 
             note: str(data.note) === "—" ? "" : str(data.note),
             screening: str(rec(data.screening).verdict),
             sameSigner: data.sameIdentityAsRefusedAttempts === true || attempt.sameSigner,
+            ledgerUnchanged: null,
           };
         }
       }
@@ -703,6 +749,52 @@ function tokenLabel(token: JsonRecord): string | null {
 function textField(data: JsonRecord, key: string): string | null {
   const value = data[key];
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function v3ProofFromEvent(data: JsonRecord): V3TechnicalProofView | null {
+  if (textField(data, "spine") !== "V3" || textField(data, "evidence") !== "LIVE_TESTNET" || data.transactions !== 1) return null;
+  const sessionId = textField(data, "sessionId");
+  const candidateId = textField(data, "candidateId");
+  const walletPrincipal = textField(data, "principal");
+  const gate = textField(data, "target");
+  const delegate = textField(data, "mandateDelegate");
+  const agent = textField(data, "agentAddress") ?? textField(data, "gateAgent");
+  const delegationDigest = textField(data, "delegationDigest");
+  const executionNonce = textField(data, "executionNonce");
+  const reservation = textField(data, "reservation");
+  const initialAllocationDigest = textField(data, "initialAllocationDigest");
+  const initialCapacity = textField(data, "initialCapacity");
+  const cumulativeDebit = textField(data, "cumulativeDebit");
+  const remainingCapacity = textField(data, "remainingCapacity");
+  const capacityUnit = textField(data, "capacityUnit");
+  const transactionHash = textField(data, "txHash");
+  const blockNumber = textField(data, "block");
+  const gasUsed = textField(data, "gasUsed");
+  const transactionStatus = textField(data, "status");
+  const transactionTo = textField(data, "target");
+  const chainId = textField(data, "chainId");
+  const receiptDigest = textField(data, "receiptDigest");
+  const capacityDecimals = data.capacityDecimals;
+  if (
+    sessionId === null || candidateId === null || walletPrincipal === null || gate === null || delegate === null
+    || agent === null || delegationDigest === null || executionNonce === null || reservation === null
+    || initialAllocationDigest === null || initialCapacity === null || cumulativeDebit === null
+    || remainingCapacity === null || capacityUnit === null || transactionHash === null || blockNumber === null
+    || gasUsed === null || transactionStatus !== "SUCCESS" || transactionTo === null || chainId === null
+    || receiptDigest === null || typeof capacityDecimals !== "number" || !Number.isInteger(capacityDecimals)
+    || capacityDecimals < 0 || capacityDecimals > 38
+  ) return null;
+  return {
+    version: "V3", sessionId, candidateId, walletPrincipal, gate, delegate, agent, delegationDigest,
+    gateMandateDigest: textField(data, "mandateDigest"),
+    gateCandidateDigest: textField(data, "candidateDigest"),
+    executionApprovalDigest: textField(data, "executionApprovalDigest"),
+    executionCommitment: textField(data, "executionCommitment"),
+    executionNonce, reservation, initialAllocationDigest, initialCapacity, cumulativeDebit, remainingCapacity,
+    capacityUnit, capacityDecimals, gasEstimate: textField(data, "gasEstimate"), transactionHash, blockNumber,
+    gasUsed, transactionStatus, transactionTo, chainId, receiptDigest,
+    explorerUrl: textField(data, "explorerUrl"), evidence: "LIVE_TESTNET", broadcast: true,
+  };
 }
 
 export function deriveSettlement(events: readonly LiveEvent[]): SettlementView {
@@ -738,6 +830,7 @@ export function deriveSettlement(events: readonly LiveEvent[]): SettlementView {
     walletPrincipal: null,
     receiptDigest: null,
     commitmentRecorded: false,
+    v3Proof: null,
   };
   let view = base;
   for (const event of events) {
@@ -828,6 +921,7 @@ export function deriveSettlement(events: readonly LiveEvent[]): SettlementView {
       const authorized = rec(data.authorized);
       const tokenIn = rec(data.tokenIn);
       const tokenOut = rec(data.tokenOut);
+      const v3Proof = event.kind === "DOMAIN_EXECUTION_SETTLED" ? v3ProofFromEvent(data) : null;
       touch({
         stage: confirmed ? "SETTLED" : view.stage,
         settled: confirmed,
@@ -849,6 +943,7 @@ export function deriveSettlement(events: readonly LiveEvent[]): SettlementView {
         gate: textField(data, "target") ?? view.gate,
         receiptDigest: textField(data, "receiptDigest") ?? view.receiptDigest,
         commitmentRecorded: rec(data.postconditions).commitmentRecordedOnchain === true || view.commitmentRecorded,
+        v3Proof: v3Proof ?? view.v3Proof,
       });
     }
   }
@@ -1075,12 +1170,19 @@ export function awaitingReplies(events: readonly LiveEvent[]): RoleName[] {
   return participants.filter((role) => !answered.has(role)).map(asRole).filter((role): role is RoleName => role !== null);
 }
 
+/** Settlement evidence class for one agent outcome. Never invents a chain settlement. */
+export type AgentSettlementEvidence = "LIVE_TESTNET" | "OFFCHAIN_ONLY" | "NONE";
+
 export interface ReviewItem {
   readonly role: RoleName;
   readonly amount: string;
   readonly from: string | null;
   readonly reason: string;
   readonly codes: readonly string[];
+  /** Visual outcome for the receipt: SETTLED only when this agent has real settlement evidence. */
+  readonly outcome: "AUTHORIZED" | "BLOCKED" | "NO ACTION" | "SETTLED";
+  readonly settlementEvidence: AgentSettlementEvidence;
+  readonly settlementNote: string | null;
 }
 
 export interface TradeReview {
@@ -1097,6 +1199,32 @@ export interface TradeReview {
   readonly reserved: string | null;
 }
 
+/**
+ * Live Lab settlement connectors: only Stock has a Robinhood Chain testnet
+ * path. Other domains may be authorized/reserved without onchain settlement.
+ */
+export function agentSettlementCapability(role: RoleName): "LIVE_TESTNET_CAPABLE" | "OFFCHAIN_ONLY" {
+  return role === "stock" ? "LIVE_TESTNET_CAPABLE" : "OFFCHAIN_ONLY";
+}
+
+/** Classify one authorized agent's settlement evidence from the session settlement view. */
+export function classifyAgentSettlement(
+  role: RoleName,
+  settlement: Pick<SettlementView, "settled" | "evidence">,
+): { readonly outcome: "AUTHORIZED" | "SETTLED"; readonly settlementEvidence: AgentSettlementEvidence; readonly settlementNote: string | null } {
+  if (role === "stock" && settlement.settled && settlement.evidence === "LIVE_TESTNET") {
+    return { outcome: "SETTLED", settlementEvidence: "LIVE_TESTNET", settlementNote: "Fixture settlement · not authorized capital" };
+  }
+  if (agentSettlementCapability(role) === "OFFCHAIN_ONLY") {
+    return {
+      outcome: "AUTHORIZED",
+      settlementEvidence: "OFFCHAIN_ONLY",
+      settlementNote: "Authorized · no live settlement connector in this build",
+    };
+  }
+  return { outcome: "AUTHORIZED", settlementEvidence: "NONE", settlementNote: "Authorized · not settled in this session" };
+}
+
 /** Counts and lists for the receipt, from the run's events only. Nothing is assumed or hardcoded. */
 export function deriveReview(events: readonly LiveEvent[]): TradeReview {
   const agents = deriveAgents(events);
@@ -1110,7 +1238,18 @@ export function deriveReview(events: readonly LiveEvent[]): TradeReview {
     ? []
     : arr(proposal.data.requests).map(rec).filter((row) => amountOf(row.from) !== amountOf(row.to)).flatMap((row) => {
         const role = asRole(str(row.role));
-        return role === null ? [] : [{ role, amount: amountOf(row.to) ?? "—", from: amountOf(row.from), reason: "", codes: [] }];
+        return role === null
+          ? []
+          : [{
+              role,
+              amount: amountOf(row.to) ?? "—",
+              from: amountOf(row.from),
+              reason: "",
+              codes: [],
+              outcome: "AUTHORIZED" as const,
+              settlementEvidence: "NONE" as const,
+              settlementNote: null,
+            }];
       });
   const resolvedRooms = authorizedEvent === undefined ? 0 : events.filter((event) => event.kind === "ROOM_FINALIZED" && event.data.result === "PROPOSED").length;
   return {
@@ -1119,11 +1258,43 @@ export function deriveReview(events: readonly LiveEvent[]): TradeReview {
     noProposal: agents.filter((agent) => ["ABSTAINED", "TIMED OUT", "FAILED", "INVALID RESPONSE"].includes(agent.phase)).length,
     conflictsResolved: resolvedRooms,
     authorizedCount: agents.filter((agent) => agent.finalOutcome === "RESERVED").length,
-    settlementsConfirmed: settlement.settled ? 1 : 0,
-    authorized: agents.filter((agent) => agent.finalOutcome === "RESERVED").map((agent) => ({ role: agent.role, amount: agent.finalAmount.replace(/ USDC$/, ""), from: null, reason: "", codes: [] })),
-    blockedItems: agents.filter((agent) => agent.phase === "BLOCKED").map((agent) => ({ role: agent.role, amount: agent.requested.replace(/ USDC$/, ""), from: null, reason: explainReasons(agent.reasons).headline || "Blocked", codes: agent.reasons })),
+    settlementsConfirmed: settlement.settled && settlement.evidence === "LIVE_TESTNET" ? 1 : 0,
+    authorized: agents
+      .filter((agent) => agent.finalOutcome === "RESERVED")
+      .map((agent) => {
+        const classified = classifyAgentSettlement(agent.role, settlement);
+        return {
+          role: agent.role,
+          amount: agent.finalAmount.replace(/ USDC$/, ""),
+          from: null,
+          reason: "",
+          codes: [],
+          outcome: classified.outcome,
+          settlementEvidence: classified.settlementEvidence,
+          settlementNote: classified.settlementNote,
+        };
+      }),
+    blockedItems: agents.filter((agent) => agent.phase === "BLOCKED").map((agent) => ({
+      role: agent.role,
+      amount: agent.requested.replace(/ USDC$/, ""),
+      from: null,
+      reason: explainReasons(agent.reasons).headline || "Blocked",
+      codes: agent.reasons,
+      outcome: "BLOCKED" as const,
+      settlementEvidence: "NONE" as const,
+      settlementNote: "Mandate stopped it before execution",
+    })),
     negotiated,
-    quiet: agents.filter((agent) => ["ABSTAINED", "TIMED OUT", "FAILED", "INVALID RESPONSE"].includes(agent.phase)).map((agent) => ({ role: agent.role, amount: "—", from: null, reason: agent.phase === "ABSTAINED" ? "No proposal" : agent.phase === "TIMED OUT" ? "Timed out" : "Couldn't respond", codes: [] })),
+    quiet: agents.filter((agent) => ["ABSTAINED", "TIMED OUT", "FAILED", "INVALID RESPONSE"].includes(agent.phase)).map((agent) => ({
+      role: agent.role,
+      amount: "—",
+      from: null,
+      reason: agent.phase === "ABSTAINED" ? "No proposal" : agent.phase === "TIMED OUT" ? "Timed out" : "Couldn't respond",
+      codes: [],
+      outcome: "NO ACTION" as const,
+      settlementEvidence: "NONE" as const,
+      settlementNote: null,
+    })),
     reserved: authorizedEvent === undefined ? null : amountOf(authorizedEvent.data.reserved),
   };
 }

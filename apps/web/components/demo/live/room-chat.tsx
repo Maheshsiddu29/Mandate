@@ -76,7 +76,7 @@ export function RoomChat(props: {
     <div className={props.compact === true ? "mw-room mw-room--compact" : "mw-room"}>
       <header className="mw-room__head">
         <div>
-          <p className="mw-room__title">Mandate Room {props.live ? <Pill tone="accent">LIVE</Pill> : null}</p>
+          <p className="mw-room__title">Coordination {props.live ? <Pill tone="accent">LIVE</Pill> : null}</p>
           <p className="mw-room__sub">Agents are resolving a shared authority conflict.</p>
         </div>
         <span className="mw-authority" tabIndex={0} aria-describedby="room-authority-tip">

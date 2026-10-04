@@ -24,7 +24,9 @@ export {
 export { DRAFT_FIELD_PATHS, parseFieldValue } from './authoring/draft-fields.ts';
 export { CATALOG, CATALOG_SETS, AGENT_DOMAINS, REVIEWED_BOUNDS } from './authoring/catalog.ts';
 export { PAUSE_CONFIRMATION, AUTHORIZATION_METHODS, type VersionRecord, type AuthorizeResult, type ActiveMandate, type PrincipalAuthorization, type AuthorizationMethod } from './authoring/mandate-versioning.ts';
-export type { DraftValidation, GuardrailRow } from './authoring/draft-validator.ts';
+export { validateDraft, type DraftValidation, type GuardrailRow, type ValidationContext } from './authoring/draft-validator.ts';
+export { classifyAllocation, draftDeployable, type AllocationView, type AllocationIntent, type PlanningState } from './allocation/intent.ts';
+export { sessionBindings, runProtocol, FixedProposalStrategy, type ProtocolRun } from './mandate/portfolio-adapter.ts';
 export { DOMAIN_AGENTS, actionableCandidates, assessCandidate, STATIC_SCOPE_CODES, type CandidateEligibility, type CandidateUniverse, type EligibilityFilter } from './agents/index.ts';
 export {
   LIVE_LAB_SETTLEMENT_PROFILE,
@@ -47,6 +49,15 @@ export { ProviderError } from './runtime/errors.ts';
 export { realClock, type Clock } from './runtime/clock.ts';
 export { APPROVAL_CHAIN_ID, sessionDigest } from './wallet/approval.ts';
 export { spineAuthority } from './wallet/spine.ts';
+export { spineAuthorityV3, spineTypedDataV3, SPINE_V3_CHAIN_ID } from './wallet/spine-v3.ts';
+export type {
+  V3ChallengeHost,
+  V3PublicScope,
+  V3IssueInput,
+  V3IssueResult,
+  V3SettlementSetupPlan,
+  V3SetupPreviewResult,
+} from './wallet/v3-host.ts';
 export type { AgentModelProvider, ProviderKind } from './runtime/provider.ts';
 export { LIVE_SCHEMA, LIVE_EVENT_KINDS, type LiveEvent, type LiveEventKind } from './telemetry/events.ts';
 export { renderEvent } from './telemetry/render.ts';

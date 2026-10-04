@@ -85,6 +85,7 @@ describe('C2.0 acceptance prompts', () => {
   it('F: five-thousand hybrid with approved venues and per-trade note', () => {
     const d = draftOf('I have $5k. Stock can use $2k, Yield $1k, no perps, Swap can use the remainder, no trade above $500, approved venues only.');
     assert.equal(d.portfolio.totalCapital, '5000');
+    assert.equal(d.portfolio.maxDeployed, '5000');
     assert.equal(d.agents.stock.enabled, true);
     assert.equal(d.agents.stock.budget, '2000');
     assert.equal(d.agents.yield.enabled, true);
@@ -95,7 +96,30 @@ describe('C2.0 acceptance prompts', () => {
     assert.equal(d.agents.nft.enabled, false);
     assert.ok(d.market.venues !== null && d.market.venues.length > 0);
     assert.ok(d.issues.some((i) => i.kind === 'UNSUPPORTED' && /per-trade/i.test(i.text)));
-    assert.equal(classifyAllocation(d).intent, 'HYBRID');
+    const view = classifyAllocation(d);
+    assert.equal(view.intent, 'HYBRID');
+    assert.equal(view.poolAtoms, 2_000_000_000n);
+  });
+
+  it('F′: exact advanced judge prompt — per-trade remains NOT SUPPORTED', () => {
+    const d = draftOf('I have $5k. Stock $2k, Yield $1k, no perps, Swap remainder, no trade above $500, approved venues only.');
+    assert.equal(d.portfolio.totalCapital, '5000');
+    assert.equal(d.portfolio.maxDeployed, '5000');
+    assert.equal(d.agents.stock.enabled, true);
+    assert.equal(d.agents.stock.budget, '2000');
+    assert.equal(d.agents.yield.enabled, true);
+    assert.equal(d.agents.yield.budget, '1000');
+    assert.equal(d.agents.perps.enabled, false);
+    assert.equal(d.agents.swap.enabled, true);
+    assert.equal(d.agents.swap.budget, null);
+    assert.ok(d.market.venues !== null && d.market.venues.length > 0);
+    assert.ok(d.issues.some((i) => i.kind === 'UNSUPPORTED' && /per-trade/i.test(i.text)));
+    // Per-trade is presentation-only: it never becomes a signed mandate field.
+    assert.equal((d as { market: { maxTrade?: unknown } }).market.maxTrade, undefined);
+    const view = classifyAllocation(d);
+    assert.equal(view.intent, 'HYBRID');
+    assert.equal(view.deployableAtoms, 5_000_000_000n);
+    assert.equal(view.poolAtoms, 2_000_000_000n);
   });
 
   it('G: recipient address is UNSUPPORTED', () => {

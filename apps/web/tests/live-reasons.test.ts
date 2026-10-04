@@ -90,7 +90,7 @@ test('the UI shows words first and keeps each raw code in its own element under 
   assert.match(agentsUi, /<summary>\{summary\}<\/summary>\s*<ul className="mw-codes">\{codes\.map\(\(reasonCode\) => <li key=\{reasonCode\}><code>\{reasonCode\}<\/code><\/li>\)\}<\/ul>/);
   assert.match(agentsUi, /summary = "Technical details"/);
   assert.match(agentsUi, /<ul className="mw-reasons" aria-label="Reasons">/);
-  assert.match(agentsUi, /line: explainReasons\(agent\.reasons\)\.headline \|\| "Blocked"/);
+  assert.match(agentsUi, /line: explainReasons\(agent\.reasons\)\.headline \|\| "Mandate refused the action"/);
   // No surface maps reasons straight into adjacent <code> elements any more, and none leads with the first raw code.
   for (const source of [agentsUi, sheets, outcome]) {
     assert.doesNotMatch(source, /reasons\.map\(\(reason\) => <code/);

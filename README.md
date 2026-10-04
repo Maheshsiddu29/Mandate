@@ -1,355 +1,305 @@
 # Mandate
 
-**Intent-aware execution infrastructure for AI agents transacting in tokenized
-financial assets.**
+## One Authority Layer. Many Agents. Multiple Markets.
 
-> **Current: Phase 7D — the invariant and reservation engine
-> (`packages/control`,
-> [docs/core-v1/implementation-7d.md](docs/core-v1/implementation-7d.md)), with
-> its Phase 7D.1 semantic hardening, Phase 7D.2 historical semantic
-> provenance and Phase 7D.3 immutable authority semantics — is FROZEN, as are Phase 7C's authority graph and
-> global authority ledger (`packages/ledger`,
-> [implementation-7c.md](docs/core-v1/implementation-7c.md)), Phase 7B's Core
-> types (`packages/core`, [implementation-7b.md](docs/core-v1/implementation-7b.md))
-> and the frozen Phase 7A Mandate Core v1 specification
-> ([docs/core-v1](docs/core-v1/README.md)). Its only domain module is a
-> test-only synthetic market; no production domain module, venue integration,
-> observation reconciliation or durable store exists yet. Phase 6 is frozen at
-> `dc98df5`. Phase 7E.0 — Lighter venue evidence and the PerpPolicy v1 /
-> Venue Signer specification ([docs/phase-7e](docs/phase-7e/README.md)),
-> documentation only — is accepted; Phase 7E.1 — PerpPolicy v1, the SQLite
-> reference store and the Lighter Venue Signer, testnet only
-> ([implementation-7e1.md](docs/phase-7e/implementation-7e1.md)) — is accepted;
-> Phase 7E.2 — custody verifies the durable `ADMIT_ATTEMPT` itself, and a live
-> Lighter state adapter ([implementation-7e2.md](docs/phase-7e/implementation-7e2.md)),
-> testnet only — is accepted. **Phase 7E.3 — Robinhood Chain testnet
-> deployment and real EVM enforcement ([implementation-7e3.md](docs/phase-7e/implementation-7e3.md),
-> [robinhood-demo.md](docs/phase-7e/robinhood-demo.md)) — is implemented and run
-> on Robinhood Chain testnet and awaiting review:** the frozen Phase 6 gate is
-> deployed on testnet (46630) at `0xb03c1e072192a82ba68604841a0e42f32609aa3e`
-> and has executed a valueless BUY of a labelled fixture token under real
-> Mandate authorization (reservation, `ADMIT_ATTEMPT`, custody), with replay,
-> mutation and an over-authority proposal refused. Testnet only, fixtures only,
-> no reconciliation. Phase 7F is not started.**
->
-> **Status: Phase 6R.2B (secure gas optimization) implemented locally and awaiting independent security and gas review ([report](docs/phase-6r2b-report.md): normal BUY 401,684 → 246,963 execution gas, worst case 6,724,561 → 425,922, no semantic change), after the Phase 6R.2A gas attribution benchmark ([report](docs/phase-6r2a-gas-profile.md)) and Phase 6R.1b — an onchain execution
-> gate, tested against a labelled settlement fixture and not deployed.** The
-> sections below describe Phases 1–5R.3; the gate is summarized under
-> [The execution gate](#the-execution-gate) and specified in
-> [docs/execution-gate.md](docs/execution-gate.md).
->
-> The deterministic
-> verifier, its domain types, canonical encoding, EIP-712 authorization, receipts
-> and replay semantics are built and tested in `packages/kernel`. The canonical
-> asset and representation registry — identifier schemes, reference resolution,
-> provenance-carrying representation metadata, mandate-constrained admissibility
-> and reproducible snapshots — is built and tested in `packages/registry`. A
-> strict adapter in `packages/adapter-robinhood` normalizes recorded and live
-> Robinhood Stock Token REST/RPC state into those unchanged decision engines.
-> `packages/router` constructs bounded candidates, separates admissibility from
-> quality, ranks exact costs, reverifies the winner and emits deterministic
-> receipts. `packages/jev` attaches TypeSafe's Jev as an **optional advisory
-> selector over an already-closed admissible set**: it may choose, abstain,
-> fail, be wrong or be malicious, and it can never authorize. A real venue
-> integration, testnet execution, funding and the web experience are **not**
-> built. The kernel, registry and router still make no network call
-> of any kind. **Jev has not been characterized against a live account** — see
-> [docs/jev-characterization.md](docs/jev-characterization.md); every Phase 5
-> result comes from recorded fixtures, deterministic stubs and adversarial
-> stubs.
-> Two rounds of adversarial review have been applied on top of Phase 5: the
-> [production architecture pressure test](docs/production-architecture-pressure-test.md)
-> (findings F-1…F-16) and an independent audit of that remediation (findings
-> N-1…N-10). The second round mattered: the first had bound an execution candidate
-> to the digest of the entire trusted state, which made the execution-handoff
-> re-verification impossible to pass against genuinely fresh state. Candidate
-> commitments are now layered by the kind of fact each one carries
-> ([ADR 0017](docs/adr/0017-layered-candidate-state-commitments.md)), and every
-> replay resolution requires a validated observed outcome
-> ([ADR 0018](docs/adr/0018-observed-execution-outcomes.md)).
-> Nothing below should be read as a claim beyond that boundary.
+Mandate is the authorization and execution control plane for autonomous
+financial agents.
 
----
+Humans define bounded economic authority. Agents reason and propose actions.
+Mandate deterministically verifies whether each action is permitted before
+execution.
 
-## The problem
+**Agents propose. Mandate authorizes. Markets settle.**
 
-An AI agent with spending authority and a swap tool will produce transactions
-that are mechanically valid and financially wrong. The chain confirms them; a
-block explorer calls them successes. Each of these is one:
+## Why Mandate
 
-- buying a token whose ticker matches `NVDA` but which is an unrelated deployment;
-- buying synthetic exposure when the principal required a backed instrument;
-- buying from an issuer an institution has not approved;
-- executing against a quote taken before a 4:1 split;
-- executing while the underlying is halted;
-- routing to an address supplied by a prompt injection.
+A valid agent signature proves who proposed an action. It does not prove that
+the action is authorized.
 
-Slippage tolerance catches none of them. Slippage protects a token-amount
-expectation. These are failures of financial identity, instrument semantics,
-authorization scope, and state freshness.
+Financial agents can produce mechanically valid transactions that violate the
+principal's rules: the wrong asset representation, an unapproved issuer, stale
+state, excessive portfolio exposure, a replayed proposal, or a route supplied
+by prompt injection. Wallet authentication alone cannot answer whether the
+exact economic action is permitted.
 
-## The approach
+Mandate separates those questions:
 
-Mandate replaces the routing decomposition used today:
-
-```
-token address  ->  swap
+```text
+agent identity + signed proposal
+                ↓
+bounded principal authority
+                ↓
+deterministic verification + portfolio-global reservation
+                ↓
+execution gate or fail-closed refusal
 ```
 
-with one that separates financial intent from blockchain mechanics:
+Canonical financial identity is also separate from token representation.
+`NASDAQ:NVDA` names an underlying; a token contract is one representation of
+it. Mandate never assumes that two representations of the same underlying are
+economically or legally equivalent.
 
-```
-financial intent  ->  valid representation  ->  valid route  ->  verified execution
-```
+## What is implemented
 
-Three ideas carry the design.
+- **Portfolio Mandates** compile principal intent into typed, reviewable,
+  signed portfolio authority without changing the frozen Core semantics.
+- **Multiple agent domains** cover Stock, Swap, NFT, Yield, and Perps. Model
+  output stays advisory and inside closed schemas; it cannot supply contracts,
+  venues, calldata, or signatures.
+- **Deterministic authority and control** re-check proposals against canonical
+  identity, domain invariants, semantic bindings, live or admitted state, and
+  principal limits. Unknown mandatory semantics fail closed.
+- **Portfolio-global reservations** coordinate concurrent agents through one
+  principal-wide ledger, including durable SQLite-backed live sessions.
+- **Mandate Room** negotiates over remaining portfolio authority when otherwise
+  admissible agents compete for shared capacity, then re-verifies the result.
+- **V3 reusable bounded principal delegation** binds the portfolio mandate,
+  allocation, session, principal, delegate, Stock agent, fixture market,
+  cumulative debit limit, time window, generation, chain, and Gate.
+- **No per-trade wallet signature on the supported V3 path** after the bounded
+  mandate authorization and any required bounded fixture-token allowance.
+  Agent and execution-delegate signatures remain required for each execution.
+- **Robinhood Chain Testnet fixture settlement** exercises the deployed V3 Gate
+  with valueless MDUSD/MDEMO assets.
+- **Durable journal, crash recovery, and reconciliation** preserve submitted
+  evidence without automatic resend after restart.
+- **Policy Stress firewall** sends bounded adversarial proposals through the
+  real authorization path and records explicit refusal reasons.
+- **`@mandate/sdk`** exposes compile, review, delegated-authorization
+  preparation, screening, reservation, execution preparation, and
+  reconciliation as a thin facade over existing authority components.
+- **Documentation and demo site** provide the authority model, autonomous
+  execution flow, security boundaries, evidence, SDK, architecture, and
+  reference material.
 
-**A canonical asset is not a token.** `NASDAQ:NVDA` is a financial identity.
-An ERC-20 on some chain from some issuer is a *representation* of it.
-Representations of the same underlying differ in backing, redemption,
-shareholder rights, corporate-action handling and jurisdiction. Mandate treats
-"same underlying" and "economically equivalent" as separate claims and never
-converts one into the other silently.
+The deterministic verifier has final authority. Models may propose, rank,
+negotiate, or abstain; they cannot widen the permitted execution set.
 
-**A mandate is a bounded authorization, not a prompt.** A human or institution
-signs a machine-readable authorization — asset, side, maximum notional,
-approved issuers, whether synthetic exposure is allowed, tolerable execution
-deviation, required corporate-action freshness, expiry. The agent operates
-inside it. A valid agent signature proves who asked; it does not prove the
-action was permitted.
+## Live proof
 
-**Model output is advisory; deterministic code decides.** Jev selects among
-candidates the pipeline has already admitted. It receives a projection rather
-than a candidate, returns a name that is only meaningful as a key into a local
-array, and whatever it names is re-verified from scratch against current state
-before handoff. A model cannot relax a constraint, add a candidate, or
-authorize an execution — and this is measured, not asserted: seventeen
-adversarial behaviours and every failure reason produce zero unsafe handoffs
-across the evaluation corpus. See
-[docs/jev-integration.md](docs/jev-integration.md).
+The current onchain evidence is a fixture settlement on **Robinhood Chain
+Testnet**, not a production securities trade.
 
-## What Mandate optimizes
-
-Crypto routers maximize token output. Mandate optimizes execution quality
-**subject to** canonical asset identity, representation semantics, issuer
-restrictions, backing requirements, economic rights, jurisdiction, portfolio
-policy, price limits, execution deviation, liquidity, trading status,
-corporate-action state, user authorization, agent authority, mandate expiry and
-replay protection.
-
-The constraint set is the product. Optimization happens only over candidates
-that already satisfy it — a candidate that violates a constraint is not a worse
-candidate, it is not a candidate.
-
-## What exists today
-
-Three pure decision packages and one external adapter. The kernel, registry and
-router perform no I/O, read no clock, and can reach no inference client. The
-adapter owns external I/O; the router consumes already-normalized trusted state.
-
-**The verifier** decides whether one proposed execution is inside one signed
-authorization:
-
-```
-verify({ mandate, authorization, candidate, trustedState, clock, expectedDomain })
-    -> { decision: PASS | REJECT, reasonCodes[], violations[], digests, receiptDigest }
+```text
+Chain:       Robinhood Chain Testnet
+chainId:     46630
+V3 Gate:     0x5cf0621ab974d100fd5df225dab046bf35fa7519
+Live tx:     0x95fae11bb545330f03365939dc87a1c39023717a0b00b81ae93ab6a4b25f0878
+Block:       128655452
+Gas used:    322661
+Fixture:     64 MDUSD → 6.4 MDEMO
 ```
 
-**The registry** decides what financial asset a human meant, and which tokenized
-representations may legitimately be considered for it:
+**Disclosure:** MDUSD and MDEMO are valueless demo assets. This was not an NVDA
+trade and not a Robinhood Stock Token trade. The signed mandate authorized up
+to $800 of Stock capital, but the testnet settlement consumed **64 fixture
+MDUSD**; it is false to say that $800 settled.
 
+Deployment evidence is committed in
+[`contracts/deploy/robinhood-testnet-delegated-live.json`](contracts/deploy/robinhood-testnet-delegated-live.json).
+The live receipt and evidence qualification are documented under
+[`/docs/proof`](apps/web/app/docs/proof/page.tsx) and in
+[`docs/demo/c2-3-delegated-execution.md`](docs/demo/c2-3-delegated-execution.md).
+
+## Evidence model
+
+Mandate labels evidence at the boundary where it was produced:
+
+- **`LIVE_MODEL`** — a live model produced an advisory result under a closed
+  schema. This does not imply blockchain execution.
+- **`LIVE_TESTNET`** — a transaction or receipt was observed on a named
+  testnet. It does not imply mainnet or production-market execution.
+- **`FIXTURE`** — engineered, valueless assets or market state were used and
+  are identified as such.
+- **`SIMULATED`** — execution or state transition was simulated and was not
+  broadcast.
+- **`OFFCHAIN_ONLY`** — the domain action stopped at authorization,
+  coordination, or reservation and did not settle onchain.
+
+Authorization evidence is not settlement evidence. Recorded, simulated,
+fixture, and live-testnet data are never presented as interchangeable.
+
+## Architecture
+
+```text
+Principal intent
+  → Portfolio Mandate review and signature
+  → Domain agents (Stock / Swap / NFT / Yield / Perps)
+  → Mandate Room coordination
+  → Portfolio verifier + control invariants
+  → Principal-wide reservation ledger
+  → Domain execution preparation
+  → V3 execution gate or offchain-only result
+  → Receipt, journal, and reconciliation
 ```
-resolve(registry, "NVDA")                 -> RESOLVED | AMBIGUOUS | UNKNOWN | INVALID
-listRepresentations(registry, assetId)     -> representations issued against it
-evaluateRepresentation(registry, req, id)  -> ADMISSIBLE | EXCLUDED + reasonCodes[]
+
+The dependency direction is deliberately one-way. Core, ledger, and control
+remain deterministic and model-free. Network, filesystem, clock, randomness,
+wallet, and transaction capabilities live only at explicit outer boundaries,
+with structural tests enforcing those boundaries.
+
+The canonical long-term specification is
+[`docs/mandate-design.md`](docs/mandate-design.md). Frozen Core v1 and phase
+records remain as design and audit history; current release entry points are
+the docs site, SDK, Live AI Lab, and committed evidence documents.
+
+## SDK
+
+`@mandate/sdk` does not hold the principal private key and has no public
+surprise-broadcast method. The wallet signs prepared V3 typed data; the SDK
+then uses the existing verifier, control, ledger, and settlement preparation
+paths.
+
+```ts
+import { createMandateClient, liveLabDomainBindings } from '@mandate/sdk';
+
+const client = createMandateClient({
+  principal,
+  chainId: 46630,
+  now: () => protocolNow,
+  bindings: liveLabDomainBindings(),
+  session,
+});
+
+const draft = await client.compile({
+  instruction: 'Let the Stock agent manage $800',
+});
+const review = client.review(draft);
+if (!review.signable) return review.issues;
+
+const prepared = await client.prepareDelegatedAuthorization(review);
+if (!prepared.ok) return prepared;
+
+// The application wallet signs prepared.prepared.typedData.
+// The SDK neither signs nor stores the principal key.
+await client.acceptAuthorization({
+  prepared: prepared.prepared,
+  signature,
+  draft: review.draft,
+});
+client.attachAuthority({ mandate, signature, core, bindings });
+
+const decision = await client.screen({ proposal: agentProposal });
+if (!decision.authorized) return decision.reasons;
+
+const reservation = await client.reserve(decision);
+if (!reservation.ok) return reservation.reasons;
 ```
 
-**The Robinhood adapter** strictly normalizes issuer REST state and fixed-block
-mainnet contract/oracle observations. Ticker never establishes identity; the
-audited edge is issuer UID + validated ISIN + authoritative deployment + matching
-onchain code and metadata.
+See [`packages/sdk/README.md`](packages/sdk/README.md) for delegated
+authorization preparation, wallet-signing, execution-preparation, and
+reconciliation examples.
 
-**The router** limits discovery to registry representations, treats every
-provider quote as untrusted, requires exact full-fill quantity and independently
-established costs, verifies before ranking, and verifies the selected route a
-second time — against **fresh** trusted state supplied for the handoff, never the
-state it evaluated — before returning a handoff candidate. That second
-verification re-evaluates every dynamic predicate rather than comparing state
-digests, so a safe refresh hands off and an unsafe one refuses with the reason
-code for what actually changed.
+## Running locally
 
-| Piece | What it does |
-| --- | --- |
-| `packages/kernel` | Mandate types, MCE v2 canonical encoding and keccak-256 digests, EIP-712 authorization, the verifier's 19 independent checks, 51 stable reason codes, receipts, and the evidence-carrying replay state machine |
-| `packages/registry` | Canonical asset identity with check-digit-validated identifier schemes, deterministic reference resolution, provenance-carrying representation metadata with trust floors and fail-closed conflict handling, mandate-constrained admissibility with 21 registry reason codes, reproducible snapshots and digests, and synthetic world builders |
-| `packages/adapter-robinhood` | Strict Robinhood assets, price, capability, corporate-action, ERC-20/ERC-8056 and Chainlink normalization; explicit live failure handling and capture tooling |
-| `packages/router` | Strict provider boundary, committed routing candidates, fail-closed cost model, lexicographic BUY/SELL ranking, re-verification, selection receipts and seeded simulation |
-| `packages/jev` | TypeSafe client and strict response parser, closed-set choice projection, explicit abstention, deterministic fallback across eighteen failure reasons, advisory receipts, handoff re-verification, adversarial stubs and the trader-facing summary |
-| `corpus/v2` | 70 verifier decision vectors across 27 families (MCE v2, candidate schema v3) |
-| `corpus/registry-v1` | 27 registry decision vectors covering resolution and admissibility |
-| `corpus/mainnet-v1` | 11 recorded-mainnet registry-plus-kernel replay vectors and a machine-readable report |
-| `corpus/mainnet-routing-v1` | Six hybrid recorded-mainnet candidate-set routing worlds with deterministic receipts |
-| `corpus/routing-simulation-v1` | Committed 200-world safety and determinism metrics |
-| `corpus/jev-evaluation-v1` | 13 advisory scenarios over six recorded symbols, run in five modes including a fully adversarial one |
-
-Three properties hold across both. A refusal names **every** violated constraint,
-not the first. No verdict depends on the order checks ran in. And `UNKNOWN` is a
-value that rejects — unknown metadata, a conflict between data sources, an
-unregistered contract and an ambiguous ticker are all refusals, not defaults.
-
-The registry asserts the weakest useful claim: *this token is issued against that
-underlying*. It never asserts that two representations of one underlying are
-equivalent, interchangeable or equally safe. Whether one may satisfy a given
-mandate is computed against that mandate and is not stored anywhere.
+Prerequisites are Node.js 22 and, for Solidity validation, Foundry 1.7.1 with
+solc 0.8.37.
 
 ```bash
 npm install
-npm run check      # offline TypeScript tests plus fixtures, replays, boundaries and repository safety gates
+npm run check
 ```
 
-### The execution gate
-
-`contracts/src/MandateExecutionGate.sol` is the onchain half: **a transaction
-that materially differs from the principal's signed mandate and the authorized
-agent's bound execution cannot settle through the fixture path.** It re-derives the mandate and candidate digests, checks the
-principal's existing signature and the agent's signed execution commitment under
-one EIP-712 domain, uses chain time, consumes the mandate digest atomically, binds
-the candidate to immutable market facts, and settles on the principal's
-candidate notional arithmetic, signed `maxNotional` against the true quantity ×
-price at the principal's precision, immutable fixture price and
-declared economics, then settles exact quantity and *measured* balance deltas
-against the signed economic bound. Every trader and
-every agent uses the same gate; there are no modes.
-
-The only supported execution path runs against a **labelled fixed-price settlement fixture**,
-because the repository evidences no executable Robinhood venue. `REAL_MARKET`
-configuration is rejected until inclusion-time market state can be
-authenticated. Phase 6 deployed nothing; **Phase 7E.3 deployed the unchanged
-gate to Robinhood Chain testnet** with one labelled fixture market and drives
-it from Mandate Core through `packages/evm-robinhood`
-([robinhood-deployment.md](docs/phase-7e/robinhood-deployment.md)).
+Run the deterministic agent lab without a model credential:
 
 ```bash
-git submodule update --init          # forge-std
-npm run contracts:test               # regenerate the differential corpus ABI, then forge test
-npm run contracts:slither            # Slither, failing on any unreviewed finding
+npm run agents:stub
 ```
 
-**Mandate does not choose investments for users. It enforces the authority users
-grant to agents.**
+Run the canonical offline judge transcript:
 
-## Documentation
-
-| Document | What it covers |
-| --- | --- |
-| **[docs/mandate-design.md](docs/mandate-design.md)** | **Canonical specification.** The complete Mandate design: problem, primitives, lifecycle, verification, routing, corporate actions, settlement, invariants, threat model, scope and roadmap. Start here. |
-| [docs/architecture.md](docs/architecture.md) | System structure, components and their boundaries, data flow, and where each concern is enforced. |
-| [docs/roadmap.md](docs/roadmap.md) | Phased engineering plan, what each phase delivers, and its exit criteria. |
-| [docs/core-v1/README.md](docs/core-v1/README.md) | Phase 7A: the Mandate Core v1 specification — authority graph, global authority ledger, typed actions, state and quantities, reservations and reconciliation, enforcement adapters, receipts, security invariants and worked examples. Specification only. |
-| [docs/statelatch-reuse.md](docs/statelatch-reuse.md) | Assessment of the prior StateLatch / EquityGuard codebase: what is reusable, what must be rebuilt, and what must not be carried over. |
-| [docs/verifier-invariants.md](docs/verifier-invariants.md) | What the kernel guarantees today, how each guarantee is established, and what it explicitly does not guarantee. |
-| [docs/registry-semantics.md](docs/registry-semantics.md) | Canonical asset identity, the representation model, registry trust and provenance, resolution and ambiguity, admissibility, snapshots — and what the registry explicitly does not guarantee. |
-| [docs/reason-codes.md](docs/reason-codes.md) | The 51 stable verifier reason codes. Generated from the registry, so it cannot drift. |
-| [docs/registry-reason-codes.md](docs/registry-reason-codes.md) | The 21 registry reason codes, and the kernel codes registry decisions reuse. Generated. |
-| [docs/replay-semantics.md](docs/replay-semantics.md) | How a mandate is consumed, and the one obligation the kernel cannot enforce for an integrator. |
-| [docs/execution-gate.md](docs/execution-gate.md) | Phase 6: the onchain execution gate — commitment hierarchy, replay, settlement, differential testing, Slither findings, threat model and residual risks. |
-| [docs/phase-6r-principal-authority.md](docs/phase-6r-principal-authority.md) | Phase 6R principal-authority matrix and real-market stop condition. |
-| [docs/phase-6r-report.md](docs/phase-6r-report.md) | Phase 6R remediation, validation evidence, deployment policy and remaining risk. |
-| [docs/phase-6r1-report.md](docs/phase-6r1-report.md) | Phase 6R.1: exact principal notional enforcement (M-1), fixture price consistency, reconciliation expiry rule, reproduced profile figures. |
-| [docs/phase-6r1a-report.md](docs/phase-6r1a-report.md) | Phase 6R.1a: attempt-scoped reconciliation bounded by the reservation, gate-created fixture venue and adapter with fixture-wiring verification, overflow-branch and exact-oracle test closure. |
-| [docs/phase-6r1b-report.md](docs/phase-6r1b-report.md) | Phase 6R.1b: reservation-generation binding for reconciliation, the M4 ceiling boundary, pinned fixture decimals, corrected deployment-verification and gas claims. |
-| [docs/robinhood-integration.md](docs/robinhood-integration.md) | Verified endpoints, schemas, issuer semantics, price/multiplier rules, timestamps and real-data limitations. |
-| [docs/mainnet-replay.md](docs/mainnet-replay.md) | Recorded-mainnet replay methodology, synthetic labelling and validation report. |
-| [docs/routing.md](docs/routing.md) | Candidate model, provider boundary, ranking, costs, limits and selection receipts. |
-| [docs/jev-integration.md](docs/jev-integration.md) | The advisory decision layer: authority boundary, closed-set projection, abstention, fallback, confidence policy, receipts and trader-facing output. |
-| [docs/jev-characterization.md](docs/jev-characterization.md) | The documented TypeSafe API surface, the characterization method, and the measured results of the live run performed on 2026-09-25. |
-| [docs/jev-evaluation.md](docs/jev-evaluation.md) | Advisory evaluation methodology, the safety/quality distinction, results, and the honest finding about decision quality. |
-| [docs/jev-performance.md](docs/jev-performance.md) | Local latency cost of the advisory layer, and what is deliberately not measured. |
-| [docs/router-performance.md](docs/router-performance.md) | Deterministic router latency baseline and methodology. |
-| [docs/security-review.md](docs/security-review.md) | Living internal threat/control review and dependency-audit status. |
-| [docs/ci.md](docs/ci.md) | Offline continuous-integration and drift gates. |
-| [docs/simulation.md](docs/simulation.md) | Seeded hybrid-world generation, metrics and replay methodology. |
-| [docs/adr/](docs/adr/) | Architecture decision records: authorization architecture, canonical encoding, kernel language and dependency boundary. |
-| [corpus/v2/README.md](corpus/v2/README.md) | Verifier decision-vector format, for reimplementers. |
-| [corpus/registry-v1/README.md](corpus/registry-v1/README.md) | Registry decision-vector format, and exactly which fixture data is real and which is synthetic. |
-| [corpus/gate-v1/README.md](corpus/gate-v1/README.md) | TypeScript ↔ Solidity execution-gate differential corpus. |
-| [AGENTS.md](AGENTS.md) | Operating rules for coding agents working in this repository. Read before making any change. |
-
-Other documents summarize; `docs/mandate-design.md` is the source of truth and
-is where a disagreement gets resolved.
-
-## Scope
-
-**Buildathon MVP** — a narrow, production-quality vertical slice on tokenized
-equities over Robinhood Chain / Arbitrum-compatible infrastructure: a
-machine-readable mandate, a canonical asset and representation registry,
-representation metadata, market-state integration, multiple execution
-candidates, optional Jev-assisted selection, deterministic verification with
-stable PASS/REJECT reason codes, an execution gate, and deliberate failure
-demonstrations.
-
-**Not in the MVP** — cross-chain routing, multi-issuer breadth, portfolio
-mandates, delegated institutional policy, settlement abstraction, agent
-identity infrastructure, automated reauthorization, and asset classes beyond
-equities. These are described in the design document as future architecture and
-are not claimed as built.
-
-See [MVP scope](docs/mandate-design.md#20-buildathon-mvp-scope) and
-[explicit non-goals](docs/mandate-design.md#21-explicit-non-goals-for-the-mvp).
-
-## Repository layout
-
-```
-.
-├── AGENTS.md              operating rules for coding agents
-├── README.md              this file
-├── packages/kernel/       the verifier and everything it needs
-│   ├── src/               domain types, encoding, authorization, verifier
-│   └── test/              118 tests: behaviour, boundaries, properties, structure
-├── packages/registry/     canonical assets, representations, resolution
-│   ├── src/               identity, claims, semantics, admissibility, snapshots
-│   │   └── testing/       synthetic world builders and labelled dev fixtures
-│   └── test/              180 tests: behaviour, adversarial properties, structure
-├── packages/adapter-robinhood/ strict Robinhood REST/RPC normalization
-│   ├── src/               adapters, provenance, exact price and epoch semantics
-│   └── test/              recorded fixtures, offline replay and failure tests
-├── packages/execution-gate/ offchain half of the Phase 6 gate: commitment, reference model, reconciliation
-├── packages/core/         Mandate Core v1 types, canonical encodings and validators (Phase 7B; no ledger)
-├── packages/ledger/       authority graph, meet and principal-wide CAS ledger over Core (Phase 7C; in-memory store only)
-├── packages/control/      invariant and reservation engine: domain-module contract, admission, projection, reservation (Phase 7D)
-├── packages/ledger-sqlite/ durable SQLite reference store and issuance journal (Phase 7E.1)
-├── packages/perp-lighter/ PerpPolicy v1 and the Lighter Venue Signer, testnet only (Phase 7E.1–7E.2)
-├── packages/evm-robinhood/ GateSpotPolicy v1 and the Robinhood gate signer over the frozen gate, testnet only (Phase 7E.3)
-├── contracts/             Solidity: the execution gate, codec, labelled fixture venue, Foundry tests
-├── corpus/gate-v1/        TypeScript ↔ Solidity execution-gate vectors
-├── corpus/core-v1/        Mandate Core v1 canonical-encoding vectors
-├── corpus/control-v1/     Phase 7D authorization decision vectors (synthetic module)
-├── corpus/v2/             cross-implementation verifier decision vectors
-├── corpus/registry-v1/    cross-implementation registry decision vectors
-├── corpus/mainnet-v1/     recorded mainnet replay vectors and metrics
-└── docs/
-    ├── mandate-design.md         canonical specification
-    ├── architecture.md           system structure and component boundaries
-    ├── roadmap.md                phased engineering plan
-    ├── verifier-invariants.md    what the kernel guarantees, and how
-    ├── registry-semantics.md     what the registry means, and what it refuses to mean
-    ├── reason-codes.md           generated verifier reason-code registry
-    ├── registry-reason-codes.md  generated registry reason-code registry
-    ├── replay-semantics.md       consumption and nonce semantics
-    ├── robinhood-integration.md  verified Phase 3 external-data findings
-    ├── mainnet-replay.md         real replay methodology and limits
-    ├── statelatch-reuse.md       prior-codebase reuse assessment
-    └── adr/                      architecture decision records
+```bash
+npm run demo:judge
+npm run demo:judge:json
 ```
 
-Directories are created when they hold real code. The dependency direction is
-`adapter → registry → kernel`, never the reverse, and structural tests enforce
-it from all three packages. `execution-gate → kernel` and `core → kernel` are
-enforced the same way.
+Run the web experience and docs:
 
-## Contributing
+```bash
+cd apps/web
+npm run dev
+```
 
-Human and agent contributors both follow [AGENTS.md](AGENTS.md). The rules that
-matter most: agents commit locally and never push, never merge, never open pull
-requests, and never modify remote state; the repository owner reviews and
-pushes. Each phase lands as several meaningful commits, never one large one.
+Then open `http://localhost:3000/`, `/demo/live`, or `/docs`. Inspecting the
+site and docs requires no wallet private key and no RPC secret. Live model mode
+is opt-in and requires `OPENAI_API_KEY`; normal tests use stub and scripted
+providers only.
+
+Testnet deployment and send commands are intentionally absent from this quick
+start. They require explicit human authorization and interactive safeguards.
+
+## Validation
+
+The principal release checks are commands, not marketing claims:
+
+```bash
+npm run typecheck
+npm test
+npm run check
+npm run generated:check
+npm run credentials:scan
+npm run repository:junk
+npm run audit:security
+npm run contracts:fmt
+npm run contracts:build
+npm run contracts:lint
+npm run contracts:test
+npm run contracts:slither
+
+cd apps/web
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
+
+The test corpus includes deterministic refusal paths, canonical encodings,
+portfolio-global invariants, replay and reconciliation, cross-implementation
+gate vectors, fuzzing, and invariant suites.
+
+## Limitations
+
+- The live Stock proof settles a labelled, valueless fixture mapping, not a
+  stock, an NVDA token, or a Robinhood Stock Token.
+- No mainnet deployment or production-market execution is claimed.
+- Non-Stock agent domains may end as `OFFCHAIN_ONLY`; authorization support is
+  not the same as a live settlement adapter.
+- Mandatory natural-language semantics that cannot be compiled into supported
+  typed constraints fail closed.
+- V3 delegation is bounded by scope, cumulative debit, time, generation,
+  chain, and Gate. It is not one approval forever.
+- Mandate is not investment advice, a broker, a custody product, or a claim of
+  brokerage, regulatory, or best-execution compliance.
+
+## Docs
+
+The web documentation routes are:
+
+- `/docs` — overview
+- `/docs/concepts` — authority model
+- `/docs/execution` — autonomous execution and V3 boundaries
+- `/docs/security` — threat model and Policy Stress
+- `/docs/proof` — evidence classes and live-testnet proof
+- `/docs/sdk` — developer integration
+- `/docs/architecture` — package and trust boundaries
+- `/docs/reference` — terms, reason codes, and evidence references
+
+Repository documents include:
+
+- [`docs/mandate-design.md`](docs/mandate-design.md) — canonical specification
+- [`docs/demo/live-ai-lab.md`](docs/demo/live-ai-lab.md) — Live AI Lab and
+  Mandate Room
+- [`docs/demo/authority-spine-v2.md`](docs/demo/authority-spine-v2.md) — wallet
+  and settlement authority spine
+- [`docs/demo/c2-3-delegated-execution.md`](docs/demo/c2-3-delegated-execution.md)
+  — V3 delegated execution chronology and evidence
+- [`docs/demo/sdk.md`](docs/demo/sdk.md) — SDK boundaries
+- [`docs/security-review.md`](docs/security-review.md) — security review record
+- [`docs/adr/`](docs/adr/) — accepted architecture decisions
+
+## Repository safety
+
+Read [`AGENTS.md`](AGENTS.md) before contributing. Agents may create focused
+local commits, but they must not push, merge, open pull requests, publish,
+deploy, broadcast, or modify remote Git state. The repository owner reviews
+local commits and performs all remote operations.

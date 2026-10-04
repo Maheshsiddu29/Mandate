@@ -5,6 +5,7 @@ import { useState, type ReactNode } from "react";
 import { type AuthorityReviewModel } from "./authority-review";
 import { arr, rec, str, type Json, type JsonRecord } from "./live-client";
 import { allocationSummary, ROLE_DESCRIPTORS, ROLE_TITLES, ROLES, usd, type RoleName } from "./live-model";
+import { formatMdusdAtoms, type SettlementSetupStatus, type TrustedSettlementPlan } from "./settlement-setup";
 import { APPROVAL_CHAIN, shortAddress } from "./wallet";
 import { AgentGlyph, Pill } from "./workspace-ui";
 
@@ -21,11 +22,18 @@ export function mandateSummary(access: DraftAccess, signed: boolean): string {
   const total = access.text("portfolio.totalCapital");
   const enabled = ROLES.filter((role) => access.enabled(role) === true);
   const head = `${total === "" ? "—" : usd(total)} ${signed ? "authorized" : "draft"} · ${enabled.length} ${enabled.length === 1 ? "agent" : "agents"}`;
+  // Prefer the current plan (budget) over the envelope ceiling so the trail never calls a maximum "allocated".
   const distinct = enabled
-    .map((role) => ({ role, amount: access.text(`agents.${role}.maxAllocation`) || access.text(`agents.${role}.budget`) }))
-    .filter((item) => item.amount !== "" && item.amount !== total);
+    .map((role) => {
+      const plan = access.text(`agents.${role}.budget`);
+      const max = access.text(`agents.${role}.maxAllocation`);
+      if (plan !== "") return { role, amount: plan, kind: "planned" as const };
+      if (max !== "") return { role, amount: max, kind: "max" as const };
+      return null;
+    })
+    .filter((item): item is { role: RoleName; amount: string; kind: "planned" | "max" } => item !== null && item.amount !== total);
   if (distinct.length === 0) return head;
-  return `${head} · ${distinct.map((item) => `${ROLE_TITLES[item.role]} ${usd(item.amount)} allocated`).join(", ")}`;
+  return `${head} · ${distinct.map((item) => `${ROLE_TITLES[item.role]} ${usd(item.amount)} ${item.kind === "planned" ? "planned" : "max"}`).join(", ")}`;
 }
 
 export function draftAccess(draft: JsonRecord): DraftAccess {
@@ -84,19 +92,22 @@ function FieldInput({ value, label, prefix, placeholder, disabled, onCommit, inp
 function AgentConfigRow({ role, access, busy, onField }: { readonly role: RoleName; readonly access: DraftAccess; readonly busy: boolean; readonly onField: (path: string, value: Json) => void }): ReactNode {
   const enabled = access.enabled(role);
   const max = access.text(`agents.${role}.maxAllocation`);
+  const plan = access.text(`agents.${role}.budget`);
+  const showPlan = plan !== "" && plan !== max;
   return (
     <li className="mw-agent-config" data-role={role} data-enabled={enabled === true ? "on" : enabled === false ? "off" : "unset"}>
       <span className="mw-glyph"><AgentGlyph role={role} /></span>
       <span className="mw-agent-config__name">
         <strong>{ROLE_TITLES[role]}</strong>
         <span>{enabled === false ? "No authority · cannot propose" : ROLE_DESCRIPTORS[role]}</span>
+        {enabled === true && showPlan ? <span className="mw-agent-config__plan">{usd(plan)} planned</span> : null}
       </span>
       {enabled === false ? (
         <span className="mw-agent-config__off">—</span>
       ) : (
         <span className="mw-agent-config__amount">
           <span className="mw-agent-config__hint" aria-hidden="true">Up to</span>
-          <FieldInput key={max} value={max} label={`${ROLE_TITLES[role]} agent maximum allocation in USDC`} prefix="$" disabled={busy} onCommit={(value) => onField(`agents.${role}.maxAllocation`, value)} />
+          <FieldInput key={max} value={max} label={`${ROLE_TITLES[role]} maximum authority in USDC`} prefix="$" disabled={busy} onCommit={(value) => onField(`agents.${role}.maxAllocation`, value)} />
         </span>
       )}
       <button
@@ -247,8 +258,18 @@ export function ApproveStage(props: {
   readonly authorizing: boolean;
   readonly error: string;
   readonly wallet: WalletState;
+  /** When "V3", disclose autonomous settlement before the one Mandate signature. */
+  readonly spine?: "V2" | "V3";
+  /** V3 only: bounded MDUSD allowance to the live Gate (renew when insufficient). */
+  readonly settlementSetup?: {
+    readonly status: SettlementSetupStatus;
+    readonly plan: TrustedSettlementPlan | null;
+    readonly busy: boolean;
+    readonly detail: string;
+  };
   readonly onConnect: () => void;
   readonly onSwitchChain: () => void;
+  readonly onEnableSettlement?: () => void;
   readonly onSignWallet: () => void;
   readonly onAuthorize: (confirmation: string) => void;
   readonly onCancel: () => void;
@@ -257,27 +278,36 @@ export function ApproveStage(props: {
   readonly onAcknowledgeUnsupported: (index: number) => void;
 }): ReactNode {
   const [confirmation, setConfirmation] = useState("");
-  const [method, setMethod] = useState<"wallet" | "demo">(props.wallet.available ? "wallet" : "demo");
+  const v3 = props.spine === "V3";
+  const [method, setMethod] = useState<"wallet" | "demo">(props.wallet.available || v3 ? "wallet" : "demo");
   const version = props.expected.replace("AUTHORIZE MANDATE ", "");
   const matches = confirmation === props.expected && props.expected !== "—";
   const wallet = props.wallet;
   const connected = wallet.address !== null;
   const rightChain = wallet.chainId === APPROVAL_CHAIN.chainId;
   const reviewClean = props.review.canAuthorize;
-  const walletReady = method === "wallet" && connected && rightChain && reviewClean;
+  const signingMethod = v3 ? "wallet" : method;
+  const setup = props.settlementSetup;
+  const setupReady = !v3 || setup?.status === "READY";
+  const walletReady = signingMethod === "wallet" && connected && rightChain && reviewClean && setupReady;
   const demoReady = matches && reviewClean;
   const r = props.review;
   const groups = [...new Set(r.advanced.map((row) => row.group))];
+  const allowanceLabel = setup?.plan !== null && setup?.plan !== undefined ? formatMdusdAtoms(setup.plan.requiredAllowanceAtoms) : null;
   return (
     <div className="mw-approve">
       <header className="mw-stage-head">
-        <p className="mw-kicker">Mandate {version}</p>
-        <h2>Mandate review</h2>
-        <p>This is the exact authority your wallet will sign. Edit anything that is wrong before authorizing.</p>
+        <p className="mw-kicker">{v3 ? "AUTHORIZE AUTONOMOUS MANDATE" : "You're authorizing"}</p>
+        <h2>{v3 ? "Authorize autonomous mandate" : "Mandate review"}</h2>
+        <p>
+          {v3
+            ? "Your wallet signs this authority once. Mandate independently verifies each action. Allowed Stock actions may settle without another wallet approval."
+            : "This is the exact authority your wallet will sign. Agents cannot exceed it."}
+        </p>
       </header>
 
       {r.blockers.length > 0 ? (
-        <section className="mw-review-blockers" aria-labelledby="review-blockers-title" role="alert">
+        <section className="mw-review-blockers" aria-labelledby="review-blockers-title" role="status">
           <h3 id="review-blockers-title">{r.blockerSummary}</h3>
           <ul>
             {r.blockers.map((b) => (
@@ -288,8 +318,8 @@ export function ApproveStage(props: {
       ) : null}
 
       {r.conflicts.length > 0 ? (
-        <section className="mw-review-needs" aria-labelledby="review-conflicts-title">
-          <h3 id="review-conflicts-title">Needs your input</h3>
+        <section className="mw-review-needs" data-kind="needs" aria-labelledby="review-conflicts-title">
+          <h3 id="review-conflicts-title">Needs input</h3>
           {r.conflicts.map((c) => (
             <div key={c.index} className="mw-review-needs__card">
               <p className="mw-review-needs__kind">Conflict</p>
@@ -313,8 +343,8 @@ export function ApproveStage(props: {
       ) : null}
 
       {r.ambiguities.length > 0 || r.clarifications.length > 0 ? (
-        <section className="mw-review-needs" aria-labelledby="review-ambiguity-title">
-          <h3 id="review-ambiguity-title">Clarify before signing</h3>
+        <section className="mw-review-needs" data-kind="needs" aria-labelledby="review-ambiguity-title">
+          <h3 id="review-ambiguity-title">Needs input</h3>
           {[...r.ambiguities, ...r.clarifications].map((c) => (
             <div key={c.index} className="mw-review-needs__card">
               <p className="mw-review-needs__kind">{c.kind === "AMBIGUOUS" ? "Ambiguous" : "Needs clarification"}</p>
@@ -332,14 +362,18 @@ export function ApproveStage(props: {
           <h3 id="review-unsupported-title">Requested but not enforceable in this mandate version</h3>
           <ul>
             {r.unsupported.map((u) => (
-              <li key={u.index} data-dangerous={u.dangerous ? "" : undefined}>
+              <li key={u.index} data-kind={u.dangerous ? "refused" : "unsupported"}>
                 <div>
                   <strong>{u.dangerous ? "Refused" : "Not supported"}</strong>
                   <p>{u.text}</p>
-                  <p className="mw-fine">This restriction will NOT be included in the signed mandate.</p>
+                  <p className="mw-fine">
+                    {u.dangerous
+                      ? "Execution recipient and trusted settlement details cannot be set from natural-language mandate text."
+                      : "This restriction is not included in the signed mandate."}
+                  </p>
                 </div>
                 {u.dangerous ? (
-                  <p className="mw-fine">Cannot accept. Change the prompt.</p>
+                  <p className="mw-fine">Cannot authorize. Change the prompt.</p>
                 ) : (
                   <button type="button" className="mw-soft-button" disabled={props.authorizing} onClick={() => props.onAcknowledgeUnsupported(u.index)}>
                     I understand — continue without this
@@ -384,7 +418,7 @@ export function ApproveStage(props: {
           ))}
         </ul>
 
-        <h3 className="mw-authority-review__title">Allocation</h3>
+        <h3 className="mw-authority-review__title">{r.allocation.headline === "Current plan" ? "Current plan" : "Allocation"}</h3>
         <p className="mw-authority-review__alloc">
           <strong>{r.allocation.headline}</strong>
           <span>{r.allocation.detail}</span>
@@ -392,12 +426,25 @@ export function ApproveStage(props: {
         {r.allocation.lines.length === 0 ? null : (
           <ul className="mw-authority-review__alloc-lines">
             {r.allocation.lines.map((line) => (
-              <li key={line.label}>
+              <li key={`plan-${line.label}`}>
                 <span>{line.label}</span>
                 <strong>{line.value}</strong>
               </li>
             ))}
           </ul>
+        )}
+        {r.allocation.maxLines.length === 0 ? null : (
+          <>
+            <h3 className="mw-authority-review__title">Maximum authority</h3>
+            <ul className="mw-authority-review__alloc-lines">
+              {r.allocation.maxLines.map((line) => (
+                <li key={`max-${line.label}`}>
+                  <span>{line.label}</span>
+                  <strong>{line.value}</strong>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
         {r.allocation.planningNote === null ? null : <p className="mw-fine">{r.allocation.planningNote}</p>}
 
@@ -475,34 +522,87 @@ export function ApproveStage(props: {
       </div>
 
       <section className="mw-signer" aria-label="How this mandate is signed" role="radiogroup">
-        <button type="button" role="radio" aria-checked={method === "wallet"} className="mw-signer__option" data-selected={method === "wallet" ? "" : undefined} data-disabled={wallet.available ? undefined : ""} disabled={!wallet.available || props.authorizing} onClick={() => setMethod("wallet")}>
+        <button type="button" role="radio" aria-checked={signingMethod === "wallet"} className="mw-signer__option" data-selected={signingMethod === "wallet" ? "" : undefined} data-disabled={wallet.available ? undefined : ""} disabled={!wallet.available || props.authorizing} onClick={() => setMethod("wallet")}>
           <span className="mw-signer__icon" aria-hidden="true">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="6" width="18" height="13" rx="3" /><path d="M16 12.5h2M3 9h15a3 3 0 0 0-3-3" /></svg>
           </span>
           <span>
             <strong>Approve in wallet</strong>
-            <small>{!wallet.available ? "No browser wallet detected. Use the demo principal key below." : connected ? `${shortAddress(wallet.address ?? "")}${rightChain ? " · Robinhood Chain testnet" : " · switch to Robinhood Chain testnet to sign"}` : "Your wallet will sign this Mandate. This does not submit a blockchain transaction."}</small>
+            <small>{!wallet.available ? (v3 ? "A browser wallet is required for V3 autonomous mandate authorization." : "No browser wallet detected. Use the demo principal key below.") : connected ? `${shortAddress(wallet.address ?? "")}${rightChain ? " · Robinhood Chain testnet" : " · switch to Robinhood Chain testnet to sign"}` : "Your wallet will sign this Mandate. This does not submit a blockchain transaction."}</small>
           </span>
           <Pill tone={connected && rightChain ? "good" : "neutral"}>{!wallet.available ? "Not detected" : !connected ? "Not connected" : rightChain ? "Connected" : "Wrong network"}</Pill>
         </button>
-        <button type="button" role="radio" aria-checked={method === "demo"} className="mw-signer__option" data-selected={method === "demo" ? "" : undefined} disabled={props.authorizing} onClick={() => setMethod("demo")}>
-          <span className="mw-signer__icon" aria-hidden="true">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><circle cx="8" cy="15" r="4" /><path d="m11 12 8-8M16 7l2 2M14 9l2 2" /></svg>
-          </span>
-          <span><strong>Demo principal key</strong><small>Held by the local server. Publicly derived: it secures nothing and is not a wallet signature.</small></span>
-          <Pill tone={method === "demo" ? "accent" : "neutral"}>Fallback</Pill>
-        </button>
-        {method === "wallet" && wallet.available ? (
+        {v3 ? null : (
+          <button type="button" role="radio" aria-checked={method === "demo"} className="mw-signer__option" data-selected={method === "demo" ? "" : undefined} disabled={props.authorizing} onClick={() => setMethod("demo")}>
+            <span className="mw-signer__icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><circle cx="8" cy="15" r="4" /><path d="m11 12 8-8M16 7l2 2M14 9l2 2" /></svg>
+            </span>
+            <span><strong>Demo principal key</strong><small>Held by the local server. Publicly derived: it secures nothing and is not a wallet signature.</small></span>
+            <Pill tone={method === "demo" ? "accent" : "neutral"}>Fallback</Pill>
+          </button>
+        )}
+        {signingMethod === "wallet" && wallet.available ? (
           <div className="mw-signer__actions">
             {!connected ? <button type="button" className="mw-soft-button" disabled={props.authorizing} onClick={props.onConnect}>Connect wallet</button> : null}
             {connected && !rightChain ? <button type="button" className="mw-soft-button" disabled={props.authorizing} onClick={props.onSwitchChain}>Switch to Robinhood Chain testnet</button> : null}
             <details className="mw-disclosure mw-disclosure--inline">
               <summary>What this signature does</summary>
-              <p className="mw-fine">An offchain EIP-712 PortfolioMandateAuthorizationV2 approval of this exact mandate and the initial allocation shown above, for this session, once. Your wallet becomes the protocol principal. No gas, no transaction. Stock settlement asks for a separate MandateAuthorization. This page does not broadcast, and your signature does not delegate onchain execution authority.</p>
+              <p className="mw-fine">
+                {v3
+                  ? "An offchain EIP-712 DelegatedPortfolioAuthorizationV3. One signature binds portfolio authority and bounded autonomous Stock testnet execution. No gas. No per-trade wallet approval after this. Mandate verifies each exact action; the ephemeral Mandate execution delegate signs settlement."
+                  : "An offchain EIP-712 PortfolioMandateAuthorizationV2 approval of this exact mandate and the initial allocation shown above, for this session, once. Your wallet becomes the protocol principal. No gas, no transaction. Stock settlement asks for a separate MandateAuthorization. This page does not broadcast, and your signature does not delegate onchain execution authority."}
+              </p>
             </details>
+            {v3 ? (
+              <section className="mw-authority-review__group" aria-label="Automatic execution">
+                <h4>Automatic execution</h4>
+                <p className="mw-fine">Enabled for the Stock testnet settlement path. Recipient is your wallet. Bounded by the derived MDUSD fixture debit cap disclosed below.</p>
+              </section>
+            ) : null}
           </div>
         ) : null}
-        {method === "demo" ? (
+        {v3 && connected && rightChain ? (
+          <section className="mw-settlement-setup" aria-label="Settlement setup">
+            <h3 className="mw-authority-review__title">Settlement setup</h3>
+            {setup === undefined || setup.status === "IDLE" || setup.status === "LOADING" ? (
+              <p className="mw-fine">Checking MDUSD allowance for this mandate…</p>
+            ) : null}
+            {setup?.status === "NEED_ENABLE" || setup?.status === "SUBMITTING" || setup?.status === "CONFIRMING" || setup?.status === "FAILED" ? (
+              <>
+                <p className="mw-notice mw-notice--warn" role="status">
+                  <strong>Settlement allowance required</strong>
+                  <br />
+                  Allow the Mandate V3 Gate to use up to {allowanceLabel ?? "the derived MDUSD fixture cap"} for this testnet mandate.
+                </p>
+                <p className="mw-fine">
+                  This bounded ERC-20 allowance is separate from your Mandate authorization.
+                  Renew it only when the remaining settlement allowance is insufficient.
+                </p>
+                <button
+                  type="button"
+                  className="mw-soft-button"
+                  disabled={props.authorizing || setup.busy || setup.status === "SUBMITTING" || setup.status === "CONFIRMING"}
+                  onClick={props.onEnableSettlement}
+                >
+                  {setup.status === "SUBMITTING" || setup.status === "CONFIRMING" ? "Confirming settlement setup…" : "Enable settlement"}
+                </button>
+                {setup.detail !== "" ? <p className="mw-fine" role="status">{setup.detail}</p> : null}
+              </>
+            ) : null}
+            {setup?.status === "READY" ? (
+              <p className="mw-notice" role="status">
+                ✓ Settlement enabled
+                {allowanceLabel === null ? null : (
+                  <>
+                    <br />
+                    Up to {allowanceLabel}
+                  </>
+                )}
+              </p>
+            ) : null}
+          </section>
+        ) : null}
+        {signingMethod === "demo" ? (
           <label className="mw-confirm">
             <span>Type <code>{props.expected}</code> to sign</span>
             <input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" spellCheck={false} disabled={props.authorizing || !reviewClean} aria-label="Authorization confirmation" />
@@ -510,21 +610,33 @@ export function ApproveStage(props: {
         ) : null}
       </section>
 
-      {props.authorizing ? <div className="mw-inline-status" aria-live="polite"><LatticeLoader label={method === "wallet" ? "Waiting for your wallet" : `Signing mandate ${version}`} status="working" pattern="orbit" showTimer={false} /></div> : null}
+      {props.authorizing ? <div className="mw-inline-status" aria-live="polite"><LatticeLoader label={signingMethod === "wallet" ? "Waiting for your wallet" : `Signing mandate ${version}`} status="working" pattern="orbit" showTimer={false} /></div> : null}
       {props.error === "" ? null : <p className="mw-notice mw-notice--bad" role="alert">{props.error}</p>}
-      {!reviewClean ? <p className="mw-notice mw-notice--warn" role="status">Authorize is disabled until every item above is resolved. The wallet will not be asked to sign a blocked draft.</p> : null}
+      {reviewClean ? (
+        <p className="mw-fine mw-approve__promise">
+          {v3 && !setupReady
+            ? "Enable settlement before authorizing the autonomous mandate."
+            : "Your wallet signs this authority. Agents cannot exceed it."}
+        </p>
+      ) : (
+        <p className="mw-notice mw-notice--warn" role="status">
+          Authorize is disabled until every item above is resolved. The wallet will not be asked to sign a blocked draft.
+        </p>
+      )}
 
       <footer className="mw-stage-foot">
-        {method === "wallet" ? (
+        {signingMethod === "wallet" ? (
           <button type="button" className="mw-cta" disabled={!walletReady || props.authorizing} onClick={props.onSignWallet}>
-            Authorize mandate
+            {v3 ? "Authorize autonomous mandate" : "Authorize mandate"}
           </button>
         ) : (
           <button type="button" className="mw-cta" disabled={!demoReady || props.authorizing} onClick={() => props.onAuthorize(confirmation)}>
             Authorize mandate
           </button>
         )}
-        <button type="button" className="mw-text-button" disabled={props.authorizing} onClick={props.onCancel}>Cancel</button>
+        <button type="button" className="mw-text-button" disabled={props.authorizing} onClick={props.onCancel}>
+          Cancel
+        </button>
       </footer>
     </div>
   );
@@ -540,24 +652,24 @@ const SET_FIELDS = [
 
 const SECTIONS: readonly { readonly title: string; readonly levels: readonly string[]; readonly names?: readonly string[]; readonly fields: readonly { readonly path: string; readonly label: string; readonly prefix?: string; readonly suffix?: string }[] }[] = [
   { title: "Capital", levels: ["PORTFOLIO"], names: ["Total capital", "Maximum deployed", "Allocation", "Stock spot capital"], fields: [
-    { path: "portfolio.totalCapital", label: "Total capital", prefix: "$" },
-    { path: "portfolio.maxDeployed", label: "Maximum deployed", prefix: "$" },
-    { path: "portfolio.minUnallocated", label: "Minimum unallocated", prefix: "$" },
+    { path: "portfolio.totalCapital", label: "Portfolio authority", prefix: "$" },
+    { path: "portfolio.maxDeployed", label: "Maximum initially deployable", prefix: "$" },
+    { path: "portfolio.minUnallocated", label: "Minimum kept available", prefix: "$" },
   ] },
-  { title: "Risk", levels: ["PORTFOLIO"], names: ["Derivative exposure", "Illiquid exposure", "Validity"], fields: [
-    { path: "portfolio.maxDerivative", label: "Derivative exposure cap", prefix: "$" },
-    { path: "portfolio.maxIlliquid", label: "Illiquid exposure cap", prefix: "$" },
-    { path: "portfolio.validityMinutes", label: "Validity", suffix: "min" },
+  { title: "Exposure", levels: ["PORTFOLIO"], names: ["Derivative exposure", "Illiquid exposure", "Validity"], fields: [
+    { path: "portfolio.maxDerivative", label: "Derivative exposure", prefix: "$" },
+    { path: "portfolio.maxIlliquid", label: "Illiquid exposure", prefix: "$" },
+    { path: "portfolio.validityMinutes", label: "Mandate duration", suffix: "min" },
     { path: "market.maxLeverage", label: "Maximum leverage", suffix: "×" },
   ] },
-  { title: "Markets", levels: ["MARKET"], fields: [] },
-  { title: "Execution", levels: ["EXECUTION"], fields: [
+  { title: "Assets & venues", levels: ["MARKET"], fields: [] },
+  { title: "Execution limits", levels: ["EXECUTION"], fields: [
     { path: "market.maxSlippageBps", label: "Maximum slippage", suffix: "bps" },
     { path: "market.maxQuoteAgeSeconds", label: "Quote freshness", suffix: "s" },
   ] },
-  { title: "Agent limits", levels: ["AGENT"], fields: ROLES.flatMap((role) => [
-    { path: `agents.${role}.maxAllocation`, label: `${ROLE_TITLES[role]} ceiling`, prefix: "$" },
-    { path: `agents.${role}.maxExposure`, label: `${ROLE_TITLES[role]} exposure`, prefix: "$" },
+  { title: "Agents", levels: ["AGENT"], fields: ROLES.flatMap((role) => [
+    { path: `agents.${role}.maxAllocation`, label: `${ROLE_TITLES[role].replace(" Agent", "")} maximum`, prefix: "$" },
+    { path: `agents.${role}.maxExposure`, label: `${ROLE_TITLES[role].replace(" Agent", "")} exposure`, prefix: "$" },
   ]) },
 ];
 
@@ -627,12 +739,9 @@ export function PermissionsBody(props: {
                 })}
               </div>
             ) : null}
-            {section.title === "Markets" && access !== null ? SET_FIELDS.map((field) => <SetField key={field.path} field={field} access={access} catalog={props.catalog} editable={props.editable} busy={props.busy} onField={props.onField} />) : null}
-            {section.title === "Execution" && access !== null ? (
-              <>
-                <SetField field={{ path: "execution.recipients", set: "recipients", label: "Recipients" }} access={access} catalog={props.catalog} editable={false} busy={props.busy} onField={props.onField} />
-                <p className="mw-fine">Trusted execution details (recipients, Gate, adapter, chain, calldata) are not editable here.</p>
-              </>
+            {section.title === "Assets & venues" && access !== null ? SET_FIELDS.map((field) => <SetField key={field.path} field={field} access={access} catalog={props.catalog} editable={props.editable} busy={props.busy} onField={props.onField} />) : null}
+            {section.title === "Execution limits" && access !== null ? (
+              <p className="mw-fine">Trusted execution details (recipients, Gate, adapter, chain, calldata) are not editable here.</p>
             ) : null}
             <Guardrails rows={rows} />
           </section>

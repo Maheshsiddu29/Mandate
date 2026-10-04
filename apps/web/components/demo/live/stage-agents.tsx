@@ -16,11 +16,15 @@ export function elapsedSince(at: string | null, now: number): number | null {
 
 /** What Mandate concluded about one agent, in words first. The raw reason codes stay in details. */
 export function mandateVerdict(agent: AgentCard): { readonly tone: "good" | "warn" | "bad" | "neutral"; readonly label: string; readonly line: string } | null {
-  if (agent.finalOutcome === "RESERVED") return { tone: "good", label: "AUTHORIZED", line: `${usd(agent.finalAmount)} reserved` };
-  if (agent.phase === "BLOCKED") return { tone: "bad", label: "BLOCKED", line: explainReasons(agent.reasons).headline || "Blocked" };
+  if (agent.finalOutcome === "RESERVED") return { tone: "good", label: "AUTHORIZED", line: `${usd(agent.finalAmount)} authorized` };
+  if (agent.phase === "BLOCKED") return { tone: "bad", label: "BLOCKED", line: explainReasons(agent.reasons).headline || "Mandate refused the action" };
   if (agent.portfolioConflict) return { tone: "warn", label: "PORTFOLIO CONFLICT", line: "Valid action, but the portfolio is over a shared limit" };
-  if (agent.phase === "ADMISSIBLE") return { tone: "good", label: "ALLOWED", line: "Inside your mandate" };
+  if (agent.phase === "ADMISSIBLE") return { tone: "good", label: "AUTHORIZED", line: "Inside your mandate" };
+  if (agent.phase === "ABSTAINED") return { tone: "neutral", label: "NO ACTION", line: "Capital remains available" };
   if (agent.phase === "STALE") return { tone: "warn", label: "STALE QUOTE", line: "Quote expired; a fresh decision is required" };
+  if (agent.candidate !== "—" && (agent.phase === "RESPONDED" || agent.phase === "SIGNED" || agent.phase === "RESPONDING")) {
+    return { tone: "neutral", label: "PROPOSED", line: `${usd(agent.requested)} proposed` };
+  }
   return null;
 }
 
@@ -49,11 +53,16 @@ export function MandateReasons({ reasons, summary = "Technical details" }: { rea
 
 function quiet(agent: AgentCard): string | null {
   switch (agent.phase) {
-    case "ABSTAINED": return "No proposal. Nothing was submitted.";
-    case "TIMED OUT": return `${agent.title} agent didn't respond in time. No action was submitted.`;
-    case "FAILED": return `${agent.title} agent couldn't respond. No action was submitted.`;
-    case "INVALID RESPONSE": return `${agent.title} agent returned an invalid answer. No action was submitted.`;
-    default: return null;
+    case "ABSTAINED":
+      return "No action. The agent did not find an opportunity worth using its authority. Capital remains available.";
+    case "TIMED OUT":
+      return `${agent.title} agent didn't respond in time. No action was submitted.`;
+    case "FAILED":
+      return `${agent.title} agent couldn't respond. No action was submitted.`;
+    case "INVALID RESPONSE":
+      return `${agent.title} agent returned an invalid answer. No action was submitted.`;
+    default:
+      return null;
   }
 }
 
@@ -117,14 +126,26 @@ export function AgentsStage(props: {
   readonly version: number | null;
   readonly reduced: boolean;
 }): ReactNode {
-  const active = props.agents.filter((agent) => props.enabled(agent.role) !== false).length;
+  const active = props.agents.filter((agent) => props.enabled(agent.role) === true).length;
   return (
     <div className="mw-agents">
       <header className="mw-stage-head">
-        <p className="mw-kicker">Mandate V{props.version ?? "—"} · {active} {active === 1 ? "agent" : "agents"}</p>
-        <h2>{props.reviewing ? "Mandate review" : "Agents are working"}</h2>
-        <p>{props.reviewing ? "Each proposal has been checked. Mandate is evaluating the portfolio as a whole." : "Each agent works independently. Nothing executes until Mandate allows it."}</p>
+        <p className="mw-kicker">Mandate active · {active} {active === 1 ? "agent" : "agents"}</p>
+        <h2>{props.reviewing ? "Checking the portfolio" : "Mandate active"}</h2>
+        <p>{props.reviewing ? "Each proposal has been checked. Mandate is evaluating the portfolio as a whole." : "Agents can act only within the authority you approved."}</p>
       </header>
+      <ul className="mw-authority-map" aria-label="One authority, many agents">
+        {props.agents.map((agent) => {
+          const on = props.enabled(agent.role);
+          const state = on === false ? "Disabled" : on === null ? "Not selected" : agent.phase === "PENDING" || agent.phase === "RESPONDING" ? "Evaluating" : agent.phase === "ABSTAINED" ? "No action" : agent.phase === "BLOCKED" ? "Blocked" : agent.finalOutcome === "RESERVED" ? "Authorized" : "Available";
+          return (
+            <li key={agent.role} data-enabled={on === true ? "on" : on === false ? "off" : "unset"}>
+              <strong>{ROLE_TITLES[agent.role].replace(" Agent", "")}</strong>
+              <span>{state}</span>
+            </li>
+          );
+        })}
+      </ul>
       <ul className="mw-activity-list" aria-live="polite" aria-label="Agent activity">
         {props.agents.map((agent) => <AgentActivity key={agent.role} agent={agent} now={props.now} enabled={props.enabled(agent.role)} reduced={props.reduced} />)}
       </ul>

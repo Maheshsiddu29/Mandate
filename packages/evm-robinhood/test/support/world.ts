@@ -261,6 +261,10 @@ export class ModelChain implements GateChain {
     this.balances.set(key(token, owner), (this.balances.get(key(token, owner)) ?? 0n) + amount);
   }
 
+  setBalance(token: string, owner: string, amount: bigint): void {
+    this.balances.set(key(token, owner), amount);
+  }
+
   approve(token: string, owner: string, spender: string, amount: bigint): void {
     this.allowances.set(key(token, `${owner}>${spender}`), amount);
   }

@@ -23,17 +23,18 @@
  */
 
 import type { LiveSession } from '@mandate/live-agents';
+import { delegationStructHash, type DelegationFields } from '@mandate/execution-gate';
 import { selectStockExecution } from './authorized-execution.ts';
 import { ASSET_QUALIFICATION } from './evidence.ts';
 import type { GateExecutionRequest } from './gate-authority.ts';
-import type { SettlementJournal } from './journal.ts';
+import type { AttemptRecord, SettlementJournal, V3ProofRecord } from './journal.ts';
 import { reservationStatus, type ReservationStatus } from './portfolio-ledger.ts';
 import type { ReconcileDeps, ReconcileReport } from './reconcile.ts';
 import type { TestnetRpc } from './rpc.ts';
 import { SendGate, SEND_AUTHORIZATION_PHRASE } from './send-gate.ts';
 import { durableSettlement, unreadableSettlement, type DurableSettlement, type PendingSettlement } from './settlement-state.ts';
 import type { SpineHold, SpineSettlementInput, SpineSettlementResult } from './spine-settlement.ts';
-import type { TestnetDeployment } from './deployment.ts';
+import { explorerTxUrl, type TestnetDeployment } from './deployment.ts';
 import type { DomainKeys } from './domain-leg.ts';
 
 type LabJson = string | number | boolean | null | readonly LabJson[] | { readonly [k: string]: LabJson };
@@ -43,9 +44,62 @@ export interface LabRouteResponse {
   readonly body: { readonly [k: string]: LabJson };
 }
 
+/** Explicit V3 browser DTO. Null fields mean the durable evidence does not contain that fact. */
+export interface V3TechnicalProof {
+  readonly version: 'V3';
+  readonly sessionId: string;
+  readonly candidateId: string;
+  readonly walletPrincipal: string;
+  readonly gate: string;
+  readonly delegate: string;
+  readonly agent: string;
+  readonly delegationDigest: string;
+  readonly gateMandateDigest: string | null;
+  readonly gateCandidateDigest: string | null;
+  readonly executionApprovalDigest: string | null;
+  readonly executionCommitment: string | null;
+  readonly executionNonce: string;
+  readonly reservation: string;
+  readonly initialAllocationDigest: string;
+  readonly initialCapacity: string;
+  readonly cumulativeDebit: string;
+  readonly remainingCapacity: string;
+  readonly capacityUnit: string;
+  readonly capacityDecimals: number;
+  readonly gasEstimate: string | null;
+  readonly transactionHash: string;
+  readonly blockNumber: string;
+  readonly gasUsed: string;
+  readonly transactionStatus: string;
+  readonly transactionTo: string;
+  readonly chainId: string;
+  readonly receiptDigest: string;
+  readonly explorerUrl: string | null;
+  readonly evidence: 'LIVE_TESTNET';
+  readonly broadcast: true;
+}
+
+type DurableSettlementResponse = DurableSettlement & { readonly technicalProof: V3TechnicalProof | null };
+
 export interface ScratchLedger {
   readonly path: string;
   readonly cleanup: () => void;
+}
+
+export interface V3UiHost {
+  readonly host: import('./v3/host.ts').LiveV3ChallengeHost;
+  readonly settle: (input: import('./v3/settlement.ts').V3SettlementInput) => Promise<import('./v3/settlement.ts').V3SettlementResult>;
+  readonly gate: { readonly address: string; readonly domainSeparator: string; readonly runtimeCodeHash: string };
+  /**
+   * RPC client bound to {@link gate} — never the V2 deployment Gate.
+   * settleSpineV3 simulates and broadcasts only through this client.
+   */
+  readonly rpc: TestnetRpc;
+  /** Next execution nonce per session (starts at 1). */
+  readonly nextNonce: (sessionId: string) => bigint;
+  readonly markNonceUsed: (sessionId: string, nonce: bigint) => void;
+  readonly usedDebit: (sessionId: string) => bigint;
+  readonly addDebit: (sessionId: string, debit: bigint) => void;
 }
 
 export interface SpineUiHost {
@@ -63,6 +117,8 @@ export interface SpineUiHost {
   /** Arm a timer. Return a function that cancels it. No timer lives in this module. */
   readonly schedule: (ms: number, fn: () => void) => () => void;
   readonly signatureWaitMs: number;
+  /** When set, V3 sessions settle autonomously through this host. */
+  readonly v3?: V3UiHost;
 }
 
 interface Job {
@@ -100,6 +156,176 @@ const STATE_UNVERIFIED = /^(GATE_STATE_UNKNOWN|CHAIN_TIME_UNREADABLE)\./;
 
 function asJson(value: unknown): LabJson {
   return JSON.parse(JSON.stringify(value, (_k, x: unknown) => (typeof x === 'bigint' ? x.toString() : x))) as LabJson;
+}
+
+function object(value: LabJson): { readonly [k: string]: LabJson } | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as { readonly [k: string]: LabJson } : null;
+}
+
+function eventText(data: { readonly [k: string]: LabJson } | null, key: string): string | null {
+  const value = data?.[key];
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function settledV3Event(session: LiveSession, txHash: string): { readonly [k: string]: LabJson } | null {
+  for (let i = session.events.events.length - 1; i >= 0; i -= 1) {
+    const event = session.events.events[i];
+    if (event?.kind !== 'DOMAIN_EXECUTION_SETTLED') continue;
+    const data = object(asJson(event.data));
+    if (eventText(data, 'spine') === 'V3' && eventText(data, 'txHash') === txHash) return data;
+  }
+  return null;
+}
+
+function signedV3(session: LiveSession, version: number): {
+  readonly initialAllocationDigest: string;
+  readonly delegate: string;
+  readonly agent: string;
+  readonly delegationDigest: string;
+  readonly initialCapacity: string;
+} | null {
+  const record = session.versions.records.find((item) => item.version === version);
+  const wallet = record?.authorization.wallet;
+  if (
+    record === undefined
+    || record.authorization.method !== 'WALLET_PRINCIPAL_V3_DELEGATED'
+    || wallet === undefined
+    || wallet === null
+    || wallet.initialAllocationDigest === undefined
+    || wallet.sessionDigest === undefined
+    || wallet.delegate === undefined
+    || wallet.agent === undefined
+    || wallet.representationIdHash === undefined
+    || wallet.fundingToken === undefined
+    || wallet.cumulativeDebitLimit === undefined
+    || wallet.validAfter === undefined
+    || wallet.validUntil === undefined
+    || wallet.generation === undefined
+  ) return null;
+  try {
+    const fields: DelegationFields = {
+      portfolioMandateDigest: record.digest,
+      initialAllocationDigest: wallet.initialAllocationDigest,
+      sessionDigest: wallet.sessionDigest,
+      principal: record.authorization.principal,
+      delegate: wallet.delegate,
+      agent: wallet.agent,
+      representationIdHash: wallet.representationIdHash,
+      fundingToken: wallet.fundingToken,
+      cumulativeDebitLimit: BigInt(wallet.cumulativeDebitLimit),
+      validAfter: BigInt(wallet.validAfter),
+      validUntil: BigInt(wallet.validUntil),
+      generation: BigInt(wallet.generation),
+    };
+    return {
+      initialAllocationDigest: fields.initialAllocationDigest,
+      delegate: fields.delegate,
+      agent: fields.agent,
+      delegationDigest: delegationStructHash(fields),
+      initialCapacity: fields.cumulativeDebitLimit.toString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function subtractCapacity(initial: string, remaining: string): string | null {
+  try {
+    const first = BigInt(initial);
+    const rest = BigInt(remaining);
+    return rest >= 0n && rest <= first ? (first - rest).toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Normalize durable V3 evidence; only a successful consumed/settled receipt produces proof. */
+export function v3TechnicalProof(
+  session: LiveSession,
+  attempt: AttemptRecord | null,
+  candidateId: string,
+  version: number,
+  deployment: TestnetDeployment,
+): V3TechnicalProof | null {
+  if (
+    attempt === null
+    || (attempt.state !== 'SETTLED' && attempt.state !== 'CONSUMED')
+    || attempt.receipt?.status !== 'SUCCESS'
+    || attempt.tx === null
+    || attempt.observation === null
+  ) return null;
+  const signed = signedV3(session, version);
+  const event = settledV3Event(session, attempt.tx.hash);
+  if (signed === null || eventText(event, 'evidence') !== 'LIVE_TESTNET') return null;
+  const journal = attempt.v3Proof;
+  const executionNonce = journal?.executionNonce ?? eventText(event, 'executionNonce');
+  const remainingCapacity = journal?.remainingCapacity ?? eventText(event, 'remainingCapacity');
+  const initialCapacity = journal?.initialCapacity ?? signed.initialCapacity;
+  const cumulativeDebit = journal?.cumulativeDebit ?? (remainingCapacity === null ? null : subtractCapacity(initialCapacity, remainingCapacity));
+  if (executionNonce === null || remainingCapacity === null || cumulativeDebit === null) return null;
+  return {
+    version: 'V3',
+    sessionId: session.id,
+    candidateId: journal?.candidateId ?? candidateId,
+    walletPrincipal: attempt.principal,
+    gate: attempt.gate,
+    delegate: journal?.delegate ?? signed.delegate,
+    agent: journal?.agent ?? signed.agent,
+    delegationDigest: journal?.delegationDigest ?? signed.delegationDigest,
+    gateMandateDigest: journal?.mandateDigest ?? eventText(event, 'mandateDigest'),
+    gateCandidateDigest: journal?.candidateDigest ?? eventText(event, 'candidateDigest'),
+    executionApprovalDigest: journal?.executionApprovalDigest ?? eventText(event, 'executionApprovalDigest'),
+    executionCommitment: journal?.executionCommitment ?? eventText(event, 'executionCommitment'),
+    executionNonce,
+    reservation: attempt.reservation,
+    initialAllocationDigest: journal?.initialAllocationDigest ?? signed.initialAllocationDigest,
+    initialCapacity,
+    cumulativeDebit,
+    remainingCapacity,
+    capacityUnit: journal?.capacityUnit ?? deployment.mdusd.symbol,
+    capacityDecimals: journal?.capacityDecimals ?? deployment.mdusd.decimals,
+    gasEstimate: journal?.gasEstimate ?? eventText(event, 'gasEstimate'),
+    transactionHash: attempt.tx.hash,
+    blockNumber: attempt.receipt.blockNumber,
+    gasUsed: attempt.receipt.gasUsed,
+    transactionStatus: attempt.receipt.status,
+    transactionTo: attempt.tx.to,
+    chainId: attempt.chainId,
+    receiptDigest: attempt.observation,
+    explorerUrl: explorerTxUrl(deployment, attempt.tx.hash),
+    evidence: 'LIVE_TESTNET',
+    broadcast: true,
+  };
+}
+
+function proofFromResult(
+  session: LiveSession,
+  proof: V3ProofRecord,
+  txHash: string | null,
+  receipt: AttemptRecord['receipt'],
+  receiptDigest: string | null,
+  explorerUrl: string | null,
+  gate: string,
+  chainId: string,
+  reservation: string,
+): V3TechnicalProof | null {
+  if (txHash === null || receipt?.status !== 'SUCCESS' || receiptDigest === null) return null;
+  const selected = selectStockExecution(session.reservedExecutions);
+  if (!selected.ok) return null;
+  const principal = session.versions.records.find((record) => record.version === selected.execution.version)?.authorization.principal;
+  if (principal === undefined) return null;
+  return {
+    version: 'V3', sessionId: session.id, candidateId: proof.candidateId, walletPrincipal: principal, gate,
+    delegate: proof.delegate, agent: proof.agent, delegationDigest: proof.delegationDigest,
+    gateMandateDigest: proof.mandateDigest, gateCandidateDigest: proof.candidateDigest,
+    executionApprovalDigest: proof.executionApprovalDigest, executionCommitment: proof.executionCommitment,
+    executionNonce: proof.executionNonce, reservation, initialAllocationDigest: proof.initialAllocationDigest,
+    initialCapacity: proof.initialCapacity, cumulativeDebit: proof.cumulativeDebit, remainingCapacity: proof.remainingCapacity,
+    capacityUnit: proof.capacityUnit, capacityDecimals: proof.capacityDecimals, gasEstimate: proof.gasEstimate,
+    transactionHash: txHash, blockNumber: receipt.blockNumber, gasUsed: receipt.gasUsed,
+    transactionStatus: receipt.status, transactionTo: gate, chainId, receiptDigest, explorerUrl,
+    evidence: 'LIVE_TESTNET', broadcast: true,
+  };
 }
 
 /** The browser's explicit execute action. It is not an asset, an amount, or a calldata field. */
@@ -217,14 +443,18 @@ export class SpineUi {
     const read = SESSION_READ.exec(path);
     if (method === 'GET' && read !== null && lab !== undefined) return this.#sessionRead(read[1] as string, await lab());
     if (method === 'GET' && path === '/api/live/settlement') {
+      const v3 = this.#host.v3 !== undefined;
       return ok({
         available: true,
-        spine: 'V2',
+        spine: v3 ? 'V3' : 'V2',
+        spines: v3 ? ['V2', 'V3'] : ['V2'],
         chainId: this.#host.deployment.chainId.toString(),
         sendAuthorization: SEND_AUTHORIZATION_PHRASE,
-        reverify: 'EIP-712 PortfolioMandateV2',
+        reverify: v3 ? 'EIP-712 DelegatedPortfolioAuthorizationV3 or PortfolioMandateV2' : 'EIP-712 PortfolioMandateV2',
         gasPayer: 'DEPLOYER',
         walletBroadcasts: false,
+        autonomousV3: v3,
+        v3Gate: v3 ? this.#host.v3!.gate.address : null,
       });
     }
     const match = SETTLE_PATH.exec(path);
@@ -254,6 +484,14 @@ export class SpineUi {
     const session = await this.#host.openSession(id);
     if (session === null) return refuse(404, 'SESSION_NOT_FOUND', 'No such session.');
     if (body.mode === 'RECONCILE') return this.#reconcile(session);
+
+    const versions = session.versions;
+    const activeAuth = versions === undefined || versions.active === null
+      ? null
+      : versions.records.find((r) => r.version === versions.active!.version)?.authorization.method ?? null;
+    if (activeAuth === 'WALLET_PRINCIPAL_V3_DELEGATED') {
+      return this.#settleV3(session, body);
+    }
 
     const gate = new SendGate();
     // The phrase and the browser intent are different surfaces. The browser path never types the phrase.
@@ -347,6 +585,138 @@ export class SpineUi {
     }
   }
 
+  /**
+   * V3 autonomous path: no SendGate, no browser Gate signature, no Execute
+   * intent. Authority is the reusable DelegatedPortfolioAuthorizationV3.
+   */
+  async #settleV3(session: LiveSession, body: ParsedBody): Promise<LabRouteResponse> {
+    const v3 = this.#host.v3;
+    if (v3 === undefined) return refuse(409, 'V3_UNAVAILABLE', 'V3 autonomous settlement is not configured on this lab.');
+    if (body.mode !== 'DRY_RUN' && body.mode !== 'SEND') {
+      return refuse(409, 'BAD_REQUEST', 'V3 settlement mode must be DRY_RUN or SEND.');
+    }
+    const mode = body.mode;
+    if (body.browserExecute) {
+      return refuse(409, 'V3_NO_BROWSER_EXECUTE', 'V3 does not use Execute on Robinhood Testnet. Settlement proceeds under the signed delegated authority.');
+    }
+    if (body.gateSignature !== null) {
+      return refuse(409, 'V3_NO_GATE_SIGNATURE', 'V3 does not accept a per-trade wallet Gate signature.');
+    }
+    if (session.restored) return refuse(409, 'SESSION_RESTORED', 'A restored session is evidence only. Start a fresh V3 mandate.');
+    if (session.versions.paused) return refuse(409, 'MANDATE_PAUSED', 'The mandate is paused. Autonomous settlement is stopped.');
+
+    // Restore public delegate evidence if the process restarted mid-session.
+    const auth = session.versions.records.find((r) => r.version === session.versions.active?.version)?.authorization;
+    const w = auth?.wallet;
+    if (auth?.method === 'WALLET_PRINCIPAL_V3_DELEGATED' && w?.delegate !== undefined && w.domain.verifyingContract !== undefined
+      && w.agent !== undefined && w.representationIdHash !== undefined && w.fundingToken !== undefined
+      && w.cumulativeDebitLimit !== undefined && w.generation !== undefined && w.initialAllocationDigest !== undefined) {
+      if (v3.host.sessionOf(session.id) === null) {
+        v3.host.restorePublic(session.id, {
+          verifyingContract: w.domain.verifyingContract,
+          delegate: w.delegate,
+          agent: w.agent,
+          representationIdHash: w.representationIdHash,
+          fundingToken: w.fundingToken,
+          cumulativeDebitLimit: w.cumulativeDebitLimit,
+          validAfter: w.validAfter,
+          validUntil: w.validUntil,
+          generation: w.generation,
+        });
+      }
+    }
+    v3.host.arm(session.id);
+
+    let journal: SettlementJournal;
+    try {
+      journal = this.#host.journalFor(session);
+    } catch {
+      return refuse(500, 'INTERNAL', 'The settlement journal could not be opened. Nothing was broadcast.');
+    }
+    const scratch = mode === 'DRY_RUN' ? this.#host.scratch() : null;
+    try {
+      const nonce = v3.nextNonce(session.id);
+      // V3 must use the V3-bound RPC. The V2 host RPC is bound to the frozen
+      // V2 Gate and would refuse every V3 simulate/send with TARGET_NOT_THE_GATE.
+      if (v3.rpc.boundGate.toLowerCase() !== v3.gate.address.toLowerCase()) {
+        return refuse(500, 'V3_RPC_GATE_MISMATCH', 'V3 settlement RPC is not bound to the live V3 Gate. Nothing was broadcast.');
+      }
+      const result = await v3.settle({
+        session,
+        journal,
+        deployment: this.#host.deployment,
+        v3Gate: v3.gate,
+        rpc: v3.rpc,
+        keys: this.#host.keys,
+        mode,
+        host: v3.host,
+        ledgerPath: scratch === null ? this.#host.ledgerPath(session) : scratch.path,
+        nextExecutionNonce: nonce,
+        usedDebit: v3.usedDebit(session.id),
+      });
+      if (result.status === 'INELIGIBLE') {
+        return denied(result.reason, `V3 autonomous settlement refused at ${result.stage}.`, {
+          stage: result.stage,
+          transactions: 0,
+          txHash: null,
+        });
+      }
+      if (result.status === 'READY') {
+        // Dry-run advances lab nonce/debit so a second trade cannot reuse nonce 1 offline.
+        v3.markNonceUsed(session.id, result.executionNonce);
+        v3.addDebit(session.id, BigInt(result.debit));
+        return ok({
+          status: 'READY',
+          sessionId: session.id,
+          mode,
+          spine: 'V3',
+          executionNonce: result.executionNonce.toString(),
+          wouldSend: asJson(result.wouldSend),
+          transactions: 0,
+          message: 'V3 dry-run complete. Exact delegated execute simulated. Nothing was broadcast.',
+          ...stockEvidence(session),
+        });
+      }
+      if (result.status === 'SENT') {
+        v3.markNonceUsed(session.id, result.executionNonce);
+        v3.addDebit(session.id, BigInt(result.debit));
+        const selected = selectStockExecution(session.reservedExecutions);
+        const reservation = selected.ok ? selected.execution.reservation : '';
+        const technicalProof = reservation === '' ? null : proofFromResult(
+          session,
+          result.proof,
+          result.txHash,
+          result.receipt,
+          result.receiptDigest,
+          result.explorerUrl,
+          v3.gate.address,
+          this.#host.deployment.chainId.toString(),
+          reservation,
+        );
+        return ok({
+          status: 'SENT',
+          sessionId: session.id,
+          spine: 'V3',
+          executionNonce: result.executionNonce.toString(),
+          txHash: result.txHash,
+          transactions: result.broadcasts,
+          remainingCapacity: result.remainingCapacity,
+          executionAuthority: 'BOUNDED_V3_DELEGATION',
+          walletApprovalForTrade: 'NONE',
+          technicalProof: asJson(technicalProof),
+          ...stockEvidence(session),
+          message: result.broadcasts === 0 ? 'Nothing was broadcast.' : 'V3 autonomous settlement submitted under the signed delegation.',
+        });
+      }
+      return ok({ status: result.status, sessionId: session.id, spine: 'V3', transactions: 0, attempt: asJson(result.attempt) });
+    } catch {
+      return refuse(500, 'INTERNAL', 'V3 settlement could not be completed. Nothing further was broadcast.');
+    } finally {
+      journal.close();
+      scratch?.cleanup();
+    }
+  }
+
   /** Chain evidence only, over the reader: the same pass `settleSpine` opens with. No gate is opened, so nothing can be sent. */
   async #reconcile(session: LiveSession): Promise<LabRouteResponse> {
     let journal: SettlementJournal;
@@ -383,19 +753,23 @@ export class SpineUi {
   }
 
   /** The journal's attempt for the one reserved Stock child, the ledger's word on it, and whether a settle call is open. */
-  async #durable(session: LiveSession, journal: SettlementJournal): Promise<DurableSettlement> {
+  async #durable(session: LiveSession, journal: SettlementJournal): Promise<DurableSettlementResponse> {
     const asOf = session.events.events.length;
     const pending = this.#pending(session.id);
     const stock = Array.isArray(session.reservedExecutions) ? session.reservedExecutions.filter((r) => r.role === 'stock') : [];
     const only = stock.length === 1 ? stock[0] : undefined;
-    if (only === undefined) return durableSettlement({ reservation: null, reservationState: null, attempt: null, artifacts: [], pending, asOfEvents: asOf });
+    if (only === undefined) return { ...durableSettlement({ reservation: null, reservationState: null, attempt: null, artifacts: [], pending, asOfEvents: asOf }), technicalProof: null };
     const reservation = only.record.reservation;
     try {
       const core = session.versions.coreOf(only.version)?.core;
       const reservationState: ReservationStatus = core === undefined ? 'UNKNOWN' : reservationStatus((await core.engine.read(core.compiled.mandate.principal)).state, reservation);
-      return durableSettlement({ reservation, reservationState, attempt: journal.get(reservation), artifacts: journal.artifacts(reservation), pending, asOfEvents: asOf });
+      const attempt = journal.get(reservation);
+      return {
+        ...durableSettlement({ reservation, reservationState, attempt, artifacts: journal.artifacts(reservation), pending, asOfEvents: asOf }),
+        technicalProof: v3TechnicalProof(session, attempt, only.candidateId, only.version, this.#host.deployment),
+      };
     } catch {
-      return unreadableSettlement(reservation, pending, asOf);
+      return { ...unreadableSettlement(reservation, pending, asOf), technicalProof: null };
     }
   }
 
@@ -404,7 +778,7 @@ export class SpineUi {
     if (base.status !== 200) return { status: base.status, body: fields };
     const session = await this.#host.openSession(id);
     if (session === null) return { status: base.status, body: fields };
-    let state: DurableSettlement;
+    let state: DurableSettlementResponse;
     try {
       const journal = this.#host.journalFor(session);
       try {
@@ -413,7 +787,7 @@ export class SpineUi {
         journal.close();
       }
     } catch {
-      state = unreadableSettlement(null, this.#pending(id), session.events.events.length);
+      state = { ...unreadableSettlement(null, this.#pending(id), session.events.events.length), technicalProof: null };
     }
     return { status: base.status, body: { ...fields, settlement: asJson(state) } };
   }

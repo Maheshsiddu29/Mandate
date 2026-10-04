@@ -665,6 +665,21 @@ export function interpretLocally(prompt: string): DraftInterpretation {
       if (portfolio['maxDeployed'] === null) portfolio['maxDeployed'] = amount;
     }
   }
+  // "I have $5k" with no separate deploy cap: deployable equals stated capital minus any
+  // stated reserve. Never leave maxDeployed unset for a model or balanced fill to invent
+  // a smaller envelope (the Scenario C $2,500 regression).
+  if (portfolio['totalCapital'] !== null && portfolio['maxDeployed'] === null && portfolio['deployAll'] !== true) {
+    const totalAtoms = parseUsdc(portfolio['totalCapital'] as string);
+    const reserveAtoms = portfolio['minUnallocated'] === null ? 0n : parseUsdc(portfolio['minUnallocated'] as string);
+    if (totalAtoms !== null && reserveAtoms !== null && reserveAtoms <= totalAtoms) {
+      portfolio['maxDeployed'] = usdcText(totalAtoms - reserveAtoms);
+      notes.push(
+        reserveAtoms === 0n
+          ? 'No separate deploy cap was stated: maximum deployed equals total capital.'
+          : `No separate deploy cap was stated: maximum deployed is total capital minus the ${usdcText(reserveAtoms)} USDC reserve.`,
+      );
+    }
+  }
   // "Stock only" / "NFT only"
   const onlyRole = /\b(stocks?|swaps?|nfts?|yield|perps?|equities)\s+only\b/.exec(p);
   if (onlyRole !== null) {
@@ -730,10 +745,31 @@ export interface Interpreted {
   readonly draft: MandateDraft | null;
 }
 
+/** Decimal USDC amounts named in local UNSUPPORTED per-trade issues. */
+export function unsupportedPerTradeAmounts(issues: readonly DraftIssue[]): ReadonlySet<string> {
+  const out = new Set<string>();
+  for (const issue of issues) {
+    if (issue.kind !== 'UNSUPPORTED') continue;
+    const hit = /per-trade cap \((\d+(?:\.\d+)?) USDC\)/i.exec(issue.text);
+    if (hit?.[1] !== undefined) out.add(hit[1]);
+  }
+  return out;
+}
+
 /**
  * The prompt's own explicit amounts and agent choices win over a model draft.
  * A model may fill what the prompt did not say. It may not replace "$800"
- * with a preset-shaped total. Null local fields are left to the model.
+ * with a preset-shaped total, clip a stated budget to a ceiling, or dump the
+ * freed remainder onto a delegated agent. When the local parser mentioned an
+ * agent and left its budget null ("Swap remainder"), that null wins — the
+ * model must not invent a fixed budget.
+ *
+ * Unsupported per-trade amounts are a separate dimension. At this stage every
+ * agent ceiling still comes from the *model* (PRESET fill is later and is
+ * never suppressed by per-trade equality). A model ceiling equal to an
+ * unsupported per-trade amount, when the local parser did not name that
+ * ceiling, is discarded as model-inferred-from-unsupported — not because the
+ * numbers match a future preset.
  */
 export function preferExplicitPrompt(model: DraftInterpretation, prompt: string): DraftInterpretation {
   const local = interpretLocally(prompt);
@@ -743,18 +779,60 @@ export function preferExplicitPrompt(model: DraftInterpretation, prompt: string)
     const value = local.portfolio[key];
     if (value !== null) write[key] = value;
   }
+  // When the prompt fixed some agent budgets, other locally mentioned agents
+  // with a null budget are the delegated pool ("Swap remainder"). A model
+  // must not invent fixed amounts for them — that is how Stock/Yield clips
+  // silently reallocate into Swap.
+  const localFixedBudgets = local.agents.some((a) => a.budget !== null);
   const byRole = new Map(model.agents.map((item) => [item.role, { ...item }] as const));
+  // Ceilings the model alone supplied (local left null): candidates for
+  // discarding when they equal an unsupported per-trade amount.
+  const modelOnlyCeiling = new Map<Role, { readonly max: boolean; readonly exposure: boolean }>();
+  for (const role of ROLES) {
+    const localAgent = local.agents.find((a) => a.role === role);
+    const modelAgent = byRole.get(role);
+    modelOnlyCeiling.set(role, {
+      max: (localAgent?.maxAllocation ?? null) === null && (modelAgent?.maxAllocation ?? null) !== null,
+      exposure: (localAgent?.maxExposure ?? null) === null && (modelAgent?.maxExposure ?? null) !== null,
+    });
+  }
   for (const item of local.agents) {
     const current = byRole.get(item.role) ?? { role: item.role, enabled: null, maxAllocation: null, maxExposure: null, budget: null };
+    const budget =
+      item.budget !== null ? item.budget
+      : localFixedBudgets ? null
+      : current.budget;
     byRole.set(item.role, {
       role: item.role,
       enabled: item.enabled ?? current.enabled,
       maxAllocation: item.maxAllocation ?? current.maxAllocation,
       maxExposure: item.maxExposure ?? current.maxExposure,
-      budget: item.budget ?? current.budget,
+      budget,
     });
   }
-  return { ...model, portfolio, agents: ROLES.map((role) => byRole.get(role)).filter((item) => item !== undefined), notes: [...local.notes, ...model.notes].slice(0, MAX_NOTES) };
+  // Provenance: strip only model-only ceilings that match unsupported per-trade.
+  const blocked = unsupportedPerTradeAmounts(local.issues);
+  if (blocked.size > 0) {
+    for (const role of ROLES) {
+      const current = byRole.get(role);
+      if (current === undefined) continue;
+      const only = modelOnlyCeiling.get(role) ?? { max: false, exposure: false };
+      byRole.set(role, {
+        ...current,
+        maxAllocation: only.max && current.maxAllocation !== null && blocked.has(current.maxAllocation) ? null : current.maxAllocation,
+        maxExposure: only.exposure && current.maxExposure !== null && blocked.has(current.maxExposure) ? null : current.maxExposure,
+      });
+    }
+  }
+  const issues = [...local.issues, ...model.issues];
+  const seen = new Map(issues.map((i) => [`${i.kind}|${i.text}`, i] as const));
+  return {
+    ...model,
+    portfolio,
+    agents: ROLES.map((role) => byRole.get(role)).filter((item) => item !== undefined),
+    issues: [...seen.values()].slice(0, MAX_ISSUES),
+    notes: [...local.notes, ...model.notes].slice(0, MAX_NOTES),
+  };
 }
 
 /** Ask a provider to interpret `prompt`. A failed or malformed answer yields no draft; nothing falls back silently. */
@@ -769,6 +847,15 @@ export async function interpretPrompt(prompt: string, provider: AgentModelProvid
   for (const path of Object.keys(localDraft.provenance)) {
     const v = fieldAt(localDraft, path);
     if (v !== null && v !== undefined) draft = withField(draft, path, v, 'EXPLICIT_PROMPT', localDraft.evidence[path]?.sourceText);
+  }
+  // Delegated remainder in a hybrid prompt: clear model-invented pool budgets.
+  const localFixedBudgets = local.agents.some((a) => a.budget !== null);
+  if (localFixedBudgets) {
+    for (const a of local.agents) {
+      if (a.budget === null && fieldAt(draft, `agents.${a.role}.budget`) !== null) {
+        draft = withField(draft, `agents.${a.role}.budget`, null, 'EXPLICIT_PROMPT');
+      }
+    }
   }
   const issues = [...localDraft.issues, ...draft.issues];
   const notes = [...localDraft.notes, ...draft.notes].filter((n, i, a) => a.indexOf(n) === i).slice(0, MAX_NOTES);

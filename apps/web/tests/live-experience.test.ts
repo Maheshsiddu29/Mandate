@@ -54,31 +54,41 @@ const upTo = (sequence: number) => eventsAfter(run.filter((item) => item.sequenc
 
 test('the first screen is one prompt: no agents, limits, Room, settlement or log', () => {
   assert.equal(deriveFlow(idle).phase, 'PROMPT');
-  assert.match(compose, /What should your agents do\?/);
+  assert.match(compose, /What do you want your agents to do\?/);
   assert.match(compose, /<PromptBar[\s\S]*tone="light"/);
-  assert.match(compose, /Prompt suggestions/);
-  for (const chip of ['Deploy $2,000', 'Keep $300 unallocated', 'Limit derivatives to $400', 'Approved venues only', 'Prefer stocks + yield']) assert.ok(compose.includes(chip), chip);
+  assert.match(compose, /Example mandates/);
+  for (const chip of ['Let Stock and Yield manage $2,000 conservatively.', 'Stock can use $1,000. Keep half of the capital untouched.', 'Let the Stock agent manage $800.']) assert.ok(compose.includes(chip), chip);
   assert.doesNotMatch(compose, /AgentConfigRow|Advanced permissions|RoomChat|Settlement|EventLog/);
 });
 
 test('the five-step stepper is gone; a quiet status line remains', () => {
   assert.doesNotMatch(lab, /live-stepper|Demo progression|const STEPS|StageShell/);
   assert.match(lab, /className="mw-bar__status"/);
-  assert.equal(deriveFlow({ ...idle, drafting: true }).status, 'Drafting');
-  assert.equal(deriveFlow(running(upTo(30))).status, 'Negotiating');
+  assert.equal(deriveFlow({ ...idle, drafting: true }).status, 'Interpreting');
+  assert.equal(deriveFlow(running(upTo(30))).status, 'Live');
 });
 
 test('submitting the prompt shows drafting only while the real request is open', () => {
   assert.equal(deriveFlow({ ...idle, drafting: true }).phase, 'DRAFTING');
   assert.match(lab, /setDrafting\(true\);[\s\S]*await api\(SERVER, "POST", `\/sessions\/\$\{id\}\/draft`[\s\S]*setDrafting\(false\)/);
-  assert.match(compose, /<LatticeLoader label="Building your mandate" status="working"/);
-  assert.match(compose, /Turning your intent into explicit authority\./);
+  assert.match(compose, /<LatticeLoader label="Interpreting mandate…" status="working"/);
+  assert.match(compose, /Interpreting mandate/);
 });
 
 test('no timer, delay or randomness drives any state', () => {
-  for (const source of [browserSources, prompt, lattice]) {
+  const walletSource = read(`${LIVE}wallet.ts`);
+  for (const file of readdirSync(liveDir).filter((f) => /\.(ts|tsx)$/.test(f))) {
+    if (file === 'wallet.ts') continue;
+    const source = readFileSync(new URL(file, liveDir), 'utf8');
+    assert.doesNotMatch(source, /setTimeout\(|Math\.random\(/, file);
+  }
+  for (const source of [prompt, lattice]) {
     assert.doesNotMatch(source, /setTimeout\(|Math\.random\(/);
   }
+  // C2.3.3: wallet polls receipt confirmation only; it does not drive mandate state.
+  assert.equal((walletSource.match(/setTimeout\(/g) ?? []).length, 1);
+  assert.match(walletSource, /waitForReceipt[\s\S]*setTimeout\(resolve, 1_000\)/);
+  assert.doesNotMatch(walletSource, /Math\.random\(/);
   // The only intervals read real status (an open server task) or tick an elapsed clock for open requests.
   assert.match(lab, /if \(task === null\) return undefined;[\s\S]*setInterval\(\(\) => void refresh\(\), 700\)/);
   assert.match(lab, /if \(!pending\) return undefined;[\s\S]*setInterval\(\(\) => setNow\(Date\.now\(\)\), 250\)/);
@@ -116,11 +126,11 @@ test('capital allocation compares agent ceilings to deployable capital, and only
 
 test('advanced permissions start closed and open as an accessible dialog', () => {
   assert.match(lab, /useState<SheetName>\(null\)/);
-  assert.match(lab, /title="Advanced permissions"/);
+  assert.match(lab, /title="Edit permissions"/);
   assert.match(shared, /dialog\.showModal\(\)/);
   assert.match(shared, /aria-labelledby=\{id\}/);
   assert.match(shared, /aria-label=\{`Close \$\{title\}`\}/);
-  for (const section of ['Capital', 'Risk', 'Markets', 'Execution', 'Agent limits']) assert.match(configure, new RegExp(`title: "${section}"`));
+  for (const section of ['Capital', 'Exposure', 'Assets & venues', 'Execution limits', 'Agents']) assert.match(configure, new RegExp(`title: "${section}"`));
   for (const status of ['From your prompt', 'Default', 'Edited']) assert.ok(configure.includes(status), status);
   assert.match(configure, /What Mandate enforces/);
 });
@@ -158,13 +168,13 @@ test('the review step signs with a real wallet, or with the labelled demo key �
   assert.match(configure, /const reviewClean = props\.review\.canAuthorize/);
   assert.match(configure, /disabled=\{!demoReady \|\| props\.authorizing\}/);
   // The wallet's CTA needs a connected wallet on the approval chain and a clean Review; nothing pretends to be connected.
-  assert.match(configure, /const walletReady = method === "wallet" && connected && rightChain && reviewClean;/);
+  assert.match(configure, /const walletReady = signingMethod === "wallet" && connected && rightChain && reviewClean && setupReady;/);
   assert.match(configure, /disabled=\{!walletReady \|\| props\.authorizing\}/);
   assert.doesNotMatch(browserSources, /Wallet approved|setConfirmation\(props\.expected\)|confirmation: expected/i);
   // Signing a mandate is not a transaction: the review step shows no gas estimate or limit.
   assert.doesNotMatch(configure, /gas estimate|gasEstimate|estimateGas|gasLimit/i);
   // The wallet path: a server challenge, the wallet's EIP-712 signature, server verification; the browser sends only id and signature.
-  assert.match(lab, /call\("POST", "\/wallet\/challenge", \{ address, spine: "V2" \}\)/);
+  assert.match(lab, /call\("POST", "\/wallet\/challenge", \{ address, spine: preferV3 \? "V3" : "V2" \}\)/);
   assert.match(lab, /api\(SERVER, "GET", "\/settlement"\)/);
   assert.match(lab, /mode: "SEND", intent: "EXECUTE_ROBINHOOD_TESTNET"/);
   assert.match(lab, /gateSignature: signed\.value/);
@@ -177,10 +187,12 @@ test('the review step signs with a real wallet, or with the labelled demo key �
   assert.match(outcome, /Nothing is broadcast\./);
   assert.match(outcome, /Execute on Robinhood Testnet/);
   assert.match(outcome, /Testnet settlement proof/);
-  assert.match(outcome, /\{settlement\.fixtureIn\} → \{settlement\.fixtureOut/);
+  assert.match(outcome, /Fixture debit \{settlement\.fixtureIn\}/);
+  assert.match(outcome, /Fixture output \{settlement\.fixtureOut\}/);
   assert.doesNotMatch(outcome, /MDEMO → MDUSD/);
   assert.doesNotMatch(outcome, /Send testnet transaction/);
-  assert.doesNotMatch(browserSources, /live-settlement|eth_sendTransaction|sendTransaction/);
+  assert.doesNotMatch(browserSources, /@mandate\/live-settlement|packages\/live-settlement/);
+  assert.match(browserSources, /sendBoundedErc20Approve/);
   assert.match(lab, /w\.signTypedData\(address, challenge\.typedData\)/);
   assert.match(lab, /call\("POST", "\/wallet\/authorize", \{ challenge: str\(challenge\.challenge\), signature: signed\.value \}\)/);
   assert.doesNotMatch(lab, /console\.|localStorage\.setItem\([^)]*signature/);
@@ -196,7 +208,8 @@ test('signing starts the run; Trade never broadcasts anything', () => {
   assert.match(lab, /const body = await call\("POST", "\/authorize", \{ confirmation \}\);[\s\S]*await startRun\(body\);/);
   assert.match(lab, /const body = await call\("POST", "\/wallet\/authorize"[\s\S]*await startRun\(body\);/);
   assert.match(lab, /setRunFrom\(known\);\s*await call\("POST", "\/run", \{\}\);/);
-  assert.doesNotMatch(browserSources, /sendTransaction|signTransaction|eth_sendRawTransaction|eth_sign(?!TypedData_v4)|personal_sign/i);
+  assert.doesNotMatch(browserSources, /eth_sendRawTransaction|eth_signTransaction|personal_sign/i);
+  assert.match(browserSources, /sendBoundedErc20Approve/);
 });
 
 test('agent rows start from AGENT_REQUEST_STARTED and update independently', () => {
@@ -302,7 +315,7 @@ test('authorization appears only after PORTFOLIO_AUTHORIZED; reserved is never c
   const review = deriveReview(eventsAfter(run, 4));
   assert.deepEqual(review.authorized.map((item) => [item.role, item.amount]), [['stock', '400'], ['yield', '500'], ['perps', '400']]);
   assert.equal(review.reserved, '1300');
-  assert.match(outcome, /Reserved is not settled\./);
+  assert.match(outcome, /Reserved is authorization evidence, not settlement\./);
 });
 
 test('settlement progress follows settlement events; a hash is submitted, not confirmed', () => {
@@ -327,8 +340,8 @@ test('settlement progress follows settlement events; a hash is submitted, not co
 test('the decision and the fixture settlement proof stay separate, with the disclaimer always shown', () => {
   assert.match(outcome, /export const FIXTURE_QUALIFICATION = "Valueless demo assets\. Not an NVDA trade\. Not a Robinhood Stock Token\."/);
   assert.match(outcome, /<p className="mw-proof__qualify">\{FIXTURE_QUALIFICATION\}<\/p>/);
-  assert.match(outcome, /mw-proof__decision[\s\S]*Trade decision[\s\S]*mw-proof__chain[\s\S]*Settlement proof/);
-  assert.match(outcome, /The browser never sends transactions\./);
+  assert.match(outcome, /mw-proof__decision[\s\S]*mw-proof__chain[\s\S]*Testnet settlement proof/);
+  assert.match(outcome, /The browser never sends transactions/);
   assert.doesNotMatch(outcome, /\$\{usd\([^)]*\)\} → \$\{settlement\.fixtureOut/);
 });
 
@@ -356,21 +369,26 @@ test('failures stay in the same panel and say nothing was authorized', () => {
 });
 
 test('policy stress is a secondary security demo after the trade', () => {
-  assert.match(outcome, /Test the firewall/);
+  assert.match(sheets, /Try an unauthorized action/);
   assert.match(lab, /<Sheet open=\{sheet === "stress"\}[\s\S]*<StressBody/);
+  assert.match(outcome, /Test the firewall/);
+  assert.match(lab, /setSheet\("stress"\)/);
   assert.doesNotMatch(agentsUi + compose + configure, /policy-stress|StressBody/);
   assert.match(sheets, /VALID AGENT ≠ VALID ACTION/);
   assert.match(sheets, /DIFFERENT AUTHORIZATION RESULT/);
+  assert.match(sheets, /Ledger unchanged/);
+  assert.match(sheets, /not LIVE_TESTNET/);
   const identity = { agentIdentity: 'VALID', membership: 'VALID', delegation: 'ACTIVE', signature: 'VALID', sameSignerAsSwapAgent: true };
   const attempts = derivePresentation([
     event(1, 'POLICY_STRESS_STARTED'),
     event(2, 'POLICY_STRESS_CASE_SELECTED', { attempt: 1, caseId: 'RECIPIENT_MISMATCH', rationale: 'test' }),
     event(3, 'POLICY_STRESS_PROPOSAL_SIGNED', { attempt: 1, identity }),
-    event(4, 'POLICY_STRESS_PROPOSAL_BLOCKED', { attempt: 1, reasons: ['RECIPIENT_NOT_ALLOWED'], screening: { verdict: 'BLOCKED' } }),
+    event(4, 'POLICY_STRESS_PROPOSAL_BLOCKED', { attempt: 1, reasons: ['RECIPIENT_NOT_ALLOWED'], screening: { verdict: 'BLOCKED' }, ledgerUnchanged: true }),
     event(5, 'POLICY_STRESS_CASE_SELECTED', { attempt: 2, caseId: 'COMPLIANT_CONTROL', rationale: 'inside' }),
     event(6, 'POLICY_STRESS_PROPOSAL_AUTHORIZED', { attempt: 2, screening: { verdict: 'ADMISSIBLE' }, sameIdentityAsRefusedAttempts: true }),
   ]).stress.attempts;
   assert.deepEqual(attempts.map((attempt) => attempt.outcome), ['REFUSED', 'AUTHORIZED']);
+  assert.equal(attempts[0]?.ledgerUnchanged, true);
   assert.equal(eventsAfter([event(9, 'POLICY_STRESS_STARTED'), event(10, 'AGENT_REQUEST_STARTED', {}, 'stock')], 8).length, 1);
 });
 

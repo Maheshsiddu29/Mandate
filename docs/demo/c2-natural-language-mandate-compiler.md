@@ -143,8 +143,26 @@ Five roles: `stock`, `swap`, `nft`, `yield`, `perps`.
 - `maxAllocation` → signed ceiling; without `autoReallocate`, signed max ≈ budget.
 - Fill-from-preset **never** sets `AUTHORITY_CHOICES`
   (`agents.*.enabled`, `portfolio.autoReallocate`).
-- `withinStatedCapital` caps a filled `maxDeployed` to stated total − reserve
-  (the $800 vs balanced $2,500 regression).
+- When total capital is stated and no separate deploy cap is named, the
+  compiler derives `maxDeployed = total − reserve` so a model or balanced
+  fill cannot invent a smaller deployable envelope (Scenario C: "$5k" must
+  not become "$2,500 available").
+- `withinStatedCapital` fills `maxDeployed` from stated total − reserve when
+  the principal already named total capital (the $800 vs balanced $2,500
+  regression, and the inverse $5k vs balanced $2,500 case).
+- Agent `budget` (planned) and `maxAllocation` (signed Up to) stay distinct.
+  `"Stock $2k"` sets the planned budget only; balanced fill may still apply
+  an $800 preset ceiling, which blocks signing until the principal raises
+  the ceiling or reduces the budget — authority is never expanded silently,
+  and a preset conflict must not clip the requested budget or dump the
+  freed remainder onto a delegated agent (Scenario C: Stock/Yield stay
+  $2k/$1k with Swap remainder $2k, never Stock/Yield $800 and Swap $3,400).
+- An unsupported per-trade amount never becomes any agent's
+  `maxAllocation` / `maxExposure` from the *model*. Preset ceilings are a
+  separate source: balanced Swap `$500` is still filled under
+  `"no trade above $500"` (provenance `PRESET`), and the per-trade note
+  remains an independent `UNSUPPORTED` signing blocker. Numeric equality
+  alone must not suppress or invent aggregate authority.
 
 ---
 
@@ -157,7 +175,10 @@ Five roles: `stock`, `swap`, `nft`, `yield`, `perps`.
   never enable unnamed agents; report issues.
 - Offline / tests: `interpretLocally` regex parser → same admission path.
 - `preferExplicitPrompt`: local explicit amounts and agent choices overlay
-  the model so a model cannot replace `"$800"` with a preset-shaped `$2,500`.
+  the model so a model cannot replace `"$800"` with a preset-shaped `$2,500`,
+  clip a stated budget to a ceiling, invent a fixed budget for a delegated
+  remainder agent, or (model-only) turn an unsupported per-trade amount into
+  an aggregate ceiling. Preset fill is not value-gated by per-trade.
 
 ---
 

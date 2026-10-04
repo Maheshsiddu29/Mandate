@@ -21,7 +21,25 @@ export * from './market.ts';
 export { ASSUMPTIONS, BLOCK_LADDER, ORDER_DEBIT_BOUND, createGateSpotPolicy, gateSpotImplementation, gateSpotManifest, gateSpotModuleRef, type GateSpotConfig, type GateSpotPolicy } from './policy.ts';
 export * from './adapter.ts';
 export { EVALUATION_STATE_ID, buildGateArtifact, checkGateArtifact, gateMandateId, reviewedMarketDigest, slotScope, type ArtifactSource, type ArtifactTerms, type GateArtifact } from './gate.ts';
-export { EXECUTE_SIGNATURE, executeCalldata, calldata, encodeArguments, type AbiType, type AbiValue } from './abi.ts';
+export {
+  EXECUTE_SIGNATURE,
+  executeCalldata,
+  calldata,
+  encodeArguments,
+  mandateValue,
+  candidateValue,
+  termsValue,
+  MANDATE,
+  CANDIDATE,
+  TERMS,
+  address,
+  bytes,
+  bytes32,
+  uint,
+  tuple,
+  type AbiType,
+  type AbiValue,
+} from './abi.ts';
 export { LocalAgentSigner, LocalGateCustody, keyAddress, verifyAdmitted, type AgentSigner, type CustodyBinding, type CustodyResult, type CustodyView, type GateClaim, type GateKeyCustody } from './custody.ts';
 export { TxSender, createAddress, type Eip1559Tx } from './transaction.ts';
 export { ChainClient, JsonRpcClient, REFUSED_CHAIN_IDS, pause, ROBINHOOD_TESTNET_CHAIN_ID, RpcHostRefused, TESTNET_RPC_HOSTS, isQuickNodeHost, type RpcEndpointKind, type RpcOptions, type BlockRef, type Read, type Receipt, type Simulation, type Submission } from './chain.ts';

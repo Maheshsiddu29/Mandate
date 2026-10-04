@@ -147,6 +147,27 @@ test('FIXED / DYNAMIC / HYBRID / NEEDS_AGENT_SELECTION allocation copy', () => {
   assert.equal(dynamic.canAuthorize, false);
   assert.ok(dynamic.blockers.some((b) => /Planning Room|agent plan/i.test(b.text)));
 
+  const planned = buildAuthorityReview({
+    draft: draft({
+      total: '2000',
+      agents: { stock: agent(true, '600', '800'), yield: agent(true, '800', '800') },
+      provenance: { 'agents.stock.budget': 'PLANNED', 'agents.yield.budget': 'PLANNED' },
+    }),
+    allocation: allocation({
+      intent: 'DYNAMIC',
+      planning: 'COMPLETE',
+      pool: ['stock', 'yield'],
+      enabled: ['stock', 'yield'],
+      deployable: '2000',
+      pooled: '2000',
+    }),
+    validationOk: true,
+    validationBlocking: [],
+  });
+  assert.equal(planned.allocation.headline, 'Current plan');
+  assert.match(planned.agents.find((a) => a.role === 'stock')?.authorityLabel ?? '', /\$600 planned · up to \$800/);
+  assert.ok(planned.allocation.maxLines.some((l) => l.label === 'Stock' && /up to \$800/.test(l.value)));
+
   const hybrid = buildAuthorityReview({
     draft: draft({
       total: '2000',
@@ -281,10 +302,9 @@ test('Approve stage wires review gating, conflict resolution, and Authorize mand
   assert.match(configure, /onChooseTotal/);
   assert.match(configure, /onAcknowledgeUnsupported/);
   assert.match(configure, /Requested but not enforceable/);
-  assert.match(configure, /Needs your input/);
+  assert.match(configure, /Needs input/);
   assert.match(configure, /Edit permissions/);
   assert.match(configure, /Trusted execution details/);
-  assert.match(configure, /editable=\{false\}/);
   assert.match(lab, /buildAuthorityReview/);
   assert.match(lab, /acknowledgeUnsupported: true/);
   assert.match(lab, /chooseTotal/);

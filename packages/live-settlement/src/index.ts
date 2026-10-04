@@ -36,3 +36,20 @@ export { domainPolicy, type DomainKeys } from './domain-leg.ts';
 export { reverifySpine, SPINE_CHAIN_ID, type SpineCheck, type SpineFacts } from './spine.ts';
 export { settleSpine, type SpineHold, type SpineSettlementInput, type SpineSettlementResult } from './spine-settlement.ts';
 export { durableSettlement, SETTLEMENT_STATUSES, type DurableSettlement, type SettlementStatus, type PendingSettlement } from './settlement-state.ts';
+export {
+  createExecutionDelegate,
+  restoredExecutionDelegate,
+  VerifiedDelegatedExecution,
+  type ExecutionDelegate,
+  type ExecutionDelegatePublic,
+} from './v3/execution-delegate.ts';
+export { deriveV3StockFixtureCap, type V3CapInput, type V3CapResult } from './v3/cap.ts';
+export { AutonomousSettlementGate, type AutonomousGateState } from './v3/autonomous-gate.ts';
+export { LiveV3ChallengeHost, type V3HostConfig, type V3SessionDelegate } from './v3/host.ts';
+export { reverifySpineV3, SPINE_V3_CHAIN_ID, type V3SpineCheck, type V3SpineFacts } from './v3/reverify.ts';
+export { settleSpineV3, type V3PreparedExecution, type V3SettlementInput, type V3SettlementResult } from './v3/settlement.ts';
+export { encodeDelegatedExecute } from './v3/calldata.ts';
+export { decodeErc20InsufficientBalance, classifyV3SimulationRevert, ERC20_INSUFFICIENT_BALANCE_SELECTOR, type Erc20InsufficientBalance, type V3SimulationFailure } from './v3/revert.ts';
+
+/** Fixture address used for local V3 wiring before human deployment. */
+export const V3_GATE_PLACEHOLDER = '0xa0cb889707d426a7a386870a03bc70d1b0697598';

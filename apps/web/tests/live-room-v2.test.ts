@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import type { JsonRecord, LiveEvent } from '../components/demo/live/live-client.ts';
-import { allocationState, authorizedStockTrade, budgetRows, canAskForPlan, checkBudgets, planView, planningCards, roomCopy, serverCompatible, ROOM_PURPOSE_COPY } from '../components/demo/live/allocation-model.ts';
+import { allocationHeader, allocationState, authorizedStockTrade, budgetRows, canAskForPlan, checkBudgets, planView, planningCards, roomCopy, serverCompatible, ROOM_PURPOSE_COPY } from '../components/demo/live/allocation-model.ts';
 import { deriveFlow, type FlowInput } from '../components/demo/live/live-flow.ts';
 import { deriveAgents, deriveRoomChat } from '../components/demo/live/live-model.ts';
 
@@ -63,6 +63,28 @@ test('37. an edited allocation is validated immediately', () => {
   assert.equal(plan?.unallocated, '1250');
 });
 
+test('37b. Scenario C hybrid header never calls deployable capital "available"', () => {
+  const hybrid = allocationState(allocation({
+    intent: 'HYBRID',
+    planning: 'REQUIRED',
+    enabled: ['stock', 'swap', 'yield'],
+    undecided: [],
+    fixed: ['stock', 'yield'],
+    pool: ['swap'],
+    autoReallocate: false,
+    deployableAtoms: '5000000000',
+    poolAtoms: '2000000000',
+  }));
+  assert.ok(hybrid);
+  const header = allocationHeader(hybrid!);
+  assert.match(header.label, /Part of the allocation is fixed/);
+  assert.equal(header.amount, '2000');
+  assert.match(header.amountSuffix ?? '', /remains for Swap/);
+  assert.doesNotMatch(`${header.label} ${header.amountSuffix}`, /available/i);
+  assert.match(planning, /allocationHeader/);
+  assert.doesNotMatch(planning, /\$\{usd\(state\.deployable\)\}<\/strong> available/);
+});
+
 test('38. the signed review shows the budgets the draft holds after editing, with who set them', () => {
   const draft: JsonRecord = { agents: { stock: { budget: '650' }, swap: { budget: '350' }, yield: { budget: '750' }, perps: { budget: '250' } }, provenance: { 'agents.stock.budget': 'USER', 'agents.swap.budget': 'PLANNED', 'agents.yield.budget': 'USER', 'agents.perps.budget': 'PLANNED' } };
   assert.deepEqual(budgetRows(draft, ['stock', 'swap', 'yield', 'perps']).map((r) => [r.role, r.amount, r.source]), [['stock', '650', 'YOU'], ['swap', '350', 'AGENTS'], ['yield', '750', 'YOU'], ['perps', '250', 'AGENTS']]);
@@ -121,7 +143,7 @@ test('43. Start over leaves a restored evidence-only session before building aga
 });
 
 test('44. a single-agent proposal is not labelled as a Mandate Room', () => {
-  assert.match(planning, /singleAgent \? "Agent plan" : "Mandate Room"/);
+  assert.match(planning, /singleAgent \? "Agent plan" : "Planning Room"/);
   assert.match(planning, /One agent is proposing how much/);
   assert.match(lab, /stageStatus[\s\S]*?"Agent plan"/);
 });
