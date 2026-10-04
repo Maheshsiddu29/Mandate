@@ -4,6 +4,10 @@
 > [c2-2-demo-ux-polish.md](./c2-2-demo-ux-polish.md).** Presentation polish
 > only. No protocol, Review gating, settlement construction, or contract
 > changes. No broadcasts by the agent.
+>
+> Follow-up: [C2.2.1 Judge Acceptance Hotfix](./c2-2-1-validation.md)
+> (plan vs authority presentation, multi-agent evidence honesty, DRAFT
+> output-token budget).
 
 ## What shipped
 
