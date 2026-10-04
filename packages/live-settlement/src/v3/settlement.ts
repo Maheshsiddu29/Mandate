@@ -20,6 +20,7 @@ import {
   delegationStructHash,
   encodeGateCandidate,
   encodeGateMandate,
+  executionCommitment,
   type DelegatedExecutionApprovalFields,
   type DelegationFields,
   type GateCandidate,
@@ -29,11 +30,11 @@ import {
 import { portfolioMandateDigest, type PortfolioMandate } from '@mandate/portfolio';
 import type { LiveSession } from '@mandate/live-agents';
 import { selectStockExecution } from '../authorized-execution.ts';
-import type { TestnetDeployment } from '../deployment.ts';
+import { explorerTxUrl, type TestnetDeployment } from '../deployment.ts';
 import type { DomainKeys } from '../domain-leg.ts';
 import { ASSET_QUALIFICATION } from '../evidence.ts';
 import { mapToFixture } from '../fixture-mapping.ts';
-import type { AttemptRecord, SettlementJournal } from '../journal.ts';
+import type { AttemptRecord, SettlementJournal, V3ProofRecord } from '../journal.ts';
 import { admitSettlement, consumeReservation } from '../portfolio-ledger.ts';
 import { reconcileAttempts, reconciliationOnly, type ReconcileReport } from '../reconcile.ts';
 import type { TestnetRpc } from '../rpc.ts';
@@ -82,6 +83,7 @@ export type V3SettlementResult =
       readonly wouldSend: { readonly gate: string; readonly debit: string };
       readonly debit: string;
       readonly prepared: V3PreparedExecution;
+      readonly proof: V3ProofRecord;
     }
   | {
       readonly status: 'SENT';
@@ -92,6 +94,10 @@ export type V3SettlementResult =
       readonly remainingCapacity: string;
       readonly debit: string;
       readonly prepared: V3PreparedExecution;
+      readonly proof: V3ProofRecord;
+      readonly receipt: AttemptRecord['receipt'];
+      readonly receiptDigest: string | null;
+      readonly explorerUrl: string | null;
     };
 
 export interface V3SettlementInput {
@@ -449,6 +455,29 @@ export async function settleSpineV3(i: V3SettlementInput): Promise<V3SettlementR
     agent: check.agent,
     approval,
   };
+  const proof: V3ProofRecord = {
+    candidateId: x.candidateId,
+    initialAllocationDigest: check.initialAllocationDigest,
+    delegationDigest,
+    mandateDigest: artifact.mandateDigest,
+    candidateDigest: artifact.candidateDigest,
+    executionApprovalDigest: preparedProof.approvalStructHash,
+    executionCommitment: executionCommitment({ mandateDigest: artifact.mandateDigest, candidateDigest: artifact.candidateDigest, terms: artifact.terms }),
+    delegate: check.delegate,
+    agent: check.agent,
+    executionNonce: i.nextExecutionNonce.toString(),
+    initialCapacity: check.cumulativeDebitLimit.toString(),
+    cumulativeDebit: (used + s.debit).toString(),
+    remainingCapacity: remaining,
+    capacityUnit: artifact.mandate.economicLimit.unit,
+    capacityDecimals: artifact.mandate.economicLimit.decimals,
+    gasEstimate: gas.value.toString(),
+  };
+  try {
+    journal.recordV3Proof(x.reservation, proof);
+  } catch {
+    return refuse('JOURNAL', 'JOURNAL_WRITE_FAILED', reports);
+  }
   if (i.mode === 'DRY_RUN') {
     session.events.emit('DOMAIN_EXECUTION_READY', {
       agent: 'stock',
@@ -470,6 +499,7 @@ export async function settleSpineV3(i: V3SettlementInput): Promise<V3SettlementR
       wouldSend: { gate: i.v3Gate.address, debit: s.debit.toString() },
       debit: s.debit.toString(),
       prepared: preparedProof,
+      proof,
     };
   }
 
@@ -493,12 +523,12 @@ export async function settleSpineV3(i: V3SettlementInput): Promise<V3SettlementR
   const broadcast = await rpc.broadcast(prepared.value);
   if (broadcast.kind !== 'ACCEPTED') {
     journal.transition(x.reservation, 'RECONCILIATION_REQUIRED', { quarantine: 'AMBIGUOUS_BROADCAST' }, `broadcast ${broadcast.kind}`);
-    return { status: 'SENT', reports, txHash: prepared.value.hash, executionNonce: i.nextExecutionNonce, broadcasts: 1, remainingCapacity: remaining, debit: s.debit.toString(), prepared: preparedProof };
+    return { status: 'SENT', reports, txHash: prepared.value.hash, executionNonce: i.nextExecutionNonce, broadcasts: 1, remainingCapacity: remaining, debit: s.debit.toString(), prepared: preparedProof, proof, receipt: null, receiptDigest: null, explorerUrl: explorerTxUrl(d, prepared.value.hash) };
   }
   journal.transition(x.reservation, 'SUBMITTED', {}, 'broadcast ACCEPTED');
   const receipt = await rpc.receipt(prepared.value.hash);
   if (!receipt.ok || receipt.value === null || receipt.value.status !== 'SUCCESS') {
-    return { status: 'SENT', reports, txHash: prepared.value.hash, executionNonce: i.nextExecutionNonce, broadcasts: 1, remainingCapacity: remaining, debit: s.debit.toString(), prepared: preparedProof };
+    return { status: 'SENT', reports, txHash: prepared.value.hash, executionNonce: i.nextExecutionNonce, broadcasts: 1, remainingCapacity: remaining, debit: s.debit.toString(), prepared: preparedProof, proof, receipt: null, receiptDigest: null, explorerUrl: explorerTxUrl(d, prepared.value.hash) };
   }
   const receiptDigest = keccak256(new TextEncoder().encode(`${prepared.value.hash}:${receipt.value.blockNumber}`)) as unknown as Digest32;
   const receiptFacts = {
@@ -508,6 +538,7 @@ export async function settleSpineV3(i: V3SettlementInput): Promise<V3SettlementR
     gasUsed: receipt.value.gasUsed.toString(),
     effectiveGasPrice: receipt.value.effectiveGasPrice.toString(),
   };
+  const explorerUrl = explorerTxUrl(d, prepared.value.hash);
   journal.transition(x.reservation, 'CONFIRMED_SUCCESS', { receipt: receiptFacts, observation: receiptDigest }, `mined SUCCESS in block ${receipt.value.blockNumber}`);
   journal.transition(x.reservation, 'SETTLED', { postconditions: { ok: true, failures: [] } }, 'mined SUCCESS; V3 delegated postconditions verified');
   const consumed = await consumeReservation(core, x.reservation, receiptDigest, session.protocolNow());
@@ -517,8 +548,31 @@ export async function settleSpineV3(i: V3SettlementInput): Promise<V3SettlementR
     data: {
       spine: 'V3',
       txHash: prepared.value.hash,
+      block: receipt.value.blockNumber.toString(),
+      status: receipt.value.status,
+      gasUsed: receipt.value.gasUsed.toString(),
+      receiptDigest,
+      explorerUrl,
+      network: d.networkName,
+      chainId: d.chainId.toString(),
+      target: i.v3Gate.address,
+      principal: check.principal,
+      candidateId: x.candidateId,
+      reservation: x.reservation,
+      initialAllocationDigest: check.initialAllocationDigest,
+      delegationDigest: proof.delegationDigest,
+      mandateDigest: proof.mandateDigest,
+      candidateDigest: proof.candidateDigest,
+      executionApprovalDigest: proof.executionApprovalDigest,
+      executionCommitment: proof.executionCommitment,
+      gateAgent: proof.agent,
       executionNonce: i.nextExecutionNonce.toString(),
+      initialCapacity: proof.initialCapacity,
+      cumulativeDebit: proof.cumulativeDebit,
       remainingCapacity: remaining,
+      capacityUnit: proof.capacityUnit,
+      capacityDecimals: proof.capacityDecimals,
+      gasEstimate: proof.gasEstimate,
       executionAuthority: 'BOUNDED_V3_DELEGATION',
       walletApprovalForTrade: 'NONE',
       mandateDelegate: check.delegate,
@@ -548,5 +602,9 @@ export async function settleSpineV3(i: V3SettlementInput): Promise<V3SettlementR
     remainingCapacity: remaining,
     debit: s.debit.toString(),
     prepared: preparedProof,
+    proof,
+    receipt: receiptFacts,
+    receiptDigest,
+    explorerUrl,
   };
 }

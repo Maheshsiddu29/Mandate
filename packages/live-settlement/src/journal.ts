@@ -101,6 +101,26 @@ export interface ArtifactRecord {
   readonly mode: 'DRY_RUN' | 'SEND';
 }
 
+/** Public V3 proof facts persisted before submission; never calldata, a signature or a key. */
+export interface V3ProofRecord {
+  readonly candidateId: string;
+  readonly initialAllocationDigest: string;
+  readonly delegationDigest: string;
+  readonly mandateDigest: string;
+  readonly candidateDigest: string;
+  readonly executionApprovalDigest: string;
+  readonly executionCommitment: string;
+  readonly delegate: string;
+  readonly agent: string;
+  readonly executionNonce: string;
+  readonly initialCapacity: string;
+  readonly cumulativeDebit: string;
+  readonly remainingCapacity: string;
+  readonly capacityUnit: string;
+  readonly capacityDecimals: number;
+  readonly gasEstimate: string;
+}
+
 export interface AttemptRecord extends AttemptBinding {
   readonly state: AttemptState;
   readonly quarantine: Quarantine | null;
@@ -117,6 +137,8 @@ export interface AttemptRecord extends AttemptBinding {
   readonly postconditions: { readonly ok: boolean; readonly failures: readonly string[] } | null;
   /** The observation the portfolio ledger's CONSUME or CLOSE names. */
   readonly observation: string | null;
+  /** V3-only proof facts. Old and V2 records normalize to null when read. */
+  readonly v3Proof: V3ProofRecord | null;
   readonly detail: string;
   readonly revision: number;
 }
@@ -182,7 +204,8 @@ export class SettlementJournal {
     if (row === undefined) return null;
     let a: AttemptRecord;
     try {
-      a = JSON.parse(String(row['json'])) as AttemptRecord;
+      const parsed = JSON.parse(String(row['json'])) as AttemptRecord;
+      a = { ...parsed, v3Proof: parsed.v3Proof ?? null };
     } catch {
       throw new JournalRefusal('CORRUPT', `attempt ${reservation} is not JSON`);
     }
@@ -220,9 +243,25 @@ export class SettlementJournal {
         for (const f of BINDING_FIELDS) if (existing[f] !== b[f]) throw new JournalRefusal('BINDING_MISMATCH', `the reservation's attempt is bound to another ${f}`);
         return { record: existing, created: false };
       }
-      const a: AttemptRecord = { ...b, state: 'PREPARED', quarantine: null, domainOpenedAt: null, artifactDeadAfter: null, tx: null, sendArtifact: null, before: null, receipt: null, postconditions: null, observation: null, detail: 'prepared', revision: 1 };
+      const a: AttemptRecord = { ...b, state: 'PREPARED', quarantine: null, domainOpenedAt: null, artifactDeadAfter: null, tx: null, sendArtifact: null, before: null, receipt: null, postconditions: null, observation: null, v3Proof: null, detail: 'prepared', revision: 1 };
       this.#write(a, null, 'prepared');
       return { record: a, created: true };
+    });
+  }
+
+  /** Persist the exact public V3 proof before any transaction can be submitted. */
+  recordV3Proof(reservation: string, proof: V3ProofRecord): AttemptRecord {
+    return this.#tx(() => {
+      const a = this.#read(reservation);
+      if (a === null) throw new JournalRefusal('NOT_RECORDED', `no attempt for ${reservation}`);
+      if (a.state !== 'PREPARED') throw new JournalRefusal('TRANSITION_FORBIDDEN', `${a.state} cannot accept V3 proof`);
+      if (a.v3Proof !== null) {
+        if (JSON.stringify(a.v3Proof) !== JSON.stringify(proof)) throw new JournalRefusal('BINDING_MISMATCH', 'the attempt is bound to different V3 proof');
+        return a;
+      }
+      const next = { ...a, v3Proof: proof, revision: a.revision + 1, detail: 'V3 technical proof journaled' };
+      this.#write(next, a.state, next.detail);
+      return next;
     });
   }
 
