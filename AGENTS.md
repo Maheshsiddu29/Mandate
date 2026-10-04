@@ -378,7 +378,10 @@ does not change protocol semantics. `npm run web:demo:generate` runs the
 canonical JSON runner and writes `apps/web/generated/judge-demo.v1.json`.
 `npm run web:demo:check` fails if that file drifts. The site is a Next.js
 static export intended for Cloudflare Pages. Judge mode requires no secrets.
-See [docs/demo/web.md](docs/demo/web.md).
+C4 adds a judge/developer documentation tree under `/docs` (Overview,
+Authority Model, Autonomous Execution, Security, Proof & Evidence, SDK,
+Architecture, Reference) — documentation only; it does not change protocol
+semantics. See [docs/demo/web.md](docs/demo/web.md).
 
 `packages/live-agents` (buildathon Milestone B.5, [docs/demo/live-ai-lab.md](docs/demo/live-ai-lab.md))
 is the Live AI Lab: model-backed agents act under a Portfolio Mandate the

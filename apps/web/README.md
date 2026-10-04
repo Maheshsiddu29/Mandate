@@ -3,7 +3,9 @@
 This directory is the static public website for Mandate. It plays the
 canonical judge-demo transcript. It does not run the protocol.
 
-Routes: `/`, `/demo`, `/demo/live`, `/developers`, and `/docs`.
+Routes: `/`, `/demo`, `/demo/live`, `/developers`, and the documentation tree
+under `/docs` (`/docs`, `/docs/concepts`, `/docs/execution`, `/docs/security`,
+`/docs/proof`, `/docs/sdk`, `/docs/architecture`, `/docs/reference`).
 
 ## Local development
 
@@ -54,7 +56,8 @@ The `/demo` route is a presentation cursor over the generated transcript.
 Playback does not re-run Mandate, read a key, or call a network. Historical
 explorer links are optional. The demo still plays if the explorer is down.
 
-`/developers` is a placeholder for a later integration surface. It is not an SDK.
+`/developers` points at the `@mandate/sdk` integration docs under `/docs/sdk`.
+The SDK lives in `packages/sdk`; the web app does not re-implement authority.
 
 ## Live AI Lab (`/demo/live`)
 

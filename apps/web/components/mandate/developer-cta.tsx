@@ -11,11 +11,11 @@ export function DeveloperCta(): ReactNode {
           <span>Let Mandate handle authority.</span>
         </h2>
         <div className="hero-actions">
-          <Link className="button button--primary focus-ring" href="/demo">
-            Launch Demo
+          <Link className="button button--primary focus-ring" href="/docs/sdk">
+            Open SDK docs
           </Link>
-          <Link className="button button--secondary focus-ring" href="/developers">
-            View Integration
+          <Link className="button button--secondary focus-ring" href="/demo/live">
+            Launch Live Demo
           </Link>
         </div>
       </div>
