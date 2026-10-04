@@ -28,7 +28,7 @@ test('Compose hierarchy: product question, real interpretation states, judge exa
 });
 
 test('Review authorize copy and issue categories', () => {
-  assert.match(configure, /You&apos;re authorizing/);
+  assert.match(configure, /You&apos;re authorizing|AUTHORIZE AUTONOMOUS MANDATE/);
   assert.match(configure, /Agents cannot exceed it/);
   assert.match(configure, /Needs input/);
   assert.match(configure, /Not supported/);
@@ -79,8 +79,9 @@ test('No spine/operator jargon in primary demo surfaces', () => {
   assert.doesNotMatch(compose + agents + planning, /\bspine\b|Phase 7|candidateDigest|reservation lineage/i);
   assert.doesNotMatch(lab, /V2 settlement spine/);
   assert.match(lab, /cannot settle from the browser/);
-  // API still uses spine: "V2" — that is not user-facing copy.
-  assert.match(lab, /spine: "V2"/);
+  // API still uses spine V2/V3 — that is not user-facing copy.
+  assert.match(lab, /"V2"/);
+  assert.match(lab, /preferV3 \? "V3" : "V2"/);
 });
 
 test('progress cue and reduced-motion stage transitions remain', () => {

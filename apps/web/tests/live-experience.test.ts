@@ -158,13 +158,13 @@ test('the review step signs with a real wallet, or with the labelled demo key â€
   assert.match(configure, /const reviewClean = props\.review\.canAuthorize/);
   assert.match(configure, /disabled=\{!demoReady \|\| props\.authorizing\}/);
   // The wallet's CTA needs a connected wallet on the approval chain and a clean Review; nothing pretends to be connected.
-  assert.match(configure, /const walletReady = method === "wallet" && connected && rightChain && reviewClean;/);
+  assert.match(configure, /const walletReady = signingMethod === "wallet" && connected && rightChain && reviewClean;/);
   assert.match(configure, /disabled=\{!walletReady \|\| props\.authorizing\}/);
   assert.doesNotMatch(browserSources, /Wallet approved|setConfirmation\(props\.expected\)|confirmation: expected/i);
   // Signing a mandate is not a transaction: the review step shows no gas estimate or limit.
   assert.doesNotMatch(configure, /gas estimate|gasEstimate|estimateGas|gasLimit/i);
   // The wallet path: a server challenge, the wallet's EIP-712 signature, server verification; the browser sends only id and signature.
-  assert.match(lab, /call\("POST", "\/wallet\/challenge", \{ address, spine: "V2" \}\)/);
+  assert.match(lab, /call\("POST", "\/wallet\/challenge", \{ address, spine: preferV3 \? "V3" : "V2" \}\)/);
   assert.match(lab, /api\(SERVER, "GET", "\/settlement"\)/);
   assert.match(lab, /mode: "SEND", intent: "EXECUTE_ROBINHOOD_TESTNET"/);
   assert.match(lab, /gateSignature: signed\.value/);
