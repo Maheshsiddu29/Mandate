@@ -140,8 +140,7 @@ contract DelegatedDifferentialTest is Test {
     }
 
     function _sign(uint256 key, bytes32 domain, bytes32 structHash) internal pure returns (bytes memory) {
-        (uint8 v, bytes32 r, bytes32 s) =
-            vm.sign(key, keccak256(abi.encodePacked(hex"1901", domain, structHash)));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(key, keccak256(abi.encodePacked(hex"1901", domain, structHash)));
         return abi.encodePacked(r, s, v);
     }
 

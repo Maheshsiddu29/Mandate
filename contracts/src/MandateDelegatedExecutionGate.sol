@@ -353,27 +353,22 @@ contract MandateDelegatedExecutionGate is ReentrancyGuard {
         bytes calldata delegateSignature
     ) external nonReentrant returns (bytes32 executionCommitment, uint256 actualDebit, uint256 actualCredit) {
         Plan memory plan = _authorize(
-            delegation,
-            principalSignature,
-            mandate,
-            candidate,
-            terms,
-            agentSignature,
-            executionNonce,
-            delegateSignature
+            delegation, principalSignature, mandate, candidate, terms, agentSignature, executionNonce, delegateSignature
         );
 
-        // Effects before interactions: consume nonce and tentative capacity
-        // (fundingLimit) before any external call. A revert below unwinds both.
-        // After settlement, capacity is adjusted to the measured debit so a
-        // venue refund does not permanently consume unused tentative room.
+        // Effects before interactions: consume the execution nonce before any
+        // external call. Cumulative capacity is checked against fundingLimit
+        // above (fail closed); the measured debit is recorded after settlement
+        // and cannot exceed fundingLimit (DebitExceedsLimit). A revert below
+        // unwinds the nonce write.
         _usedNonce[plan.delegationDigest][plan.executionNonce] = true;
-        _usedDebit[plan.delegationDigest] += plan.inputAmount;
 
         (actualDebit, actualCredit) = _settle(plan, mandate.principal, terms);
 
-        _usedDebit[plan.delegationDigest] =
-            _usedDebit[plan.delegationDigest] - plan.inputAmount + actualDebit;
+        // slither-disable-next-line reentrancy-no-eth
+        // nonReentrant blocks execute reentry; measured debit is bounded by the
+        // pre-checked fundingLimit, so recording it here cannot exceed the cap.
+        _usedDebit[plan.delegationDigest] += actualDebit;
 
         uint256 cumulativeUsed = _usedDebit[plan.delegationDigest];
         emit DelegatedMandateExecuted(
@@ -555,16 +550,14 @@ contract MandateDelegatedExecutionGate is ReentrancyGuard {
                         candidate.notional.decimals
                     ) >= 0
             ) revert DeclaredFeesExceedNotional();
-            if (
-                !GateArithmetic.differenceMeetsLimit(
+            if (!GateArithmetic.differenceMeetsLimit(
                     candidate.notional.atoms,
                     candidate.notional.decimals,
                     candidate.feeTotal.atoms,
                     candidate.feeTotal.decimals,
                     mandate.economicLimit.atoms,
                     mandate.economicLimit.decimals
-                )
-            ) revert DeclaredTotalCreditBelowMinimum();
+                )) revert DeclaredTotalCreditBelowMinimum();
         }
     }
 
@@ -677,16 +670,16 @@ contract MandateDelegatedExecutionGate is ReentrancyGuard {
         IMandateExecutionAdapter(plan.market.adapter)
             .execute(
                 ExecutionOrder({
-                    side: plan.side,
-                    inputToken: plan.inputToken,
-                    outputToken: plan.outputToken,
-                    inputAmount: plan.inputAmount,
-                    minOutput: plan.minOutput,
-                    recipient: recipient,
-                    refundTo: principal,
-                    executionData: terms.executionData,
-                    executionCommitment: plan.executionCommitment
-                })
+                side: plan.side,
+                inputToken: plan.inputToken,
+                outputToken: plan.outputToken,
+                inputAmount: plan.inputAmount,
+                minOutput: plan.minOutput,
+                recipient: recipient,
+                refundTo: principal,
+                executionData: terms.executionData,
+                executionCommitment: plan.executionCommitment
+            })
             );
 
         uint256 inputAfter = input.balanceOf(principal);

@@ -103,8 +103,11 @@ contract DelegatedGateHandler is Test {
         Mandate memory m = _mandate(nonce);
         Candidate memory c = _candidate(nonce);
         ExecutionTerms memory t = _terms();
-        try dgate.execute(del, principalSig, m, c, t, _signAgent(m, c, t), nonce, _signDelegate(m, c, t, nonce))
-        returns (bytes32, uint256 debit, uint256) {
+        try dgate.execute(
+            del, principalSig, m, c, t, _signAgent(m, c, t), nonce, _signDelegate(m, c, t, nonce)
+        ) returns (
+            bytes32, uint256 debit, uint256
+        ) {
             ghostUsed += debit;
             ghostSettled += 1;
             settledNonces.push(nonce);

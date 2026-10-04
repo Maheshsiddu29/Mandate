@@ -4,12 +4,7 @@ pragma solidity 0.8.37;
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import {MandateDelegatedExecutionGate} from "../src/MandateDelegatedExecutionGate.sol";
-import {
-    Candidate,
-    ExecutionTerms,
-    Mandate,
-    SIDE_SELL
-} from "../src/MandateTypes.sol";
+import {Candidate, ExecutionTerms, Mandate, SIDE_SELL} from "../src/MandateTypes.sol";
 import {ScriptedAdapter} from "./mocks/ScriptedAdapter.sol";
 import {DelegatedGateTestBase} from "./utils/DelegatedGateTestBase.sol";
 
@@ -363,7 +358,14 @@ contract MandateDelegatedExecutionGateTest is DelegatedGateTestBase {
         Candidate memory c = _candidate();
         ExecutionTerms memory t = _terms();
         aapl.setDecimals(8);
-        _expectRevert(d, m, c, t, 1, abi.encodeWithSelector(MandateDelegatedExecutionGate.TokenDecimalsChanged.selector, address(aapl)));
+        _expectRevert(
+            d,
+            m,
+            c,
+            t,
+            1,
+            abi.encodeWithSelector(MandateDelegatedExecutionGate.TokenDecimalsChanged.selector, address(aapl))
+        );
     }
 
     function test_25_reentrancyAttemptFails() public {
@@ -479,7 +481,12 @@ contract MandateDelegatedExecutionGateTest is DelegatedGateTestBase {
     function test_zeroCumulativeLimitRejected() public {
         MandateDelegatedExecutionGate.Delegation memory d = _delegation(0);
         _expectRevert(
-            d, _mandate(), _candidate(), _terms(), 1, _err(MandateDelegatedExecutionGate.InvalidDelegationParties.selector)
+            d,
+            _mandate(),
+            _candidate(),
+            _terms(),
+            1,
+            _err(MandateDelegatedExecutionGate.InvalidDelegationParties.selector)
         );
     }
 
@@ -487,7 +494,12 @@ contract MandateDelegatedExecutionGateTest is DelegatedGateTestBase {
         MandateDelegatedExecutionGate.Delegation memory d = _delegation();
         d.delegate = agent;
         _expectRevert(
-            d, _mandate(), _candidate(), _terms(), 1, _err(MandateDelegatedExecutionGate.InvalidDelegationParties.selector)
+            d,
+            _mandate(),
+            _candidate(),
+            _terms(),
+            1,
+            _err(MandateDelegatedExecutionGate.InvalidDelegationParties.selector)
         );
     }
 }
