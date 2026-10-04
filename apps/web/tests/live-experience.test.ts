@@ -369,25 +369,26 @@ test('failures stay in the same panel and say nothing was authorized', () => {
 });
 
 test('policy stress is a secondary security demo after the trade', () => {
-  assert.match(lab, /Try an unauthorized action/);
+  assert.match(sheets, /Try an unauthorized action/);
   assert.match(lab, /<Sheet open=\{sheet === "stress"\}[\s\S]*<StressBody/);
-  assert.doesNotMatch(outcome, /Try an unauthorized action|Test the firewall/);
+  assert.match(outcome, /Test the firewall/);
+  assert.match(lab, /setSheet\("stress"\)/);
   assert.doesNotMatch(agentsUi + compose + configure, /policy-stress|StressBody/);
   assert.match(sheets, /VALID AGENT ≠ VALID ACTION/);
   assert.match(sheets, /DIFFERENT AUTHORIZATION RESULT/);
-  assert.match(sheets, /Try an unauthorized action/);
-  assert.match(sheets, /Mandate stopped it before execution/);
-  assert.doesNotMatch(sheets, /Test the firewall/);
+  assert.match(sheets, /Ledger unchanged/);
+  assert.match(sheets, /not LIVE_TESTNET/);
   const identity = { agentIdentity: 'VALID', membership: 'VALID', delegation: 'ACTIVE', signature: 'VALID', sameSignerAsSwapAgent: true };
   const attempts = derivePresentation([
     event(1, 'POLICY_STRESS_STARTED'),
     event(2, 'POLICY_STRESS_CASE_SELECTED', { attempt: 1, caseId: 'RECIPIENT_MISMATCH', rationale: 'test' }),
     event(3, 'POLICY_STRESS_PROPOSAL_SIGNED', { attempt: 1, identity }),
-    event(4, 'POLICY_STRESS_PROPOSAL_BLOCKED', { attempt: 1, reasons: ['RECIPIENT_NOT_ALLOWED'], screening: { verdict: 'BLOCKED' } }),
+    event(4, 'POLICY_STRESS_PROPOSAL_BLOCKED', { attempt: 1, reasons: ['RECIPIENT_NOT_ALLOWED'], screening: { verdict: 'BLOCKED' }, ledgerUnchanged: true }),
     event(5, 'POLICY_STRESS_CASE_SELECTED', { attempt: 2, caseId: 'COMPLIANT_CONTROL', rationale: 'inside' }),
     event(6, 'POLICY_STRESS_PROPOSAL_AUTHORIZED', { attempt: 2, screening: { verdict: 'ADMISSIBLE' }, sameIdentityAsRefusedAttempts: true }),
   ]).stress.attempts;
   assert.deepEqual(attempts.map((attempt) => attempt.outcome), ['REFUSED', 'AUTHORIZED']);
+  assert.equal(attempts[0]?.ledgerUnchanged, true);
   assert.equal(eventsAfter([event(9, 'POLICY_STRESS_STARTED'), event(10, 'AGENT_REQUEST_STARTED', {}, 'stock')], 8).length, 1);
 });
 

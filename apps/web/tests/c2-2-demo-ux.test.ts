@@ -69,6 +69,7 @@ test('Settlement progress, held, receipt hierarchy, start new mandate', () => {
   assert.match(outcome, /Settlement evidence/);
   assert.match(outcome, /Start new mandate/);
   assert.match(outcome, /Review details/);
+  assert.match(outcome, /Test the firewall/);
   assert.doesNotMatch(outcome, />Run again</);
   assert.doesNotMatch(outcome, /Awaiting operator authorization/i);
   assert.match(lab, /rememberSession\(null\)/);

@@ -43,8 +43,9 @@ test('the browser talks only to a loopback server', () => {
 
 test('the policy stress panel uses neutral wording and shows the real result', () => {
   const ui = read('../components/demo/live/sheets.tsx');
+  const outcome = read('../components/demo/live/stage-outcome.tsx');
   assert.match(ui, /Try an unauthorized action/);
-  assert.doesNotMatch(ui, /Test the firewall/);
+  assert.match(outcome, /Test the firewall/);
   assert.match(ui, /VALID AGENT ≠ VALID ACTION/);
   for (const row of ['Identity', 'Membership', 'Delegation', 'Signature', 'DIFFERENT AUTHORIZATION RESULT']) assert.match(ui, new RegExp(row));
   assert.doesNotMatch(ui, /hacker|escaped|jailbreak|rogue/i);

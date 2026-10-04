@@ -223,14 +223,16 @@ test('multi-agent receipt: Stock LIVE_TESTNET, Yield OFFCHAIN_ONLY, no fake Yiel
   assert.doesNotMatch(outcome, /0xyield/);
 });
 
-test('security demo uses authorization wording, not firewall', () => {
+test('security demo is exposed from the receipt as Test the firewall', () => {
   assert.match(sheets, /Try an unauthorized action/);
-  assert.match(lab, /Try an unauthorized action/);
-  assert.match(lab, /Security demo/);
-  assert.doesNotMatch(sheets + lab, /Test the firewall/);
-  assert.match(sheets, /Mandate stopped it before execution/);
+  assert.match(lab, /Security test/);
+  assert.match(lab, /VALID AGENT ≠ VALID ACTION/);
+  assert.match(outcome, /Test the firewall/);
+  assert.match(lab, /setSheet\("stress"\)/);
+  assert.match(lab, /POST", "\/policy-stress"/);
   assert.match(sheets, /Nothing was sent; the reservation ledger is unchanged/);
-  assert.match(sheets, /BLOCKED/);
+  assert.match(sheets, /REFUSED/);
+  assert.match(sheets, /not LIVE_TESTNET/);
 });
 
 test('restored settled session never offers Execute', () => {
