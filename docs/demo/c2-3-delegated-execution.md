@@ -296,3 +296,28 @@ runs one controlled acceptance execution.
 6. Browser one-signature UX
 7. Recovery / revoke / allowance handling
 8. Fork dry-run + full validation → **STOP** (no live deploy)
+
+## 18. Implementation status (local)
+
+| Phase | Status |
+| --- | --- |
+| 0 Design doc | Done |
+| 1 `MandateDelegatedExecutionGate` | Done — V2 Gate untouched |
+| 2 Foundry unit/fuzz/invariant/differential | Done (51 V3 suite tests + digest vector) |
+| 3 TS reference model + vectors | Done (`@mandate/execution-gate` `delegated.ts`) |
+| 4 Portfolio V3 verify + ephemeral delegate | Partial — verify + delegate + cap + autonomous gate; Live Lab challenge/authorize spine wiring incomplete |
+| 5 Autonomous V3 settlement orchestration | Partial — gate + delegate modules; full `settleSpine` V3 path not yet browser-wired |
+| 6 Browser one-signature UX | Partial — acceptance test pins ≤2 `signTypedData` sites; V3 authorize screen not yet primary |
+| 7 Recovery / revoke / allowance docs | Partial — documented; onchain revoke in contract; browser revoke UX not wired |
+| 8 Fork dry-run / Slither / full `npm run check` | Pending human review gate before live deploy |
+
+**Allowance setup (V3 Gate).** One-time testnet: principal must `approve(MandateDelegatedExecutionGate, amount)` for MDUSD. Not a Mandate signature. Not auto-sent by agent tests.
+
+**Manual deploy (human only, after review):**
+
+```bash
+npm run robinhood:v3:testnet:deploy -- --dry-run
+# then human Foundry deploy against chain 46630 only; never mainnet
+```
+
+Agent broadcasts during this milestone: **0**.
