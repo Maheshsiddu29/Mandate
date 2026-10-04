@@ -24,6 +24,7 @@ import type { LiveEvent } from '../telemetry/events.ts';
 import type { ApiRequest, ApiResponse, LiveLab } from './app.ts';
 
 export const MAX_BODY_BYTES = 32 * 1024;
+export const PUBLIC_DEMO_WRITE_DISABLED = 'PUBLIC_DEMO_WRITE_DISABLED';
 const HEARTBEAT_MS = 15_000;
 const EVENTS = /^\/api\/live\/sessions\/([A-Za-z0-9-]{1,64})\/events$/;
 
@@ -91,6 +92,10 @@ export const SYNC_MS = 400;
 
 export function createLabServer(lab: LiveLab, o: HttpOptions): Server {
   if (o.publicDemo && o.allowedOrigins.some((origin) => origin.includes('*'))) throw new Error('Wildcard CORS is forbidden in public-demo mode.');
+  // `before` is the sole extension point used by the separate settlement
+  // composition. A public server must fail at construction, before an
+  // attached callback can inspect a request or reach a sender.
+  if (o.publicDemo && o.before !== undefined) throw new Error(PUBLIC_DEMO_WRITE_DISABLED);
   const sweeper = setInterval(() => lab.sweep(), 60_000);
   sweeper.unref();
   const syncer = setInterval(() => lab.syncEvents(), SYNC_MS);

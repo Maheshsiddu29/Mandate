@@ -4,7 +4,7 @@ import { request } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { LiveLab, type ApiRequest } from '../src/server/app.ts';
-import { createLabServer, listen, MAX_BODY_BYTES } from '../src/server/http.ts';
+import { createLabServer, listen, MAX_BODY_BYTES, PUBLIC_DEMO_WRITE_DISABLED } from '../src/server/http.ts';
 import { OpenAIProvider } from '../src/runtime/openai-provider.ts';
 import { realClock } from '../src/runtime/clock.ts';
 import type { JsonObject, JsonValue } from '../src/runtime/strict-json.ts';
@@ -236,5 +236,20 @@ describe('the public-demo HTTP binding', () => {
     assert.equal(rejected.status, 403);
     assert.equal(rejected.headers['access-control-allow-origin'], undefined);
     assert.throws(() => createLabServer(lab(false), { port: 0, allowedOrigins: ['*'], publicDemo: true }), /Wildcard CORS/);
+  });
+
+  it('refuses settlement composition before its callback or a sender can execute', () => {
+    let callbackCalls = 0;
+    const attach = () => createLabServer(lab(false), {
+      port: 0,
+      allowedOrigins: [publicOrigin],
+      publicDemo: true,
+      before: () => {
+        callbackCalls += 1;
+        return Promise.resolve({ status: 200, body: { broadcast: true } });
+      },
+    });
+    assert.throws(attach, new RegExp(PUBLIC_DEMO_WRITE_DISABLED));
+    assert.equal(callbackCalls, 0);
   });
 });
