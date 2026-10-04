@@ -16,7 +16,7 @@ export const FIXTURE_QUALIFICATION = "Valueless demo assets. Not an NVDA trade. 
 export type SettlementOffer =
   | { readonly kind: "loading" }
   | { readonly kind: "unavailable"; readonly message: string }
-  | { readonly kind: "ready" };
+  | { readonly kind: "ready"; readonly spine?: "V2" | "V3" };
 
 function RefusalNotice({ conflict }: { readonly conflict: SettlementRefusal }): ReactNode {
   const hold = holdNote(conflict, (ms) => new Date(ms).toLocaleTimeString());
@@ -190,17 +190,22 @@ export function SettlingStage(props: {
   readonly conflict: SettlementRefusal | null;
   readonly restored: RestoredSettlement | null;
   readonly onReconcile: () => void;
+  readonly autonomousV3?: boolean;
 }): ReactNode {
   const { settlement } = props;
+  const v3 = props.autonomousV3 === true;
   return (
     <div className="mw-settling">
       <header className="mw-stage-head">
         <p className="mw-kicker">{settlement.network || "Robinhood Chain Testnet"} · fixture execution</p>
-        <h2>Executing</h2>
-        <p>{settlementStatus(settlement.stage)}</p>
+        <h2>{v3 ? "Autonomous settlement" : "Executing"}</h2>
+        <p>{v3 ? v3SettlementStatus(settlement.stage) : settlementStatus(settlement.stage)}</p>
       </header>
+      {v3 ? (
+        <p className="mw-notice" role="status">AUTHORIZED — No additional wallet approval required</p>
+      ) : null}
       <SettlementSteps settlement={settlement} />
-      {settlement.stage === "SIGN_GATE" ? (
+      {!v3 && settlement.stage === "SIGN_GATE" ? (
         <>
           <p className="mw-notice">This signs execution authority. It is not a transaction. Nothing is broadcast.</p>
           {props.walletReady ? (
@@ -250,6 +255,24 @@ function settlementStatus(stage: SettlementView["stage"]): string {
   }
 }
 
+function v3SettlementStatus(stage: SettlementView["stage"]): string {
+  switch (stage) {
+    case "PREFLIGHT":
+    case "READY":
+      return "Checking chain state…";
+    case "SIMULATION":
+      return "Simulating…";
+    case "SUBMITTED":
+      return "Submitting…";
+    case "SETTLED":
+      return "Confirmed";
+    case "RECONCILING":
+      return "Confirming…";
+    default:
+      return "Bounded autonomous settlement under your signed V3 authority.";
+  }
+}
+
 function failureLine(detail: string): string {
   if (detail === "SETTLEMENT_INTERRUPTED") return "Execution was interrupted. Nothing was sent.";
   if (detail.includes("SPINE_EXPIRED")) return "Authorization expired. Review and authorize a fresh mandate.";
@@ -276,6 +299,13 @@ function SettleActions(props: {
   if (!props.walletOk) return <p className="mw-fine">Connect the wallet that authorized this mandate.</p>;
   if (offer.kind === "loading") return <p className="mw-fine">Checking whether this server can settle.</p>;
   if (offer.kind === "unavailable") return <p className="mw-fine">{offer.message}</p>;
+  if (offer.spine === "V3") {
+    return (
+      <div className="mw-execute">
+        <p className="mw-fine">V3 autonomous settlement — no Execute button. Settlement proceeds under your signed delegated authority.</p>
+      </div>
+    );
+  }
   return (
     <div className="mw-execute">
       <p className="mw-fine">Mandate has authorized this Stock action. Execute its testnet settlement proof.</p>
@@ -461,8 +491,10 @@ export function ReceiptStage(props: {
   readonly busy: boolean;
   readonly restored: RestoredSettlement | null;
   readonly onReconcile: () => void;
+  readonly autonomousV3?: boolean;
 }): ReactNode {
   const { review, settlement } = props;
+  const v3 = props.autonomousV3 === true || props.offer.kind === "ready" && props.offer.spine === "V3";
   const heading = receiptHeading({ settled: settlement.settled, txHash: settlement.txHash, stage: settlement.stage, refused: props.conflict !== null });
   const tone =
     heading.title === "Settlement failed" || heading.title === "Settlement needs review" || heading.title === "Not sent" || heading.title === "Not executed"
@@ -505,6 +537,15 @@ export function ReceiptStage(props: {
         </div>
       </details>
 
+      {v3 && settlement.settled ? (
+        <section className="mw-authority-review" aria-label="V3 execution authority">
+          <h3 className="mw-authority-review__title">Execution authority</h3>
+          <p>Bounded V3 delegation</p>
+          <p className="mw-fine">Wallet approval for this trade: None</p>
+          <p className="mw-fine">Principal authorization: One reusable bounded mandate signature</p>
+          <p className="mw-fine">Evidence: LIVE_TESTNET · Stock fixture only</p>
+        </section>
+      ) : null}
       {props.conflict === null || settlement.stage === "HELD" ? null : <RefusalNotice conflict={props.conflict} />}
       <SettlementProof
         settlement={settlement}

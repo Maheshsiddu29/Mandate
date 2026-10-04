@@ -257,6 +257,8 @@ export function ApproveStage(props: {
   readonly authorizing: boolean;
   readonly error: string;
   readonly wallet: WalletState;
+  /** When "V3", disclose autonomous settlement before the one Mandate signature. */
+  readonly spine?: "V2" | "V3";
   readonly onConnect: () => void;
   readonly onSwitchChain: () => void;
   readonly onSignWallet: () => void;
@@ -267,23 +269,29 @@ export function ApproveStage(props: {
   readonly onAcknowledgeUnsupported: (index: number) => void;
 }): ReactNode {
   const [confirmation, setConfirmation] = useState("");
-  const [method, setMethod] = useState<"wallet" | "demo">(props.wallet.available ? "wallet" : "demo");
+  const v3 = props.spine === "V3";
+  const [method, setMethod] = useState<"wallet" | "demo">(props.wallet.available || v3 ? "wallet" : "demo");
   const version = props.expected.replace("AUTHORIZE MANDATE ", "");
   const matches = confirmation === props.expected && props.expected !== "—";
   const wallet = props.wallet;
   const connected = wallet.address !== null;
   const rightChain = wallet.chainId === APPROVAL_CHAIN.chainId;
   const reviewClean = props.review.canAuthorize;
-  const walletReady = method === "wallet" && connected && rightChain && reviewClean;
+  const signingMethod = v3 ? "wallet" : method;
+  const walletReady = signingMethod === "wallet" && connected && rightChain && reviewClean;
   const demoReady = matches && reviewClean;
   const r = props.review;
   const groups = [...new Set(r.advanced.map((row) => row.group))];
   return (
     <div className="mw-approve">
       <header className="mw-stage-head">
-        <p className="mw-kicker">You&apos;re authorizing</p>
-        <h2>Mandate review</h2>
-        <p>This is the exact authority your wallet will sign. Agents cannot exceed it.</p>
+        <p className="mw-kicker">{v3 ? "AUTHORIZE AUTONOMOUS MANDATE" : "You're authorizing"}</p>
+        <h2>{v3 ? "Authorize autonomous mandate" : "Mandate review"}</h2>
+        <p>
+          {v3
+            ? "Your wallet signs this authority once. Mandate independently verifies each action. Allowed Stock actions may settle without another wallet approval."
+            : "This is the exact authority your wallet will sign. Agents cannot exceed it."}
+        </p>
       </header>
 
       {r.blockers.length > 0 ? (
@@ -502,34 +510,46 @@ export function ApproveStage(props: {
       </div>
 
       <section className="mw-signer" aria-label="How this mandate is signed" role="radiogroup">
-        <button type="button" role="radio" aria-checked={method === "wallet"} className="mw-signer__option" data-selected={method === "wallet" ? "" : undefined} data-disabled={wallet.available ? undefined : ""} disabled={!wallet.available || props.authorizing} onClick={() => setMethod("wallet")}>
+        <button type="button" role="radio" aria-checked={signingMethod === "wallet"} className="mw-signer__option" data-selected={signingMethod === "wallet" ? "" : undefined} data-disabled={wallet.available ? undefined : ""} disabled={!wallet.available || props.authorizing} onClick={() => setMethod("wallet")}>
           <span className="mw-signer__icon" aria-hidden="true">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="6" width="18" height="13" rx="3" /><path d="M16 12.5h2M3 9h15a3 3 0 0 0-3-3" /></svg>
           </span>
           <span>
             <strong>Approve in wallet</strong>
-            <small>{!wallet.available ? "No browser wallet detected. Use the demo principal key below." : connected ? `${shortAddress(wallet.address ?? "")}${rightChain ? " · Robinhood Chain testnet" : " · switch to Robinhood Chain testnet to sign"}` : "Your wallet will sign this Mandate. This does not submit a blockchain transaction."}</small>
+            <small>{!wallet.available ? (v3 ? "A browser wallet is required for V3 autonomous mandate authorization." : "No browser wallet detected. Use the demo principal key below.") : connected ? `${shortAddress(wallet.address ?? "")}${rightChain ? " · Robinhood Chain testnet" : " · switch to Robinhood Chain testnet to sign"}` : "Your wallet will sign this Mandate. This does not submit a blockchain transaction."}</small>
           </span>
           <Pill tone={connected && rightChain ? "good" : "neutral"}>{!wallet.available ? "Not detected" : !connected ? "Not connected" : rightChain ? "Connected" : "Wrong network"}</Pill>
         </button>
-        <button type="button" role="radio" aria-checked={method === "demo"} className="mw-signer__option" data-selected={method === "demo" ? "" : undefined} disabled={props.authorizing} onClick={() => setMethod("demo")}>
-          <span className="mw-signer__icon" aria-hidden="true">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><circle cx="8" cy="15" r="4" /><path d="m11 12 8-8M16 7l2 2M14 9l2 2" /></svg>
-          </span>
-          <span><strong>Demo principal key</strong><small>Held by the local server. Publicly derived: it secures nothing and is not a wallet signature.</small></span>
-          <Pill tone={method === "demo" ? "accent" : "neutral"}>Fallback</Pill>
-        </button>
-        {method === "wallet" && wallet.available ? (
+        {v3 ? null : (
+          <button type="button" role="radio" aria-checked={method === "demo"} className="mw-signer__option" data-selected={method === "demo" ? "" : undefined} disabled={props.authorizing} onClick={() => setMethod("demo")}>
+            <span className="mw-signer__icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><circle cx="8" cy="15" r="4" /><path d="m11 12 8-8M16 7l2 2M14 9l2 2" /></svg>
+            </span>
+            <span><strong>Demo principal key</strong><small>Held by the local server. Publicly derived: it secures nothing and is not a wallet signature.</small></span>
+            <Pill tone={method === "demo" ? "accent" : "neutral"}>Fallback</Pill>
+          </button>
+        )}
+        {signingMethod === "wallet" && wallet.available ? (
           <div className="mw-signer__actions">
             {!connected ? <button type="button" className="mw-soft-button" disabled={props.authorizing} onClick={props.onConnect}>Connect wallet</button> : null}
             {connected && !rightChain ? <button type="button" className="mw-soft-button" disabled={props.authorizing} onClick={props.onSwitchChain}>Switch to Robinhood Chain testnet</button> : null}
             <details className="mw-disclosure mw-disclosure--inline">
               <summary>What this signature does</summary>
-              <p className="mw-fine">An offchain EIP-712 PortfolioMandateAuthorizationV2 approval of this exact mandate and the initial allocation shown above, for this session, once. Your wallet becomes the protocol principal. No gas, no transaction. Stock settlement asks for a separate MandateAuthorization. This page does not broadcast, and your signature does not delegate onchain execution authority.</p>
+              <p className="mw-fine">
+                {v3
+                  ? "An offchain EIP-712 DelegatedPortfolioAuthorizationV3. One signature binds portfolio authority and bounded autonomous Stock testnet execution. No gas. No per-trade wallet approval after this. Mandate verifies each exact action; the ephemeral Mandate execution delegate signs settlement."
+                  : "An offchain EIP-712 PortfolioMandateAuthorizationV2 approval of this exact mandate and the initial allocation shown above, for this session, once. Your wallet becomes the protocol principal. No gas, no transaction. Stock settlement asks for a separate MandateAuthorization. This page does not broadcast, and your signature does not delegate onchain execution authority."}
+              </p>
             </details>
+            {v3 ? (
+              <section className="mw-authority-review__group" aria-label="Automatic execution">
+                <h4>Automatic execution</h4>
+                <p className="mw-fine">Enabled for the Stock testnet settlement path. Recipient is your wallet. Bounded by the derived MDUSD fixture debit cap disclosed in technical details after signing.</p>
+              </section>
+            ) : null}
           </div>
         ) : null}
-        {method === "demo" ? (
+        {signingMethod === "demo" ? (
           <label className="mw-confirm">
             <span>Type <code>{props.expected}</code> to sign</span>
             <input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" spellCheck={false} disabled={props.authorizing || !reviewClean} aria-label="Authorization confirmation" />
@@ -537,7 +557,7 @@ export function ApproveStage(props: {
         ) : null}
       </section>
 
-      {props.authorizing ? <div className="mw-inline-status" aria-live="polite"><LatticeLoader label={method === "wallet" ? "Waiting for your wallet" : `Signing mandate ${version}`} status="working" pattern="orbit" showTimer={false} /></div> : null}
+      {props.authorizing ? <div className="mw-inline-status" aria-live="polite"><LatticeLoader label={signingMethod === "wallet" ? "Waiting for your wallet" : `Signing mandate ${version}`} status="working" pattern="orbit" showTimer={false} /></div> : null}
       {props.error === "" ? null : <p className="mw-notice mw-notice--bad" role="alert">{props.error}</p>}
       {reviewClean ? (
         <p className="mw-fine mw-approve__promise">Your wallet signs this authority. Agents cannot exceed it.</p>
@@ -548,7 +568,7 @@ export function ApproveStage(props: {
       )}
 
       <footer className="mw-stage-foot">
-        {method === "wallet" ? (
+        {signingMethod === "wallet" ? (
           <button type="button" className="mw-cta" disabled={!walletReady || props.authorizing} onClick={props.onSignWallet}>
             Authorize mandate
           </button>

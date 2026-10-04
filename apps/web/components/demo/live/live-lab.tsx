@@ -128,6 +128,7 @@ export function LiveLab(): ReactNode {
   const stageRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const shownStage = useRef<string | null>(null);
+  const v3AutoSettleStarted = useRef(false);
 
   useEffect(() => {
     if (SERVER === null) return;
@@ -145,11 +146,12 @@ export function LiveLab(): ReactNode {
           setSettlementOffer({ kind: "unavailable", message: message(settlement.body) });
           return;
         }
-        if (str(settlement.body.spine) !== "V2") {
+        const spine = str(settlement.body.spine);
+        if (spine !== "V2" && spine !== "V3") {
           setSettlementOffer({ kind: "unavailable", message: "This local settlement server cannot settle from the browser. Nothing will be sent." });
           return;
         }
-        setSettlementOffer({ kind: "ready" });
+        setSettlementOffer({ kind: "ready", spine: spine === "V3" ? "V3" : "V2" });
       });
       // A reload (or a server restart) returns to the same durable session; its events replay from the start.
       const id = rememberedSession();
@@ -269,7 +271,16 @@ export function LiveLab(): ReactNode {
   const activeRecord = versions.find((item) => item.version === activeVersion) ?? null;
   const roomSeen = runEvents.some((event) => event.kind === "ROOM_OPENED");
   const authorization = rec(activeRecord?.authorization);
-  const authorizedBy = typeof authorization.method !== "string" ? null : authorization.method === "WALLET_PRINCIPAL_V2" || authorization.method === "WALLET_PRINCIPAL_V2_PLAN" ? `wallet principal ${shortAddress(str(authorization.principal))}` : authorization.method === "WALLET_EIP712" ? `authorized by ${shortAddress(str(authorization.principal))}` : "demo principal key";
+  const authorizedBy = typeof authorization.method !== "string"
+    ? null
+    : authorization.method === "WALLET_PRINCIPAL_V3_DELEGATED"
+      ? `V3 autonomous mandate · ${shortAddress(str(authorization.principal))}`
+      : authorization.method === "WALLET_PRINCIPAL_V2" || authorization.method === "WALLET_PRINCIPAL_V2_PLAN"
+        ? `wallet principal ${shortAddress(str(authorization.principal))}`
+        : authorization.method === "WALLET_EIP712"
+          ? `authorized by ${shortAddress(str(authorization.principal))}`
+          : "demo principal key";
+  const v3Active = authorization.method === "WALLET_PRINCIPAL_V3_DELEGATED";
   const provider = rec(view.provider);
   const providerKind = sessionId === null ? (providerChoice === "openai" ? "LIVE" : "STUB") : str(provider.kind);
   const liveAvailable = rec(rec(status?.providers).openai).available === true;
@@ -378,7 +389,14 @@ export function LiveLab(): ReactNode {
       await readWallet();
       return;
     }
-    const challenge = await call("POST", "/wallet/challenge", { address, spine: "V2" });
+    const statusV3 = rec(rec(status?.principalAuthorization).spineV3).available === true;
+    if (statusV3 && settlementOffer.kind === "loading") {
+      setAuthorizing(false);
+      setError("Waiting for the settlement offer before authorizing a V3 autonomous mandate.");
+      return;
+    }
+    const preferV3 = statusV3 || (settlementOffer.kind === "ready" && settlementOffer.spine === "V3");
+    const challenge = await call("POST", "/wallet/challenge", { address, spine: preferV3 ? "V3" : "V2" });
     if (challenge === null) {
       setAuthorizing(false);
       return;
@@ -516,6 +534,27 @@ export function LiveLab(): ReactNode {
     setSigning(false);
   }
 
+  // V3: after Mandate authorizes a Stock action, settle automatically — no Execute, no gate signature.
+  useEffect(() => {
+    if (SERVER === null) return;
+    if (authorization.method !== "WALLET_PRINCIPAL_V3_DELEGATED") return;
+    if (settlementOffer.kind !== "ready" || settlementOffer.spine !== "V3") return;
+    if (phase !== "AUTHORIZED" && phase !== "COMPLETE") return;
+    if (settlement.settled || settlement.stage === "SUBMITTED" || settlement.stage === "SIMULATION" || settlement.stage === "PREFLIGHT") return;
+    if (signing || v3AutoSettleStarted.current) return;
+    const trade = authorizedStockTrade(runEvents, arr(view.reservations).map(rec));
+    if (!trade.settlementCapable) return;
+    v3AutoSettleStarted.current = true;
+    void (async () => {
+      setSigning(true);
+      await postSettle({ mode: "SEND" });
+      await refresh();
+      setSigning(false);
+    })();
+    // postSettle/refresh are stable session closures for this effect's SEND arm.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: arm once per authorized V3 stock reservation
+  }, [SERVER, authorization.method, settlementOffer, phase, settlement.settled, settlement.stage, signing, runEvents, view.reservations, refresh]);
+
   if (SERVER === null) {
     return (
       <main className="mw" id="main-content">
@@ -617,6 +656,7 @@ export function LiveLab(): ReactNode {
           authorizing={authorizing}
           error={error}
           wallet={wallet}
+          spine={rec(rec(status?.principalAuthorization).spineV3).available === true || (settlementOffer.kind === "ready" && settlementOffer.spine === "V3") ? "V3" : "V2"}
           onConnect={() => void connectWallet()}
           onSwitchChain={() => void switchChain()}
           onSignWallet={() => {
@@ -669,6 +709,7 @@ export function LiveLab(): ReactNode {
           walletReady={wallet.address !== null && wallet.chainId === APPROVAL_CHAIN.chainId}
           conflict={settleConflict}
           restored={restored}
+          autonomousV3={authorization.method === "WALLET_PRINCIPAL_V3_DELEGATED"}
           onReconcile={() => void reconcile()}
           onSignStock={() => void signStock()}
           onPrepareWallet={() => {
@@ -686,11 +727,12 @@ export function LiveLab(): ReactNode {
           stockTrade={stockTrade}
           sessionId={sessionId}
           offer={settlementOffer}
-          walletOk={wallet.address !== null && wallet.chainId === APPROVAL_CHAIN.chainId && (str(authorization.principal) === "—" || wallet.address === str(authorization.principal).toLowerCase()) && (authorization.method === "WALLET_PRINCIPAL_V2" || authorization.method === "WALLET_PRINCIPAL_V2_PLAN")}
+          walletOk={wallet.address !== null && wallet.chainId === APPROVAL_CHAIN.chainId && (str(authorization.principal) === "—" || wallet.address === str(authorization.principal).toLowerCase()) && (authorization.method === "WALLET_PRINCIPAL_V2" || authorization.method === "WALLET_PRINCIPAL_V2_PLAN" || authorization.method === "WALLET_PRINCIPAL_V3_DELEGATED")}
           busy={task !== null || signing}
           conflict={settleConflict}
           retry={executionRetry(settleConflict?.code ?? null, settleConflict?.held ?? false) && executeOffered(restored, runEvents)}
           restored={restored}
+          autonomousV3={v3Active}
           onReconcile={() => void reconcile()}
           onExecute={() => void execute()}
           onDetails={() => setSheet("review")}
@@ -789,6 +831,13 @@ export function LiveLab(): ReactNode {
             </button>
           ) : null}
         </nav>
+      ) : null}
+
+      {v3Active && activeVersion !== null && view.paused !== true ? (
+        <p className="mw-notice" role="status">
+          MANDATE ACTIVE · AUTONOMOUS EXECUTION ACTIVE — Bounded by your signed authority
+          {typeof activeRecord?.expiresAt === "string" && activeRecord.expiresAt !== "" ? ` · Expires ${activeRecord.expiresAt}` : ""}
+        </p>
       ) : null}
 
       <motion.div ref={stageRef} className="mw-stage" data-phase={phase} layout={reduced ? false : "size"} transition={transition}>
