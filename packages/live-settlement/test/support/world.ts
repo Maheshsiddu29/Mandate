@@ -110,6 +110,8 @@ export class ModelRpc implements TestnetRpc {
   prepared = 0;
   broadcasts = 0;
   readonly #mined = new Map<string, ModelTx>();
+  /** Mirror RobinhoodTestnetRpc.boundGate; tests may rebind for V3. */
+  boundGate: Address = GATE;
 
   constructor() {
     this.chain = new ModelChain(T + 5n);
@@ -158,6 +160,7 @@ export class ModelRpc implements TestnetRpc {
   async simulateExecute(gate: Address, call: GateCall): Promise<Simulation> {
     this.executeTargets.push(gate);
     this.simulations += 1;
+    if (gate.toLowerCase() !== this.boundGate.toLowerCase()) return { ok: false, revert: 'TARGET_NOT_THE_GATE' };
     if (this.simulateRevert !== null) return { ok: false, revert: this.simulateRevert };
     if (this.v3PassthroughGate !== null && gate.toLowerCase() === this.v3PassthroughGate.toLowerCase()) {
       return { ok: true, returnData: '0x' };
@@ -167,10 +170,12 @@ export class ModelRpc implements TestnetRpc {
   async estimateExecute(gate: Address): Promise<Read<bigint>> {
     this.executeTargets.push(gate);
     this.estimates += 1;
+    if (gate.toLowerCase() !== this.boundGate.toLowerCase()) return { ok: false, error: 'TARGET_NOT_THE_GATE' };
     return this.estimateError === null ? { ok: true, value: 240_000n } : { ok: false, error: this.estimateError };
   }
   async prepareExecute(gate: Address, call: GateCall, gasLimit: bigint): Promise<Read<PreparedTx>> {
     this.executeTargets.push(gate);
+    if (gate.toLowerCase() !== this.boundGate.toLowerCase()) return { ok: false, error: 'TARGET_NOT_THE_GATE' };
     if (this.prepareError !== null) return { ok: false, error: this.prepareError };
     this.prepared += 1;
     const hash = hashOf(`${call.calldata}:${this.prepared}`);
@@ -179,6 +184,7 @@ export class ModelRpc implements TestnetRpc {
   async broadcast(tx: PreparedTx): Promise<BroadcastResult> {
     this.broadcasts += 1;
     this.beforeMine?.();
+    if (tx.to.toLowerCase() !== this.boundGate.toLowerCase()) return { kind: 'ERROR', error: 'NOT_A_PREPARED_GATE_EXECUTE' };
     const v3 = this.v3PassthroughGate !== null && tx.to.toLowerCase() === this.v3PassthroughGate.toLowerCase();
     switch (this.broadcastBehaviour) {
       case 'ERROR_NOT_SENT':

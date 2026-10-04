@@ -45,6 +45,8 @@ import type { AutonomousSettlementGate } from './autonomous-gate.ts';
 
 /** Exact execute artifact produced by settleSpineV3 (never a hand-built bypass). */
 export interface V3PreparedExecution {
+  /** Outer EVM transaction target — always the V3 delegated Gate. */
+  readonly to: string;
   readonly calldata: string;
   readonly delegation: DelegationFields;
   readonly mandate: GateMandate;
@@ -338,10 +340,49 @@ export async function settleSpineV3(i: V3SettlementInput): Promise<V3SettlementR
   );
   const call: GateCall = { calldata, attempt: null as never };
 
-  session.events.emit('TESTNET_SIMULATION_STARTED', { agent: 'stock', data: { target: i.v3Gate.address, method: 'eth_call + eth_estimateGas', spine: 'V3', sessionId: session.id } });
+  const planGate = i.v3Gate.address.toLowerCase();
+  const simulationExpectedGate = rpc.boundGate.toLowerCase();
+  session.events.emit('TESTNET_SIMULATION_STARTED', {
+    agent: 'stock',
+    data: {
+      target: planGate,
+      planGate,
+      simulationExpectedGate,
+      transactionTo: planGate,
+      method: 'eth_call + eth_estimateGas',
+      spine: 'V3',
+      sessionId: session.id,
+    },
+  });
+  if (simulationExpectedGate !== planGate) {
+    session.events.emit('TESTNET_SIMULATION_FAILED', {
+      agent: 'stock',
+      data: {
+        reason: 'TARGET_NOT_THE_GATE',
+        spine: 'V3',
+        planGate,
+        simulationExpectedGate,
+        transactionTo: planGate,
+        sessionId: session.id,
+        transactions: 0,
+      },
+    });
+    return refuse('SIMULATION', 'SIMULATION_REVERT.TARGET_NOT_THE_GATE', reports);
+  }
   const sim = await rpc.simulateExecute(i.v3Gate.address as never, call);
   if (!sim.ok) {
-    session.events.emit('TESTNET_SIMULATION_FAILED', { agent: 'stock', data: { reason: sim.revert, spine: 'V3', sessionId: session.id, transactions: 0 } });
+    session.events.emit('TESTNET_SIMULATION_FAILED', {
+      agent: 'stock',
+      data: {
+        reason: sim.revert,
+        spine: 'V3',
+        planGate,
+        simulationExpectedGate,
+        transactionTo: planGate,
+        sessionId: session.id,
+        transactions: 0,
+      },
+    });
     return refuse('SIMULATION', `SIMULATION_REVERT.${sim.revert}`, reports);
   }
   const gas = await rpc.estimateExecute(i.v3Gate.address as never, call);
@@ -359,6 +400,7 @@ export async function settleSpineV3(i: V3SettlementInput): Promise<V3SettlementR
     executionNonce: i.nextExecutionNonce,
   };
   const preparedProof: V3PreparedExecution = {
+    to: planGate,
     calldata,
     delegation,
     mandate: artifact.mandate,

@@ -52,6 +52,11 @@ export interface V3UiHost {
   readonly host: import('./v3/host.ts').LiveV3ChallengeHost;
   readonly settle: (input: import('./v3/settlement.ts').V3SettlementInput) => Promise<import('./v3/settlement.ts').V3SettlementResult>;
   readonly gate: { readonly address: string; readonly domainSeparator: string; readonly runtimeCodeHash: string };
+  /**
+   * RPC client bound to {@link gate} — never the V2 deployment Gate.
+   * settleSpineV3 simulates and broadcasts only through this client.
+   */
+  readonly rpc: TestnetRpc;
   /** Next execution nonce per session (starts at 1). */
   readonly nextNonce: (sessionId: string) => bigint;
   readonly markNonceUsed: (sessionId: string, nonce: bigint) => void;
@@ -423,12 +428,17 @@ export class SpineUi {
     const scratch = mode === 'DRY_RUN' ? this.#host.scratch() : null;
     try {
       const nonce = v3.nextNonce(session.id);
+      // V3 must use the V3-bound RPC. The V2 host RPC is bound to the frozen
+      // V2 Gate and would refuse every V3 simulate/send with TARGET_NOT_THE_GATE.
+      if (v3.rpc.boundGate.toLowerCase() !== v3.gate.address.toLowerCase()) {
+        return refuse(500, 'V3_RPC_GATE_MISMATCH', 'V3 settlement RPC is not bound to the live V3 Gate. Nothing was broadcast.');
+      }
       const result = await v3.settle({
         session,
         journal,
         deployment: this.#host.deployment,
         v3Gate: v3.gate,
-        rpc: this.#host.rpc,
+        rpc: v3.rpc,
         keys: this.#host.keys,
         mode,
         host: v3.host,

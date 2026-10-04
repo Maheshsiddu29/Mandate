@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { OpenAIProvider, readConfig, realClock, sessionDir } from '@mandate/live-agents';
 import { delegatedDomainSeparator } from '@mandate/execution-gate';
+import type { Address } from '@mandate/evm-robinhood';
 import type { ApiRequest, ApiResponse } from '../../live-agents/src/server/app.ts';
 import { LiveLab } from '../../live-agents/src/server/app.ts';
 import { createLabServer, listen } from '../../live-agents/src/server/http.ts';
@@ -25,6 +26,7 @@ import {
   reconcileAttempts,
   settleSpine,
   settleSpineV3,
+  type RpcEndpoints,
   type TestnetDeployment,
 } from '../src/index.ts';
 import { SpineUi, type LabRouteResponse, type V3UiHost } from '../src/ui-settle.ts';
@@ -49,7 +51,12 @@ function asApi(r: LabRouteResponse): ApiResponse {
   return { status: r.status, body: r.body };
 }
 
-function buildV3(d: TestnetDeployment, agentAddress: string): { readonly host: LiveV3ChallengeHost; readonly ui: V3UiHost } | null {
+function buildV3(
+  d: TestnetDeployment,
+  agentAddress: string,
+  submitterKey: string,
+  endpoints: RpcEndpoints,
+): { readonly host: LiveV3ChallengeHost; readonly ui: V3UiHost } | null {
   // Live Gate from human deployment evidence — never invent, never use V2 Gate.
   const live = loadLiveV3Gate();
   if (!live.ok) {
@@ -65,6 +72,8 @@ function buildV3(d: TestnetDeployment, agentAddress: string): { readonly host: L
     market: d.market,
     validitySeconds: V3_VALIDITY_SECONDS,
   });
+  // Separate RPC client bound to the V3 Gate. The V2 client stays on the frozen V2 Gate.
+  const v3Rpc = new RobinhoodTestnetRpc(submitterKey, gate as Address, endpoints);
   const nonces = new Map<string, bigint>();
   const debits = new Map<string, bigint>();
   return {
@@ -77,6 +86,7 @@ function buildV3(d: TestnetDeployment, agentAddress: string): { readonly host: L
         domainSeparator: delegatedDomainSeparator(d.chainId, gate as never),
         runtimeCodeHash: live.runtimeCodeHash ?? `0x${'00'.repeat(32)}`,
       },
+      rpc: v3Rpc,
       nextNonce: (sessionId) => nonces.get(sessionId) ?? 1n,
       markNonceUsed: (sessionId, nonce) => {
         nonces.set(sessionId, nonce + 1n);
@@ -110,8 +120,16 @@ function settlement(lab: LiveLab, v3: { readonly host: LiveV3ChallengeHost; read
   if (keys.principal.address !== d.principal || keys.agent.address !== d.agent || keys.deployer.address !== d.submitter) {
     return { before: unavailable('The disposable keys are not the manifest parties. Settlement routes are off.'), note: 'settlement unavailable: keys are not the manifest parties' };
   }
+  // V2 RPC: frozen V2 Gate only.
   const rpc = new RobinhoodTestnetRpc(keys.deployer.privateKey, d.gate.address, rpcConfig.endpoints);
   const domainKeys = { principal: keys.principal.privateKey, agent: keys.agent.privateKey };
+  // When V3 is on, its ui.rpc must already be bound to the live V3 Gate (not d.gate).
+  if (v3 !== null && v3.ui.rpc.boundGate.toLowerCase() !== v3.ui.gate.address.toLowerCase()) {
+    return { before: unavailable('V3 settlement RPC is not bound to the live V3 Gate.'), note: 'settlement unavailable: V3 RPC gate mismatch' };
+  }
+  if (v3 !== null && v3.ui.rpc.boundGate.toLowerCase() === d.gate.address.toLowerCase()) {
+    return { before: unavailable('V3 settlement RPC must not share the frozen V2 Gate.'), note: 'settlement unavailable: V3 RPC leaked V2 Gate' };
+  }
   const ui = new SpineUi({
     openSession: (id) => lab.openSession(id),
     taskOf: (id) => lab.taskOf(id),
@@ -138,7 +156,7 @@ function settlement(lab: LiveLab, v3: { readonly host: LiveV3ChallengeHost; read
       const handled = await ui.handle(r.method, r.path, r.body, () => lab.handle(r));
       return handled === null ? null : asApi(handled);
     },
-    note: `V2${v3 === null ? '' : '+V3'} settlement on this port · RPC ${rpcConfig.label}${rpcConfig.notes.length === 0 ? '' : ` · ${rpcConfig.notes.join(' · ')}`}`,
+    note: `V2${v3 === null ? '' : '+V3'} settlement on this port · RPC ${rpcConfig.label}${rpcConfig.notes.length === 0 ? '' : ` · ${rpcConfig.notes.join(' · ')}`}${v3 === null ? '' : ` · V3 Gate ${v3.ui.gate.address}`}`,
   };
 }
 
@@ -147,11 +165,12 @@ const scorer = configuredScorer();
 
 let v3Bundle: { readonly host: LiveV3ChallengeHost; readonly ui: V3UiHost } | null = null;
 try {
+  const rpcConfig = readRpcConfig();
   const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'));
   const deployment = parseDeployment(manifest);
-  if (deployment.ok) {
+  if (rpcConfig.ok && deployment.ok) {
     const keys = loadKeys();
-    v3Bundle = buildV3(deployment.value, keys.agent.address);
+    v3Bundle = buildV3(deployment.value, keys.agent.address, keys.deployer.privateKey, rpcConfig.endpoints);
   }
 } catch {
   v3Bundle = null;
