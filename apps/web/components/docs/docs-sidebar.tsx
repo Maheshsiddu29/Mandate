@@ -3,7 +3,7 @@
 import { DOCS_NAV } from "@/lib/docs/nav";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 function pathActive(pathname: string, href: string): boolean {
   if (href === "/docs") return pathname === "/docs";
@@ -14,9 +14,18 @@ export function DocsSidebar(): ReactNode {
   const pathname = usePathname();
   const panelId = useId();
   const [open, setOpen] = useState(false);
+  const panelRef = useRef<HTMLElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const wasOpen = useRef(false);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      if (wasOpen.current) toggleRef.current?.focus();
+      wasOpen.current = false;
+      return;
+    }
+    wasOpen.current = true;
+    panelRef.current?.querySelector<HTMLAnchorElement>("a")?.focus();
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === "Escape") setOpen(false);
     };
@@ -49,6 +58,7 @@ export function DocsSidebar(): ReactNode {
     <>
       <div className="docs-sidebar__mobile-bar">
         <button
+          ref={toggleRef}
           type="button"
           className="docs-sidebar__menu-toggle focus-ring"
           aria-expanded={open}
@@ -72,6 +82,7 @@ export function DocsSidebar(): ReactNode {
       ) : null}
 
       <nav
+        ref={panelRef}
         id={panelId}
         className="docs-sidebar"
         aria-label="Documentation"
