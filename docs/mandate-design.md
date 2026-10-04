@@ -5,23 +5,18 @@ repository summarize parts of this one and link back to it; this file is the
 source of truth.
 
 - **Document status:** canonical specification.
-- **Implementation status:** Phase 5R.3 complete — the mandate core kernel
-  (types, canonical encoding, EIP-712 authorization, deterministic verifier,
-  receipts, replay semantics, decision-vector corpus) and the canonical asset and
-  representation registry (identifier schemes, reference resolution,
-  provenance-carrying representation metadata, mandate-constrained admissibility,
-  deterministic snapshots, registry decision vectors), plus the read-only
-  Robinhood REST/RPC adapter, recorded mainnet fixtures and replay corpus, plus
-  deterministic candidate construction, admissibility, exact-cost ranking,
-  selection receipts, mainnet routing replay and seeded simulation, and the
-  optional Jev advisory layer. Phase 5R through 5R.3 hardened signed economic
-  authority, replay, fresh-state handoff, layered candidate commitments,
-  registry snapshot binding, public plain-value boundaries and canonical
-  parser/encoder domain agreement. Phase 6 adds the onchain execution gate
-  (`contracts/`, `packages/execution-gate`), tested locally against a labelled
-  settlement fixture and **not deployed**. A real venue integration, funding and
-  web work remain unbuilt.
-- **Last structural revision:** Phase 6 ([ADR 0019](adr/0019-onchain-execution-gate.md)).
+- **Implementation status:** the frozen kernel, registry, router, execution
+  gate, Core, ledger, and control layers are implemented. Above them, the
+  repository implements testnet domain adapters, the Portfolio Mandate and
+  multi-agent coordination layer, durable live sessions and settlement
+  journal, V3 bounded delegated execution, `@mandate/sdk`, and the web/docs
+  experience. The V3 Gate has been exercised on Robinhood Chain Testnet with
+  valueless fixture assets; no mainnet or production securities execution is
+  claimed. See the root [README](../README.md) for the current release surface
+  and evidence qualification, and [roadmap.md](roadmap.md) for chronology.
+- **Last structural revision:** Portfolio Mandate layer
+  ([ADR 0027](adr/0027-portfolio-mandate-layer.md)); later demo, V3 execution,
+  live-session, and SDK work stays above the frozen authority layers.
 
 ## How to read status labels
 

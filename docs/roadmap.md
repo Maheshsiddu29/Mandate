@@ -21,9 +21,12 @@ and what it depends on.
 > only, is accepted; Phase 7E.3
 > ([phase-7e/implementation-7e3.md](phase-7e/implementation-7e3.md)) — the
 > frozen gate deployed to Robinhood Chain **testnet** and driven by Mandate
-> Core — is run on testnet and awaiting review.** No mainnet deployment,
-> production domain module, observation reconciliation or later Phase 7
-> mechanism exists.
+> Core — is run on testnet and awaiting review. Phase 7F — the Portfolio
+> Mandate and multi-agent coordination layer — is implemented locally above
+> the frozen layers. Later buildathon work adds the Live AI Lab, durable
+> settlement journal and reconciliation, V3 bounded delegated execution,
+> `@mandate/sdk`, and the web/docs experience.** No mainnet deployment or
+> production securities execution is claimed.
 > Rationale for the phase ordering is in
 > [mandate-design.md §25](mandate-design.md#25-phased-engineering-roadmap);
 > scope boundaries are in

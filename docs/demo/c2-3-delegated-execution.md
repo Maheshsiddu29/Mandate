@@ -1,6 +1,14 @@
 # C2.3 — Bounded Delegated Execution Authority
 
-> **Status: C2.3.2 local deployment-readiness proof complete; awaiting human deploy.**
+> **Current status (2026-10-04): deployed and exercised on Robinhood Chain
+> Testnet (chain id 46630).** The V3 Gate is
+> `0x5cf0621ab974d100fd5df225dab046bf35fa7519`; deployment transaction
+> `0x0440398d7f9d3ee3ce7cdd4e4cbc22d6e419bc10b0edc51d21a3c0cc18247f95`.
+> The live settlement remains a valueless MDUSD/MDEMO fixture, not an NVDA or
+> Robinhood Stock Token trade.
+>
+> **Historical pre-deployment status:** C2.3.2 local deployment-readiness proof
+> was complete and awaiting human deploy.
 > Testnet-only. Stock fixture settlement path only. The agent does **not**
 > deploy or broadcast. Old V2 `MandateExecutionGate` remains frozen and available.
 > C2.3.2 proves `settleSpineV3` against real `MandateDelegatedExecutionGate`
