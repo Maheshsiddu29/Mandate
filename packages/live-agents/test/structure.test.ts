@@ -19,6 +19,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 import * as pkg from '../src/index.ts';
 import { createAgentSigners, LocalPrincipalSigner } from '../src/mandate/signer.ts';
 import { caseViews } from '../src/policy-stress/cases.ts';
@@ -39,6 +40,48 @@ function sources(dir: string): readonly { readonly file: string; readonly text: 
 }
 const SRC = sources('src/');
 const SCRIPTS = sources('scripts/');
+const FORBIDDEN_WEB_DEPENDENCIES = ['@mandate/live-agents'] as const;
+
+function moduleSpecifiers(file: string, source: string): readonly string[] {
+  const kind = file.endsWith('.tsx') ? ts.ScriptKind.TSX : file.endsWith('.ts') ? ts.ScriptKind.TS : ts.ScriptKind.JS;
+  const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, kind);
+  const specifiers: string[] = [];
+  const add = (node: ts.Expression | undefined): void => {
+    if (node && ts.isStringLiteralLike(node)) specifiers.push(node.text);
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) add(node.moduleSpecifier);
+    if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) add(node.moduleReference.expression);
+    if (ts.isCallExpression(node) && node.arguments.length === 1) {
+      if (node.expression.kind === ts.SyntaxKind.ImportKeyword) add(node.arguments[0]);
+      if (ts.isIdentifier(node.expression) && node.expression.text === 'require') add(node.arguments[0]);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(parsed);
+  return specifiers;
+}
+
+function forbiddenWebDependency(file: string, source: string): string | undefined {
+  return moduleSpecifiers(file, source).find((specifier) =>
+    FORBIDDEN_WEB_DEPENDENCIES.some((dependency) => specifier === dependency || specifier.startsWith(`${dependency}/`)),
+  );
+}
+
+type DependencyManifest = {
+  readonly dependencies?: { readonly [name: string]: string };
+  readonly devDependencies?: { readonly [name: string]: string };
+  readonly optionalDependencies?: { readonly [name: string]: string };
+  readonly peerDependencies?: { readonly [name: string]: string };
+};
+
+function forbiddenManifestDependency(manifest: DependencyManifest): string | undefined {
+  for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'] as const) {
+    for (const dependency of FORBIDDEN_WEB_DEPENDENCIES) if (manifest[field]?.[dependency]) return `${field}: ${dependency}`;
+  }
+  return undefined;
+}
+
 const only = (pattern: RegExp, allowed: readonly string[], set = SRC) => {
   for (const { file, text } of set) if (!allowed.includes(file)) assert.doesNotMatch(text, pattern, file);
 };
@@ -72,9 +115,30 @@ describe('live-agents structural boundary', () => {
       for (const f of readdirSync(dir, { recursive: true }).map(String)) if (f.endsWith('.ts')) assert.doesNotMatch(readFileSync(join(dir, f), 'utf8'), /@mandate\/live-agents|live-agents\//, `${p}/${f}`);
     }
     const web = fileURLToPath(new URL('apps/web/', REPO));
+    const manifest = JSON.parse(readFileSync(join(web, 'package.json'), 'utf8')) as DependencyManifest;
+    assert.equal(forbiddenManifestDependency(manifest), undefined, 'web/package.json dependency boundary');
     for (const d of ['app', 'components', 'lib']) {
-      for (const f of readdirSync(join(web, d), { recursive: true }).map(String)) if (/\.(ts|tsx|mjs)$/.test(f)) assert.doesNotMatch(readFileSync(join(web, d, f), 'utf8'), /@mandate\/live-agents|packages\/live-agents/, `web/${d}/${f}`);
+      for (const f of readdirSync(join(web, d), { recursive: true }).map(String)) {
+        if (!/\.(ts|tsx|mjs)$/.test(f)) continue;
+        const dependency = forbiddenWebDependency(f, readFileSync(join(web, d, f), 'utf8'));
+        assert.equal(dependency, undefined, `web/${d}/${f}: ${dependency}`);
+      }
     }
+  });
+
+  it('allows web documentation prose that names the package', () => {
+    const source = 'export const description = "Architecture: web does not depend on @mandate/live-agents";';
+    assert.equal(forbiddenWebDependency('architecture.tsx', source), undefined);
+  });
+
+  it('rejects an actual web import from the forbidden package', () => {
+    const source = 'import { LiveSession } from "@mandate/live-agents";';
+    assert.equal(forbiddenWebDependency('page.tsx', source), '@mandate/live-agents');
+  });
+
+  it('rejects the forbidden package when declared by the web manifest', () => {
+    const manifest = { dependencies: { '@mandate/live-agents': '0.1.0' } };
+    assert.equal(forbiddenManifestDependency(manifest), 'dependencies: @mandate/live-agents');
   });
 
   it('reads the environment in one module, files in one module, and no process or shell anywhere', () => {
