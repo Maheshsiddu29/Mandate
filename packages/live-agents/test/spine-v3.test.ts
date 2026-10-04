@@ -47,6 +47,18 @@ function host(scope?: Partial<V3PublicScope>): V3ChallengeHost {
         },
       };
     },
+    previewSettlementSetup() {
+      return {
+        ok: true,
+        plan: {
+          chainId: 46_630,
+          gate: (scope?.verifyingContract ?? GATE).toLowerCase(),
+          fundingToken: (scope?.fundingToken ?? FUNDING).toLowerCase(),
+          requiredAllowanceAtoms: scope?.cumulativeDebitLimit ?? '64000000',
+          basis: 'MAXIMUM',
+        },
+      };
+    },
   };
 }
 
@@ -65,6 +77,20 @@ function session(o: { id?: string; stateDir?: string; v3Host?: V3ChallengeHost }
 }
 
 describe('wallet principal V3 delegated', () => {
+  it('previews bounded settlement setup from the connected wallet without a challenge', () => {
+    const s = session();
+    const draft = presetDraft('balanced');
+    const preview = s.previewV3SettlementSetup(draft, WALLET);
+    assert.equal(preview.ok, true);
+    if (!preview.ok) return;
+    assert.equal(preview.principal, WALLET);
+    assert.equal(preview.plan.chainId, 46_630);
+    assert.equal(preview.plan.gate, GATE);
+    assert.equal(preview.plan.fundingToken, FUNDING);
+    assert.equal(preview.plan.requiredAllowanceAtoms, '64000000');
+    assert.notEqual(preview.plan.requiredAllowanceAtoms, ((1n << 256n) - 1n).toString());
+  });
+
   it('issues typed data for DelegatedPortfolioAuthorizationV3 and activates with one signature', async () => {
     const s = session();
     const draft = presetDraft('balanced');

@@ -14,9 +14,12 @@ const configure = readFileSync(`${root}/components/demo/live/stage-configure.tsx
 const outcome = readFileSync(`${root}/components/demo/live/stage-outcome.tsx`, 'utf8');
 
 describe('C2.3 delegated execution UX contracts', () => {
-  it('wallet adapter still cannot send transactions', () => {
+  it('wallet adapter signs typed data; only bounded ERC-20 approve may send', () => {
     assert.match(wallet, /eth_signTypedData_v4/);
-    assert.doesNotMatch(wallet, /eth_sendTransaction|eth_sendRawTransaction/);
+    assert.match(wallet, /eth_sendTransaction/);
+    assert.match(wallet, /sendBoundedErc20Approve/);
+    assert.doesNotMatch(wallet, /eth_sendRawTransaction/);
+    assert.match(wallet, /Unlimited or zero approval is refused/);
   });
 
   it('V2 path remains: portfolio challenge still names spine V2 as fallback', () => {

@@ -21,8 +21,11 @@ test('the browser holds no key and never talks to a model provider', () => {
   for (const { file, text } of liveSources) {
     assert.doesNotMatch(text, /api\.openai\.com|OPENAI_API_KEY|OPENAI_MODEL|\bsk-[A-Za-z0-9]{8}|['"]authorization['"]\s*:|\bBearer\s/i, file);
     assert.doesNotMatch(text, /@mandate\/live-agents|packages\/live-agents/, file);
-    // B.5.3: the wallet adapter may ask a wallet for an EIP-712 signature (eth_signTypedData_v4) and nothing else that signs.
-    assert.doesNotMatch(text, /sendTransaction|signTransaction|eth_sign(?!TypedData_v4)|personal_sign|privateKey/i, file);
+    // B.5.3 / C2.3.3: EIP-712 mandate signature, plus one bounded eth_sendTransaction approve in the wallet adapter only.
+    assert.doesNotMatch(text, /signTransaction|eth_sign(?!TypedData_v4)|personal_sign|privateKey/i, file);
+    if (file !== 'wallet.ts' && file !== 'settlement-setup.ts') {
+      assert.doesNotMatch(text, /sendTransaction|eth_sendTransaction/i, file);
+    }
   }
   // The only public configuration is the local server's URL.
   const env = liveSources.flatMap(({ text }) => [...text.matchAll(/process\.env\.([A-Z_]+)/g)].map((m) => m[1]));

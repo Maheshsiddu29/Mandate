@@ -43,9 +43,20 @@ function fakeProvider(answers: { readonly [method: string]: unknown } = {}) {
   };
 }
 
-test('the wallet adapter can connect, read, switch chain and sign typed data — and nothing that sends or signs a transaction', async () => {
-  assert.deepEqual([...WALLET_METHODS], ['eth_requestAccounts', 'eth_accounts', 'eth_chainId', 'wallet_switchEthereumChain', 'wallet_addEthereumChain', 'eth_signTypedData_v4']);
-  assert.doesNotMatch(walletSource, /eth_sendTransaction|eth_sendRawTransaction|eth_signTransaction|personal_sign|eth_sign"|eth_sign'/);
+test('the wallet adapter connects, reads, switches chain, signs typed data, and only sends bounded ERC-20 approve', async () => {
+  assert.deepEqual([...WALLET_METHODS], [
+    'eth_requestAccounts',
+    'eth_accounts',
+    'eth_chainId',
+    'wallet_switchEthereumChain',
+    'wallet_addEthereumChain',
+    'eth_signTypedData_v4',
+    'eth_sendTransaction',
+    'eth_call',
+    'eth_getTransactionReceipt',
+  ]);
+  assert.match(walletSource, /sendBoundedErc20Approve/);
+  assert.doesNotMatch(walletSource, /eth_sendRawTransaction|eth_signTransaction|personal_sign|eth_sign"|eth_sign'/);
   const sig = `0x${'ab'.repeat(65)}`;
   const p = fakeProvider({ eth_requestAccounts: ['0xABCDEF0123456789abcdef0123456789ABCDEF01'], eth_chainId: '0xb626', eth_signTypedData_v4: sig });
   const w = injectedWallet(p);
@@ -57,6 +68,41 @@ test('the wallet adapter can connect, read, switch chain and sign typed data —
   const signCall = p.calls.find((c) => c.method === 'eth_signTypedData_v4');
   assert.deepEqual(signCall?.params, ['0xabcdef0123456789abcdef0123456789abcdef01', JSON.stringify(typed)]);
   for (const c of p.calls) assert.ok((WALLET_METHODS as readonly string[]).includes(c.method), c.method);
+});
+
+test('bounded V3 MDUSD approve refuses wrong chain and unlimited amounts', async () => {
+  const principal = '0xabcdef0123456789abcdef0123456789abcdef01';
+  const plan = {
+    chainId: 46_630,
+    gate: '0x5cf0621ab974d100fd5df225dab046bf35fa7519',
+    fundingToken: '0x53b640b9a573e33c541de5a4917bc4d28d956abf',
+    requiredAllowanceAtoms: '64000000',
+    principal,
+    basis: 'MAXIMUM' as const,
+  };
+  const wrongChain = fakeProvider({ eth_chainId: '0x1' });
+  const wWrong = injectedWallet(wrongChain);
+  assert.ok(wWrong !== null);
+  const refused = await wWrong.sendBoundedErc20Approve(plan);
+  assert.equal(refused.ok, false);
+  if (!refused.ok) assert.equal(refused.error.code, 'WRONG_CHAIN');
+
+  const txHash = `0x${'cd'.repeat(32)}`;
+  const p = fakeProvider({ eth_chainId: '0xb626', eth_sendTransaction: txHash });
+  const w = injectedWallet(p);
+  assert.ok(w !== null);
+  const sent = await w.sendBoundedErc20Approve(plan);
+  assert.deepEqual(sent, { ok: true, value: txHash });
+  const send = p.calls.find((c) => c.method === 'eth_sendTransaction');
+  const tx = send?.params[0] as { to: string; data: string; value: string; from: string };
+  assert.equal(tx.to, plan.fundingToken);
+  assert.equal(tx.from, principal);
+  assert.equal(tx.value, '0x0');
+  assert.match(tx.data, /^0x095ea7b3/);
+  assert.ok(!tx.data.toLowerCase().endsWith('f'.repeat(64)));
+
+  const unlimited = await w.sendBoundedErc20Approve({ ...plan, requiredAllowanceAtoms: ((1n << 256n) - 1n).toString() });
+  assert.equal(unlimited.ok, false);
 });
 
 test('a rejected or unknown-chain request fails closed, and adding the chain offers only the public testnet RPC', async () => {

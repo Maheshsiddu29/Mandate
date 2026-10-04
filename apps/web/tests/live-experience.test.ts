@@ -76,9 +76,19 @@ test('submitting the prompt shows drafting only while the real request is open',
 });
 
 test('no timer, delay or randomness drives any state', () => {
-  for (const source of [browserSources, prompt, lattice]) {
+  const walletSource = read(`${LIVE}wallet.ts`);
+  for (const file of readdirSync(liveDir).filter((f) => /\.(ts|tsx)$/.test(f))) {
+    if (file === 'wallet.ts') continue;
+    const source = readFileSync(new URL(file, liveDir), 'utf8');
+    assert.doesNotMatch(source, /setTimeout\(|Math\.random\(/, file);
+  }
+  for (const source of [prompt, lattice]) {
     assert.doesNotMatch(source, /setTimeout\(|Math\.random\(/);
   }
+  // C2.3.3: wallet polls receipt confirmation only; it does not drive mandate state.
+  assert.equal((walletSource.match(/setTimeout\(/g) ?? []).length, 1);
+  assert.match(walletSource, /waitForReceipt[\s\S]*setTimeout\(resolve, 1_000\)/);
+  assert.doesNotMatch(walletSource, /Math\.random\(/);
   // The only intervals read real status (an open server task) or tick an elapsed clock for open requests.
   assert.match(lab, /if \(task === null\) return undefined;[\s\S]*setInterval\(\(\) => void refresh\(\), 700\)/);
   assert.match(lab, /if \(!pending\) return undefined;[\s\S]*setInterval\(\(\) => setNow\(Date\.now\(\)\), 250\)/);
@@ -158,7 +168,7 @@ test('the review step signs with a real wallet, or with the labelled demo key â€
   assert.match(configure, /const reviewClean = props\.review\.canAuthorize/);
   assert.match(configure, /disabled=\{!demoReady \|\| props\.authorizing\}/);
   // The wallet's CTA needs a connected wallet on the approval chain and a clean Review; nothing pretends to be connected.
-  assert.match(configure, /const walletReady = signingMethod === "wallet" && connected && rightChain && reviewClean;/);
+  assert.match(configure, /const walletReady = signingMethod === "wallet" && connected && rightChain && reviewClean && setupReady;/);
   assert.match(configure, /disabled=\{!walletReady \|\| props\.authorizing\}/);
   assert.doesNotMatch(browserSources, /Wallet approved|setConfirmation\(props\.expected\)|confirmation: expected/i);
   // Signing a mandate is not a transaction: the review step shows no gas estimate or limit.
@@ -180,7 +190,8 @@ test('the review step signs with a real wallet, or with the labelled demo key â€
   assert.match(outcome, /\{settlement\.fixtureIn\} â†’ \{settlement\.fixtureOut/);
   assert.doesNotMatch(outcome, /MDEMO â†’ MDUSD/);
   assert.doesNotMatch(outcome, /Send testnet transaction/);
-  assert.doesNotMatch(browserSources, /live-settlement|eth_sendTransaction|sendTransaction/);
+  assert.doesNotMatch(browserSources, /@mandate\/live-settlement|packages\/live-settlement/);
+  assert.match(browserSources, /sendBoundedErc20Approve/);
   assert.match(lab, /w\.signTypedData\(address, challenge\.typedData\)/);
   assert.match(lab, /call\("POST", "\/wallet\/authorize", \{ challenge: str\(challenge\.challenge\), signature: signed\.value \}\)/);
   assert.doesNotMatch(lab, /console\.|localStorage\.setItem\([^)]*signature/);
@@ -196,7 +207,8 @@ test('signing starts the run; Trade never broadcasts anything', () => {
   assert.match(lab, /const body = await call\("POST", "\/authorize", \{ confirmation \}\);[\s\S]*await startRun\(body\);/);
   assert.match(lab, /const body = await call\("POST", "\/wallet\/authorize"[\s\S]*await startRun\(body\);/);
   assert.match(lab, /setRunFrom\(known\);\s*await call\("POST", "\/run", \{\}\);/);
-  assert.doesNotMatch(browserSources, /sendTransaction|signTransaction|eth_sendRawTransaction|eth_sign(?!TypedData_v4)|personal_sign/i);
+  assert.doesNotMatch(browserSources, /eth_sendRawTransaction|eth_signTransaction|personal_sign/i);
+  assert.match(browserSources, /sendBoundedErc20Approve/);
 });
 
 test('agent rows start from AGENT_REQUEST_STARTED and update independently', () => {
