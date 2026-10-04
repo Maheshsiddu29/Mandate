@@ -57,7 +57,7 @@ if an existing settled session is sufficient.
 | --- | --- | --- |
 | A | Let the Stock agent manage $800. | $800 authority · Agent plan · authorize · truthful Stock receipt |
 | B | I have $2,000. Let Stock and Yield decide how to split it. | Current plan ≠ Maximum authority; Yield OFFCHAIN_ONLY |
-| C | I have $5k. Stock $2k, Yield $1k, no perps, Swap remainder, no trade above $500, approved venues only. | No max_output_tokens failure; per-trade NOT SUPPORTED |
+| C | I have $5k. Stock $2k, Yield $1k, no perps, Swap remainder, no trade above $500, approved venues only. | Deployable $5k (not $2.5k); Stock/Yield planned distinct from Up to; Swap remainder $2k; per-trade NOT SUPPORTED and does not mutate aggregates; balanced $800 ceilings conflict in product language and block signing until resolved |
 | G | Try an unauthorized action (Security demo) | BLOCKED · valid agent · no tx · no settlement |
 | I | Existing SETTLED `?session=` hard refresh + backend restart | Same receipt · no Execute · no new signature |
 
