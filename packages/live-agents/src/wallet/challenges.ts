@@ -14,6 +14,7 @@ import type { MandateDraft } from '../authoring/draft-types.ts';
 import type { InitialAllocationPlan } from '@mandate/portfolio';
 import type { PreparedVersion } from '../authoring/mandate-versioning.ts';
 import type { ApprovalMessage } from './approval.ts';
+import type { V3PublicScope } from './v3-host.ts';
 
 export const MAX_SIGNATURE_FAILURES = 5;
 
@@ -25,13 +26,16 @@ export interface WalletChallenge {
   /**
    * `V1`: the B.5.3 approval (`message` is set). `V2`: the wallet is the
    * protocol principal and `message` is null — the signed bytes are rebuilt
-   * from the prepared mandate.
+   * from the prepared mandate. `V3`: one DelegatedPortfolioAuthorizationV3
+   * (portfolio + bounded autonomous execution); `v3Scope` is set.
    */
-  readonly spine: 'V1' | 'V2';
+  readonly spine: 'V1' | 'V2' | 'V3';
   readonly message: ApprovalMessage | null;
-  /** Present only for the plan-bound V2 primary type. */
+  /** Present only for the plan-bound V2/V3 primary types. */
   readonly initialAllocation: InitialAllocationPlan | null;
   readonly initialAllocationDigest: string | null;
+  /** Present only for V3: trusted scope the browser may not invent. */
+  readonly v3Scope: V3PublicScope | null;
   /** Wall-clock unix seconds. The challenge may be submitted in `[issuedAt, deadline)`. */
   readonly issuedAt: bigint;
   readonly deadline: bigint;

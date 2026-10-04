@@ -47,6 +47,8 @@ export { ProviderError } from './runtime/errors.ts';
 export { realClock, type Clock } from './runtime/clock.ts';
 export { APPROVAL_CHAIN_ID, sessionDigest } from './wallet/approval.ts';
 export { spineAuthority } from './wallet/spine.ts';
+export { spineAuthorityV3, spineTypedDataV3, SPINE_V3_CHAIN_ID } from './wallet/spine-v3.ts';
+export type { V3ChallengeHost, V3PublicScope, V3IssueInput, V3IssueResult } from './wallet/v3-host.ts';
 export type { AgentModelProvider, ProviderKind } from './runtime/provider.ts';
 export { LIVE_SCHEMA, LIVE_EVENT_KINDS, type LiveEvent, type LiveEventKind } from './telemetry/events.ts';
 export { renderEvent } from './telemetry/render.ts';

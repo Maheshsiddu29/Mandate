@@ -22,7 +22,7 @@
  */
 
 import { authorityId } from '@mandate/core';
-import { createPortfolioCore, decodePortfolioMandate, initialAllocationDigest, initialAllocationPlanInputOf, mandateSignedByPrincipal, mandateSignedByPrincipalV2, mandateSignedByPrincipalV2Plan, portfolioMandateDigest, validateInitialAllocationPlan, type DomainBinding, type PortfolioCore, type PortfolioMandate } from '@mandate/portfolio';
+import { createPortfolioCore, decodePortfolioMandate, initialAllocationDigest, initialAllocationPlanInputOf, mandateSignedByPrincipal, mandateSignedByPrincipalV2, mandateSignedByPrincipalV2Plan, mandateSignedByPrincipalV3, portfolioMandateDigest, validateInitialAllocationPlan, type DomainBinding, type PortfolioCore, type PortfolioMandate } from '@mandate/portfolio';
 import { demoParty } from '@mandate/portfolio/demo';
 import { normalizeDraft, type MandateDraft } from '../authoring/draft-types.ts';
 import { PLANNING_RECORD_SCHEMA, type AllocationEvidence, type PlanningRecordV1 } from '../allocation/planning-record.ts';
@@ -68,13 +68,48 @@ function decoded<T>(text: string, what: string): T {
 
 /** V1: the raw prehash. V2: the wallet EIP-712 signature, and only that, for this session. */
 function protocolSignatureHolds(sessionId: string, mandate: PortfolioMandate, record: VersionRecord, signature: string): boolean {
-  if (record.authorization.method !== 'WALLET_PRINCIPAL_V2' && record.authorization.method !== 'WALLET_PRINCIPAL_V2_PLAN') return mandateSignedByPrincipal(mandate, signature);
   const a = record.authorization;
   const bound = sessionDigest(sessionId);
+  if (a.method === 'WALLET_PRINCIPAL_V3_DELEGATED') {
+    const w = a.wallet;
+    if (a.domainDelegation !== 'BOUNDED_DELEGATE' || a.protocolSigner !== a.principal) return false;
+    if (mandate.principal.kind !== 'eip155-address' || mandate.principal.value !== a.principal) return false;
+    if (
+      w === null
+      || w.chainId !== APPROVAL_CHAIN_ID.toString()
+      || w.sessionDigest !== bound
+      || w.domain.verifyingContract === undefined
+      || w.delegate === undefined
+      || w.agent === undefined
+      || w.representationIdHash === undefined
+      || w.fundingToken === undefined
+      || w.cumulativeDebitLimit === undefined
+      || w.generation === undefined
+      || w.initialAllocationDigest === undefined
+    ) {
+      return false;
+    }
+    return mandateSignedByPrincipalV3(mandate, signature, {
+      scheme: 'V3_DELEGATED_EIP712',
+      chainId: APPROVAL_CHAIN_ID,
+      verifyingContract: w.domain.verifyingContract,
+      sessionDigest: bound,
+      initialAllocationDigest: w.initialAllocationDigest,
+      delegate: w.delegate,
+      agent: w.agent,
+      representationIdHash: w.representationIdHash,
+      fundingToken: w.fundingToken,
+      cumulativeDebitLimit: BigInt(w.cumulativeDebitLimit),
+      validAfter: BigInt(w.validAfter),
+      validUntil: BigInt(w.validUntil),
+      generation: BigInt(w.generation),
+    });
+  }
+  if (a.method !== 'WALLET_PRINCIPAL_V2' && a.method !== 'WALLET_PRINCIPAL_V2_PLAN') return mandateSignedByPrincipal(mandate, signature);
   if (a.domainDelegation !== 'SAME_PRINCIPAL' || a.protocolSigner !== a.principal) return false;
   if (mandate.principal.kind !== 'eip155-address' || mandate.principal.value !== a.principal) return false;
   if (a.wallet?.chainId !== APPROVAL_CHAIN_ID.toString() || a.wallet.sessionDigest !== bound) return false;
-  if (record.authorization.method === 'WALLET_PRINCIPAL_V2_PLAN') {
+  if (a.method === 'WALLET_PRINCIPAL_V2_PLAN') {
     const initialAllocationDigest = a.wallet?.initialAllocationDigest;
     return initialAllocationDigest !== undefined && mandateSignedByPrincipalV2Plan(mandate, signature, { chainId: APPROVAL_CHAIN_ID, sessionDigest: bound, initialAllocationDigest });
   }

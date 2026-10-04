@@ -43,6 +43,7 @@ import { ROLES, ROLE_LABELS, usdcText, isRole, type Role } from '../types.ts';
 import { LIVE_SCHEMA, safe, type LiveEvent } from '../telemetry/events.ts';
 import { summarizePolicyStress, summarizeRun } from '../telemetry/summary.ts';
 import { APPROVAL_CHAIN_ID, APPROVAL_DOMAIN, APPROVAL_ENVIRONMENT } from '../wallet/approval.ts';
+import type { V3ChallengeHost } from '../wallet/v3-host.ts';
 
 export interface ApiRequest {
   readonly method: string;
@@ -74,6 +75,11 @@ export interface LabOptions {
   readonly stateDir?: string;
   /** Advisory opportunity scoring (Jev) for Planning and Reallocation Rooms; absent: none, and none is invented. */
   readonly scorer?: OpportunityScorer;
+  /**
+   * Settlement composition root only. When set, `spine: "V3"` challenges are
+   * available. Private delegate keys stay in the host implementation.
+   */
+  readonly v3Host?: V3ChallengeHost;
 }
 
 /**
@@ -156,7 +162,14 @@ export class LiveLab {
     if (dir === undefined || !sessionExists(dir, id)) return false;
     let session: LiveSession;
     try {
-      session = await LiveSession.restore(dir, id, { clock: this.#o.clock, agentTimeoutMs: this.#o.agentTimeoutMs, roomRoundTimeoutMs: this.#o.roomRoundTimeoutMs, by: 'local-server', ...(this.#o.entropy === undefined ? {} : { entropy: this.#o.entropy }) });
+      session = await LiveSession.restore(dir, id, {
+        clock: this.#o.clock,
+        agentTimeoutMs: this.#o.agentTimeoutMs,
+        roomRoundTimeoutMs: this.#o.roomRoundTimeoutMs,
+        by: 'local-server',
+        ...(this.#o.entropy === undefined ? {} : { entropy: this.#o.entropy }),
+        ...(this.#o.v3Host === undefined ? {} : { v3Host: this.#o.v3Host }),
+      });
     } catch {
       return false;
     }
@@ -282,9 +295,21 @@ export class LiveLab {
       presets: PRESETS,
       pauseConfirmation: PAUSE_CONFIRMATION,
       principalAuthorization: {
-        methods: ['WALLET_EIP712', 'DEMO_PRINCIPAL_KEY', 'WALLET_PRINCIPAL_V2', 'WALLET_PRINCIPAL_V2_PLAN'],
+        methods: ['WALLET_EIP712', 'DEMO_PRINCIPAL_KEY', 'WALLET_PRINCIPAL_V2', 'WALLET_PRINCIPAL_V2_PLAN', 'WALLET_PRINCIPAL_V3_DELEGATED'],
         wallet: { chainId: APPROVAL_CHAIN_ID, environment: APPROVAL_ENVIRONMENT, domain: { name: APPROVAL_DOMAIN.name, version: APPROVAL_DOMAIN.version }, delegatesDomainExecution: false },
         spine: { method: 'WALLET_PRINCIPAL_V2_PLAN', request: { spine: 'V2' }, domain: { name: 'Mandate', version: '2', chainId: APPROVAL_CHAIN_ID }, primaryType: 'PortfolioMandateAuthorizationV2', principalIsWallet: true, initialAllocationBound: true, domainExecution: 'PER_EXECUTION_GATE_EIP712' },
+        spineV3: this.#o.v3Host === undefined
+          ? null
+          : {
+              method: 'WALLET_PRINCIPAL_V3_DELEGATED',
+              request: { spine: 'V3' },
+              domain: { name: 'Mandate', version: '3', chainId: APPROVAL_CHAIN_ID },
+              primaryType: 'DelegatedPortfolioAuthorizationV3',
+              principalIsWallet: true,
+              initialAllocationBound: true,
+              domainExecution: 'BOUNDED_AUTONOMOUS_DELEGATE',
+              available: true,
+            },
       },
       roles: ROLES.map((r) => ({ role: r, label: ROLE_LABELS[r], domain: AGENT_DOMAINS[r], objective: DOMAIN_AGENTS[r].objective, candidates: DOMAIN_AGENTS[r].candidates.map((c) => ({ id: c.id, title: c.title })) })),
       catalog: Object.fromEntries(CATALOG_SETS.map((s) => [s, CATALOG[s].map((e) => ({ id: e.id, label: e.label }))])),
@@ -325,7 +350,18 @@ export class LiveLab {
     const entropy = this.#o.entropy ?? realEntropy;
     // 128 random bits: unique across restarts and processes, never a timestamp.
     const id = `lab-${entropy.bytes32().slice(-32)}`;
-    const session = new LiveSession({ provider, clock: this.#o.clock, sessionId: id, agentTimeoutMs: this.#o.agentTimeoutMs, roomRoundTimeoutMs: this.#o.roomRoundTimeoutMs, chaos, entropy, ...(this.#o.stateDir === undefined ? {} : { stateDir: this.#o.stateDir }), ...(this.#o.scorer === undefined ? {} : { scorer: this.#o.scorer }) });
+    const session = new LiveSession({
+      provider,
+      clock: this.#o.clock,
+      sessionId: id,
+      agentTimeoutMs: this.#o.agentTimeoutMs,
+      roomRoundTimeoutMs: this.#o.roomRoundTimeoutMs,
+      chaos,
+      entropy,
+      ...(this.#o.stateDir === undefined ? {} : { stateDir: this.#o.stateDir }),
+      ...(this.#o.scorer === undefined ? {} : { scorer: this.#o.scorer }),
+      ...(this.#o.v3Host === undefined ? {} : { v3Host: this.#o.v3Host }),
+    });
     const entry: Entry = { session, provider: provider.name, draft: null, task: null, lastRun: null, lastPlan: null, lastPlanError: null, lastPolicyStress: null, lastError: null, touchedMs: this.#o.clock.nowMs() };
     this.#sessions.set(id, entry);
     return ok({ sessionId: id, ...this.#view(entry) }, 201);
@@ -458,10 +494,25 @@ export class LiveLab {
     const address = body['address'];
     if (typeof address !== 'string' || address.length > 42) return refuse(400, 'BAD_REQUEST', 'address must be the connected wallet address.');
     const spine = body['spine'];
-    if (spine !== undefined && spine !== 'V2') return refuse(400, 'BAD_REQUEST', 'spine must be "V2" or omitted. Omitted is the B.5.3 wallet approval.');
-    const r = spine === 'V2' ? entry.session.spineChallenge(entry.draft, address) : entry.session.walletChallenge(entry.draft, address);
+    if (spine !== undefined && spine !== 'V2' && spine !== 'V3') {
+      return refuse(400, 'BAD_REQUEST', 'spine must be "V2", "V3", or omitted. Omitted is the B.5.3 wallet approval.');
+    }
+    const r =
+      spine === 'V3' ? entry.session.spineChallengeV3(entry.draft, address)
+      : spine === 'V2' ? entry.session.spineChallenge(entry.draft, address)
+      : entry.session.walletChallenge(entry.draft, address);
     if (!r.ok) return { status: 409, body: safe({ error: r.code, message: r.message, ...this.#view(entry) }) };
-    return ok({ challenge: r.challenge, version: r.version, digest: r.digest, initialAllocationDigest: r.initialAllocationDigest, principal: r.principal, validUntil: r.validUntil, typedData: r.typedData, spine: spine === 'V2' ? 'V2' : 'V1', ...this.#view(entry) });
+    return ok({
+      challenge: r.challenge,
+      version: r.version,
+      digest: r.digest,
+      initialAllocationDigest: r.initialAllocationDigest,
+      principal: r.principal,
+      validUntil: r.validUntil,
+      typedData: r.typedData,
+      spine: spine === 'V3' ? 'V3' : spine === 'V2' ? 'V2' : 'V1',
+      ...this.#view(entry),
+    });
   }
 
   async #walletAuthorize(entry: Entry, body: JsonObject): Promise<ApiResponse> {

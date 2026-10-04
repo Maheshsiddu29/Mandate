@@ -31,7 +31,17 @@
  */
 
 import type { LedgerStore, ReducerRules } from '@mandate/ledger';
-import { mandateSignedByPrincipalV2, mandateSignedByPrincipalV2Plan, portfolioMandateDigest, validatePortfolioMandate, type CompiledPortfolio, type DomainBinding, type PortfolioCore, type PortfolioMandate } from '@mandate/portfolio';
+import {
+  mandateSignedByPrincipalV2,
+  mandateSignedByPrincipalV2Plan,
+  mandateSignedByPrincipalV3,
+  portfolioMandateDigest,
+  validatePortfolioMandate,
+  type CompiledPortfolio,
+  type DomainBinding,
+  type PortfolioCore,
+  type PortfolioMandate,
+} from '@mandate/portfolio';
 import { compile, registerFirst, registerSuccessor, revokeRoot } from '../mandate/portfolio-adapter.ts';
 import { PRINCIPAL_SIGNATURE_LABEL, type LocalPrincipalSigner } from '../mandate/signer.ts';
 import { APPROVAL_CHAIN_ID } from '../wallet/approval.ts';
@@ -49,14 +59,20 @@ export interface FieldChange {
   readonly to: string;
 }
 
-export const AUTHORIZATION_METHODS = ['WALLET_EIP712', 'DEMO_PRINCIPAL_KEY', 'WALLET_PRINCIPAL_V2', 'WALLET_PRINCIPAL_V2_PLAN'] as const;
+export const AUTHORIZATION_METHODS = [
+  'WALLET_EIP712',
+  'DEMO_PRINCIPAL_KEY',
+  'WALLET_PRINCIPAL_V2',
+  'WALLET_PRINCIPAL_V2_PLAN',
+  'WALLET_PRINCIPAL_V3_DELEGATED',
+] as const;
 export type AuthorizationMethod = (typeof AUTHORIZATION_METHODS)[number];
 
 /** What the wallet approval bound, public facts only: the signature itself is evidence kept server-side. */
 export interface WalletApprovalFacts {
   readonly chainId: string;
   readonly environment: string;
-  readonly domain: { readonly name: string; readonly version: string; readonly chainId: string };
+  readonly domain: { readonly name: string; readonly version: string; readonly chainId: string; readonly verifyingContract?: string };
   readonly primaryType: string;
   readonly sessionDigest: string;
   readonly challengeDigest: string;
@@ -64,6 +80,13 @@ export interface WalletApprovalFacts {
   readonly validAfter: string;
   readonly validUntil: string;
   readonly initialAllocationDigest?: string;
+  /** V3 public delegation facts (never a private key). */
+  readonly delegate?: string;
+  readonly agent?: string;
+  readonly representationIdHash?: string;
+  readonly fundingToken?: string;
+  readonly cumulativeDebitLimit?: string;
+  readonly generation?: string;
 }
 
 /**
@@ -76,6 +99,8 @@ export interface WalletApprovalFacts {
  * signature. Domain execution is allowed only for that same address
  * (`SAME_PRINCIPAL`): it is the manifest principal, or it presents a separate
  * per-execution gate signature. It does not delegate to any other key.
+ * `WALLET_PRINCIPAL_V3_DELEGATED` is one reusable DelegatedPortfolioAuthorizationV3:
+ * portfolio authority plus bounded autonomous execution (`BOUNDED_DELEGATE`).
  */
 export interface PrincipalAuthorization {
   readonly method: AuthorizationMethod;
@@ -83,7 +108,7 @@ export interface PrincipalAuthorization {
   readonly protocolSigner: string;
   readonly label: string;
   readonly wallet: WalletApprovalFacts | null;
-  readonly domainDelegation: 'NOT_DELEGATED' | 'SAME_PRINCIPAL';
+  readonly domainDelegation: 'NOT_DELEGATED' | 'SAME_PRINCIPAL' | 'BOUNDED_DELEGATE';
 }
 
 export const DEMO_AUTHORIZATION_LABEL = 'Demo principal key: the exact confirmation text, then the publicly derived demonstration key signs. Not a wallet signature.';
@@ -91,6 +116,10 @@ export const WALLET_AUTHORIZATION_LABEL = 'Wallet-signed mandate: EIP-712 approv
 export const SPINE_AUTHORIZATION_LABEL = 'Wallet is the protocol principal: EIP-712 PortfolioMandateV2 over the canonical mandate digest. Domain execution still needs this same address to sign each gate mandate.';
 export const SPINE_SIGNATURE_LABEL = 'EIP-712 PortfolioMandateV2 by the wallet principal (Robinhood Chain testnet, chain 46630). Not the demonstration key.';
 export const PLAN_BOUND_SPINE_SIGNATURE_LABEL = 'EIP-712 PortfolioMandateAuthorizationV2 by the wallet principal, binding the accepted initial allocation (Robinhood Chain testnet, chain 46630).';
+export const V3_DELEGATED_AUTHORIZATION_LABEL =
+  'Wallet is the protocol principal: one EIP-712 DelegatedPortfolioAuthorizationV3 binding portfolio authority and bounded autonomous Stock testnet execution. No further wallet signature per in-policy trade.';
+export const V3_DELEGATED_SIGNATURE_LABEL =
+  'EIP-712 DelegatedPortfolioAuthorizationV3 by the wallet principal (Robinhood Chain testnet, chain 46630, MandateDelegatedExecutionGate).';
 
 /** The public record of a version. No key, no core. */
 export interface VersionRecord {
@@ -329,19 +358,61 @@ export class MandateVersions {
    * challenge first, so a refusal cannot be retried with another signature.
    */
   #protocolSignature(prepared: PreparedVersion, authorization: PrincipalAuthorization, protocolSignature: string | undefined): { readonly ok: true; readonly signature: string; readonly label: string } | { readonly ok: false; readonly code: RefusalCode; readonly message: string } {
-    if (authorization.method !== 'WALLET_PRINCIPAL_V2' && authorization.method !== 'WALLET_PRINCIPAL_V2_PLAN') {
+    if (
+      authorization.method !== 'WALLET_PRINCIPAL_V2'
+      && authorization.method !== 'WALLET_PRINCIPAL_V2_PLAN'
+      && authorization.method !== 'WALLET_PRINCIPAL_V3_DELEGATED'
+    ) {
       if (protocolSignature !== undefined) return { ok: false, code: 'SPINE_SIGNATURE_INVALID', message: 'A V1 authorization is signed by the demonstration principal key. An external signature is not accepted on that path.' };
       return { ok: true, signature: this.#signer.signMandate(prepared.mandate), label: PRINCIPAL_SIGNATURE_LABEL };
     }
     const wallet = authorization.wallet;
-    if (wallet === null || protocolSignature === undefined) return { ok: false, code: 'SPINE_SIGNATURE_INVALID', message: 'A V2 mandate needs the wallet’s EIP-712 signature.' };
-    if (authorization.domainDelegation !== 'SAME_PRINCIPAL' || authorization.protocolSigner !== authorization.principal) {
-      return { ok: false, code: 'SPINE_SIGNATURE_INVALID', message: 'V2 names one principal. The protocol signer and the domain principal are that address, or the mandate is refused.' };
+    if (wallet === null || protocolSignature === undefined) {
+      return { ok: false, code: 'SPINE_SIGNATURE_INVALID', message: 'A V2/V3 mandate needs the wallet’s EIP-712 signature.' };
     }
     if (prepared.mandate.principal.kind !== 'eip155-address' || prepared.mandate.principal.value !== authorization.principal) {
       return { ok: false, code: 'SPINE_SIGNATURE_INVALID', message: 'The compiled mandate’s principal is not the wallet that signed it.' };
     }
-    if (wallet.chainId !== APPROVAL_CHAIN_ID.toString()) return { ok: false, code: 'SPINE_SIGNATURE_INVALID', message: 'V2 signatures are bound to Robinhood Chain testnet.' };
+    if (wallet.chainId !== APPROVAL_CHAIN_ID.toString()) return { ok: false, code: 'SPINE_SIGNATURE_INVALID', message: 'Spine signatures are bound to Robinhood Chain testnet.' };
+    if (authorization.method === 'WALLET_PRINCIPAL_V3_DELEGATED') {
+      if (authorization.domainDelegation !== 'BOUNDED_DELEGATE' || authorization.protocolSigner !== authorization.principal) {
+        return { ok: false, code: 'SPINE_SIGNATURE_INVALID', message: 'V3 names one principal and a bounded Mandate execution delegate.' };
+      }
+      if (
+        wallet.domain.verifyingContract === undefined
+        || wallet.delegate === undefined
+        || wallet.agent === undefined
+        || wallet.representationIdHash === undefined
+        || wallet.fundingToken === undefined
+        || wallet.cumulativeDebitLimit === undefined
+        || wallet.generation === undefined
+        || wallet.initialAllocationDigest === undefined
+      ) {
+        return { ok: false, code: 'SPINE_SIGNATURE_INVALID', message: 'A V3 mandate needs the full delegated scope in wallet evidence.' };
+      }
+      const valid = mandateSignedByPrincipalV3(prepared.mandate, protocolSignature, {
+        scheme: 'V3_DELEGATED_EIP712',
+        chainId: APPROVAL_CHAIN_ID,
+        verifyingContract: wallet.domain.verifyingContract,
+        sessionDigest: wallet.sessionDigest,
+        initialAllocationDigest: wallet.initialAllocationDigest,
+        delegate: wallet.delegate,
+        agent: wallet.agent,
+        representationIdHash: wallet.representationIdHash,
+        fundingToken: wallet.fundingToken,
+        cumulativeDebitLimit: BigInt(wallet.cumulativeDebitLimit),
+        validAfter: BigInt(wallet.validAfter),
+        validUntil: BigInt(wallet.validUntil),
+        generation: BigInt(wallet.generation),
+      });
+      if (!valid) {
+        return { ok: false, code: 'SPINE_SIGNATURE_INVALID', message: 'The signature is not this wallet’s EIP-712 V3 delegated authorization for this session and scope.' };
+      }
+      return { ok: true, signature: protocolSignature, label: V3_DELEGATED_SIGNATURE_LABEL };
+    }
+    if (authorization.domainDelegation !== 'SAME_PRINCIPAL' || authorization.protocolSigner !== authorization.principal) {
+      return { ok: false, code: 'SPINE_SIGNATURE_INVALID', message: 'V2 names one principal. The protocol signer and the domain principal are that address, or the mandate is refused.' };
+    }
     const valid = authorization.method === 'WALLET_PRINCIPAL_V2_PLAN'
       ? wallet.initialAllocationDigest !== undefined && mandateSignedByPrincipalV2Plan(prepared.mandate, protocolSignature, { chainId: APPROVAL_CHAIN_ID, sessionDigest: wallet.sessionDigest, initialAllocationDigest: wallet.initialAllocationDigest })
       : mandateSignedByPrincipalV2(prepared.mandate, protocolSignature, { chainId: APPROVAL_CHAIN_ID, sessionDigest: wallet.sessionDigest });

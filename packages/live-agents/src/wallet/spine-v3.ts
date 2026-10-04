@@ -7,22 +7,36 @@
  * must not import those.
  */
 
-import { portfolioMandateDigest, type PortfolioMandate } from '@mandate/portfolio';
+import {
+  PORTFOLIO_AUTHORITY_V3,
+  portfolioMandateDigest,
+  type PortfolioAuthorityV3,
+  type PortfolioMandate,
+} from '@mandate/portfolio';
 import { APPROVAL_CHAIN_ID, sessionDigest } from './approval.ts';
+import type { V3PublicScope } from './v3-host.ts';
 
 export { APPROVAL_CHAIN_ID as SPINE_V3_CHAIN_ID };
 
-export interface V3DelegationScope {
-  readonly verifyingContract: string;
-  readonly delegate: string;
-  readonly agent: string;
-  readonly representationIdHash: string;
-  readonly fundingToken: string;
-  /** Fixture MDUSD atoms — derived outside this package; never model-supplied. */
-  readonly cumulativeDebitLimit: string;
-  readonly validAfter: string;
-  readonly validUntil: string;
-  readonly generation: string;
+export type V3DelegationScope = V3PublicScope;
+
+/** What the room / verifier must be told for a V3 version. */
+export function spineAuthorityV3(sessionId: string, initialAllocationDigest: string, scope: V3PublicScope): PortfolioAuthorityV3 {
+  return {
+    scheme: PORTFOLIO_AUTHORITY_V3,
+    chainId: APPROVAL_CHAIN_ID,
+    verifyingContract: scope.verifyingContract,
+    sessionDigest: sessionDigest(sessionId),
+    initialAllocationDigest,
+    delegate: scope.delegate,
+    agent: scope.agent,
+    representationIdHash: scope.representationIdHash,
+    fundingToken: scope.fundingToken,
+    cumulativeDebitLimit: BigInt(scope.cumulativeDebitLimit),
+    validAfter: BigInt(scope.validAfter),
+    validUntil: BigInt(scope.validUntil),
+    generation: BigInt(scope.generation),
+  };
 }
 
 /** Typed data for `eth_signTypedData_v4` — exactly one Mandate signature for V3. */
