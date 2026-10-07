@@ -1,0 +1,12 @@
+Mandate
+Copyright 2026 Mandate contributors
+
+The original Mandate project code is made available under the Apache License,
+Version 2.0. See the root LICENSE file for the license terms.
+
+Third-party components, vendored code, fonts, and assets remain subject to
+their original licenses and attribution requirements. See
+apps/web/THIRD_PARTY_NOTICES.md and any license notices accompanying those
+components. In particular, React Bits-derived components have separately
+documented MIT + Commons Clause terms; the root Apache-2.0 license does not
+supersede those terms.
